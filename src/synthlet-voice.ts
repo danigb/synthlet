@@ -1,49 +1,54 @@
 import { Envelope } from "./envelope";
-import { Oscillator2, Waveforms } from "./osc2";
+import { Oscillator, Waveforms } from "./oscillator";
 
 const noteToFrequency = (note: number) => 440 * Math.pow(2, (note - 69) / 12);
 
 export class SynthletVoice {
-  #osc1: Oscillator2;
-  #note: number;
-  #volEnv: Envelope;
+  osc1: Oscillator;
+  osc2: Oscillator;
+  _note: number;
+  volEnv: Envelope;
   targetFrequency: number;
 
   constructor() {
-    this.#osc1 = new Oscillator2(Waveforms.Triangle);
-    this.#volEnv = new Envelope();
+    this.osc1 = new Oscillator(Waveforms.Triangle);
+    this.osc2 = new Oscillator(Waveforms.Square);
+    this.volEnv = new Envelope();
     this.note = 60;
   }
 
   set note(note: number) {
-    this.#note = note;
+    this._note = note;
     this.targetFrequency = noteToFrequency(note);
   }
 
   get note(): number {
-    return this.#note;
+    return this._note;
   }
 
   start() {
-    this.#volEnv.start();
+    this.volEnv.start();
   }
 
   release() {
-    this.#volEnv.release();
+    this.volEnv.release();
   }
 
   process(dt: number) {
     // update envelopes
-    const volEnvValue = this.#volEnv.process(dt);
+    const volEnvValue = this.volEnv.process(dt);
 
     // if (volEnvValue === 0) {
     //   return 0;
     // }
 
     // update oscillators
-    const oscOut = this.#osc1.process(dt, this.targetFrequency);
+    const osc1Out = this.osc1.process(dt, this.targetFrequency);
+    const osc2Out = this.osc2.process(dt, this.targetFrequency - 10);
+
+    const out = (osc1Out + osc2Out) * 0.6;
 
     // apply volume envelope
-    return oscOut * volEnvValue;
+    return osc1Out * volEnvValue;
   }
 }
