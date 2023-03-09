@@ -24,7 +24,7 @@
   "scripts": {
     "start": "vite example/",
     "build": "tsup src/index.ts --dts --format esm,cjs",
-    "worklet": "esbuild src/synthlet-processor.ts --bundle --minify > src/processor.js"
+    "worklet": "esbuild src/synthlet-processor.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/processor.ts"
   },
   "jest": {
     "preset": "ts-jest"

@@ -15,8 +15,8 @@ export class Envelope {
     this.value = 0;
     this.a = 0.1;
     this.d = 0.1;
-    this.s = 0.5;
-    this.r = 0.5;
+    this.s = 0.1;
+    this.r = 0.0;
     this.stage = STAGE_FINISH;
   }
 

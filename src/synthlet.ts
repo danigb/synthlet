@@ -14,37 +14,41 @@ async function createSynthletWorkletNode(context: AudioContext) {
   }
   await ready;
 
-  const synth = new AudioWorkletNode(context, "SynthletWorklet", {
-    outputChannelCount: [2],
+  const synth = new AudioWorkletNode(context, "SynthletProcessor", {
+    numberOfInputs: 0,
+    outputChannelCount: [1],
   });
   return synth;
 }
 
 export class Synthlet {
-  #synthlet: AudioWorkletNode | undefined;
-  #ready: Promise<this>;
-  #output: AudioNode;
+  synthlet: AudioWorkletNode | undefined;
+  ready: Promise<this>;
+  output: AudioNode;
 
   constructor(context: AudioContext) {
-    this.#output = context.destination;
-    this.#output.connect(context.destination);
-    this.#ready = createSynthletWorkletNode(context).then((synth) => {
-      synth.connect(this.#output);
-      this.#synthlet = synth;
+    this.output = context.destination;
+    this.ready = createSynthletWorkletNode(context).then((synth) => {
+      console.log("WORKLET", Array.from(synth.parameters.keys()));
+      synth.port.onmessage = (e) => {
+        console.log("MSG >>>", e.data);
+      };
+      synth.connect(this.output);
+      this.synthlet = synth;
       return this;
     });
   }
 
   start(time: number) {
-    this.#synthlet?.parameters.get("trigger")?.setValueAtTime(1, time);
+    this.getParam("trigger")?.setValueAtTime(1, time);
   }
 
   release(time: number) {
-    this.#synthlet?.parameters.get("trigger")?.setValueAtTime(0, time);
+    this.getParam("trigger")?.setValueAtTime(0, time);
   }
 
   setNote(note: number, time: number) {
-    this.#synthlet?.parameters.get("note")?.setValueAtTime(note, time);
+    this.getParam("note")?.setValueAtTime(note, time);
   }
 
   get paramNames() {
@@ -52,22 +56,22 @@ export class Synthlet {
   }
 
   getParam(name: typeof PARAMS[number]): AudioParam | undefined {
-    return this.#synthlet?.parameters.get("preDelay");
+    return this.synthlet?.parameters.get(name);
   }
 
   get isReady(): boolean {
-    return this.#synthlet !== undefined;
+    return this.synthlet !== undefined;
   }
 
-  ready(): Promise<this> {
-    return this.#ready;
+  loaded(): Promise<this> {
+    return this.ready;
   }
 
   connect(output: AudioNode) {
-    if (this.#synthlet) {
-      this.#synthlet.disconnect(this.#output);
-      this.#synthlet.connect(output);
+    if (this.synthlet) {
+      this.synthlet.disconnect(this.output);
+      this.synthlet.connect(output);
     }
-    this.#output = output;
+    this.output = output;
   }
 }

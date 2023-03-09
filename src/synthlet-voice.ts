@@ -36,9 +36,9 @@ export class SynthletVoice {
     // update envelopes
     const volEnvValue = this.#volEnv.process(dt);
 
-    if (volEnvValue === 0) {
-      return 0;
-    }
+    // if (volEnvValue === 0) {
+    //   return 0;
+    // }
 
     // update oscillators
     const oscOut = this.#osc1.process(dt, this.targetFrequency);

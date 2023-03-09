@@ -3,11 +3,14 @@ import { SynthletVoice } from "./synthlet-voice";
 export class SynthletProcessor extends AudioWorkletProcessor {
   voice: SynthletVoice;
   dt: number;
+  started: boolean;
 
   constructor() {
     super();
     this.voice = new SynthletVoice();
     this.dt = 1 / sampleRate;
+    this.port.postMessage("SynthletProcessor 05 ready: " + this.dt);
+    this.started = false;
   }
 
   process(
@@ -16,12 +19,20 @@ export class SynthletProcessor extends AudioWorkletProcessor {
     parameters: any
   ) {
     const trigger = parameters.trigger[0];
-    if (trigger === 1) this.voice.start();
-    else if (trigger === 0) this.voice.release();
+    if (trigger !== 0 && !this.started) {
+      this.started = true;
+      this.port.postMessage("start: " + trigger);
+      this.voice.start();
+    } else if (trigger === 0 && this.started) {
+      this.port.postMessage("release: " + trigger);
+      this.started = false;
+      this.voice.release();
+    }
 
     const note = parameters.note[0];
     this.voice.note = note;
 
+    // mono output
     const output = outputs[0][0];
     for (let i = 0; i < output.length; i++) {
       output[i] = this.voice.process(this.dt);
@@ -47,30 +58,6 @@ export class SynthletProcessor extends AudioWorkletProcessor {
       },
     ];
   }
-  static get parameterDescriptorsOther() {
-    return [
-      ["bandwidth", 0.9999, 0, 1, "k-rate"],
-      ["inputDiffusion1", 0.75, 0, 1, "k-rate"],
-      ["inputDiffusion2", 0.625, 0, 1, "k-rate"],
-      ["decay", 0.5, 0, 1, "k-rate"],
-      ["decayDiffusion1", 0.7, 0, 0.999999, "k-rate"],
-      ["decayDiffusion2", 0.5, 0, 0.999999, "k-rate"],
-      ["damping", 0.005, 0, 1, "k-rate"],
-      ["excursionRate", 0.5, 0, 2, "k-rate"],
-      ["excursionDepth", 0.7, 0, 2, "k-rate"],
-      ["wet", 1.0, 0, 1, "k-rate"],
-      ["dry", 0.0, 0, 1, "k-rate"],
-    ].map(
-      (x) =>
-        new Object({
-          name: x[0],
-          defaultValue: x[1],
-          minValue: x[2],
-          maxValue: x[3],
-          automationRate: x[4],
-        })
-    );
-  }
 }
 
-registerProcessor("synthlet-worklet", SynthletProcessor);
+registerProcessor("SynthletProcessor", SynthletProcessor);
