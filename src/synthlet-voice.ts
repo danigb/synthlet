@@ -1,16 +1,16 @@
 import { Envelope } from "./envelope";
-import { Oscillator } from "./oscillator";
+import { Oscillator2, Waveforms } from "./osc2";
 
 const noteToFrequency = (note: number) => 440 * Math.pow(2, (note - 69) / 12);
 
 export class SynthletVoice {
-  #osc1: Oscillator;
+  #osc1: Oscillator2;
   #note: number;
   #volEnv: Envelope;
   targetFrequency: number;
 
   constructor() {
-    this.#osc1 = new Oscillator();
+    this.#osc1 = new Oscillator2(Waveforms.Triangle);
     this.#volEnv = new Envelope();
     this.note = 60;
   }
