@@ -11,7 +11,7 @@ export type MikaParams = {
   kFmMode: number;
   kFmCoarse: number;
   kFmFine: number;
-  kFilterEnabled: boolean;
+  kFilterEnabled: number;
   kFilterCutoff: number;
   kFilterResonance: number;
   kFilterKeyTrack: number;
@@ -36,8 +36,44 @@ export type MikaParams = {
   kLfoCutoff: number;
   kVoiceMode: number;
   kGlideSpeed: number;
+  kGlideEnabled: number;
   kMasterVolume: number;
 };
+
+export type MikaParamName = keyof MikaParams;
+
+export function getMikaParameterDescriptors() {
+  const automationRate = "k-rate";
+  return [
+    {
+      name: "trigger",
+      defaultValue: 0,
+      minValue: 0,
+      maxValue: 1,
+      automationRate: "k-rate",
+    },
+    {
+      name: "note",
+      defaultValue: 60,
+      minValue: 0,
+      maxValue: 127,
+      automationRate: "k-rate",
+    },
+    ...MIKA_PARAM_DEFS.map(
+      ([name, desc, defaultValue, minValue, maxValue]) => ({
+        name,
+        defaultValue,
+        minValue,
+        maxValue,
+        automationRate,
+      })
+    ),
+  ];
+}
+
+export function getMikaParameterNames(): MikaParamName[] {
+  return MIKA_PARAM_DEFS.map(([name]) => name as MikaParamName);
+}
 
 // MikaParamDefinition: [name, description, default, min, max, steps?, units?]
 type MikaParamDefinition = [
@@ -46,11 +82,11 @@ type MikaParamDefinition = [
   number,
   number,
   number,
-  number?,
+  number,
   string?
 ];
 
-export const MIKA_PARAM_DEFS: MikaParamDefinition[] = [
+const MIKA_PARAM_DEFS: MikaParamDefinition[] = [
   // oscillators
   ["kOsc1Wave", "Oscillator 1 waveform", 2, 0, 7, 1],
   ["kOsc1Coarse", "Oscillator 1 coarse", 0, -24, 24, 1, "semitones"],
@@ -64,7 +100,7 @@ export const MIKA_PARAM_DEFS: MikaParamDefinition[] = [
 
   // fm
   ["kFmMode", "FM mode", 0, 0, 3, 1],
-  ["kFmCoarse", "FM coarse", 0, 0, 48],
+  ["kFmCoarse", "FM coarse", 0, 0, 48, 1],
   ["kFmFine", "FM fine", 0.0, -1.0, 1.0, 0.01],
 
   // filter
@@ -129,7 +165,8 @@ export const MIKA_PARAM_DEFS: MikaParamDefinition[] = [
   ["kLfoCutoff", "Vibrato to filter cutoff", 0.0, -8000.0, 8000.0, 0.01],
 
   // master
-  ["kVoiceMode", "Voice mode", 0, 0, 0, 0],
+  ["kVoiceMode", "Voice mode", 0, 0, 2, 1],
   ["kGlideSpeed", "Glide speed", 1.0, 1.0, 1000.0, 0.01],
+  ["kGlideEnabled", "Glide enabled", 0, 0, 1, 1],
   ["kMasterVolume", "Master volume", 0.25, 0.0, 0.5, 0.01],
 ];

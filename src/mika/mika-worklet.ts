@@ -1,7 +1,12 @@
-import { MIKA_PARAM_DEFS } from "./mika-params";
+import {
+  getMikaParameterDescriptors,
+  getMikaParameterNames,
+  MikaParamName,
+} from "./mika-params";
+import { MikaPreset } from "./mika-presets";
 import { MikaSynth } from "./mika-synth";
 
-const DEFAULT = {
+const DEFAULT: MikaPreset = {
   name: "Default - Mika",
   params: {
     kOsc1Wave: 2,
@@ -16,7 +21,7 @@ const DEFAULT = {
     kFmMode: 1,
     kFmCoarse: 4,
     kFmFine: 0.0,
-    kFilterEnabled: false,
+    kFilterEnabled: 1,
     kFilterCutoff: 200.0,
     kFilterResonance: 0.953125,
     kFilterKeyTrack: 1.0,
@@ -41,6 +46,7 @@ const DEFAULT = {
     kLfoCutoff: 0.0,
     kVoiceMode: 0,
     kGlideSpeed: 1.0,
+    kGlideEnabled: 0,
     kMasterVolume: 0.123047,
   },
 };
@@ -50,6 +56,7 @@ export class MikaWorklet extends AudioWorkletProcessor {
   dt: number;
   started: boolean;
   debug = 0;
+  params: MikaParamName[];
 
   constructor() {
     super();
@@ -64,6 +71,7 @@ export class MikaWorklet extends AudioWorkletProcessor {
         this.synth.setParams(params);
       }
     };
+    this.params = getMikaParameterNames();
   }
 
   process(
@@ -83,6 +91,11 @@ export class MikaWorklet extends AudioWorkletProcessor {
     const note = parameters.note[0];
     this.synth.setNote(note);
 
+    // Copy params to synth before processing
+    for (const param of this.params) {
+      this.synth.setParam(param, parameters[param][0]);
+    }
+
     // mono output
     const output = outputs[0][0];
     for (let i = 0; i < output.length; i++) {
@@ -91,39 +104,18 @@ export class MikaWorklet extends AudioWorkletProcessor {
 
     this.debug++;
     if (this.debug === 1000) {
-      this.port.postMessage({ type: "debug", debug: output[0] });
+      this.port.postMessage({
+        type: "debug",
+        debug: output[0],
+        vvv: this.synth.params.kGlideEnabled,
+      });
       this.debug = 0;
     }
     return true;
   }
 
   static get parameterDescriptors() {
-    const automationRate = "k-rate";
-    return [
-      {
-        name: "trigger",
-        defaultValue: 0,
-        minValue: 0,
-        maxValue: 1,
-        automationRate: "k-rate",
-      },
-      {
-        name: "note",
-        defaultValue: 60,
-        minValue: 0,
-        maxValue: 127,
-        automationRate: "k-rate",
-      },
-      ...MIKA_PARAM_DEFS.map(
-        ([name, desc, defaultValue, minValue, maxValue]) => ({
-          name,
-          defaultValue,
-          minValue,
-          maxValue,
-          automationRate,
-        })
-      ),
-    ];
+    return getMikaParameterDescriptors();
   }
 }
 

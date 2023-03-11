@@ -2,7 +2,7 @@ import { Filter } from "../dsp/filter";
 import { pitchFactor, pitchToFrequency } from "../dsp/math";
 import { Oscillator, WaveformType } from "../dsp/oscillator";
 import { MikaEnvelope } from "./mika-envelope";
-import { MikaParams } from "./mika-params";
+import { MikaParamName, MikaParams } from "./mika-params";
 
 export class MikaVoice {
   osc1a: Oscillator;
@@ -43,8 +43,8 @@ export class MikaVoice {
     this.params = params;
   }
 
-  setParams(params: MikaParams) {
-    this.params = params;
+  setParam(paramName: MikaParamName, value: number) {
+    this.params[paramName] = value;
   }
 
   start() {
@@ -88,8 +88,9 @@ export class MikaVoice {
     lfoValue *= this.lfoEnv.withVelocity(0.0, this.velocity);
 
     // glide to target frequency (for mono and legato modes)
+    const glideSpeed = p.kGlideEnabled === 1 ? p.kGlideSpeed : 0.1;
     this.baseFrequency +=
-      (this.targetFrequency - this.baseFrequency) * p.kGlideSpeed * dt;
+      (this.targetFrequency - this.baseFrequency) * glideSpeed * dt;
 
     // smooth oscillator split
     const osc1bEnabled =

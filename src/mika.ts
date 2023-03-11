@@ -5,10 +5,14 @@ import { PROCESSOR } from "./mika/mika-processor";
 
 const loadWorklet = createWorklet("MikaWorklet", PROCESSOR);
 
+type MikaVoiceMode = "mono" | "legato";
+
 export class Mika {
   worklet: AudioWorkletNode | undefined;
   ready: Promise<this>;
   output: AudioNode;
+  mode: MikaVoiceMode = "mono";
+  pressedKeys: number[] = [];
 
   constructor(public readonly context: AudioContext) {
     this.output = context.destination;
@@ -24,19 +28,29 @@ export class Mika {
     this.worklet?.port.postMessage({ type: "preset-change", params });
   }
 
-  start(time?: number) {
-    time ??= this.context.currentTime;
-    this.getParam("trigger")?.setValueAtTime(1, time);
+  pressKey(keyPress: { note: number; time?: number; velocity?: number }) {
+    console.log("pressKey", keyPress);
+    const time = keyPress.time ?? this.context.currentTime;
+    if (this.mode === "mono") {
+      if (!this.pressedKeys.length) {
+        console.log("start envelope", time);
+        this.getParam("trigger")?.setValueAtTime(1, time);
+      }
+      this.getParam("note")?.setValueAtTime(keyPress.note, time);
+      this.pressedKeys = [keyPress.note];
+    }
   }
 
-  release(time?: number) {
-    time ??= this.context.currentTime;
-    this.getParam("trigger")?.setValueAtTime(0, time);
-  }
-
-  setNote(note: number, time?: number) {
-    time ??= this.context.currentTime;
-    this.getParam("note")?.setValueAtTime(note, time);
+  releaseKey(keyRelease: { note: number; time?: number }) {
+    console.log("releaseKey", keyRelease);
+    const time = keyRelease.time ?? this.context.currentTime;
+    if (this.mode === "mono") {
+      if (this.pressedKeys.length && this.pressedKeys[0] === keyRelease.note) {
+        console.log("stop envelope", time);
+        this.getParam("trigger")?.setValueAtTime(0, time);
+        this.pressedKeys = [];
+      }
+    }
   }
 
   get paramNames() {
@@ -61,5 +75,12 @@ export class Mika {
       this.worklet.connect(output);
     }
     this.output = output;
+  }
+
+  destroy() {
+    if (this.worklet) {
+      this.worklet.disconnect(this.output);
+      this.worklet = undefined;
+    }
   }
 }
