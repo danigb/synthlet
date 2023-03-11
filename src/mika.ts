@@ -62,4 +62,11 @@ export class Mika {
     }
     this.output = output;
   }
+
+  destroy() {
+    if (this.worklet) {
+      this.worklet.disconnect(this.output);
+      this.worklet = undefined;
+    }
+  }
 }
