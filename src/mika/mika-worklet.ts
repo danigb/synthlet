@@ -1,7 +1,8 @@
 import { getMikaParameterDescriptors } from "./mika-params";
+import { MikaPreset } from "./mika-presets";
 import { MikaSynth } from "./mika-synth";
 
-const DEFAULT = {
+const DEFAULT: MikaPreset = {
   name: "Default - Mika",
   params: {
     kOsc1Wave: 2,
@@ -41,6 +42,7 @@ const DEFAULT = {
     kLfoCutoff: 0.0,
     kVoiceMode: 0,
     kGlideSpeed: 1.0,
+    kGlideEnabled: 0,
     kMasterVolume: 0.123047,
   },
 };

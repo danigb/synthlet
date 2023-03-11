@@ -36,6 +36,7 @@ export type MikaParams = {
   kLfoCutoff: number;
   kVoiceMode: number;
   kGlideSpeed: number;
+  kGlideEnabled: number;
   kMasterVolume: number;
 };
 
@@ -158,7 +159,8 @@ const MIKA_PARAM_DEFS: MikaParamDefinition[] = [
   ["kLfoCutoff", "Vibrato to filter cutoff", 0.0, -8000.0, 8000.0, 0.01],
 
   // master
-  ["kVoiceMode", "Voice mode", 0, 0, 0, 0],
+  ["kVoiceMode", "Voice mode", 0, 0, 2, 1],
   ["kGlideSpeed", "Glide speed", 1.0, 1.0, 1000.0, 0.01],
+  ["kGlideEnabled", "Glide enabled", 0, 0, 1, 1],
   ["kMasterVolume", "Master volume", 0.25, 0.0, 0.5, 0.01],
 ];
