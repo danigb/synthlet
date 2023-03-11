@@ -19,12 +19,14 @@
     "ts-jest": "^29.0.2",
     "tsup": "^6.2.3",
     "typescript": "^4.8.3",
-    "vite": "^3.2.1"
+    "vite": "^4.1.4"
   },
   "scripts": {
-    "start": "vite example/",
+    "dev": "vite example/",
     "build": "tsup src/index.ts --dts --format esm,cjs",
-    "worklet": "esbuild src/synthlet-processor.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/processor.ts"
+    "worklet": "npm run worklet:build # npm run worklet:check",
+    "worklet:build": "esbuild src/mika/mika-worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/mika/mika-processor.ts",
+    "worklet:check": "npx tsc --noEmit src/mika/mika-worklet.ts"
   },
   "jest": {
     "preset": "ts-jest"
