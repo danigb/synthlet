@@ -1,7 +1,11 @@
 export const PI = Math.PI;
 export const TWO_PI = Math.PI * 2;
 
-export const fastAtan2 = (x: number) => x / (1.0 + 0.28 * (x * x));
+export const pitchFactor = (pitch: number) => Math.pow(1.0595, pitch);
+export const pitchToFrequency = (pitch: number) =>
+  440 * pitchFactor(pitch - 69);
+
+export const fastAtan = (x: number) => x / (1.0 + 0.28 * (x * x));
 
 // http://www.kvraudio.com/forum/viewtopic.php?t=375517
 export function blep(phase: number, phaseIncrement: number): number {

@@ -5,7 +5,7 @@ const STAGE_FINISH = 3;
 
 export class Envelope {
   stage: number;
-  value: number;
+  private value: number;
   a: number;
   d: number;
   s: number;
@@ -20,12 +20,23 @@ export class Envelope {
     this.stage = STAGE_FINISH;
   }
 
+  getValue(velocitySensitivity: number, velocity: number) {
+    return this.value * (1.0 + (velocity - 1.0) * velocitySensitivity);
+  }
+
   start() {
     this.stage = STAGE_ATTACK;
   }
 
   release() {
     this.stage = STAGE_RELEASE;
+  }
+
+  update(a: number, d: number, s: number, r: number) {
+    this.a = a;
+    this.d = d;
+    this.s = s;
+    this.r = r;
   }
 
   process(dt: number) {
