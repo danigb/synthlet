@@ -11,7 +11,7 @@ export type MikaParams = {
   kFmMode: number;
   kFmCoarse: number;
   kFmFine: number;
-  kFilterEnabled: boolean;
+  kFilterEnabled: number;
   kFilterCutoff: number;
   kFilterResonance: number;
   kFilterKeyTrack: number;
@@ -39,6 +39,35 @@ export type MikaParams = {
   kMasterVolume: number;
 };
 
+export function getMikaParameterDescriptors() {
+  const automationRate = "k-rate";
+  return [
+    {
+      name: "trigger",
+      defaultValue: 0,
+      minValue: 0,
+      maxValue: 1,
+      automationRate: "k-rate",
+    },
+    {
+      name: "note",
+      defaultValue: 60,
+      minValue: 0,
+      maxValue: 127,
+      automationRate: "k-rate",
+    },
+    ...MIKA_PARAM_DEFS.map(
+      ([name, desc, defaultValue, minValue, maxValue]) => ({
+        name,
+        defaultValue,
+        minValue,
+        maxValue,
+        automationRate,
+      })
+    ),
+  ];
+}
+
 // MikaParamDefinition: [name, description, default, min, max, steps?, units?]
 type MikaParamDefinition = [
   string,
@@ -50,7 +79,7 @@ type MikaParamDefinition = [
   string?
 ];
 
-export const MIKA_PARAM_DEFS: MikaParamDefinition[] = [
+const MIKA_PARAM_DEFS: MikaParamDefinition[] = [
   // oscillators
   ["kOsc1Wave", "Oscillator 1 waveform", 2, 0, 7, 1],
   ["kOsc1Coarse", "Oscillator 1 coarse", 0, -24, 24, 1, "semitones"],

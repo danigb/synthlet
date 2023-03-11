@@ -1,4 +1,4 @@
-import { MIKA_PARAM_DEFS } from "./mika-params";
+import { getMikaParameterDescriptors } from "./mika-params";
 import { MikaSynth } from "./mika-synth";
 
 const DEFAULT = {
@@ -16,7 +16,7 @@ const DEFAULT = {
     kFmMode: 1,
     kFmCoarse: 4,
     kFmFine: 0.0,
-    kFilterEnabled: false,
+    kFilterEnabled: 1,
     kFilterCutoff: 200.0,
     kFilterResonance: 0.953125,
     kFilterKeyTrack: 1.0,
@@ -98,32 +98,7 @@ export class MikaWorklet extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    const automationRate = "k-rate";
-    return [
-      {
-        name: "trigger",
-        defaultValue: 0,
-        minValue: 0,
-        maxValue: 1,
-        automationRate: "k-rate",
-      },
-      {
-        name: "note",
-        defaultValue: 60,
-        minValue: 0,
-        maxValue: 127,
-        automationRate: "k-rate",
-      },
-      ...MIKA_PARAM_DEFS.map(
-        ([name, desc, defaultValue, minValue, maxValue]) => ({
-          name,
-          defaultValue,
-          minValue,
-          maxValue,
-          automationRate,
-        })
-      ),
-    ];
+    return getMikaParameterDescriptors();
   }
 }
 

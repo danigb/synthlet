@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Mika, MikaPresets } from "synthlet";
+import { getMikaParameterDescriptors, Mika, MikaPresets } from "synthlet";
 import { getAudioContext } from "./audio-context";
 import { ConnectMidi } from "./ConnectMidi";
 import { PianoKeyboard } from "./PianoKeyboard";
@@ -15,10 +15,19 @@ export function MikaExample({ className }: { className?: string }) {
   useEffect(() => {
     const mika = new Mika(getAudioContext());
     setMika(mika);
+    const randomPresetName =
+      presetNames[Math.floor(Math.random() * presetNames.length)];
+    loadPreset(randomPresetName);
     return () => {
       mika.destroy();
     };
   }, []);
+
+  function loadPreset(presetName: string) {
+    const preset = MikaPresets.find((p) => p.name === presetName);
+    if (preset) mika?.setPreset(preset);
+    setPresetName(presetName);
+  }
 
   return (
     <div className={className}>
@@ -42,15 +51,21 @@ export function MikaExample({ className }: { className?: string }) {
         />
       </div>
       <div className={!mika ? "opacity-30" : ""}>
-        <div className="flex gap-4 mb-2 no-select">
+        <div className="flex gap-2 mb-2 no-select">
+          <button
+            className="bg-zinc-700 rounded px-3 py-0.5 shadow"
+            onClick={() => {
+              const index = presetNames.indexOf(presetName);
+              if (index > 0) loadPreset(presetNames[index - 1]);
+            }}
+          >
+            &larr;
+          </button>
           <select
             className="bg-zinc-700 rounded"
             value={presetName}
             onChange={(e) => {
-              const presetName = e.target.value;
-              const preset = MikaPresets.find((p) => p.name === presetName);
-              if (preset) mika?.setPreset(preset);
-              setPresetName(presetName);
+              loadPreset(e.target.value);
             }}
           >
             {presetNames.map((name) => (
@@ -62,10 +77,12 @@ export function MikaExample({ className }: { className?: string }) {
           <button
             className="bg-zinc-700 rounded px-3 py-0.5 shadow"
             onClick={() => {
-              //   piano?.stop();
+              const index = presetNames.indexOf(presetName);
+              if (index < presetNames.length - 1)
+                loadPreset(presetNames[index + 1]);
             }}
           >
-            Stop all
+            &rarr;
           </button>
         </div>
         <PianoKeyboard
@@ -79,7 +96,39 @@ export function MikaExample({ className }: { className?: string }) {
             mika?.release();
           }}
         />
+        <ParamControls
+          className="mt-4"
+          params={MikaPresets.find((p) => p.name === presetName)?.params}
+        />
       </div>
+    </div>
+  );
+}
+
+const descriptors = getMikaParameterDescriptors();
+
+export function ParamControls({
+  className,
+  params,
+}: {
+  className?: string;
+  params?: Record<string, number>;
+}) {
+  return (
+    <div className={className}>
+      {descriptors.map((param) => (
+        <div key={param.name} className="flex gap-2 my-2">
+          <label className="w-28 text-right text-xs">{param.name}</label>
+          <input
+            className="w-60"
+            type="range"
+            min={param.minValue}
+            max={param.maxValue}
+            value={params?.[param.name] ?? param.defaultValue}
+            onChange={(e) => {}}
+          />
+        </div>
+      ))}
     </div>
   );
 }
