@@ -40,6 +40,8 @@ export type MikaParams = {
   kMasterVolume: number;
 };
 
+export type MikaParamName = keyof MikaParams;
+
 export function getMikaParameterDescriptors() {
   const automationRate = "k-rate";
   return [
@@ -67,6 +69,10 @@ export function getMikaParameterDescriptors() {
       })
     ),
   ];
+}
+
+export function getMikaParameterNames(): MikaParamName[] {
+  return MIKA_PARAM_DEFS.map(([name]) => name as MikaParamName);
 }
 
 // MikaParamDefinition: [name, description, default, min, max, steps?, units?]

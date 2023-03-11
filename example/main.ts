@@ -51,11 +51,10 @@ async function main() {
   for (const btn of noteButtons) {
     const note = parseInt(btn.getAttribute("data-note") ?? "60", 10);
     btn.addEventListener("mousedown", () => {
-      synth.setNote(note);
-      synth.start();
+      synth.pressKey({ note });
     });
     btn.addEventListener("mouseup", () => {
-      synth.release();
+      synth.releaseKey({ note });
     });
   }
 

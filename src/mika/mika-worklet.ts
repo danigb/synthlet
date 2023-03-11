@@ -1,4 +1,8 @@
-import { getMikaParameterDescriptors } from "./mika-params";
+import {
+  getMikaParameterDescriptors,
+  getMikaParameterNames,
+  MikaParamName,
+} from "./mika-params";
 import { MikaPreset } from "./mika-presets";
 import { MikaSynth } from "./mika-synth";
 
@@ -52,6 +56,7 @@ export class MikaWorklet extends AudioWorkletProcessor {
   dt: number;
   started: boolean;
   debug = 0;
+  params: MikaParamName[];
 
   constructor() {
     super();
@@ -66,6 +71,7 @@ export class MikaWorklet extends AudioWorkletProcessor {
         this.synth.setParams(params);
       }
     };
+    this.params = getMikaParameterNames();
   }
 
   process(
@@ -85,6 +91,11 @@ export class MikaWorklet extends AudioWorkletProcessor {
     const note = parameters.note[0];
     this.synth.setNote(note);
 
+    // Copy params to synth before processing
+    for (const param of this.params) {
+      this.synth.setParam(param, parameters[param][0]);
+    }
+
     // mono output
     const output = outputs[0][0];
     for (let i = 0; i < output.length; i++) {
@@ -93,7 +104,11 @@ export class MikaWorklet extends AudioWorkletProcessor {
 
     this.debug++;
     if (this.debug === 1000) {
-      this.port.postMessage({ type: "debug", debug: output[0] });
+      this.port.postMessage({
+        type: "debug",
+        debug: output[0],
+        vvv: this.synth.params.kGlideEnabled,
+      });
       this.debug = 0;
     }
     return true;

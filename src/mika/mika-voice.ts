@@ -2,7 +2,7 @@ import { Filter } from "../dsp/filter";
 import { pitchFactor, pitchToFrequency } from "../dsp/math";
 import { Oscillator, WaveformType } from "../dsp/oscillator";
 import { MikaEnvelope } from "./mika-envelope";
-import { MikaParams } from "./mika-params";
+import { MikaParamName, MikaParams } from "./mika-params";
 
 export class MikaVoice {
   osc1a: Oscillator;
@@ -43,8 +43,8 @@ export class MikaVoice {
     this.params = params;
   }
 
-  setParams(params: MikaParams) {
-    this.params = params;
+  setParam(paramName: MikaParamName, value: number) {
+    this.params[paramName] = value;
   }
 
   start() {

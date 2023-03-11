@@ -6,7 +6,23 @@ import { getAudioContext } from "./audio-context";
 import { ConnectMidi } from "./ConnectMidi";
 import { PianoKeyboard } from "./PianoKeyboard";
 
+const DEBUG = true;
 const presetNames = MikaPresets.map((p) => p.name);
+
+function showDebug(mika: Mika) {
+  mika.loaded().then(() => {
+    if (!mika.worklet) return;
+    console.log(
+      "WORKLET",
+      mika.paramNames,
+      mika.worklet.parameters,
+      Array.from(mika.worklet.parameters.keys())
+    );
+    mika.worklet.port.onmessage = (e) => {
+      console.log("MSG >>>", e.data);
+    };
+  });
+}
 
 export function MikaExample({ className }: { className?: string }) {
   const [mika, setMika] = useState<Mika | undefined>(undefined);
@@ -15,6 +31,8 @@ export function MikaExample({ className }: { className?: string }) {
   useEffect(() => {
     const mika = new Mika(getAudioContext());
     setMika(mika);
+    if (DEBUG) showDebug(mika);
+
     const randomPresetName =
       presetNames[Math.floor(Math.random() * presetNames.length)];
     loadPreset(randomPresetName);
