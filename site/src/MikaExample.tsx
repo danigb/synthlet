@@ -39,13 +39,10 @@ export function MikaExample({ className }: { className?: string }) {
         <ConnectMidi
           instrument={{
             start(note) {
-              console.log("start", note);
-              mika?.setNote(note.note, note.velocity);
-              mika?.start();
+              mika?.pressKey(note);
             },
             stop(note) {
-              console.log("stop", note);
-              mika?.release();
+              mika?.releaseKey({ note: note.stopId });
             },
           }}
         />
@@ -88,12 +85,10 @@ export function MikaExample({ className }: { className?: string }) {
         <PianoKeyboard
           borderColor="border-rose-700"
           onPress={(note) => {
-            if (!mika) return;
-            mika.setNote(note.note, note.time);
-            mika.start(note.time);
+            mika?.pressKey(note);
           }}
-          onRelease={(midi) => {
-            mika?.release();
+          onRelease={(note) => {
+            mika?.releaseKey({ note });
           }}
         />
         <ParamControls

@@ -75,7 +75,7 @@ type MikaParamDefinition = [
   number,
   number,
   number,
-  number?,
+  number,
   string?
 ];
 
@@ -93,7 +93,7 @@ const MIKA_PARAM_DEFS: MikaParamDefinition[] = [
 
   // fm
   ["kFmMode", "FM mode", 0, 0, 3, 1],
-  ["kFmCoarse", "FM coarse", 0, 0, 48],
+  ["kFmCoarse", "FM coarse", 0, 0, 48, 1],
   ["kFmFine", "FM fine", 0.0, -1.0, 1.0, 0.01],
 
   // filter
