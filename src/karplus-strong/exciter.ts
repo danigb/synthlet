@@ -1,4 +1,4 @@
-import { DCRemovalFilter } from "./dc-removal-filter";
+import { DCRemovalFilter } from "../filters/dc-removal-filter";
 import { ExciterEG } from "./exciter-eg";
 
 /**
