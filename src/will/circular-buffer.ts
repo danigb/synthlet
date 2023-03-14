@@ -1,7 +1,7 @@
 const linearInterpolation = (y1: number, y2: number, fractional: number) =>
   fractional * y2 + (1.0 - fractional) * y1;
 
-class CircularBuffer {
+export class CircularBuffer {
   private buffer: number[];
   private writeIndex = 0;
   private bufferLength = 1024;
