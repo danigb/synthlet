@@ -2,7 +2,7 @@ import { LP1PFilter } from "../filters/lp1p-filter";
 import { LP2Filter } from "../filters/lp2-filter";
 import { DelayLine } from "./delay-line";
 
-enum PluckFilterType {
+export enum PluckFilterType {
   kPluck,
   kPluckAndBridge,
   kPickup,

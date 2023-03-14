@@ -20,7 +20,7 @@ export class Exciter {
     return true;
   }
 
-  render(coupledInput: number): number {
+  render(coupledInput: number = 0.0): number {
     const noise = this.noiseGen.doWhiteNoise();
     const eg = this.noiseEG.render();
     const ahr = noise * eg + coupledInput;
