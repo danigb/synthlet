@@ -22,10 +22,10 @@
   },
   "scripts": {
     "dev": "vite example/",
-    "build": "tsup src/index.ts --dts --format esm,cjs",
-    "worklet": "npm run worklet:build # npm run worklet:check",
-    "worklet:build": "esbuild src/mika/mika-worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/mika/mika-processor.ts",
-    "worklet:check": "npx tsc --noEmit src/mika/mika-worklet.ts"
+    "build": "yarn worklet && yarn build:lib",
+    "build:lib": "tsup src/index.ts --dts --format esm,cjs",
+    "worklet": "npm run worklet:adsr # npm run worklet:check",
+    "worklet:adsr": "esbuild src/adsr/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/adsr/processor.js"
   },
   "jest": {
     "preset": "ts-jest"

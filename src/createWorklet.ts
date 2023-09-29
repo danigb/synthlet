@@ -1,4 +1,7 @@
-export function createWorklet(name: string, code: string) {
+export function loadWorklet<T>(
+  code: string,
+  create: (context: AudioContext) => T
+) {
   const init = new WeakMap<AudioContext, Promise<void>>();
 
   return async function load(context: AudioContext) {
@@ -9,12 +12,14 @@ export function createWorklet(name: string, code: string) {
       ready = context.audioWorklet.addModule(url);
       init.set(context, ready);
     }
-    await ready;
-
-    const synth = new AudioWorkletNode(context, name, {
-      numberOfInputs: 0,
-      outputChannelCount: [1],
-    });
-    return synth;
+    return ready.then(() => create(context));
   };
+}
+
+export function createWorklet(name: string) {
+  return (context: AudioContext) =>
+    new AudioWorkletNode(context, name, {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+    });
 }
