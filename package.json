@@ -25,9 +25,10 @@
     "test": "jest",
     "build": "yarn worklet && yarn build:lib",
     "build:lib": "tsup src/index.ts --dts --format esm,cjs",
-    "worklet": "npm run worklet:adsr && npm run worklet:impulse",
-    "worklet:adsr": "esbuild src/adsr/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/adsr/processor.js",
-    "worklet:impulse": "esbuild src/impulse/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/impulse/processor.js"
+    "worklet": "npm run adsr && npm run impulse && npm run mika",
+    "adsr": "esbuild src/adsr/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/adsr/processor.js",
+    "impulse": "esbuild src/impulse/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/impulse/processor.js",
+    "mika": "esbuild src/mika/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/mika/processor.js"
   },
   "jest": {
     "preset": "ts-jest"
