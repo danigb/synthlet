@@ -1,13 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  AdsrNode,
-  ImpulseNode,
-  createAdsrNode,
-  createImpulseNode,
-  loadSynthlet,
-} from "synthlet";
+import { Adsr, AdsrNode, Impulse, ImpulseNode, loadSynthlet } from "synthlet";
 import { ConnectMidi } from "./ConnectMidi";
 import { PianoKeyboard } from "./PianoKeyboard";
 import { getAudioContext } from "./audio-context";
@@ -25,23 +19,20 @@ class AdsrExampleSynth {
   constructor(public context: AudioContext) {
     this.osc = new OscillatorNode(context, { type: "sine", frequency: 880 });
     this.gain = new GainNode(context, { gain: 1 });
-    this.adsr = createAdsrNode(context);
-    this.env = createAdsrNode(context);
-    this.impulse = createImpulseNode(context);
+    this.adsr = Adsr(context, { release: 1 });
+    this.env = Adsr(context);
+    this.impulse = Impulse(context, { freq: 10 });
     this.impulse.connect(this.env.gate);
     this.osc.start();
     this.osc.connect(this.env).connect(this.adsr).connect(context.destination);
   }
 
   pressKey({ note }: { note: number }) {
-    console.log("press", note, this.adsr.attack, this.adsr.release);
     this.osc.frequency.value = midiToFreq(note);
     this.adsr.gate.setValueAtTime(1, this.context.currentTime);
   }
   releaseKey({ note }: { note: number }) {
-    console.log("release1", note, this.adsr.gate);
     this.adsr.gate.setValueAtTime(0, this.context.currentTime);
-    console.log("release2", note, this.adsr.gate);
   }
 
   destroy() {
@@ -89,8 +80,8 @@ export function AdsrExample({ className }: { className?: string }) {
   const [attack, setAttack] = useState(0.1);
   const [decay, setDecay] = useState(0.1);
   const [sustain, setSustain] = useState(0.5);
-  const [release, setRelease] = useState(0.1);
-  const [freq, setFreq] = useState(2);
+  const [release, setRelease] = useState(1);
+  const [freq, setFreq] = useState(10);
 
   useEffect(() => {
     let synth: AdsrExampleSynth | undefined = undefined;

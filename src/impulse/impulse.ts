@@ -2,7 +2,7 @@ import { ParamsDef } from "../utils";
 
 export const ImpulseParams: ParamsDef = {
   freq: { min: 0, max: 10000, defaultValue: 1 },
-};
+} as const;
 
 /**
  * Impulse produce a series of single-sample impulses at a specified frequency.
