@@ -25,7 +25,7 @@ class AdsrExampleSynth {
   }
 
   pressKey({ note }: { note: number }) {
-    console.log("press", note, this.adsr.gate);
+    console.log("press", note, this.adsr.attack, this.adsr.release);
     this.osc.frequency.value = midiToFreq(note);
     this.adsr.gate.setValueAtTime(1, this.context.currentTime);
   }
@@ -41,8 +41,46 @@ class AdsrExampleSynth {
   }
 }
 
+function Slider({
+  min = 0,
+  max = 5,
+  name,
+  value,
+  onChange,
+  param,
+}: {
+  min?: number;
+  max?: number;
+  name: string;
+  value: number;
+  onChange: (value: number) => void;
+  param?: AudioParam;
+}) {
+  return (
+    <>
+      {name}
+      <input
+        type="range"
+        min={min}
+        max={max}
+        value={value}
+        step="any"
+        onChange={(e) => {
+          const value = e.target.valueAsNumber;
+          param?.setValueAtTime(value, 0);
+          onChange(value);
+        }}
+      />
+    </>
+  );
+}
+
 export function AdsrExample({ className }: { className?: string }) {
   const [synth, setSynth] = useState<AdsrExampleSynth | undefined>(undefined);
+  const [attack, setAttack] = useState(0.1);
+  const [decay, setDecay] = useState(0.1);
+  const [sustain, setSustain] = useState(0.5);
+  const [release, setRelease] = useState(0.1);
 
   useEffect(() => {
     let synth: AdsrExampleSynth | undefined = undefined;
@@ -72,6 +110,33 @@ export function AdsrExample({ className }: { className?: string }) {
               synth?.releaseKey({ note: note.stopId });
             },
           }}
+        />
+      </div>
+      <div className="flex gap-2 mb-2">
+        <Slider
+          name="Attack"
+          value={attack}
+          onChange={setAttack}
+          param={synth?.adsr.attack}
+        />
+        <Slider
+          name="Decay"
+          value={decay}
+          onChange={setDecay}
+          param={synth?.adsr.decay}
+        />
+        <Slider
+          name="Sustain"
+          max={1}
+          value={sustain}
+          onChange={setSustain}
+          param={synth?.adsr.sustain}
+        />
+        <Slider
+          name="Release"
+          value={release}
+          onChange={setRelease}
+          param={synth?.adsr.release}
         />
       </div>
       <div className={!synth ? "opacity-30" : ""}>

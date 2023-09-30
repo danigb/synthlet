@@ -1,102 +1,163 @@
-const tau2pole = (tau: number) => Math.exp(-1.0 / (tau * 0.001 * 0.001));
-
-enum AdsrMode {
-  CLEAR = 0,
-  ATTACK = 1,
-  DECAY = 2,
-  RELEASE = 3,
+enum Stage {
+  Idle,
+  Attack,
+  Decay,
+  Sustain,
+  Release,
 }
 
 export const AdsrParams = {
   gate: { min: 0, max: 1, defaultValue: 0 },
-  attack: { min: 0, max: 10, defaultValue: 0.1 },
+  attack: { min: 0, max: 10, defaultValue: 0.01 },
   decay: { min: 0, max: 10, defaultValue: 0.1 },
   sustain: { min: 0, max: 1, defaultValue: 0.5 },
   release: { min: 0, max: 10, defaultValue: 0.3 },
 };
-export const ADSR_PARAMS = Object.keys(AdsrParams).map((name) => {
-  const { min, max, defaultValue } = AdsrParams[name];
-  return { name, min, max, defaultValue, automationRate: "k-rate" };
-});
 
 /**
- * This is a classic ADSR envelope generator.
+ * An ADSR envelope generator.
  *
- * @see https://paulbatchelor.github.io/sndkit/adsr/
+ * This is a port of Nigel Redmon's ADSR code based on a one-pole filter
+ *
+ * @see https://www.earlevel.com/main/2013/06/01/envelope-generators/
+ * @see https://github.com/willpirkleaudio/SynthLab/blob/main/source/analogegcore.h
  */
 export class Adsr {
-  sampleRate: number;
-  attack: number;
-  decay: number;
-  sustain: number;
-  release: number;
-  timer: number;
-  a: number;
-  b: number;
-  y: number;
-  x: number;
-  prev: number;
-  mode: AdsrMode;
+  private output: number;
+  private state: number;
+  private attackTime: number;
+  private decayTime: number;
+  private releaseTime: number;
+  private attackCoef: number;
+  private decayCoef: number;
+  private releaseCoef: number;
+  private sustainLevel: number;
+  private attackBase: number;
+  private decayBase: number;
+  private releaseBase: number;
+  private open: boolean;
 
-  constructor(sampleRate: number) {
-    this.sampleRate = sampleRate;
-    this.attack = AdsrParams.attack.defaultValue;
-    this.decay = AdsrParams.decay.defaultValue;
-    this.sustain = AdsrParams.sustain.defaultValue;
-    this.release = AdsrParams.release.defaultValue;
+  /**
+   * Time Constant Offsets (TCOs)
+   *
+   * TCOs are values used to calculate the exponential curves.
+   * An exponential envelope's behavior is modeled after an RC (resistor-capacitor)
+   * circuit's charge and discharge curves. In such circuits, the time constant
+   * (often represented as τ, tau) is the time required for the voltage
+   * across the capacitor to reach approximately 63.2% of its final value after a change.
+   */
+  private attackTCO: number;
+  private decayTCO: number;
+  private releaseTCO: number;
 
-    this.timer = 0;
-    this.a = 0;
-    this.b = 0;
-    this.y = 0;
-    this.x = 0;
-    this.prev = 0;
+  constructor(public readonly sampleRate: number) {
+    this.state = Stage.Idle;
+    this.open = false;
+    this.output = 0.0;
+    this.attackTime = 0.0;
+    this.decayTime = 0.0;
+    this.releaseTime = 0.0;
+    this.attackCoef = 0.0;
 
-    this.mode = AdsrMode.CLEAR;
+    // Values taken from Will Pirkle's SynthLab
+    this.attackTCO = Math.exp(-1.5); // fast attack
+    this.decayTCO = Math.exp(-4.95);
+    this.releaseTCO = this.decayTCO;
+
+    this.setParams(
+      AdsrParams.attack.defaultValue,
+      AdsrParams.decay.defaultValue,
+      AdsrParams.sustain.defaultValue,
+      AdsrParams.release.defaultValue
+    );
   }
 
-  private setCoefficients(value: number) {
-    this.a = Math.exp(-1.0 / (value * this.sampleRate));
-    this.b = 1 - this.a;
+  setGate(value: number): void {
+    const open = value ? true : false;
+    if (this.open === open) return;
+    this.open = open;
+
+    if (open) {
+      this.state = Stage.Attack;
+    } else if (this.state !== Stage.Idle) {
+      this.state = Stage.Release;
+    }
   }
 
-  process(gate: number, input: Float32Array[], output: Float32Array[]) {
-    if (gate !== 0 && this.mode === AdsrMode.CLEAR) {
-      this.mode = AdsrMode.ATTACK;
-      this.timer = 0;
-      this.setCoefficients(0.6 * this.attack);
-    } else if (gate === 0) {
-      this.mode = AdsrMode.RELEASE;
-      this.setCoefficients(this.release);
+  setParams(
+    attack: number,
+    decay: number,
+    sustain: number,
+    release: number
+  ): void {
+    // Sustain needs to be first
+    this.setSustainLevel(sustain);
+    this.setAttackTime(attack);
+    this.setDecayTime(decay);
+    this.setReleaseTime(release);
+  }
+
+  process(): number {
+    switch (this.state) {
+      case Stage.Idle:
+        break;
+      case Stage.Attack:
+        this.output = this.attackBase + this.output * this.attackCoef;
+        if (this.output >= 1.0 || this.attackTime <= 0) {
+          this.output = 1.0;
+          this.state = Stage.Decay;
+        }
+        break;
+      case Stage.Decay:
+        this.output = this.decayBase + this.output * this.decayCoef;
+        if (this.output <= this.sustainLevel || this.decayTime <= 0) {
+          this.output = this.sustainLevel;
+          this.state = Stage.Sustain;
+        }
+        break;
+      case Stage.Sustain:
+        this.output = this.sustainLevel;
+        break;
+      case Stage.Release:
+        this.output = this.releaseBase + this.output * this.releaseCoef;
+        if (this.output <= 0.0 || this.releaseTime <= 0) {
+          this.output = 0.0;
+          this.state = Stage.Idle;
+        }
     }
+    return this.output;
+  }
 
-    this.x = gate;
-    this.prev = gate;
+  private setSustainLevel(level: number): void {
+    if (this.sustainLevel === level) return;
+    this.sustainLevel = level;
+    this.decayTime = -1; // force recalculation
+  }
 
-    const length = input[0].length;
-    const channels = Math.min(input.length, output.length);
-    if (!channels) return;
+  private setAttackTime(time: number): void {
+    if (this.attackTime === time) return;
+    this.attackTime = time;
+    const samples = this.sampleRate * time;
+    const tco = this.attackTCO;
+    this.attackCoef = Math.exp(-Math.log((1.0 + tco) / tco) / samples);
+    this.attackBase = (1.0 + tco) * (1.0 - this.attackCoef);
+  }
 
-    if (this.mode === AdsrMode.CLEAR) {
-      for (let i = 0; i < length; i++) {
-        for (let j = 0; j < channels; j++) {
-          output[j][i] = 0;
-        }
-      }
-    } else {
-      for (let i = 0; i < length; i++) {
-        this.y = this.b * this.x + this.a * this.y;
-        if (this.y > 0.99 && this.mode === AdsrMode.ATTACK) {
-          this.mode = AdsrMode.DECAY;
-          this.setCoefficients(this.decay);
-        }
-        if (this.mode === AdsrMode.RELEASE) {
-          this.x = this.x * this.sustain;
-        }
-        for (let j = 0; j < channels; j++) {
-          output[j][i] = this.y * input[j][i];
-        }
-      }
-    }
+  private setDecayTime(time: number): void {
+    if (this.decayTime === time) return;
+    this.decayTime = time;
+    const samples = this.sampleRate * time;
+    const tco = this.decayTCO;
+    this.decayCoef = Math.exp(-Math.log((1.0 + tco) / tco) / samples);
+    this.decayBase = (this.sustainLevel - tco) * (1.0 - this.decayCoef);
+  }
+
+  private setReleaseTime(time: number): void {
+    if (this.releaseTime === time) return;
+    this.releaseTime = time;
+    const samples = this.sampleRate * time;
+    const tco = this.releaseTCO;
+    this.releaseCoef = Math.exp(-Math.log((1.0 + tco) / tco) / samples);
+    this.releaseBase = -tco * (1.0 - this.releaseCoef);
   }
 }

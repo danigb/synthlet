@@ -23,3 +23,14 @@ export function createWorklet(name: string) {
       numberOfOutputs: 1,
     });
 }
+
+function addParam(name: string, object: any) {
+  Object.defineProperty(object, name, {
+    get() {
+      return object.parameters.get(name);
+    },
+  });
+}
+export function addParams(node: any, names: string[]) {
+  names.forEach((name) => addParam(name, node));
+}
