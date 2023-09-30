@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AdsrNode, createAdsr, loadAdsr } from "synthlet";
+import {
+  AdsrNode,
+  ImpulseNode,
+  createAdsrNode,
+  createImpulseNode,
+  loadSynthlet,
+} from "synthlet";
 import { ConnectMidi } from "./ConnectMidi";
 import { PianoKeyboard } from "./PianoKeyboard";
 import { getAudioContext } from "./audio-context";
@@ -13,15 +19,18 @@ class AdsrExampleSynth {
   gain: GainNode;
   adsr: AdsrNode;
   gate: AudioParam | undefined;
+  impulse: ImpulseNode;
+  env: AdsrNode;
 
   constructor(public context: AudioContext) {
     this.osc = new OscillatorNode(context, { type: "sine", frequency: 880 });
     this.gain = new GainNode(context, { gain: 1 });
-    this.adsr = createAdsr(context);
+    this.adsr = createAdsrNode(context);
+    this.env = createAdsrNode(context);
+    this.impulse = createImpulseNode(context);
+    this.impulse.connect(this.env.gate);
     this.osc.start();
-    this.osc.connect(this.adsr);
-    this.adsr.connect(this.gain);
-    this.gain.connect(context.destination);
+    this.osc.connect(this.env).connect(this.adsr).connect(context.destination);
   }
 
   pressKey({ note }: { note: number }) {
@@ -58,7 +67,7 @@ function Slider({
 }) {
   return (
     <>
-      {name}
+      {name} {value.toFixed(2)}
       <input
         type="range"
         min={min}
@@ -81,10 +90,11 @@ export function AdsrExample({ className }: { className?: string }) {
   const [decay, setDecay] = useState(0.1);
   const [sustain, setSustain] = useState(0.5);
   const [release, setRelease] = useState(0.1);
+  const [freq, setFreq] = useState(2);
 
   useEffect(() => {
     let synth: AdsrExampleSynth | undefined = undefined;
-    loadAdsr(getAudioContext()).then(() => {
+    loadSynthlet(getAudioContext()).then(() => {
       synth = new AdsrExampleSynth(getAudioContext());
       setSynth(synth);
     });
@@ -97,22 +107,16 @@ export function AdsrExample({ className }: { className?: string }) {
   return (
     <div className={className}>
       <div className="flex gap-2 items-end mb-2">
-        <h1 className="text-3xl">Mika</h1>
-        <p>A port of MikaMicro synth</p>
+        <h1 className="text-3xl">Adsr</h1>
+        <p>
+          <span className="text-rose-500">Adsr </span>
+          envelope with a<span className="text-rose-500"> Impulse </span>
+          trigger
+        </p>
       </div>
-      <div className="flex gap-2 mb-2">
-        <ConnectMidi
-          instrument={{
-            start(note) {
-              synth?.pressKey(note);
-            },
-            stop(note) {
-              synth?.releaseKey({ note: note.stopId });
-            },
-          }}
-        />
-      </div>
-      <div className="flex gap-2 mb-2">
+
+      <label className="text-zinc-200">Adsr</label>
+      <div className="flex gap-2 mb-2 text-zinc-400">
         <Slider
           name="Attack"
           value={attack}
@@ -139,30 +143,30 @@ export function AdsrExample({ className }: { className?: string }) {
           param={synth?.adsr.release}
         />
       </div>
-      <div className={!synth ? "opacity-30" : ""}>
-        <div className="flex gap-2 mb-2 no-select">
-          <button
-            className="bg-zinc-700 rounded px-3 py-0.5 shadow"
-            onClick={() => {}}
-          >
-            &larr;
-          </button>
-          <select
-            className="bg-zinc-700 rounded"
-            value={""}
-            onChange={(e) => {}}
-          >
-            <option key={"none"} value={""}>
-              None
-            </option>
-          </select>
-          <button
-            className="bg-zinc-700 rounded px-3 py-0.5 shadow"
-            onClick={() => {}}
-          >
-            &rarr;
-          </button>
-        </div>
+      <label className="text-zinc-200">Impulse</label>
+      <div className="flex gap-2 mb-2 text-zinc-400">
+        <Slider
+          name="Freq"
+          value={freq}
+          min={1}
+          max={20}
+          onChange={setFreq}
+          param={synth?.impulse.freq}
+        />
+      </div>
+      <div className="flex gap-2 mt-4 mb-2">
+        <ConnectMidi
+          instrument={{
+            start(note) {
+              synth?.pressKey(note);
+            },
+            stop(note) {
+              synth?.releaseKey({ note: note.stopId });
+            },
+          }}
+        />
+      </div>
+      <div className="">
         <PianoKeyboard
           borderColor="border-rose-700"
           onPress={(note) => {

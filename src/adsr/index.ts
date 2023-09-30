@@ -1,16 +1,15 @@
-import { addParams, loadWorklet } from "../worklet-utils";
+import { addParams, loadWorklet } from "../utils";
+import { AdsrParams } from "./adsr";
 import { PROCESSOR as ADSR } from "./processor";
 
-export const loadAdsr = loadWorklet(ADSR, (context) => {
-  return context;
-});
+export const loadAdsr = loadWorklet(ADSR);
 
-export const createAdsr = (context: AudioContext): AdsrNode => {
+export const createAdsrNode = (context: AudioContext): AdsrNode => {
   const node = new AudioWorkletNode(context, "AdsrWorklet", {
     numberOfInputs: 1,
     numberOfOutputs: 1,
   });
-  addParams(node, ["gate", "attack", "decay", "sustain", "release"]);
+  addParams(node, AdsrParams);
 
   return node as AdsrNode;
 };

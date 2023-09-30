@@ -1,9 +1,7 @@
+import { toWorkletParams } from "../utils";
 import { Adsr, AdsrParams } from "./adsr";
 
-const ADSR_PARAMS = Object.keys(AdsrParams).map((name) => {
-  const { min: minValue, max: maxValue, defaultValue } = AdsrParams[name];
-  return { name, minValue, maxValue, defaultValue, automationRate: "k-rate" };
-});
+const ADSR_PARAMS = toWorkletParams(AdsrParams);
 
 export class AdsrWorklet extends AudioWorkletProcessor {
   dt: number;
