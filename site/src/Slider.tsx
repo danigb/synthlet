@@ -12,7 +12,7 @@ export function Slider({
   name: string;
   value: number;
   onChange: (value: number) => void;
-  param?: AudioParam;
+  param?: AudioParam | ((num: number) => void);
 }) {
   return (
     <>
@@ -25,7 +25,8 @@ export function Slider({
         step="any"
         onChange={(e) => {
           const value = e.target.valueAsNumber;
-          param?.setValueAtTime(value, 0);
+          if (typeof param === "function") param(value);
+          else param?.setValueAtTime(value, 0);
           onChange(value);
         }}
       />

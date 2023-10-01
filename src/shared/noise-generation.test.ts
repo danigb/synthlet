@@ -1,31 +1,61 @@
-import { NoiseGenerator } from "./noise-generator";
+import {
+  NoiseGenerator,
+  fastWhiteNoise,
+  linearCongruentialGenerator,
+} from "./noise-generator";
 
 function setup() {
   const noiseGenerator = new NoiseGenerator();
+  noiseGenerator.setDeterministicWhiteNoise();
   const buffer = Array.from({ length: 10 }, () => 0);
   return { noiseGenerator, buffer };
 }
 
+describe("fastWhiteNoise", () => {});
+
 describe("NoiseGenerator", () => {
-  it("generates deterministic white noise", () => {
+  it.skip("fastWhiteNoise generates white noise in [0.0, 1.0] range", () => {
+    const generate = fastWhiteNoise();
+    for (let i = 0; i < 10000; i++) {
+      const value = generate();
+      expect(value).toBeGreaterThanOrEqual(0.0);
+      expect(value).toBeLessThanOrEqual(1.0);
+    }
+  });
+
+  it("linearCongruentialGenerator generates white noise in [0.0, 1.0] range", () => {
+    const generate = linearCongruentialGenerator();
+    let max = 0,
+      min = 0;
+    for (let i = 0; i < 10000; i++) {
+      const value = generate();
+      max = Math.max(max, value);
+      min = Math.min(min, value);
+      expect(value).toBeGreaterThanOrEqual(0.0);
+      expect(value).toBeLessThanOrEqual(1.0);
+    }
+    expect(max).toBe(0.9998433205764741);
+    expect(min).toBe(0);
+  });
+  it("can generate deterministic white noise", () => {
     const { noiseGenerator, buffer } = setup();
     const output = buffer.map(() => noiseGenerator.doWhiteNoise());
     expect(output).toEqual([
-      1.8734640525359343, 0.9401307187369398, 0.8219281036457811,
-      0.024390800396071468, -0.7649939308792805, -0.7268511133098162,
-      -1.4292637387824394, -1.561261197449933, -1.8800436737667872,
-      -2.1893516816639695,
+      0.695505274925381, 0.15381314256228507, 0.0571914603933692,
+      0.8516792457085103, 0.6325309309177101, 0.7838537741918117,
+      0.4395545981824398, 0.8536075984593481, 0.4238935192115605,
+      0.596133595565334,
     ]);
   });
 
-  it("generates deterministic pink noise", () => {
+  it("can generate deterministic pink noise", () => {
     const { noiseGenerator, buffer } = setup();
     const output = buffer.map(() => noiseGenerator.doPinkNoise());
     expect(output).toEqual([
-      3.391594665310802, 3.6297723383657376, 3.824420553058747,
-      2.775878680954277, 0.9732056992167836, -0.03422226736651296,
-      -1.8753673812055955, -3.2906362511075344, -4.8430858635424165,
-      -6.482714421024954,
+      1.4679247250864105, 1.1860996355870266, 0.9585949720960211,
+      2.1539843090831288, 2.5368705445016038, 3.129499936399707,
+      3.0143581489162408, 3.728191799691076, 3.520650741950054,
+      3.787913888725774,
     ]);
   });
 });

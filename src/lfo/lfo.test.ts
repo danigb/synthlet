@@ -26,4 +26,17 @@ describe("Lfo", () => {
       -8.88888931274414, -4.44444465637207, 4.440892098500626e-15,
     ]);
   });
+
+  it("renders sample and hold", () => {
+    const { lfo, buffer } = setup();
+    // doWhiteNoise is called once (on lfo constructor) before mocking
+    lfo.noiseGen.doWhiteNoise = jest.fn(() => 0.0);
+    lfo.setParameters(LfoWaveform.RandSampleHold, 1, 10, 0);
+    lfo.fillAudioBuffer(buffer);
+    expect(lfo.noiseGen.doWhiteNoise).toHaveBeenCalledTimes(1);
+    lfo.fillAudioBuffer(buffer);
+    expect(lfo.noiseGen.doWhiteNoise).toHaveBeenCalledTimes(2);
+    lfo.fillAudioBuffer(buffer);
+    expect(lfo.noiseGen.doWhiteNoise).toHaveBeenCalledTimes(3);
+  });
 });

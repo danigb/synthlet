@@ -101,20 +101,18 @@ export class Lfo {
 
   fillAudioBuffer(output: Float32Array) {
     for (let i = 0; i < output.length; i++) {
-      output[i] = this.render();
-      this.lfoClock.advanceClock(1);
+      output[i] = this.render(1);
     }
   }
 
   fillControlBuffer(output: Float32Array) {
-    const value = this.render();
+    const value = this.render(output.length);
     for (let i = 0; i < output.length; i++) {
       output[i] = value;
     }
-    this.lfoClock.advanceClock(output.length);
   }
 
-  private render(): number {
+  private render(advance: number): number {
     if (this.renderComplete) return 0.0;
 
     if (!this.delayTimer.timerExpired()) {
@@ -161,7 +159,7 @@ export class Lfo {
           this.rshOutputValue = this.noiseGen.doWhiteNoise();
           this.sampleHoldTimer.resetTimer();
         } else {
-          this.sampleHoldTimer.advanceTimer();
+          this.sampleHoldTimer.advanceTimer(advance);
         }
         out = this.rshOutputValue;
         break;
@@ -186,6 +184,8 @@ export class Lfo {
     // TODO: shape
 
     out *= this.params.gain;
+
+    this.lfoClock.advanceClock(advance);
 
     return out;
   }

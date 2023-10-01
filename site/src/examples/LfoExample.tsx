@@ -58,7 +58,7 @@ class LfoExampleSynth {
 export function LfoExample({ className }: { className?: string }) {
   const [synth, setSynth] = useState<LfoExampleSynth | undefined>(undefined);
   const [frequency, setFrequency] = useState(10);
-  const [gain, setGain] = useState(100);
+  const [detune, setDetune] = useState(5);
   const [quantize, setQuantize] = useState(0);
   const [waveform, setWaveform] = useState(LfoWaveform.RandSampleHold);
 
@@ -111,12 +111,14 @@ export function LfoExample({ className }: { className?: string }) {
           param={synth?.lfo.frequency}
         />
         <Slider
-          name="Detune"
-          value={gain}
-          min={0.1}
-          max={100}
-          onChange={setGain}
-          param={synth?.lfo.gain}
+          name="Detune (semitones)"
+          value={detune}
+          min={1}
+          max={12}
+          onChange={setDetune}
+          param={(value) => {
+            synth?.lfo.gain.setValueAtTime(value * 100, 0);
+          }}
         />
         <Slider
           name="Quantize"
