@@ -15,6 +15,7 @@ const VA_OSCILLATOR_PARAMS = {
 };
 
 export const VaOscillatorParams: ParamsDef = {
+  waveform: { min: 0, max: 2, defaultValue: 0 },
   frequency: { min: 0, max: 10000, defaultValue: 1 },
   mix: { min: 0, max: 1, defaultValue: 0.5 },
   pulseWidth: { min: 0, max: 1, defaultValue: 0.5 },

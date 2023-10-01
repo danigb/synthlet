@@ -3,6 +3,7 @@ import Head from "next/head";
 import { AdsrExample } from "src/examples/AdsrExample";
 import { KarplusExample } from "src/examples/KarplusExample";
 import { LfoExample } from "src/examples/LfoExample";
+import { VaOscillatorExample } from "src/examples/VaOscillatorExample";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,6 +21,7 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col gap-8">
+          <VaOscillatorExample />
           <KarplusExample />
           <LfoExample />
           <AdsrExample />
