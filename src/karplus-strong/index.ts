@@ -4,8 +4,8 @@ import {
   loadWorklet,
   workletNodeConstructor,
 } from "../worklet-utils";
+import { KarplusStrongOscillatorParams } from "./karplus-strong-oscillator";
 import { PROCESSOR } from "./processor";
-import { KarplusStrongOscillatorParams } from "./worklet";
 
 export const loadKarplusStrongOscillator = loadWorklet(PROCESSOR);
 export type KarplusStrongOscillatorOptions = GenerateNodeOptions<

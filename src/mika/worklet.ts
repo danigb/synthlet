@@ -17,9 +17,9 @@ export class MikaWorklet extends AudioWorkletProcessor {
     parameters: any
   ) {
     const wave = parameters.wave[0];
-    const freq = parameters.freq[0];
+    const frequency = parameters.frequency[0];
     const detune = parameters.detune[0];
-    this.mika.setParams(wave, freq, detune);
+    this.mika.setParams(wave, frequency, detune);
     const output = outputs[0];
     for (let i = 0; i < output.length; i++) {
       this.mika.fillAudio(output[i]);

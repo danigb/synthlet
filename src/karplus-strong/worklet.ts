@@ -1,11 +1,10 @@
-import { ParamsDef, toWorkletParams } from "../worklet-utils";
-import { KarplusStrongOscillator } from "./karplus-strong-oscillator";
+import { toWorkletParams } from "../worklet-utils";
+import {
+  KarplusStrongOscillator,
+  KarplusStrongOscillatorParams,
+} from "./karplus-strong-oscillator";
 
-export const KarplusStrongOscillatorParams: ParamsDef = {
-  gate: { min: 0, max: 1, defaultValue: 0 },
-  frequency: { min: 0, max: 10000, defaultValue: 1 },
-} as const;
-const IMPULSE_PARAMS = toWorkletParams(KarplusStrongOscillatorParams);
+const PARAMS = toWorkletParams(KarplusStrongOscillatorParams);
 
 export class KarplusStrongOscillatorWorklet extends AudioWorkletProcessor {
   osc: KarplusStrongOscillator;
@@ -22,7 +21,7 @@ export class KarplusStrongOscillatorWorklet extends AudioWorkletProcessor {
     parameters: any
   ) {
     const gate = parameters.gate[0];
-    const freq = parameters.freq[0];
+    const freq = parameters.frequency[0];
     this.osc.setParams(gate, freq);
     const output = outputs[0];
     for (let ch = 0; ch < output.length; ch++) {
@@ -35,7 +34,7 @@ export class KarplusStrongOscillatorWorklet extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return IMPULSE_PARAMS;
+    return PARAMS;
   }
 }
 

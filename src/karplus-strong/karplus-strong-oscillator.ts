@@ -1,9 +1,15 @@
+import { ParamsDef } from "../worklet-utils";
 import { Exciter } from "./exciter/exciter";
 import { HighShelfFilter } from "./filters/high-self-filter";
 import { LP2Filter } from "./filters/lp2-filter";
 import { ParametricFilter } from "./filters/parametric-filter";
 import { PluckFilterType, PluckPosFilter } from "./filters/pluck-pos-filter";
 import { Resonator } from "./resonator/resonator";
+
+export const KarplusStrongOscillatorParams: ParamsDef = {
+  gate: { min: 0, max: 1, defaultValue: 0 },
+  frequency: { min: 0, max: 10000, defaultValue: 1 },
+} as const;
 
 function tanhWaveShaper(xn: number, saturation: number): number {
   if (saturation === 0) return xn;

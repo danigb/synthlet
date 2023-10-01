@@ -16,8 +16,8 @@ export class ImpulseWorklet extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    const freq = parameters.freq[0];
-    this.impulse.setParams(freq);
+    const frequency = parameters.frequency[0];
+    this.impulse.setParams(frequency);
     const output = outputs[0];
     for (let i = 0; i < output.length; i++) {
       this.impulse.fillControl(output[i]);
