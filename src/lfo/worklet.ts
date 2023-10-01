@@ -1,14 +1,14 @@
 import { toWorkletParams } from "../worklet-utils";
-import { Lfo, LfoParams, LfoWaveform } from "./lfo";
+import { Lfo, LfoParamsDef } from "./lfo";
 
-const LFO_PARAMS = toWorkletParams(LfoParams);
+const DESCRIPTORS = toWorkletParams(LfoParamsDef);
 
 export class LfoWorklet extends AudioWorkletProcessor {
-  impulse: Lfo;
+  lfo: Lfo;
 
   constructor() {
     super();
-    this.impulse = new Lfo(sampleRate);
+    this.lfo = new Lfo(sampleRate);
   }
 
   process(
@@ -16,18 +16,18 @@ export class LfoWorklet extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    const frequency = parameters.frequency[0];
-    const gain = parameters.gain[0];
-    this.impulse.update(LfoWaveform.Triangle, frequency, gain);
+    this.lfo.setWaveform(parameters.waveform[0]);
+    this.lfo.setFrequency(parameters.frequency[0]);
+    this.lfo.setGain(parameters.gain[0]);
     const output = outputs[0];
     for (let i = 0; i < output.length; i++) {
-      this.impulse.fillAudioBuffer(output[i]);
+      this.lfo.fillControlBuffer(output[i]);
     }
     return true;
   }
 
   static get parameterDescriptors() {
-    return LFO_PARAMS;
+    return DESCRIPTORS;
   }
 }
 

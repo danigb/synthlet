@@ -4,14 +4,16 @@ import {
   loadWorklet,
   workletNodeConstructor,
 } from "../worklet-utils";
-import { LfoParams } from "./lfo";
+import { LfoParamsDef } from "./lfo";
 import { PROCESSOR } from "./processor";
 
+export { LfoMode, LfoWaveform } from "./lfo";
+
 export const loadLfo = loadWorklet(PROCESSOR);
-export type LfoOptions = GenerateNodeOptions<typeof LfoParams>;
-export type LfoNode = GenerateNodeType<typeof LfoParams>;
+export type LfoOptions = GenerateNodeOptions<typeof LfoParamsDef>;
+export type LfoNode = GenerateNodeType<typeof LfoParamsDef>;
 
 export const Lfo = workletNodeConstructor<LfoNode, LfoOptions>(
   "LfoWorklet",
-  LfoParams
+  LfoParamsDef
 );

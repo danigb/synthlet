@@ -71,3 +71,9 @@ export function wrapMax(x: number, max: number): number {
 export function wrapMinMax(x: number, min: number, max: number): number {
   return min + wrapMax(x - min, max - min);
 }
+
+export function quantizeBipolarValue(value: number, levels: number): number {
+  value = clamp(value, -1.0, 1.0);
+  const mapped: number = Math.floor(((value + 1.0) / 2) * levels + 0.5);
+  return mapped / levels;
+}

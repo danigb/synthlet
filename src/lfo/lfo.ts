@@ -4,8 +4,10 @@ import {
   PI,
   TWO_PI,
   bipolar,
+  clamp,
   concaveXForm,
   parabolicSine,
+  quantizeBipolarValue,
 } from "../shared/math";
 import { NoiseGenerator } from "../shared/noise-generator";
 import { Timer } from "../shared/timer";
@@ -13,7 +15,7 @@ import { ParamsDef } from "../worklet-utils";
 
 export enum LfoWaveform {
   Triangle = 0,
-  Sin = 1,
+  Sine = 1,
   RampUp = 2,
   RampDown = 3,
   ExpRampUp = 4,
@@ -24,16 +26,25 @@ export enum LfoWaveform {
   Pluck = 9,
 }
 
-enum LfoMode {
+export enum LfoMode {
   Sync,
   OneShot,
   FreeRun,
 }
 
-export const LfoParams: ParamsDef = {
-  waveform: { min: 0, max: 9, defaultValue: LfoWaveform.Triangle },
-  frequency: { min: 0.02, max: 200, defaultValue: 10 },
-  gain: { min: 0, max: 1000, defaultValue: 1 },
+const LFO_PARAMS = {
+  waveform: LfoWaveform.Triangle,
+  mode: LfoMode.Sync,
+  frequency: 10,
+  gain: 10,
+  quantize: 0,
+};
+
+export const LfoParamsDef: ParamsDef = {
+  waveform: { min: 0, max: 9, defaultValue: LFO_PARAMS.waveform },
+  frequency: { min: 0.02, max: 200, defaultValue: LFO_PARAMS.frequency },
+  gain: { min: 0, max: 1000, defaultValue: LFO_PARAMS.gain },
+  quantize: { min: 0, max: 1000, defaultValue: LFO_PARAMS.quantize },
 };
 
 export class Lfo {
@@ -45,13 +56,7 @@ export class Lfo {
   sampleHoldTimer: Timer; ///< for sample and hold waveforms
   fadeInModulator: FadeInModulator;
   delayTimer: Timer; ///< LFO turn on delay
-
-  params = {
-    frequency: 10,
-    gain: 10,
-    waveform: LfoWaveform.Triangle,
-    mode: LfoMode.Sync,
-  };
+  private params = { ...LFO_PARAMS };
 
   // --- ramp mod for fade-in
   // RampModulator fadeInModulator;		///< LFO fade-in modulator
@@ -66,7 +71,7 @@ export class Lfo {
     this.renderComplete = false;
 
     // --- initialize with current value
-    this.lfoClock.setFrequency(LfoParams.frequency.defaultValue);
+    this.lfoClock.setFrequency(LfoParamsDef.frequency.defaultValue);
 
     // --- to setup correct start phases, avoid clicks
     switch (this.params.waveform) {
@@ -89,7 +94,10 @@ export class Lfo {
   }
 
   fillControlBuffer(output: Float32Array) {
-    output[0] = this.render();
+    const value = this.render();
+    for (let i = 0; i < output.length; i++) {
+      output[i] = value;
+    }
     this.lfoClock.advanceClock(output.length);
   }
 
@@ -113,7 +121,7 @@ export class Lfo {
       case LfoWaveform.Triangle:
         out = 1.0 - 2.0 * Math.abs(bipolar(this.lfoClock.mcounter));
         break;
-      case LfoWaveform.Sin:
+      case LfoWaveform.Sine:
         const angle = this.lfoClock.mcounter * TWO_PI - PI;
         out = parabolicSine(-angle);
         break;
@@ -157,7 +165,11 @@ export class Lfo {
       out *= this.fadeInModulator.value;
       this.fadeInModulator.tick();
     }
-    // TODO: quantize
+
+    if (this.params.quantize) {
+      out = quantizeBipolarValue(out, this.params.quantize);
+    }
+
     // TODO: shape
 
     out *= this.params.gain;
@@ -165,9 +177,19 @@ export class Lfo {
     return out;
   }
 
-  update(waveform: LfoWaveform, frequency: number, gain: number) {
-    this.params.frequency = frequency;
+  setWaveform(waveform: number) {
+    this.params.waveform = clamp(
+      Math.floor(waveform),
+      LfoParamsDef.waveform.min,
+      LfoParamsDef.waveform.max
+    );
+  }
+
+  setGain(gain: number) {
     this.params.gain = gain;
+  }
+
+  setFrequency(frequency: number) {
     this.lfoClock.setFrequency(frequency);
     /*
     	// --- update the sampleHoldTimer; this will NOT reset the timer

@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from "react";
 import { midiToFreq } from "src/midiToFreq";
-import { Adsr, AdsrNode, Lfo, LfoNode, loadSynthlet } from "synthlet";
+import {
+  Adsr,
+  AdsrNode,
+  Lfo,
+  LfoNode,
+  LfoWaveform,
+  loadSynthlet,
+} from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
 import { Slider } from "../Slider";
@@ -15,7 +22,12 @@ class LfoExampleSynth {
 
   constructor(public context: AudioContext) {
     this.osc = new OscillatorNode(context);
-    this.lfo = Lfo(context, { frequency: 20, gain: 100 });
+    this.lfo = Lfo(context, {
+      frequency: 10,
+      gain: 100,
+      waveform: LfoWaveform.RandSampleHold,
+      quantize: 50,
+    });
     this.env = Adsr(context, {
       attack: 0.1,
       decay: 0.1,
@@ -44,7 +56,9 @@ class LfoExampleSynth {
 
 export function LfoExample({ className }: { className?: string }) {
   const [synth, setSynth] = useState<LfoExampleSynth | undefined>(undefined);
-  const [frequency, setFrequency] = useState(0.01);
+  const [frequency, setFrequency] = useState(10);
+  const [gain, setGain] = useState(100);
+  const [quantize, setQuantize] = useState(0);
 
   useEffect(() => {
     let synth: LfoExampleSynth | undefined = undefined;
@@ -71,12 +85,28 @@ export function LfoExample({ className }: { className?: string }) {
       <label className="text-zinc-200">Lfo</label>
       <div className="flex gap-2 mb-2 text-zinc-400">
         <Slider
-          name="Detune"
+          name="Frequency"
           value={frequency}
           min={0.1}
-          max={200}
+          max={20}
           onChange={setFrequency}
-          param={synth?.osc.frequency}
+          param={synth?.lfo.frequency}
+        />
+        <Slider
+          name="Detune"
+          value={gain}
+          min={0.1}
+          max={100}
+          onChange={setGain}
+          param={synth?.lfo.gain}
+        />
+        <Slider
+          name="Quantize"
+          value={quantize}
+          min={0}
+          max={100}
+          onChange={setQuantize}
+          param={synth?.lfo.quantize}
         />
       </div>
       <div className="flex gap-2 mt-4 mb-2">
@@ -95,7 +125,6 @@ export function LfoExample({ className }: { className?: string }) {
         <PianoKeyboard
           borderColor="border-cyan-700"
           onPress={(note) => {
-            console.log({ synth });
             synth?.pressKey(note);
           }}
           onRelease={(note) => {
