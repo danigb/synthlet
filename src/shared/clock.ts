@@ -16,12 +16,6 @@ export class Clock {
   phaseOffset = 0.0; ///< PM
   freqOffset = 0.0; ///< FM
   freqHz = 0.0; ///< clock frequency
-  state = {
-    modCounter: 0.0,
-    phaseInc: 0.0,
-    phaseOffset: 0.0,
-    frequency_Hz: 0.0,
-  };
 
   constructor(public readonly sampleRate: number) {
     this.mcounter = 0.0;
@@ -34,12 +28,17 @@ export class Clock {
     this.phaseInc = this.freqHz / this.sampleRate;
   }
 
-  addPhaseOffset(phaseOffset: number, wrap = false) {
+  addPhaseOffset(phaseOffset: number, wrap: boolean) {
     this.phaseOffset = phaseOffset;
     if (this.phaseInc > 0) this.mcounter += phaseOffset;
     else this.mcounter -= phaseOffset;
 
     if (wrap) this.wrapClock();
+  }
+
+  removePhaseOffset() {
+    if (this.phaseInc > 0) this.mcounter += -this.phaseOffset;
+    else this.mcounter -= -this.phaseOffset;
   }
 
   advanceClock(interval: number) {

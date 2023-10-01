@@ -70,12 +70,12 @@ export class Lfo {
     // --- to setup correct start phases, avoid clicks
     switch (this.params.waveform) {
       case LfoWaveform.Triangle:
-        this.lfoClock.addPhaseOffset(0.25);
+        this.lfoClock.addPhaseOffset(0.25, true);
         break;
 
       case LfoWaveform.RampUp:
       case LfoWaveform.RampDown:
-        this.lfoClock.addPhaseOffset(0.5);
+        this.lfoClock.addPhaseOffset(0.5, true);
         break;
     }
   }
