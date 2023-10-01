@@ -6,10 +6,10 @@ import {
   KarplusStrongOscillatorNode,
   loadSynthlet,
 } from "synthlet";
-import { ConnectMidi } from "./ConnectMidi";
-import { PianoKeyboard } from "./PianoKeyboard";
-import { Slider } from "./Slider";
-import { getAudioContext } from "./audio-context";
+import { ConnectMidi } from "../ConnectMidi";
+import { PianoKeyboard } from "../PianoKeyboard";
+import { Slider } from "../Slider";
+import { getAudioContext } from "../audio-context";
 
 class KarplusExampleSynth {
   osc: KarplusStrongOscillatorNode;
@@ -58,12 +58,12 @@ export function KarplusExample({ className }: { className?: string }) {
       <div className="flex gap-2 items-end mb-2">
         <h1 className="text-3xl text-amber-500">Karplus Strong</h1>
         <p>
-          <span className="text-amber-600">Karplus Strong</span>
+          A<span className="text-amber-600"> Karplus Strong </span>
           oscillator
         </p>
       </div>
 
-      <label className="text-zinc-200">Karplus Oscillator</label>
+      <label className="text-zinc-200">Oscillator</label>
       <div className="flex gap-2 mb-2 text-zinc-400">
         <Slider
           name="Detune"

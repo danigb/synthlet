@@ -16,11 +16,12 @@ export class LfoWorklet extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    const freq = parameters.freq[0];
-    this.impulse.update(LfoWaveform.Triangle, freq);
+    const frequency = parameters.frequency[0];
+    const gain = parameters.gain[0];
+    this.impulse.update(LfoWaveform.Triangle, frequency, gain);
     const output = outputs[0];
     for (let i = 0; i < output.length; i++) {
-      this.impulse.fillControlBuffer(output[i]);
+      this.impulse.fillAudioBuffer(output[i]);
     }
     return true;
   }

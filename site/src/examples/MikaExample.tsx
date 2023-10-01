@@ -1,34 +1,25 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Adsr, AdsrNode, Impulse, ImpulseNode, loadSynthlet } from "synthlet";
-import { ConnectMidi } from "./ConnectMidi";
-import { PianoKeyboard } from "./PianoKeyboard";
-import { Slider } from "./Slider";
-import { getAudioContext } from "./audio-context";
-import { midiToFreq } from "./midiToFreq";
+import { Adsr, Mika, MikaNode, loadSynthlet } from "synthlet";
+import { ConnectMidi } from "../ConnectMidi";
+import { PianoKeyboard } from "../PianoKeyboard";
+import { Slider } from "../Slider";
+import { getAudioContext } from "../audio-context";
+import { midiToFreq } from "../midiToFreq";
 
-class AdsrExampleSynth {
-  osc: OscillatorNode;
-  env: AdsrNode;
-  impulse: ImpulseNode;
-  impEnv: AdsrNode;
+class MikaExampleSynth {
+  env: MikaNode;
+  osc: MikaNode;
 
   constructor(public context: AudioContext) {
-    this.osc = new OscillatorNode(context, { type: "sine", frequency: 880 });
-    this.env = Adsr(context, { release: 1 });
-    this.impEnv = Adsr(context);
-    this.impulse = Impulse(context, { frequency: 10 });
-    this.impulse.connect(this.impEnv.gate);
-    this.osc.start();
-    this.osc
-      .connect(this.impEnv)
-      .connect(this.env)
-      .connect(context.destination);
+    this.osc = Mika(context, { release: 1 });
+    this.env = Adsr(context);
+    this.osc.connect(this.env).connect(context.destination);
   }
 
   pressKey({ note }: { note: number }) {
-    this.osc.frequency.value = midiToFreq(note);
+    this.osc.frequency.setValueAtTime(midiToFreq(note), 0);
     this.env.gate.setValueAtTime(1, this.context.currentTime);
   }
   releaseKey({ note }: { note: number }) {
@@ -36,25 +27,23 @@ class AdsrExampleSynth {
   }
 
   destroy() {
-    this.impulse.disconnect();
-    this.impEnv.disconnect();
     this.osc.disconnect();
     this.env.disconnect();
   }
 }
 
-export function AdsrExample({ className }: { className?: string }) {
-  const [synth, setSynth] = useState<AdsrExampleSynth | undefined>(undefined);
+export function MikaExample({ className }: { className?: string }) {
+  const [synth, setSynth] = useState<MikaExampleSynth | undefined>(undefined);
   const [attack, setAttack] = useState(0.1);
   const [decay, setDecay] = useState(0.1);
   const [sustain, setSustain] = useState(0.5);
   const [release, setRelease] = useState(1);
-  const [freq, setFreq] = useState(10);
+  const [detune, setDetune] = useState(0.01);
 
   useEffect(() => {
-    let synth: AdsrExampleSynth | undefined = undefined;
+    let synth: MikaExampleSynth | undefined = undefined;
     loadSynthlet(getAudioContext()).then(() => {
-      synth = new AdsrExampleSynth(getAudioContext());
+      synth = new MikaExampleSynth(getAudioContext());
       setSynth(synth);
     });
 
@@ -66,15 +55,26 @@ export function AdsrExample({ className }: { className?: string }) {
   return (
     <div className={className}>
       <div className="flex gap-2 items-end mb-2">
-        <h1 className="text-3xl text-rose-500">Adsr</h1>
+        <h1 className="text-3xl text-emerald-500">Mika</h1>
         <p>
-          <span className="text-rose-600">Adsr </span>
-          impEnvelope with a<span className="text-rose-600"> Impulse </span>
-          trigger
+          <span className="text-emerald-600">Mika </span>
+          oscillator with a<span className="text-emerald-600"> Adsr </span>
+          envelope
         </p>
       </div>
 
-      <label className="text-zinc-200">Adsr</label>
+      <label className="text-zinc-200">Mika Oscillator</label>
+      <div className="flex gap-2 mb-2 text-zinc-400">
+        <Slider
+          name="Detune"
+          value={detune}
+          min={0}
+          max={0.5}
+          onChange={setDetune}
+          param={synth?.osc.detune}
+        />
+      </div>
+      <label className="text-zinc-200">Envelope</label>
       <div className="flex gap-2 mb-2 text-zinc-400">
         <Slider
           name="Attack"
@@ -102,17 +102,6 @@ export function AdsrExample({ className }: { className?: string }) {
           param={synth?.env.release}
         />
       </div>
-      <label className="text-zinc-200">Impulse</label>
-      <div className="flex gap-2 mb-2 text-zinc-400">
-        <Slider
-          name="Freq"
-          value={freq}
-          min={1}
-          max={20}
-          onChange={setFreq}
-          param={synth?.impulse.freq}
-        />
-      </div>
       <div className="flex gap-2 mt-4 mb-2">
         <ConnectMidi
           instrument={{
@@ -127,8 +116,9 @@ export function AdsrExample({ className }: { className?: string }) {
       </div>
       <div className="">
         <PianoKeyboard
-          borderColor="border-rose-700"
+          borderColor="border-emerald-700"
           onPress={(note) => {
+            console.log({ synth });
             synth?.pressKey(note);
           }}
           onRelease={(note) => {

@@ -1,4 +1,3 @@
-import { PROCESSOR } from "../impulse/processor";
 import {
   GenerateNodeOptions,
   GenerateNodeType,
@@ -6,6 +5,7 @@ import {
   workletNodeConstructor,
 } from "../worklet-utils";
 import { LfoParams } from "./lfo";
+import { PROCESSOR } from "./processor";
 
 export const loadLfo = loadWorklet(PROCESSOR);
 export type LfoOptions = GenerateNodeOptions<typeof LfoParams>;

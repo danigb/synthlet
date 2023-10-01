@@ -31,23 +31,24 @@ enum LfoMode {
 }
 
 export const LfoParams: ParamsDef = {
-  waveform: { min: 0, max: 9, defaultValue: 0 },
+  waveform: { min: 0, max: 9, defaultValue: LfoWaveform.Triangle },
   frequency: { min: 0.02, max: 200, defaultValue: 10 },
-  amp: { min: 0, max: 1000, defaultValue: 1 },
+  gain: { min: 0, max: 1000, defaultValue: 1 },
 };
 
 export class Lfo {
   rshOutputValue = 0.0;
 
-  lfoClock: Clock; ///< timbase
+  lfoClock: Clock;
   renderComplete = false; ///< flag for one-shot
-  noiseGen: NoiseGenerator; ///< for noise based LFOs
+  noiseGen = new NoiseGenerator();
   sampleHoldTimer: Timer; ///< for sample and hold waveforms
   fadeInModulator: FadeInModulator;
   delayTimer: Timer; ///< LFO turn on delay
 
   params = {
-    frequencyHz: 10,
+    frequency: 10,
+    gain: 10,
     waveform: LfoWaveform.Triangle,
     mode: LfoMode.Sync,
   };
@@ -65,7 +66,7 @@ export class Lfo {
     this.renderComplete = false;
 
     // --- initialize with current value
-    this.lfoClock.setFrequency(LfoParams.freq.defaultValue);
+    this.lfoClock.setFrequency(LfoParams.frequency.defaultValue);
 
     // --- to setup correct start phases, avoid clicks
     switch (this.params.waveform) {
@@ -148,7 +149,7 @@ export class Lfo {
         // TODO
         break;
       default:
-        throw Error(`Unknown waveform ${this.params.waveform}`);
+        throw Error("Unknown waveform: " + this.params.waveform);
     }
 
     // Fade in
@@ -158,13 +159,16 @@ export class Lfo {
     }
     // TODO: quantize
     // TODO: shape
-    // TODO: amplitude
+
+    out *= this.params.gain;
+
     return out;
   }
 
-  update(waveform: LfoWaveform, frequencyHz: number) {
-    this.params.frequencyHz = frequencyHz;
-    this.lfoClock.setFrequency(frequencyHz);
+  update(waveform: LfoWaveform, frequency: number, gain: number) {
+    this.params.frequency = frequency;
+    this.params.gain = gain;
+    this.lfoClock.setFrequency(frequency);
     /*
     	// --- update the sampleHoldTimer; this will NOT reset the timer
 		if (parameters->waveformIndex == enumToInt(LFOWaveform::kRSH))

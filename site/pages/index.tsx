@@ -1,8 +1,9 @@
 import { Inter } from "@next/font/google";
 import Head from "next/head";
-import { AdsrExample } from "src/AdsrExample";
-import { KarplusExample } from "src/KarplusExample";
-import { MikaExample } from "src/MikaExample";
+import { AdsrExample } from "src/examples/AdsrExample";
+import { KarplusExample } from "src/examples/KarplusExample";
+import { LfoExample } from "src/examples/LfoExample";
+import { MikaExample } from "src/examples/MikaExample";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -20,6 +21,7 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col gap-8">
+          <LfoExample />
           <KarplusExample />
           <MikaExample />
           <AdsrExample />
