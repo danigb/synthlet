@@ -7,6 +7,7 @@ import {
   concaveXForm,
   parabolicSine,
 } from "../utils/math";
+import { NoiseGenerator } from "../utils/noise-generator";
 import { Timer } from "../utils/timer";
 import { ParamsDef } from "../worklet-utils";
 
@@ -30,24 +31,19 @@ enum LfoMode {
 }
 
 export const LfoParams: ParamsDef = {
+  waveform: { min: 0, max: 9, defaultValue: 0 },
   freq: { min: 0.02, max: 200, defaultValue: 10 },
+  amp: { min: 0, max: 1000, defaultValue: 1 },
 };
 
 export class Lfo {
-  // --- sample rate
-  out = 0.0; ///< current output,
-  rshOutputValue = 0.0; ///< current output,
+  rshOutputValue = 0.0;
 
-  // --- timebase
   lfoClock: Clock; ///< timbase
-
-  // --- for one shot renders
   renderComplete = false; ///< flag for one-shot
   noiseGen: NoiseGenerator; ///< for noise based LFOs
   sampleHoldTimer: Timer; ///< for sample and hold waveforms
   fadeInModulator: FadeInModulator;
-
-  // --- timer for delay
   delayTimer: Timer; ///< LFO turn on delay
 
   params = {

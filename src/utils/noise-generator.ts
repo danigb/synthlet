@@ -13,7 +13,7 @@ function normalRandomDistribution(
   return x;
 }
 
-class NoiseGenerator {
+export class NoiseGenerator {
   constructor() {}
 
   /** random number generator */
