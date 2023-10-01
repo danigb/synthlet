@@ -1,14 +1,14 @@
 import { toWorkletParams } from "../worklet-utils";
-import { Impulse, ImpulseParams } from "./impulse";
+import { Lfo, LfoParams, LfoWaveform } from "./lfo";
 
-const IMPULSE_PARAMS = toWorkletParams(ImpulseParams);
+const IMPULSE_PARAMS = toWorkletParams(LfoParams);
 
-export class ImpulseWorklet extends AudioWorkletProcessor {
-  impulse: Impulse;
+export class LfoWorklet extends AudioWorkletProcessor {
+  impulse: Lfo;
 
   constructor() {
     super();
-    this.impulse = new Impulse(sampleRate);
+    this.impulse = new Lfo(sampleRate);
   }
 
   process(
@@ -17,10 +17,10 @@ export class ImpulseWorklet extends AudioWorkletProcessor {
     parameters: any
   ) {
     const freq = parameters.freq[0];
-    this.impulse.setParams(freq);
+    this.impulse.update(LfoWaveform.Triangle, freq);
     const output = outputs[0];
     for (let i = 0; i < output.length; i++) {
-      this.impulse.fillControl(output[i]);
+      this.impulse.fillControlBuffer(output[i]);
     }
     return true;
   }
@@ -30,4 +30,4 @@ export class ImpulseWorklet extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor("ImpulseWorklet", ImpulseWorklet);
+registerProcessor("LfoWorklet", LfoWorklet);

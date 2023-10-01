@@ -3,7 +3,7 @@ import {
   GenerateNodeType,
   loadWorklet,
   workletNodeConstructor,
-} from "../utils";
+} from "../worklet-utils";
 import { MikaParams } from "./mika";
 import { PROCESSOR } from "./processor";
 

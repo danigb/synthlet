@@ -3,7 +3,7 @@ import {
   GenerateNodeType,
   loadWorklet,
   workletNodeConstructor,
-} from "../utils";
+} from "../worklet-utils";
 import { AdsrParams } from "./adsr";
 import { PROCESSOR } from "./processor";
 

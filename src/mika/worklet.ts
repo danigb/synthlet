@@ -1,4 +1,4 @@
-import { toWorkletParams } from "../utils";
+import { toWorkletParams } from "../worklet-utils";
 import { Mika, MikaParams } from "./mika";
 
 const IMPULSE_PARAMS = toWorkletParams(MikaParams);

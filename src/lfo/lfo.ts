@@ -1,20 +1,26 @@
-import { ParamsDef } from "../utils";
-import { Clock } from "./clock";
-import { FadeInModulator } from "./fade-in-modulator";
-import { PI, TWO_PI, bipolar, concaveXForm, parabolicSine } from "./math";
-import { Timer } from "./timer";
+import { Clock } from "../utils/clock";
+import { FadeInModulator } from "../utils/fade-in-modulator";
+import {
+  PI,
+  TWO_PI,
+  bipolar,
+  concaveXForm,
+  parabolicSine,
+} from "../utils/math";
+import { Timer } from "../utils/timer";
+import { ParamsDef } from "../worklet-utils";
 
-enum LfoWaveform {
-  Triangle,
-  Sin,
-  RampUp,
-  RampDown,
-  ExpRampUp,
-  ExpRampDown,
-  ExpTriangle,
-  Square,
-  RandSampleHold,
-  Pluck,
+export enum LfoWaveform {
+  Triangle = 0,
+  Sin = 1,
+  RampUp = 2,
+  RampDown = 3,
+  ExpRampUp = 4,
+  ExpRampDown = 5,
+  ExpTriangle = 6,
+  Square = 7,
+  RandSampleHold = 8,
+  Pluck = 9,
 }
 
 enum LfoMode {

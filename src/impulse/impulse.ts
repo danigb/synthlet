@@ -1,4 +1,4 @@
-import { ParamsDef } from "../utils";
+import { ParamsDef } from "../worklet-utils";
 
 export const ImpulseParams: ParamsDef = {
   freq: { min: 0, max: 10000, defaultValue: 1 },

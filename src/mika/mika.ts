@@ -1,4 +1,4 @@
-import { ParamsDef } from "../utils";
+import { ParamsDef } from "../worklet-utils";
 import { TWO_PI, blep, pulse } from "./math";
 
 export enum WaveformType {

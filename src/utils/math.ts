@@ -6,7 +6,7 @@ const B: number = 4.0 / PI;
 const C: number = -4.0 / PI_SQUARED;
 const P: number = 0.225;
 
-// Sinusoid approximation function
+// Sinusoid approximation function (fast sin)
 // http://devmaster.net/posts/9648/fast-and-accurate-sine-cosine
 export function parabolicSine(angle: number): number {
   let y: number = B * angle + C * angle * Math.abs(angle);

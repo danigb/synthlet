@@ -1,4 +1,4 @@
-import { ParamsDef } from "../utils";
+import { ParamsDef } from "../worklet-utils";
 
 enum Stage {
   Idle,

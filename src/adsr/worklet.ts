@@ -1,4 +1,4 @@
-import { toWorkletParams } from "../utils";
+import { toWorkletParams } from "../worklet-utils";
 import { Adsr, AdsrParams } from "./adsr";
 
 const ADSR_PARAMS = toWorkletParams(AdsrParams);
