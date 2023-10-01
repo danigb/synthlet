@@ -3,7 +3,6 @@ import Head from "next/head";
 import { AdsrExample } from "src/examples/AdsrExample";
 import { KarplusExample } from "src/examples/KarplusExample";
 import { LfoExample } from "src/examples/LfoExample";
-import { MikaExample } from "src/examples/MikaExample";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -21,9 +20,8 @@ export default function Home() {
         </div>
 
         <div className="flex flex-col gap-8">
-          <LfoExample />
           <KarplusExample />
-          <MikaExample />
+          <LfoExample />
           <AdsrExample />
         </div>
       </main>

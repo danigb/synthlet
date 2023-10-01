@@ -49,6 +49,7 @@ const LFO_PARAMS = {
   waveform: LfoWaveform.Triangle,
   mode: LfoMode.Sync,
   frequency: 10,
+  offset: 0,
   gain: 10,
   quantize: 0,
 };
@@ -56,6 +57,7 @@ const LFO_PARAMS = {
 export const LfoParamsDef: ParamsDef = {
   waveform: { min: 0, max: 9, defaultValue: LFO_PARAMS.waveform },
   frequency: { min: 0.02, max: 200, defaultValue: LFO_PARAMS.frequency },
+  offset: { min: 0.0, max: 10000, defaultValue: LFO_PARAMS.offset },
   gain: { min: 0, max: 1000, defaultValue: LFO_PARAMS.gain },
   quantize: { min: 0, max: 1000, defaultValue: LFO_PARAMS.quantize },
 };

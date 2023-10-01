@@ -18,24 +18,38 @@ import { getAudioContext } from "../audio-context";
 
 class LfoExampleSynth {
   osc: OscillatorNode;
-  lfo: LfoNode;
+  lfoSpeed: LfoNode;
+  lfoDetune: LfoNode;
   env: AdsrNode;
+
+  static params = {
+    lfoSpeed: {
+      frequency: 1.5,
+      gain: 4,
+      waveform: LfoWaveform.Sine,
+    },
+    lfoDetune: {
+      frequency: 10,
+      gain: 500,
+      waveform: LfoWaveform.Sine,
+      quantize: 0,
+    },
+    env: {
+      attack: 0.1,
+      decay: 0.1,
+      sustain: 0.2,
+      release: 1,
+    },
+  };
 
   constructor(public context: AudioContext) {
     this.osc = new OscillatorNode(context);
-    this.lfo = Lfo(context, {
-      frequency: 10,
-      gain: 100,
-      waveform: LfoWaveform.RandSampleHold,
-      quantize: 50,
-    });
-    this.env = Adsr(context, {
-      attack: 0.1,
-      decay: 0.1,
-      sustain: 0.8,
-      release: 1,
-    });
-    this.lfo.connect(this.osc.detune);
+
+    this.lfoSpeed = Lfo(context, LfoExampleSynth.params.lfoSpeed);
+    this.lfoDetune = Lfo(context, LfoExampleSynth.params.lfoDetune);
+    this.env = Adsr(context, LfoExampleSynth.params.env);
+    this.lfoSpeed.connect(this.lfoDetune.frequency);
+    this.lfoDetune.connect(this.osc.detune);
     this.osc.connect(this.env).connect(context.destination);
     this.osc.start();
   }
@@ -51,16 +65,31 @@ class LfoExampleSynth {
   destroy() {
     this.osc.disconnect();
     this.env.disconnect();
-    this.lfo.disconnect();
+    this.lfoDetune.disconnect();
+    this.lfoSpeed.disconnect();
   }
 }
 
 export function LfoExample({ className }: { className?: string }) {
   const [synth, setSynth] = useState<LfoExampleSynth | undefined>(undefined);
-  const [frequency, setFrequency] = useState(10);
-  const [detune, setDetune] = useState(5);
-  const [quantize, setQuantize] = useState(0);
-  const [waveform, setWaveform] = useState(LfoWaveform.RandSampleHold);
+  const [frequencySpeed, setFrequencySpeed] = useState(
+    LfoExampleSynth.params.lfoSpeed.frequency
+  );
+  const [gainSpeed, setGainSpeed] = useState(
+    LfoExampleSynth.params.lfoSpeed.gain
+  );
+  const [frequency, setFrequency] = useState(
+    LfoExampleSynth.params.lfoDetune.frequency
+  );
+  const [detune, setDetune] = useState(
+    LfoExampleSynth.params.lfoDetune.gain / 100
+  );
+  const [quantize, setQuantize] = useState(
+    LfoExampleSynth.params.lfoDetune.quantize
+  );
+  const [waveform, setWaveform] = useState(
+    LfoExampleSynth.params.lfoDetune.waveform
+  );
 
   useEffect(() => {
     let synth: LfoExampleSynth | undefined = undefined;
@@ -80,19 +109,40 @@ export function LfoExample({ className }: { className?: string }) {
         <h1 className="text-3xl text-cyan-500">Lfo </h1>
         <p>
           A<span className="text-cyan-600"> Lfo </span>
-          oscillator controlling the detune of an OscillatorNode
+          controlling the speed of another
+          <span className="text-cyan-600"> Lfo </span>
+          controlling the detune of an OscillatorNode
         </p>
       </div>
 
-      <label className="text-zinc-200">Lfo</label>
-      <div className="flex gap-2 mb-2 text-zinc-400">
+      <label className="text-zinc-200">Lfo1 controlling the Lfo2 speed</label>
+      <div className="flex items-center gap-2 mb-2 text-zinc-400">
+        <Slider
+          name="Frequency"
+          value={frequencySpeed}
+          min={0.1}
+          max={20}
+          onChange={setFrequencySpeed}
+          param={synth?.lfoSpeed.frequency}
+        />
+        <Slider
+          name="Amount"
+          value={gainSpeed}
+          min={0}
+          max={5}
+          onChange={setGainSpeed}
+          param={synth?.lfoSpeed.gain}
+        />
+      </div>
+      <label className="text-zinc-200">Lfo2 controlling the pitch</label>
+      <div className="flex items-center gap-2 mb-2 text-zinc-400">
         <select
           className="bg-zinc-700 rounded py-[2px]"
           value={waveform}
           onChange={(e) => {
             const waveform = parseInt(e.target.value) as LfoWaveform;
-            synth?.lfo.waveform.setValueAtTime(waveform, 0);
-            console.log(synth?.lfo.waveform);
+            synth?.lfoDetune.waveform.setValueAtTime(waveform, 0);
+            console.log(synth?.lfoDetune.waveform);
             setWaveform(waveform);
           }}
         >
@@ -108,7 +158,7 @@ export function LfoExample({ className }: { className?: string }) {
           min={0.1}
           max={20}
           onChange={setFrequency}
-          param={synth?.lfo.frequency}
+          param={synth?.lfoDetune.frequency}
         />
         <Slider
           name="Detune (semitones)"
@@ -117,7 +167,7 @@ export function LfoExample({ className }: { className?: string }) {
           max={12}
           onChange={setDetune}
           param={(value) => {
-            synth?.lfo.gain.setValueAtTime(value * 100, 0);
+            synth?.lfoDetune.gain.setValueAtTime(value * 100, 0);
           }}
         />
         <Slider
@@ -126,7 +176,7 @@ export function LfoExample({ className }: { className?: string }) {
           min={0}
           max={100}
           onChange={setQuantize}
-          param={synth?.lfo.quantize}
+          param={synth?.lfoDetune.quantize}
         />
       </div>
       <div className="flex gap-2 mt-4 mb-2">
@@ -150,6 +200,7 @@ export function LfoExample({ className }: { className?: string }) {
           onRelease={(note) => {
             synth?.releaseKey({ note });
           }}
+          initialSustain
         />
       </div>
     </div>
