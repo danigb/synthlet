@@ -11,13 +11,13 @@ function tanhWaveShaper(xn: number, saturation: number): number {
 }
 
 type KarplusStrongOscillatorParameters = {
-  algorithmIndex: any;
+  mode: KarplusStrongOscillatorMode;
   decay: number;
 
-  knob_a: number; // detune
-  knob_b: number; // boost
-  knob_c: number; // bite
-  knob_d: number; // pluck pos
+  detune: number; // detune
+  boost: number; // boost
+  bite: number; // bite
+  pluckPos: number; // pluck pos
   attackTime_mSec: number;
   holdTime_mSec: number;
   releaseTime_mSec: number;
@@ -52,6 +52,16 @@ export class KarplusStrongOscillator {
 
   private pluckPosFilter: PluckPosFilter = new PluckPosFilter(); // for simulating pluck position with comb filter
   private bodyFilter: ParametricFilter = new ParametricFilter(); // simple parametric filter for adding a resonant hump to th output
+  private mode: KarplusStrongOscillatorMode =
+    KarplusStrongOscillatorMode.kNylonGtr;
+  prevGate: number = 0.0;
+
+  setParams(gate: number, frequency: number) {
+    if (gate === 1 && this.prevGate !== 1) {
+      this.doNoteOn(frequency);
+    }
+    this.prevGate = gate;
+  }
 
   reset(sampleRate: number) {
     this.resonator.reset(sampleRate);
@@ -63,6 +73,17 @@ export class KarplusStrongOscillator {
     this.bassFilter.setParameters(150.0, 0.707);
     this.distortionFilter.reset(sampleRate);
     this.distortionFilter.setParameters(2000.0, 2.5);
+    this.updateParameters({
+      mode: KarplusStrongOscillatorMode.kNylonGtr,
+      decay: 0.5,
+      detune: 0.0,
+      boost: 0.0,
+      bite: 0.0,
+      pluckPos: 0.5,
+      attackTime_mSec: 5.0,
+      holdTime_mSec: 200.0,
+      releaseTime_mSec: 500.0,
+    });
   }
 
   doNoteOn(midiPitch: number) {
@@ -84,26 +105,26 @@ export class KarplusStrongOscillator {
     return true;
   }
 
-  process(mode: KarplusStrongOscillatorMode) {
+  process(): number {
     let input = this.exciter.render();
     input = this.highShelfFilter.processAudioSample(input);
 
-    if (mode === KarplusStrongOscillatorMode.kNylonGtr) {
+    if (this.mode === KarplusStrongOscillatorMode.kNylonGtr) {
       input = this.pluckPosFilter.processAudioSample(
         input,
         PluckFilterType.kPluckAndBridge
       );
-    } else if (mode === KarplusStrongOscillatorMode.kDistGtr) {
+    } else if (this.mode === KarplusStrongOscillatorMode.kDistGtr) {
       input = this.pluckPosFilter.processAudioSample(
         input,
         PluckFilterType.kPluckAndPickup
       );
-    } else if (mode === KarplusStrongOscillatorMode.kBass) {
+    } else if (this.mode === KarplusStrongOscillatorMode.kBass) {
       input = this.pluckPosFilter.processAudioSample(
         input,
         PluckFilterType.kPluckPickupBridge
       );
-    } else if (mode === KarplusStrongOscillatorMode.kSilent) {
+    } else if (this.mode === KarplusStrongOscillatorMode.kSilent) {
       input = 0.0;
     }
 
@@ -116,7 +137,7 @@ export class KarplusStrongOscillator {
     // you DEFINITELY want to change this to something that
     // you like better (see my tube addendum here:
     // http://www.willpirkle.com/fx-book-bonus-material/chapter-19-addendum/
-    if (mode === KarplusStrongOscillatorMode.kDistGtr) {
+    if (this.mode === KarplusStrongOscillatorMode.kDistGtr) {
       // the x10 will add sustain, the 5000.0 will add distortion
       oscOutput = tanhWaveShaper(oscOutput * 10.0, 5000.0); // adjust distortion with 2nd argument
 
@@ -131,15 +152,13 @@ export class KarplusStrongOscillator {
       // you may want to adjust this filter (see reset() function)
       oscOutput = 0.5 * this.distortionFilter.processAudioSample(oscOutput);
       oscOutput *= this.outputAmplitude;
-
-      // TODO: glide modulator
-
-      return oscOutput;
     }
+    // TODO: glide modulator
+    return oscOutput;
   }
 
   public updateParameters(params: KarplusStrongOscillatorParameters) {
-    const coarseDetune = mapNormLinear(params.knob_a, -12.0, 12.0);
+    const coarseDetune = mapNormLinear(params.detune, -12.0, 12.0);
     // convert midi pitch to frequency
     const oscillatorFrequency =
       440.0 * Math.pow(2.0, (this.midiPitch - 69.0 + coarseDetune) / 12.0);
@@ -148,7 +167,7 @@ export class KarplusStrongOscillator {
       oscillatorFrequency,
       params.decay
     );
-    this.pluckPosition = mapNormLinear(params.knob_d, 10.0, 2.0);
+    this.pluckPosition = mapNormLinear(params.pluckPos, 10.0, 2.0);
     this.pluckPosFilter.setDelayInSamples(delayLen / this.pluckPosition);
 
     // --- exciter
@@ -159,21 +178,21 @@ export class KarplusStrongOscillator {
     );
 
     // --- filters
-    const bite_dB = mapNormLinear(params.knob_c, 0.0, 20.0);
+    const bite_dB = mapNormLinear(params.bite, 0.0, 20.0);
     this.highShelfFilter.setParameters(2000.0, bite_dB);
 
     // --- boost
     const body_dB = +3.0;
 
     // --- change body filter resonance based on model
-    if (params.algorithmIndex == KarplusStrongOscillatorMode.kNylonGtr)
+    if (params.mode == KarplusStrongOscillatorMode.kNylonGtr)
       this.bodyFilter.setParameters(400.0, 1.0, body_dB);
-    else if (params.algorithmIndex == KarplusStrongOscillatorMode.kDistGtr)
+    else if (params.mode == KarplusStrongOscillatorMode.kDistGtr)
       this.bodyFilter.setParameters(300.0, 2.0, body_dB);
-    else if (params.algorithmIndex == KarplusStrongOscillatorMode.kBass)
+    else if (params.mode == KarplusStrongOscillatorMode.kBass)
       this.bodyFilter.setParameters(250.0, 1.0, body_dB);
 
-    const output_dB = mapNormLinear(params.knob_b, 0.0, 20.0);
+    const output_dB = mapNormLinear(params.boost, 0.0, 20.0);
     this.outputAmplitude = Math.pow(10.0, output_dB / 20.0);
 
     return true;

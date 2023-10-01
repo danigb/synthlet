@@ -25,12 +25,13 @@
     "test": "jest",
     "build": "yarn worklet && yarn build:lib",
     "build:lib": "tsup src/index.ts --dts --format esm,cjs",
-    "worklet": "npm run adsr && npm run osc && npm run impulse && npm run mika && npm run lfo",
+    "worklet": "npm run adsr && npm run osc && npm run impulse && npm run mika && npm run lfo && npm run karplus",
     "adsr": "esbuild src/adsr/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/adsr/processor.ts",
-    "osc": "esbuild src/osc/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/osc/processor.ts",
     "impulse": "esbuild src/impulse/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/impulse/processor.ts",
+    "karplus": "esbuild src/karplus-strong/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/karplus-strong/processor.ts",
     "lfo": "esbuild src/lfo/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/lfo/processor.ts",
-    "mika": "esbuild src/mika/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/mika/processor.ts"
+    "mika": "esbuild src/mika/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/mika/processor.ts",
+    "osc": "esbuild src/osc/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/osc/processor.ts"
   },
   "jest": {
     "preset": "ts-jest"
