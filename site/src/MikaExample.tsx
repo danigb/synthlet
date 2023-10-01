@@ -19,8 +19,7 @@ class MikaExampleSynth {
   }
 
   pressKey({ note }: { note: number }) {
-    this.osc.freq.setValueAtTime(midiToFreq(note), 0);
-    console.log({ freq: this.osc.freq.value });
+    this.osc.frequency.setValueAtTime(midiToFreq(note), 0);
     this.env.gate.setValueAtTime(1, this.context.currentTime);
   }
   releaseKey({ note }: { note: number }) {

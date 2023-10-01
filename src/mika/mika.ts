@@ -12,7 +12,7 @@ export enum WaveformType {
 
 export const MikaParams: ParamsDef = {
   wave: { min: 0, max: 5, defaultValue: 1 },
-  freq: { min: 0, max: 10000, defaultValue: 440 },
+  frequency: { min: 0, max: 10000, defaultValue: 440 },
   detune: { min: -100, max: 100, defaultValue: 0.01 },
 } as const;
 

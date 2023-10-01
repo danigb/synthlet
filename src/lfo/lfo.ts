@@ -32,7 +32,7 @@ enum LfoMode {
 
 export const LfoParams: ParamsDef = {
   waveform: { min: 0, max: 9, defaultValue: 0 },
-  freq: { min: 0.02, max: 200, defaultValue: 10 },
+  frequency: { min: 0.02, max: 200, defaultValue: 10 },
   amp: { min: 0, max: 1000, defaultValue: 1 },
 };
 

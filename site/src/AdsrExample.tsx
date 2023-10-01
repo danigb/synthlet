@@ -18,7 +18,7 @@ class AdsrExampleSynth {
     this.osc = new OscillatorNode(context, { type: "sine", frequency: 880 });
     this.env = Adsr(context, { release: 1 });
     this.impEnv = Adsr(context);
-    this.impulse = Impulse(context, { freq: 10 });
+    this.impulse = Impulse(context, { frequency: 10 });
     this.impulse.connect(this.impEnv.gate);
     this.osc.start();
     this.osc
