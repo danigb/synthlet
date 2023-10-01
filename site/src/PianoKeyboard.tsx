@@ -98,7 +98,10 @@ export function PianoKeyboard({
           className="ml-3"
           type="checkbox"
           checked={sustain}
-          onChange={(e) => setSustain(e.target.checked)}
+          onChange={(e) => {
+            setSustain(e.target.checked);
+            if (!e.target.checked) onRelease?.(0);
+          }}
         />
         <div className="">Sustain</div>
         <button

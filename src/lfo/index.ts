@@ -7,7 +7,7 @@ import {
 import { LfoParamsDef } from "./lfo";
 import { PROCESSOR } from "./processor";
 
-export { LfoMode, LfoWaveform } from "./lfo";
+export { LFO_WAVEFORM_NAMES, LfoMode, LfoWaveform } from "./lfo";
 
 export const loadLfo = loadWorklet(PROCESSOR);
 export type LfoOptions = GenerateNodeOptions<typeof LfoParamsDef>;

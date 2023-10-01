@@ -2,7 +2,6 @@ import { Lfo, LfoWaveform } from "./lfo";
 
 function setup() {
   const lfo = new Lfo(9);
-  lfo.setFrequency(1);
   const buffer = new Float32Array(10);
   return { lfo, buffer };
 }
@@ -10,7 +9,7 @@ function setup() {
 describe("Lfo", () => {
   it("renders sine", () => {
     const { lfo, buffer } = setup();
-    lfo.setWaveform(LfoWaveform.Sine);
+    lfo.setParameters(LfoWaveform.Sine, 1, 10, 0);
     lfo.fillAudioBuffer(buffer);
     expect(Array.from(buffer)).toEqual([
       10, 7.668038368225098, 1.7256516218185425, -5, -9.400548934936523,
@@ -19,7 +18,7 @@ describe("Lfo", () => {
   });
   it("renders triangle", () => {
     const { lfo, buffer } = setup();
-    lfo.setWaveform(LfoWaveform.Triangle);
+    lfo.setParameters(LfoWaveform.Triangle, 1, 10, 0);
     lfo.fillAudioBuffer(buffer);
     expect(Array.from(buffer)).toEqual([
       0, 4.44444465637207, 8.88888931274414, 6.666666507720947,

@@ -26,6 +26,19 @@ export enum LfoWaveform {
   Pluck = 9,
 }
 
+export const LFO_WAVEFORM_NAMES = [
+  "Triangle",
+  "Sine",
+  "RampUp",
+  "RampDown",
+  "ExpRampUp",
+  "ExpRampDown",
+  "ExpTriangle",
+  "Square",
+  "RandSampleHold",
+  "Pluck",
+];
+
 export enum LfoMode {
   Sync,
   OneShot,
@@ -51,11 +64,11 @@ export class Lfo {
   rshOutputValue = 0.0;
 
   lfoClock: Clock;
-  renderComplete = false; ///< flag for one-shot
+  renderComplete = false;
   noiseGen = new NoiseGenerator();
-  sampleHoldTimer: Timer; ///< for sample and hold waveforms
+  sampleHoldTimer: Timer;
   fadeInModulator: FadeInModulator;
-  delayTimer: Timer; ///< LFO turn on delay
+  delayTimer: Timer;
   private params = { ...LFO_PARAMS };
 
   // --- ramp mod for fade-in
@@ -177,37 +190,36 @@ export class Lfo {
     return out;
   }
 
-  setWaveform(waveform: number) {
+  setParameters(
+    waveform: number,
+    frequency: number,
+    gain: number,
+    quantize: number
+  ) {
     this.params.waveform = clamp(
       Math.floor(waveform),
       LfoParamsDef.waveform.min,
       LfoParamsDef.waveform.max
     );
-  }
-
-  setGain(gain: number) {
-    this.params.gain = gain;
-  }
-
-  setFrequency(frequency: number) {
     this.lfoClock.setFrequency(frequency);
-    /*
-    	// --- update the sampleHoldTimer; this will NOT reset the timer
-		if (parameters->waveformIndex == enumToInt(LFOWaveform::kRSH))
-			sampleHoldTimer.setExpireSamples(uint32_t(sampleRate / newFrequency_Hz));
+    this.params.gain = gain;
+    this.params.quantize = Math.floor(quantize);
 
-		// --- update the delay timer; this will NOT reset the timer
-		if (!delayTimer.timerExpired())
-		{
+    if (this.params.waveform === LfoWaveform.RandSampleHold) {
+      this.sampleHoldTimer.setExpireSamples(this.sampleRate / frequency);
+    }
+    // TODO: delay
+    // TODO: fade in
+    /*
+		if (!delayTimer.timerExpired()) {
 			double delay = getModKnobValueLinear(parameters->modKnobValue[MOD_KNOB_B], 0.0, MAX_LFO_DELAY_MSEC);
 			delayTimer.setExpireSamples(msecToSamples(sampleRate, delay));
 		}
 
-		if (fadeInModulator.isActive() && delayTimer.timerExpired())
-		{
+		if (fadeInModulator.isActive() && delayTimer.timerExpired()){
 			double fadeIn_mSec = getModKnobValueLinear(parameters->modKnobValue[MOD_KNOB_C], 0.0, MAX_LFO_FADEIN_MSEC);
 			fadeInModulator.setModTime(fadeIn_mSec, processInfo.sampleRate);
 		}
-     */
+    */
   }
 }

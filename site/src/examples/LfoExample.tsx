@@ -5,6 +5,7 @@ import { midiToFreq } from "src/midiToFreq";
 import {
   Adsr,
   AdsrNode,
+  LFO_WAVEFORM_NAMES,
   Lfo,
   LfoNode,
   LfoWaveform,
@@ -59,6 +60,7 @@ export function LfoExample({ className }: { className?: string }) {
   const [frequency, setFrequency] = useState(10);
   const [gain, setGain] = useState(100);
   const [quantize, setQuantize] = useState(0);
+  const [waveform, setWaveform] = useState(LfoWaveform.RandSampleHold);
 
   useEffect(() => {
     let synth: LfoExampleSynth | undefined = undefined;
@@ -84,6 +86,22 @@ export function LfoExample({ className }: { className?: string }) {
 
       <label className="text-zinc-200">Lfo</label>
       <div className="flex gap-2 mb-2 text-zinc-400">
+        <select
+          className="bg-zinc-700 rounded py-[2px]"
+          value={waveform}
+          onChange={(e) => {
+            const waveform = parseInt(e.target.value) as LfoWaveform;
+            synth?.lfo.waveform.setValueAtTime(waveform, 0);
+            console.log(synth?.lfo.waveform);
+            setWaveform(waveform);
+          }}
+        >
+          {LFO_WAVEFORM_NAMES.map((name, index) => (
+            <option key={name} value={"" + index}>
+              {name}
+            </option>
+          ))}
+        </select>
         <Slider
           name="Frequency"
           value={frequency}
