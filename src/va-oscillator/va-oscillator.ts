@@ -1,42 +1,49 @@
 import { Clock } from "../shared/clock";
-import { bipolar } from "../shared/math";
+import { bipolar, clamp } from "../shared/math";
 import { ParamsDef } from "../worklet-utils";
 
-export enum OscWaveform {
-  Square,
-  Sawtooth,
-  SawAndSquare,
+export enum VaOscillatorWaveform {
+  Square = 0,
+  Sawtooth = 1,
+  SawAndSquare = 2,
 }
 
-export const OscParams: ParamsDef = {
+const VA_OSCILLATOR_PARAMS = {
+  waveform: VaOscillatorWaveform.Square,
+  pulseWidth: 0.5,
+  mix: 0.5,
+};
+
+export const VaOscillatorParams: ParamsDef = {
   frequency: { min: 0, max: 10000, defaultValue: 1 },
   mix: { min: 0, max: 1, defaultValue: 0.5 },
   pulseWidth: { min: 0, max: 1, defaultValue: 0.5 },
 } as const;
 
 /**
- * Simple Blit2 oscillator with variable pulse width.
+ * A Virtual Analog Blit2 oscillator with variable pulse width.
  */
-export class Osc {
+export class VaOscillator {
   oscClock: Clock;
-  waveform: OscWaveform;
-  mix: number;
-  pulseWidth: number;
+  params = { ...VA_OSCILLATOR_PARAMS };
 
   constructor(public readonly sampleRate: number) {
     this.oscClock = new Clock(sampleRate);
-    this.waveform = OscWaveform.Sawtooth;
-    if (this.waveform === OscWaveform.Sawtooth) {
+    if (this.params.waveform === VaOscillatorWaveform.Sawtooth) {
       this.oscClock.mcounter = 0.5;
     }
-    this.mix = OscParams.mix.defaultValue;
-    this.pulseWidth = OscParams.pulseWidth.defaultValue;
   }
 
-  update(waveform: OscWaveform, frequency: number, mix: number) {
-    this.waveform = waveform;
+  setParams(
+    waveform: VaOscillatorWaveform,
+    frequency: number,
+    pulseWidth: number,
+    mix: number
+  ) {
+    this.params.waveform = clamp(Math.floor(waveform), 0, 3);
     this.oscClock.setFrequency(frequency);
-    this.mix = mix;
+    this.params.pulseWidth = clamp(pulseWidth, 0, 1);
+    this.params.mix = clamp(mix, 0, 1);
   }
 
   renderAudio(output: Float32Array[]) {
@@ -52,24 +59,25 @@ export class Osc {
     }
   }
 
-  private render(): number {
+  public render(): number {
+    const { params } = this;
     const saw1 = renderSaw(this.oscClock);
-    if (this.waveform === OscWaveform.Sawtooth) {
+    if (params.waveform === VaOscillatorWaveform.Sawtooth) {
       return saw1;
     }
-    this.oscClock.addPhaseOffset(this.pulseWidth, true);
+    this.oscClock.addPhaseOffset(params.pulseWidth, true);
     const saw2 = renderSaw(this.oscClock);
     const dcCorrection =
-      this.pulseWidth < 0.5
-        ? 1.0 / (1.0 - this.pulseWidth)
-        : 1.0 / this.pulseWidth;
+      params.pulseWidth < 0.5
+        ? 1.0 / (1.0 - params.pulseWidth)
+        : 1.0 / params.pulseWidth;
     const square = (0.5 * saw1 - 0.5 * saw2) * dcCorrection;
     this.oscClock.removePhaseOffset();
 
-    if (this.waveform === OscWaveform.Square) {
+    if (params.waveform === VaOscillatorWaveform.Square) {
       return square;
-    } else if (this.waveform === OscWaveform.SawAndSquare) {
-      return saw1 * (1.0 - this.mix) + square * this.mix;
+    } else if (params.waveform === VaOscillatorWaveform.SawAndSquare) {
+      return saw1 * (1.0 - params.mix) + square * params.mix;
     } else {
       throw new Error("Invalid waveform");
     }

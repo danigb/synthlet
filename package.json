@@ -32,7 +32,7 @@
     "karplus": "esbuild src/karplus-strong/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/karplus-strong/processor.ts",
     "lfo": "esbuild src/lfo/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/lfo/processor.ts",
     "mika": "esbuild src/mika/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/mika/processor.ts",
-    "osc": "esbuild src/osc/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/osc/processor.ts"
+    "osc": "esbuild src/va-oscillator/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/va-oscillator/processor.ts"
   },
   "jest": {
     "preset": "ts-jest"
