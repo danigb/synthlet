@@ -23,6 +23,8 @@ function normalRandomDistribution(
  * 3/4 * 2^32, with 1896933636 unique output values in the [-2147483647, 2147483647] range. 
  * This is probably the best you can do with a word size of 32 bits. Also note that only the highest bit will actually 
  * have the max period, lower bits will have increasingly shorter periods.
+ * 
+ * ⚠️ Currently this function is not in use because the result is outside range [0, 1]
  *
  * @author ed.bew@hcrikdlef.dreg
  * @source https://www.musicdsp.org/en/latest/Synthesis/216-fast-whitenoise-generator.html
@@ -39,6 +41,9 @@ export function fastWhiteNoise() {
   };
 }
 
+/**
+ * A simple deterministic random number generator used for testing
+ */
 export function linearCongruentialGenerator(seed = 1234567) {
   const a = 1664525;
   const c = 1013904223;

@@ -81,3 +81,20 @@
   justify-content: center;
   font-size: 1rem;
 }
+
+@keyframes moving-gradient {
+  0% {
+    background-position: 0% 0%;
+  }
+  100% {
+    background-position: 100% 100%;
+  }
+}
+
+.moving-bg {
+  background: linear-gradient(45deg, #a3e635, #06b6d4);
+  background-size: 200% 200%;
+  animation: moving-gradient 10s linear infinite;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

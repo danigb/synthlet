@@ -1,19 +1,34 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Adsr, VaOscillator, VaOscillatorNode, loadSynthlet } from "synthlet";
+import {
+  Adsr,
+  AdsrNode,
+  VA_OSCILLATOR_WAVEFORM_NAMES,
+  VaOscillator,
+  VaOscillatorNode,
+  VaOscillatorWaveform,
+  loadSynthlet,
+} from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
 import { Slider } from "../Slider";
 import { getAudioContext } from "../audio-context";
 import { midiToFreq } from "../midiToFreq";
 
-class VaOscillatorExampleSynth {
-  env: VaOscillatorNode;
+class Synth {
+  env: AdsrNode;
   osc: VaOscillatorNode;
 
+  static params = {
+    osc: {
+      frequency: 440,
+      waveform: VaOscillatorWaveform.Triangle,
+    },
+  };
+
   constructor(public context: AudioContext) {
-    this.osc = VaOscillator(context, { frequency: 440, detune: 0.01 });
+    this.osc = VaOscillator(context, Synth.params.osc);
     this.env = Adsr(context);
     this.osc.connect(this.env).connect(context.destination);
   }
@@ -33,15 +48,14 @@ class VaOscillatorExampleSynth {
 }
 
 export function VaOscillatorExample({ className }: { className?: string }) {
-  const [synth, setSynth] = useState<VaOscillatorExampleSynth | undefined>(
-    undefined
-  );
+  const [synth, setSynth] = useState<Synth | undefined>(undefined);
   const [detune, setDetune] = useState(0.01);
+  const [waveform, setWaveform] = useState(Synth.params.osc.waveform);
 
   useEffect(() => {
-    let synth: VaOscillatorExampleSynth | undefined = undefined;
+    let synth: Synth | undefined = undefined;
     loadSynthlet(getAudioContext()).then(() => {
-      synth = new VaOscillatorExampleSynth(getAudioContext());
+      synth = new Synth(getAudioContext());
       setSynth(synth);
     });
 
@@ -63,6 +77,21 @@ export function VaOscillatorExample({ className }: { className?: string }) {
 
       <label className="text-zinc-200">VaOscillator Oscillator</label>
       <div className="flex gap-2 mb-2 text-zinc-400">
+        <select
+          className="bg-zinc-700 rounded py-[2px]"
+          value={waveform}
+          onChange={(e) => {
+            const waveform = parseInt(e.target.value) as VaOscillatorWaveform;
+            synth?.osc.waveform.setValueAtTime(waveform, 0);
+            setWaveform(waveform);
+          }}
+        >
+          {VA_OSCILLATOR_WAVEFORM_NAMES.map((name, index) => (
+            <option key={name} value={"" + index}>
+              {name}
+            </option>
+          ))}
+        </select>
         <Slider
           name="Detune"
           value={detune}

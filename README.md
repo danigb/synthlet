@@ -95,6 +95,12 @@ lfo.connect(osc.detune);
 
 #### ADSR
 
-#### LFO
+An attack-decay-sustain-release envelope.
+
+#### Lfo
+
+A low frequency oscillator with several waveforms and extras.
 
 #### Virtual Analog Oscillator
+
+Oscillator based on Blip algorithm

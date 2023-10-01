@@ -9,9 +9,9 @@ export enum VaOscillatorWaveform {
   Square = 3,
   Pulse = 4,
   Noise = 5,
-  Square2 = 0,
-  Saw2 = 1,
-  SawAndSquare2 = 2,
+  Square2 = 6,
+  Saw2 = 7,
+  SawAndSquare2 = 8,
 }
 
 export const VA_OSCILLATOR_WAVEFORM_NAMES = [
@@ -26,7 +26,7 @@ export const VA_OSCILLATOR_WAVEFORM_NAMES = [
   "Saw+Square 2",
 ];
 
-const VA_OSCILLATOR_PARAMS = {
+export const VA_OSCILLATOR_PARAMS = {
   waveform: VaOscillatorWaveform.Triangle,
   frequency: 440,
   pulseWidth: 0.5,
@@ -34,7 +34,7 @@ const VA_OSCILLATOR_PARAMS = {
 };
 
 export const VaOscillatorParams: ParamsDef = {
-  waveform: { min: 0, max: 2, defaultValue: VA_OSCILLATOR_PARAMS.waveform },
+  waveform: { min: 0, max: 8, defaultValue: VA_OSCILLATOR_PARAMS.waveform },
   frequency: {
     min: 0,
     max: 10000,
