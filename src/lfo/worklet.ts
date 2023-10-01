@@ -1,7 +1,7 @@
 import { toWorkletParams } from "../worklet-utils";
 import { Lfo, LfoParams, LfoWaveform } from "./lfo";
 
-const IMPULSE_PARAMS = toWorkletParams(LfoParams);
+const LFO_PARAMS = toWorkletParams(LfoParams);
 
 export class LfoWorklet extends AudioWorkletProcessor {
   impulse: Lfo;
@@ -26,7 +26,7 @@ export class LfoWorklet extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return IMPULSE_PARAMS;
+    return LFO_PARAMS;
   }
 }
 
