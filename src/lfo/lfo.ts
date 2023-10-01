@@ -1,14 +1,14 @@
-import { Clock } from "../utils/clock";
-import { FadeInModulator } from "../utils/fade-in-modulator";
+import { Clock } from "../shared/clock";
+import { FadeInModulator } from "../shared/fade-in-modulator";
 import {
   PI,
   TWO_PI,
   bipolar,
   concaveXForm,
   parabolicSine,
-} from "../utils/math";
-import { NoiseGenerator } from "../utils/noise-generator";
-import { Timer } from "../utils/timer";
+} from "../shared/math";
+import { NoiseGenerator } from "../shared/noise-generator";
+import { Timer } from "../shared/timer";
 import { ParamsDef } from "../worklet-utils";
 
 export enum LfoWaveform {
