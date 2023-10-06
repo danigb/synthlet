@@ -5,6 +5,9 @@ import { Slider } from "src/Slider";
 import {
   Adsr,
   AdsrNode,
+  Lfo,
+  LfoNode,
+  LfoWaveform,
   VA_FILTER_TYPE_NAMES,
   VaFilter,
   VaFilterNode,
@@ -18,6 +21,7 @@ import { midiToFreq } from "../midiToFreq";
 
 class Synth {
   osc: OscillatorNode;
+  lfo: LfoNode;
   filter: VaFilterNode;
   env: AdsrNode;
 
@@ -25,9 +29,14 @@ class Synth {
     osc: {
       frequency: 440,
     },
+    lfo: {
+      frequency: 4,
+      gain: 6000,
+      waveform: LfoWaveform.RandSampleHold,
+    },
     filter: {
       type: VaFilterType.VF_LP,
-      frequency: 1000,
+      frequency: 100,
     },
   };
 
@@ -36,9 +45,11 @@ class Synth {
       type: "triangle",
       frequency: 440,
     });
+    this.lfo = Lfo(context, Synth.params.lfo);
     this.osc.start();
     this.filter = VaFilter(context, Synth.params.filter);
     this.env = Adsr(context);
+    this.lfo.connect(this.filter.frequency);
     this.osc
       .connect(this.filter)
       .connect(this.env)
@@ -54,7 +65,9 @@ class Synth {
   }
 
   destroy() {
+    this.lfo.disconnect();
     this.osc.disconnect();
+    this.filter.disconnect();
     this.env.disconnect();
   }
 }
@@ -81,8 +94,9 @@ export function VaFilterExample({ className }: { className?: string }) {
       <div className="flex gap-2 items-end mb-2">
         <h1 className="text-3xl text-purple-500">VaFilter</h1>
         <p>
-          <span className="text-purple-600">An oscillator though </span>
+          An oscillator though
           <span className="text-purple-600"> Filter </span>
+          controlled by a<span className="text-purple-600"> Lfo </span>
           and an
           <span className="text-purple-600"> Adsr </span>
           envelope

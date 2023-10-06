@@ -16,9 +16,9 @@ export default function Home() {
         <meta name="description" content="Plug and play web instruments" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
-      <main className={"max-w-4xl mx-auto my-20 p-4" + inter.className}>
+      <main className={"max-w-4xl mx-auto my-8 p-4" + inter.className}>
         <div className="flex items-end mb-16">
-          <h1 className="text-6xl font-bold moving-bg">Synthlet</h1>
+          <h1 className="text-6xl font-bold moving-bg pb-4">Synthlet</h1>
         </div>
 
         <div className="flex flex-col gap-8">
