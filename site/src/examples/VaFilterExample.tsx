@@ -35,8 +35,9 @@ class Synth {
       waveform: LfoWaveform.RandSampleHold,
     },
     filter: {
-      type: VaFilterType.VA1_LP,
+      type: VaFilterType.Korg35_LP,
       frequency: 100,
+      resonance: 0.8,
     },
   };
 
@@ -76,6 +77,7 @@ export function VaFilterExample({ className }: { className?: string }) {
   const [synth, setSynth] = useState<Synth | undefined>(undefined);
   const [filterType, seFilterType] = useState(Synth.params.filter.type);
   const [frequency, setFrequency] = useState(Synth.params.filter.frequency);
+  const [resonance, setResonance] = useState(Synth.params.filter.resonance);
 
   useEffect(() => {
     let synth: Synth | undefined = undefined;
@@ -151,6 +153,7 @@ export function VaFilterExample({ className }: { className?: string }) {
           onRelease={(note) => {
             synth?.releaseKey({ note });
           }}
+          hold
         />
       </div>
     </div>

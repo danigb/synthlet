@@ -18,21 +18,21 @@ export function PianoKeyboard({
   borderColor = "border-blue-700",
   onPress,
   onRelease,
-  initialSustain = false,
+  hold = false,
 }: {
   className?: string;
   borderColor?: string;
   onPress: (note: PianoKeyboardNote) => void;
   onRelease?: (midi: number) => void;
-  initialSustain?: boolean;
+  hold?: boolean;
 }) {
   const [velocity, setVelocity] = useState(100);
   const [oct, setOct] = useState(60);
-  const [sustain, setSustain] = useState(initialSustain);
+  const [isHold, setIsHold] = useState(hold);
   const isPlaying = (midi: number) => false;
 
   function release(midi: number) {
-    if (!sustain && onRelease) onRelease(midi);
+    if (!isHold && onRelease) onRelease(midi);
   }
 
   return (
@@ -101,17 +101,17 @@ export function PianoKeyboard({
 
         <button
           className={`px-2 py-1 rounded ${
-            sustain ? "bg-yellow-400 text-zinc-800" : "bg-zinc-700"
+            isHold ? "bg-yellow-400 text-zinc-800" : "bg-zinc-700"
           }
         `}
           onClick={() => {
-            if (sustain) {
+            if (isHold) {
               onRelease?.(0);
             }
-            setSustain(!sustain);
+            setIsHold(!isHold);
           }}
         >
-          Sustain
+          {isHold ? "Stop" : "Hold"}
         </button>
       </div>
     </div>
