@@ -130,6 +130,14 @@ export function VaFilterExample({ className }: { className?: string }) {
           onChange={setFrequency}
           param={synth?.filter.frequency}
         />
+        <Slider
+          name="Resonance"
+          value={resonance}
+          min={0}
+          max={1000}
+          onChange={setResonance}
+          param={synth?.filter.resonance}
+        />
       </div>
 
       <div className="flex gap-2 mt-4 mb-2">
