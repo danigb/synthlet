@@ -2,7 +2,7 @@
 
 [![npm version](https://img.shields.io/npm/v/synthlet)](https://www.npmjs.com/package/synthlet)
 
-Collection of synth modules implemented as AudioWorklets written in Typescript. Currently, dsp is mostly a port of Will Pirkle's Audio Effects Plugins in C++ 2nd Ed. book. Thanks Will 🙌
+Collection of synth modules implemented as AudioWorklets written in Typescript. Currently, dsp is mostly a port of Will Pirkle's Designing Synth Plugins 2nd Edition book. Thanks Will 🙌
 
 ```ts
 import { loadSynthlet } from "synthlet";
@@ -33,9 +33,23 @@ disconnect();
 
 ⚠️ This is extremely alpha software. Use at your own risk (and be careful with volume and filter resonance)
 
-#### Why
+## FAQ (not F, not even A)
+
+#### Why?
 
 Basically, to learn and for others to learn from. Most open source synths are written in C or some other low level language. This library is written in Typescript to make it more accessible (at the cost of performance).
+
+#### How is different from WebAudio API (WAA) built-in nodes?
+
+It have more nodes, basically. Most of them are different. Some of dsp could be done by creating WAA nodes. See why?
+
+#### How is different from Tone.js
+
+First of all, this is alpha. If you need to do something serious, use Tone.js
+
+Then, Tone.js and Synthlet have different scope, focus and philosophy. The scope of Synthlet is creating synths. No more. The focus is on dsp code. And the philosophy is not wrap WAA but provide more nodes.
+
+On the other hand, Tone.js provides most of the things you need to create music with WAA.
 
 #### References
 
@@ -48,17 +62,20 @@ Basically, to learn and for others to learn from. Most open source synths are wr
   - [x] ADSR
   - [ ] ASD
   - [ ] AD
-- [ ] LFO
+- LFOs
   - [x] Sin, Saw
   - [x] Sample&Hold
-- [ ] VA Oscillator
+- VA Oscillators
   - [x] Blep algorithms
   - [x] Noise algorithms
-- [ ] Wavetable Oscillator
-- [ ] PCM Oscillator
-- [-] KarplusString Oscillator
-- [ ] Granular Oscillator
-- [ ] VA Filters
+- Wavetable Oscillators
+- PCM Oscillators
+  - [ ] One-shot pcm oscillator
+- FM Oscillators
+- KarplusString Oscillators
+  - [ ] Basic Karplus-String generator
+- Granular Oscillators
+- VA Filters
   - [x] 1-pole
   - [x] 2-pole
   - [x] Korg35
