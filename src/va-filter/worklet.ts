@@ -1,12 +1,13 @@
 import { toWorkletParams } from "../worklet-utils";
 import { VaFilter, VaFilterParams } from "./va-filter";
 
+const PARAM_DESCRIPTORS = toWorkletParams(VaFilterParams);
+
 /**
  * Single input-output filter with selectable algorithms
  */
 export class VaFilterWorklet extends AudioWorkletProcessor {
   processor: VaFilter;
-  static PARAMS = toWorkletParams(VaFilterParams);
 
   constructor() {
     super();
@@ -34,7 +35,7 @@ export class VaFilterWorklet extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return VaFilterWorklet.PARAMS;
+    return PARAM_DESCRIPTORS;
   }
 }
 

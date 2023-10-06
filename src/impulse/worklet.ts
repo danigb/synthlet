@@ -1,7 +1,7 @@
 import { toWorkletParams } from "../worklet-utils";
 import { Impulse, ImpulseParams } from "./impulse";
 
-const PARAMS = toWorkletParams(ImpulseParams);
+const PARAM_DESCRIPTORS = toWorkletParams(ImpulseParams);
 
 export class ImpulseWorklet extends AudioWorkletProcessor {
   impulse: Impulse;
@@ -26,7 +26,7 @@ export class ImpulseWorklet extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return PARAMS;
+    return PARAM_DESCRIPTORS;
   }
 }
 
