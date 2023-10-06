@@ -200,7 +200,7 @@ export function LfoExample({ className }: { className?: string }) {
           onRelease={(note) => {
             synth?.releaseKey({ note });
           }}
-          initialSustain
+          hold
         />
       </div>
     </div>

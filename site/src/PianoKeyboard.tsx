@@ -18,26 +18,32 @@ export function PianoKeyboard({
   borderColor = "border-blue-700",
   onPress,
   onRelease,
-  initialSustain = false,
+  hold = false,
+  disabled = false,
 }: {
   className?: string;
   borderColor?: string;
   onPress: (note: PianoKeyboardNote) => void;
   onRelease?: (midi: number) => void;
-  initialSustain?: boolean;
+  hold?: boolean;
+  disabled?: boolean;
 }) {
   const [velocity, setVelocity] = useState(100);
   const [oct, setOct] = useState(60);
-  const [sustain, setSustain] = useState(initialSustain);
+  const [isHold, setIsHold] = useState(hold);
   const isPlaying = (midi: number) => false;
 
   function release(midi: number) {
-    if (!sustain && onRelease) onRelease(midi);
+    if (!isHold && onRelease) onRelease(midi);
   }
 
   return (
     <div className={className}>
-      <div className={`piano-container border-t-8 ${borderColor}`}>
+      <div
+        className={`piano-container border-t-8 ${borderColor} ${
+          disabled ? "opacity-25" : ""
+        }`}
+      >
         {[...buildOct(oct), ...buildOct(oct + 12)].map((midi) =>
           isBlack(midi) ? (
             <div key={midi} className={"accidental-key__wrapper"}>
@@ -69,7 +75,11 @@ export function PianoKeyboard({
           )
         )}
       </div>
-      <div className="flex gap-1 items-center mt-1">
+      <div
+        className={`flex gap-1 items-center mt-1 ${
+          disabled ? "opacity-25" : ""
+        }`}
+      >
         <div>
           Octave: {oct}-{oct + 12 + 11}
         </div>
@@ -78,6 +88,7 @@ export function PianoKeyboard({
           onClick={() => {
             setOct(oct - 12);
           }}
+          disabled={disabled}
         >
           -
         </button>
@@ -86,6 +97,7 @@ export function PianoKeyboard({
           onClick={() => {
             setOct(oct + 12);
           }}
+          disabled={disabled}
         >
           +
         </button>
@@ -97,21 +109,23 @@ export function PianoKeyboard({
           max={127}
           value={velocity}
           onChange={(e) => setVelocity(e.target.valueAsNumber)}
+          disabled={disabled}
         />
 
         <button
           className={`px-2 py-1 rounded ${
-            sustain ? "bg-yellow-400 text-zinc-800" : "bg-zinc-700"
+            isHold ? "bg-yellow-400 text-zinc-800" : "bg-zinc-700"
           }
         `}
           onClick={() => {
-            if (sustain) {
+            if (isHold) {
               onRelease?.(0);
             }
-            setSustain(!sustain);
+            setIsHold(!isHold);
           }}
+          disabled={disabled}
         >
-          Sustain
+          {isHold ? "Stop" : "Hold"}
         </button>
       </div>
     </div>

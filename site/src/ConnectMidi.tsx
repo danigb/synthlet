@@ -8,7 +8,9 @@ type Instrument = {
 
 export function ConnectMidi({
   instrument,
+  disabled = false,
 }: {
+  disabled?: boolean;
   instrument: Instrument | undefined;
 }) {
   const inst = useRef<Instrument | null>(null);
@@ -34,7 +36,8 @@ export function ConnectMidi({
       <button
         className={
           "px-1 rounded " +
-          (disconnectMidiDevice ? "bg-emerald-600" : "bg-zinc-700")
+          (disconnectMidiDevice ? "bg-emerald-600" : "bg-zinc-700") +
+          (disabled ? " opacity-25" : "")
         }
         onClick={() => {
           if (disconnectMidiDevice) {
@@ -66,16 +69,20 @@ export function ConnectMidi({
             ...(Array.isArray(listenerOff) ? listenerOff : [listenerOff]),
           ]);
         }}
+        disabled={disabled}
       >
         MIDI
       </button>
       <select
-        className="bg-zinc-700 rounded py-[2px]"
+        className={`bg-zinc-700 rounded py-[2px] ${
+          disabled ? "opacity-25" : ""
+        }`}
         value={midiDeviceName}
         onChange={(e) => {
           const name = e.target.value;
           setMidiDeviceName(name);
         }}
+        disabled={disabled}
       >
         {midiDeviceNames.map((name) => (
           <option key={name} value={name}>

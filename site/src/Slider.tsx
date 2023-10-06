@@ -6,6 +6,7 @@ export function Slider({
   value,
   onChange,
   param,
+  disabled,
 }: {
   min?: number;
   max?: number;
@@ -13,6 +14,7 @@ export function Slider({
   value: number;
   onChange: (value: number) => void;
   param?: AudioParam | ((num: number) => void);
+  disabled?: boolean;
 }) {
   return (
     <>
@@ -29,6 +31,7 @@ export function Slider({
           else param?.setValueAtTime(value, 0);
           onChange(value);
         }}
+        disabled={disabled}
       />
     </>
   );
