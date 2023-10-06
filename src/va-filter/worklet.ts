@@ -1,16 +1,16 @@
 import { toWorkletParams } from "../worklet-utils";
-import { Filter, FilterParams } from "./filter";
+import { VaFilter, VaFilterParams } from "./va-filter";
 
 /**
  * Single input-output filter with selectable algorithms
  */
-export class FilterWorklet extends AudioWorkletProcessor {
-  impulse: Filter;
-  static PARAMS = toWorkletParams(FilterParams);
+export class VaFilterWorklet extends AudioWorkletProcessor {
+  processor: VaFilter;
+  static PARAMS = toWorkletParams(VaFilterParams);
 
   constructor() {
     super();
-    this.impulse = new Filter(sampleRate);
+    this.processor = new VaFilter(sampleRate);
   }
 
   process(
@@ -21,19 +21,21 @@ export class FilterWorklet extends AudioWorkletProcessor {
     const filterType = parameters.filterType[0];
     const frequency = parameters.frequency[0];
     const resonance = parameters.resonance[0];
-    this.impulse.setParams(filterType, frequency, resonance);
+    this.processor.setParams(filterType, frequency, resonance);
     const input = inputs[0][0];
     const output = outputs[0][0];
+    if (!input || !output) return true;
+
     for (let i = 0; i < output.length; i++) {
-      output[i] = this.impulse.process(input[i]);
+      output[i] = this.processor.process(input[i]);
     }
 
     return true;
   }
 
   static get parameterDescriptors() {
-    return FilterWorklet.PARAMS;
+    return VaFilterWorklet.PARAMS;
   }
 }
 
-registerProcessor("FilterWorklet", FilterWorklet);
+registerProcessor("VaFilterWorklet", VaFilterWorklet);

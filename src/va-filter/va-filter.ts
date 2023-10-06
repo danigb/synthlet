@@ -1,7 +1,7 @@
 import { ParamsDef } from "../worklet-utils";
 import { VA1Filter } from "./va1-filter";
 
-export enum VAFilterAlgorithm {
+export enum VaFilterType {
   BypassFilter = 0,
   VF_LP = 1,
   VF_HP = 2,
@@ -19,49 +19,63 @@ export enum VAFilterAlgorithm {
   Diode_LP4 = 14,
 }
 
-export const FilterParams: ParamsDef = {
+export const VA_FILTER_TYPE_NAMES = [
+  "Bypass",
+  "VA LowPass",
+  "VA HighPass",
+  "VA AllPass",
+  "SVF LowPass",
+  "SVF HighPass",
+  "SVF BandPass",
+  "SVF BandShelf",
+  "Korg35 LowPass",
+  "Korg35 HighPass",
+  "Moog LowPass1",
+  "Moog LowPass2",
+  "Moog LowPass3",
+  "Moog LowPass4",
+  "Diode LowPass4",
+];
+
+export const VaFilterParams: ParamsDef = {
   filterType: { min: 0, max: 14, defaultValue: 1 },
   frequency: { min: 0, max: 10000, defaultValue: 1000 },
   resonance: { min: 0, max: 1, defaultValue: 0.5 },
 } as const;
 
-export class Filter {
-  filterType: VAFilterAlgorithm;
+export class VaFilter {
+  filterType: VaFilterType;
   filterVa1: VA1Filter;
   process: (x: number) => number;
 
   constructor(public readonly sampleRate: number) {
-    this.filterType = VAFilterAlgorithm.BypassFilter;
+    this.filterType = VaFilterType.BypassFilter;
     this.filterVa1 = new VA1Filter(sampleRate);
     this.process = (x: number) => x;
     this.setParams(
-      VAFilterAlgorithm.VF_LP,
-      FilterParams.frequency.defaultValue,
-      FilterParams.resonance.defaultValue
+      VaFilterType.VF_LP,
+      VaFilterParams.frequency.defaultValue,
+      VaFilterParams.resonance.defaultValue
     );
   }
 
-  setParams(
-    filterType: VAFilterAlgorithm,
-    frequency: number,
-    resonance: number
-  ) {
+  setParams(filterType: VaFilterType, frequency: number, resonance: number) {
     if (this.filterType !== filterType) {
       this.#setType(filterType);
     }
     this.#update(frequency, resonance);
   }
 
-  #setType(filterType: VAFilterAlgorithm) {
+  #setType(filterType: VaFilterType) {
     this.filterType = filterType;
     switch (filterType) {
-      case VAFilterAlgorithm.VF_LP:
+      case VaFilterType.VF_LP:
         this.process = (x: number) => this.filterVa1.process(x).LPF1;
         break;
-      case VAFilterAlgorithm.VF_HP:
+      case VaFilterType.VF_HP:
         this.process = (x: number) => this.filterVa1.process(x).HPF1;
         break;
-      case VAFilterAlgorithm.VF_AP:
+      case VaFilterType.VF_AP:
         this.process = (x: number) => this.filterVa1.process(x).APF1;
         break;
       default:
@@ -72,9 +86,9 @@ export class Filter {
 
   #update(frequency: number, resonance: number) {
     switch (this.filterType) {
-      case VAFilterAlgorithm.VF_LP:
-      case VAFilterAlgorithm.VF_HP:
-      case VAFilterAlgorithm.VF_AP:
+      case VaFilterType.VF_LP:
+      case VaFilterType.VF_HP:
+      case VaFilterType.VF_AP:
         this.filterVa1.update(frequency);
     }
   }
