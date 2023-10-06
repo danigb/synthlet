@@ -1,0 +1,5 @@
+---
+"synthlet": minor
+---
+
+PCM Oscillator

@@ -2,40 +2,85 @@
 
 [![npm version](https://img.shields.io/npm/v/synthlet)](https://www.npmjs.com/package/synthlet)
 
-Collection of synth modules implemented as AudioWorklet in Typescript. Currently is basically a port of Will Pirkle's Audio Effects Plugins in C++ 2nd Ed. book. Thanks Will 🙌
+Collection of synth modules implemented as AudioWorklets written in Typescript. Currently, dsp is mostly a port of Will Pirkle's Designing Synth Plugins 2nd Edition book. Thanks Will 🙌
 
 ```ts
-import { Lfo, LfoWaveform, loadSynthlet } from "synthlet";
+import { loadSynthlet } from "synthlet";
 
-const context = new AudioContext();
-await loadSynthlet(context);
+const { osc, filter, chain, adsr, now, trigger, param } = loadSynthlet(context);
 
-const synth = Lfo(context, { waveform: LfoWaveform.RandSampleAndHold });
+// A WebAudio normal oscillator
+
+const gate = trigger();
+const frequency = param(440);
+
+const disconnect = chain(
+  mix(
+    osc({ type: AvOscillator.SAW, frequency, detune: 2 }),
+    osc({ type: AvOscillator.SAW, frequency, detune: -2 })
+  ),
+  filter({ frequency: 3000 }),
+  adsr({ gate }),
+  context.destination
+);
+
+gate.noteOn(now());
+frequency.setValueAtTime(880, now() + 0.5);
+gate.noteOff(now() + 1);
+
+disconnect();
 ```
 
-#### Why
+⚠️ This is extremely alpha software. Use at your own risk (and be careful with volume and filter resonance)
+
+## FAQ (not F, not even A)
+
+#### Why?
 
 Basically, to learn and for others to learn from. Most open source synths are written in C or some other low level language. This library is written in Typescript to make it more accessible (at the cost of performance).
+
+#### How is different from WebAudio API (WAA) built-in nodes?
+
+It have more nodes, basically. Most of them are different. Some of dsp could be done by creating WAA nodes. See why?
+
+#### How is different from Tone.js
+
+First of all, this is alpha. If you need to do something serious, use Tone.js
+
+Then, Tone.js and Synthlet have different scope, focus and philosophy. The scope of Synthlet is creating synths. No more. The focus is on dsp code. And the philosophy is not wrap WAA but provide more nodes.
+
+On the other hand, Tone.js provides most of the things you need to create music with WAA.
 
 #### References
 
 - [Designing Synth Plugins 2nd Edition](http://www.willpirkle.com/)
+- [BasicSynth: Creating a Music Synthesizer in Software](https://basicsynth.com/index.php?page=book)
 
 #### Roadmap
 
-- Envelope
+- Envelope Generators
   - [x] ADSR
   - [ ] ASD
   - [ ] AD
-- [-] LFO
+- LFOs
   - [x] Sin, Saw
   - [x] Sample&Hold
-- [-] VA Oscillator
+- VA Oscillators
   - [x] Blep algorithms
   - [x] Noise algorithms
-- [ ] Wavetable Oscillator
-- [-] KarplusString Oscillator
-- [ ] Granular Oscillator
+- Wavetable Oscillators
+- PCM Oscillators
+  - [ ] One-shot pcm oscillator
+- FM Oscillators
+- KarplusString Oscillators
+  - [ ] Basic Karplus-String generator
+- Granular Oscillators
+- VA Filters
+  - [x] 1-pole
+  - [x] 2-pole
+  - [x] Korg35
+  - [ ] Moog
+  - [ ] Diode
 
 ## Setup
 
@@ -58,37 +103,44 @@ The first step is to load the worklets into an AudioContext. The simplest way is
 ```js
 import { loadSynthlet } from "synthlet";
 
-const context = new AudioContext();
-await loadSynthlet(context);
+const Synthlet = await loadSynthlet(new AudioContext());
+
+const osc = Synthlet.osc({ frequency: 440 }).connect(destination);
+
+// after some time...
+osc.disconnect();
 ```
 
-But you can choose which ones to load if you don't need the full library:
+But you can choose which ones to load if you don't need or want the full library:
 
 ```js
 import { loadKarplusStrongOscillator } from "synthlet";
 
-await loadKarplusStrongOscillator(context);
+const ks = await loadKarplusStrongOscillator(context);
+
+const osc = ks({ note: 60 }).connect(context.destination);
+osc.disconnect();
 ```
 
 #### Create nodes
 
-You can create the nodes using the constructor functions:
+The load function returns a promise to a function that create audio nodes:
 
 ```js
-import { Lfo } from "synthlet";
+import { loadLfo } from "synthlet";
 
-const lfo = Lfo(context, { frequency: 10 });
+const createLfo = await loadLfo(context);
+const lfo = createLfo({ frequency: 10 }); // lfo is an AudioNode
 ```
-
-⚠️ Don't use `new` in front ot the function.
 
 #### Connect nodes
 
 Each node is a normal WebAudio API `AudioNode` so the same principles apply:
 
 ```js
-const osc = new OscillatorNode(context);
-lfo.connect(osc.detune);
+const osc = new OscillatorNode(context, { frequency: 440 });
+lfo.connect(osc.frequency);
+osc.start();
 ```
 
 ## Modules
