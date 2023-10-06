@@ -95,6 +95,7 @@ export function Korg35Filter(sampleRate: number) {
       out.HP *= invK;
       out.ALP *= invK;
     }
+    return out;
   }
 
   return { update, process };

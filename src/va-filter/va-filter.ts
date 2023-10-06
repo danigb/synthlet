@@ -78,9 +78,9 @@ export class VaFilter {
       // VA 2-pole Analog Low Pass
       (x) => this.va2.process(x).ALP,
       // Korg35 Low Pass
-      (x) => this.va2.process(x).LP,
+      (x) => this.korg35.process(x).LP,
       // Korg35 High Pass
-      (x) => this.va2.process(x).HP,
+      (x) => this.korg35.process(x).HP,
     ];
     // Set default params
     this.setParams(

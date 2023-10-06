@@ -74,12 +74,14 @@ class Synth {
 }
 
 export function VaFilterExample({ className }: { className?: string }) {
+  const [active, setActive] = useState(false);
   const [synth, setSynth] = useState<Synth | undefined>(undefined);
   const [filterType, seFilterType] = useState(Synth.params.filter.type);
   const [frequency, setFrequency] = useState(Synth.params.filter.frequency);
   const [resonance, setResonance] = useState(Synth.params.filter.resonance);
 
   useEffect(() => {
+    if (!active) return;
     let synth: Synth | undefined = undefined;
     loadSynthlet(getAudioContext()).then(() => {
       synth = new Synth(getAudioContext());
@@ -89,13 +91,23 @@ export function VaFilterExample({ className }: { className?: string }) {
     return () => {
       synth?.destroy();
     };
-  }, []);
+  }, [active]);
 
   return (
     <div className={className}>
-      <div className="flex gap-2 items-end mb-2">
+      <div className="flex gap-2 items-end">
         <h1 className="text-3xl text-purple-500">VaFilter</h1>
-        <p>
+        <button
+          className={`px-2 py-1 rounded ${
+            active ? "bg-purple-500 text-zinc-800" : "bg-zinc-700"
+          }`}
+          onClick={() => setActive((active) => !active)}
+        >
+          {active ? "Off" : "On"}
+        </button>
+      </div>
+      <div className={`${active ? "" : "opacity-25"}`}>
+        <p className="mb-4">
           An oscillator though
           <span className="text-purple-600"> Filter </span>
           controlled by a<span className="text-purple-600"> Lfo </span>
@@ -103,44 +115,47 @@ export function VaFilterExample({ className }: { className?: string }) {
           <span className="text-purple-600"> Adsr </span>
           envelope
         </p>
+
+        <label className="text-zinc-200">VaFilter</label>
+        <div className="flex gap-2 mb-2 text-zinc-400">
+          <select
+            className="bg-zinc-700 rounded py-[2px]"
+            value={filterType}
+            onChange={(e) => {
+              const waveform = parseInt(e.target.value) as VaFilterType;
+              synth?.filter.type.setValueAtTime(waveform, 0);
+              seFilterType(waveform);
+            }}
+            disabled={!active}
+          >
+            {VA_FILTER_TYPE_NAMES.map((name, index) => (
+              <option key={name} value={"" + index}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <Slider
+            name="Frequency"
+            value={frequency}
+            min={0}
+            max={10000}
+            onChange={setFrequency}
+            param={synth?.filter.frequency}
+            disabled={!active}
+          />
+          <Slider
+            name="Resonance"
+            value={resonance}
+            min={0}
+            max={1000}
+            onChange={setResonance}
+            param={synth?.filter.resonance}
+            disabled={!active}
+          />
+        </div>
       </div>
 
-      <label className="text-zinc-200">VaFilter</label>
-      <div className="flex gap-2 mb-2 text-zinc-400">
-        <select
-          className="bg-zinc-700 rounded py-[2px]"
-          value={filterType}
-          onChange={(e) => {
-            const waveform = parseInt(e.target.value) as VaFilterType;
-            //synth?.filter.type.setValueAtTime(waveform, 0);
-            seFilterType(waveform);
-          }}
-        >
-          {VA_FILTER_TYPE_NAMES.map((name, index) => (
-            <option key={name} value={"" + index}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <Slider
-          name="Frequency"
-          value={frequency}
-          min={0}
-          max={10000}
-          onChange={setFrequency}
-          param={synth?.filter.frequency}
-        />
-        <Slider
-          name="Resonance"
-          value={resonance}
-          min={0}
-          max={1000}
-          onChange={setResonance}
-          param={synth?.filter.resonance}
-        />
-      </div>
-
-      <div className="flex gap-2 mt-4 mb-2">
+      <div className="flex gap-2 mb-2">
         <ConnectMidi
           instrument={{
             start(note) {
@@ -150,6 +165,7 @@ export function VaFilterExample({ className }: { className?: string }) {
               synth?.releaseKey({ note: note.stopId });
             },
           }}
+          disabled={!active}
         />
       </div>
       <div className="">
@@ -162,6 +178,7 @@ export function VaFilterExample({ className }: { className?: string }) {
             synth?.releaseKey({ note });
           }}
           hold
+          disabled={!active}
         />
       </div>
     </div>

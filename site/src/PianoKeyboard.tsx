@@ -19,12 +19,14 @@ export function PianoKeyboard({
   onPress,
   onRelease,
   hold = false,
+  disabled = false,
 }: {
   className?: string;
   borderColor?: string;
   onPress: (note: PianoKeyboardNote) => void;
   onRelease?: (midi: number) => void;
   hold?: boolean;
+  disabled?: boolean;
 }) {
   const [velocity, setVelocity] = useState(100);
   const [oct, setOct] = useState(60);
@@ -37,7 +39,11 @@ export function PianoKeyboard({
 
   return (
     <div className={className}>
-      <div className={`piano-container border-t-8 ${borderColor}`}>
+      <div
+        className={`piano-container border-t-8 ${borderColor} ${
+          disabled ? "opacity-25" : ""
+        }`}
+      >
         {[...buildOct(oct), ...buildOct(oct + 12)].map((midi) =>
           isBlack(midi) ? (
             <div key={midi} className={"accidental-key__wrapper"}>
@@ -69,7 +75,11 @@ export function PianoKeyboard({
           )
         )}
       </div>
-      <div className="flex gap-1 items-center mt-1">
+      <div
+        className={`flex gap-1 items-center mt-1 ${
+          disabled ? "opacity-25" : ""
+        }`}
+      >
         <div>
           Octave: {oct}-{oct + 12 + 11}
         </div>
@@ -78,6 +88,7 @@ export function PianoKeyboard({
           onClick={() => {
             setOct(oct - 12);
           }}
+          disabled={disabled}
         >
           -
         </button>
@@ -86,6 +97,7 @@ export function PianoKeyboard({
           onClick={() => {
             setOct(oct + 12);
           }}
+          disabled={disabled}
         >
           +
         </button>
@@ -97,6 +109,7 @@ export function PianoKeyboard({
           max={127}
           value={velocity}
           onChange={(e) => setVelocity(e.target.valueAsNumber)}
+          disabled={disabled}
         />
 
         <button
@@ -110,6 +123,7 @@ export function PianoKeyboard({
             }
             setIsHold(!isHold);
           }}
+          disabled={disabled}
         >
           {isHold ? "Stop" : "Hold"}
         </button>
