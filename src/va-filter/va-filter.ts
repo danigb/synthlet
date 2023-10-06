@@ -1,40 +1,39 @@
 import { ParamsDef } from "../worklet-utils";
-import { VA1Filter } from "./va1-filter";
+import { Korg35Filter } from "./korg35-filter";
+import { Va1Filter } from "./va1-filter";
+import { Va2Filter } from "./va2-filter";
 
 export enum VaFilterType {
-  BypassFilter = 0,
-  VF_LP = 1,
-  VF_HP = 2,
-  VF_AP = 3,
-  SVF_LP = 4,
-  SVF_HP = 5,
-  SVF_BP = 6,
-  SVF_BS = 7,
-  Korg35_LP = 8,
-  Korg35_HP = 9,
-  Moog_LP1 = 10,
-  Moog_LP2 = 11,
-  Moog_LP3 = 12,
-  Moog_LP4 = 13,
-  Diode_LP4 = 14,
+  BypassFilter,
+
+  VA1_LP,
+  VA1_HP,
+  VA1_ALP,
+
+  VA2_LP,
+  VA2_HP,
+  VA2_BP,
+  VA2_BS,
+  VA2_ALP,
+
+  Korg35_LP,
+  Korg35_HP,
 }
 
 export const VA_FILTER_TYPE_NAMES = [
   "Bypass",
-  "VA LowPass",
-  "VA HighPass",
-  "VA AllPass",
-  "SVF LowPass",
-  "SVF HighPass",
-  "SVF BandPass",
-  "SVF BandShelf",
-  "Korg35 LowPass",
-  "Korg35 HighPass",
-  "Moog LowPass1",
-  "Moog LowPass2",
-  "Moog LowPass3",
-  "Moog LowPass4",
-  "Diode LowPass4",
+  "VA 1-pole Low Pass",
+  "VA 1-pole High Pass",
+  "VA 1-pole Analog Low Pass",
+
+  "VA 2-pole Low Pass",
+  "VA 2-pole High Pass",
+  "VA 2-pole Band Pass",
+  "VA 2-pole Band Shelf",
+  "VA 2-pole Analog Low Pass",
+
+  "Korg35 Low Pass",
+  "Korg35 High Pass",
 ];
 
 export const VaFilterParams: ParamsDef = {
@@ -43,17 +42,49 @@ export const VaFilterParams: ParamsDef = {
   resonance: { min: 0, max: 1, defaultValue: 0.5 },
 } as const;
 
+type Processor = (x: number) => number;
+
 export class VaFilter {
   filterType: VaFilterType;
-  filterVa1: VA1Filter;
+  va1: ReturnType<typeof Va1Filter>;
+  va2: ReturnType<typeof Va2Filter>;
+  korg35: ReturnType<typeof Korg35Filter>;
+  processors: Processor[];
   process: (x: number) => number;
 
   constructor(public readonly sampleRate: number) {
     this.filterType = VaFilterType.BypassFilter;
-    this.filterVa1 = new VA1Filter(sampleRate);
+    this.va1 = Va1Filter(sampleRate);
+    this.va2 = Va2Filter(sampleRate);
+    this.korg35 = Korg35Filter(sampleRate);
     this.process = (x: number) => x;
+    this.processors = [
+      // Bypass
+      (x) => x,
+      // VA 1-pole Low Pass
+      (x) => this.va1.process(x).LP,
+      // VA 1-pole High Pass
+      (x) => this.va1.process(x).HP,
+      // VA 1-pole Analog Low Pass
+      (x) => this.va1.process(x).ALP,
+      // VA 2-pole Low Pass
+      (x) => this.va2.process(x).LP,
+      // VA 2-pole High Pass
+      (x) => this.va2.process(x).HP,
+      // VA 2-pole Band Pass
+      (x) => this.va2.process(x).BP,
+      // VA 2-pole Band Shelf
+      (x) => this.va2.process(x).BS,
+      // VA 2-pole Analog Low Pass
+      (x) => this.va2.process(x).ALP,
+      // Korg35 Low Pass
+      (x) => this.va2.process(x).LP,
+      // Korg35 High Pass
+      (x) => this.va2.process(x).HP,
+    ];
+    // Set default params
     this.setParams(
-      VaFilterType.VF_LP,
+      VaFilterType.VA1_LP,
       VaFilterParams.frequency.defaultValue,
       VaFilterParams.resonance.defaultValue
     );
@@ -61,35 +92,14 @@ export class VaFilter {
 
   setParams(filterType: VaFilterType, frequency: number, resonance: number) {
     if (this.filterType !== filterType) {
-      this.#setType(filterType);
+      this.process = this.processors[filterType] ?? this.processors[0];
     }
     this.#update(frequency, resonance);
   }
 
-  #setType(filterType: VaFilterType) {
-    this.filterType = filterType;
-    switch (filterType) {
-      case VaFilterType.VF_LP:
-        this.process = (x: number) => this.filterVa1.process(x).LPF1;
-        break;
-      case VaFilterType.VF_HP:
-        this.process = (x: number) => this.filterVa1.process(x).HPF1;
-        break;
-      case VaFilterType.VF_AP:
-        this.process = (x: number) => this.filterVa1.process(x).APF1;
-        break;
-      default:
-        this.process = (x: number) => x;
-        break;
-    }
-  }
-
   #update(frequency: number, resonance: number) {
-    switch (this.filterType) {
-      case VaFilterType.VF_LP:
-      case VaFilterType.VF_HP:
-      case VaFilterType.VF_AP:
-        this.filterVa1.update(frequency);
-    }
+    this.va1.update(frequency);
+    this.va2.update(frequency, resonance);
+    this.korg35.update(frequency, resonance);
   }
 }

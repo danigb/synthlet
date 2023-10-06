@@ -35,7 +35,7 @@ class Synth {
       waveform: LfoWaveform.RandSampleHold,
     },
     filter: {
-      type: VaFilterType.VF_LP,
+      type: VaFilterType.VA1_LP,
       frequency: 100,
     },
   };

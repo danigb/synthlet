@@ -3,44 +3,54 @@ import { TWO_PI } from "../shared/math";
 /**
  * Virtual Analog first order filter
  *
- * Outputs low pass, high pass, all pass and low pass with analog FNG
+ * Outputs low pass, high pass, all pass and modified low pass to better match analog behavior near Nyquist
+ *
+ * @author Will Pirkle http://www.willpirkle.com
+ * @see https://github.com/willpirkleaudio/SynthLab/blob/main/source/vafilters.h
+ * Adapted to TypeScript by danigb
  */
-export class VA1Filter {
-  private halfSamplePeriod: number;
-  private cutoffFrequency: number;
-  private state: number;
-  output: { LPF1: number; HPF1: number; APF1: number; ANM_LPF1: number };
-  private coeff: number;
+export function Va1Filter(sampleRate: number) {
+  let halfSamplePeriod = 1.0 / (2.0 * sampleRate);
 
-  constructor(public readonly sampleRate: number) {
-    this.halfSamplePeriod = 1.0 / (2.0 * sampleRate);
-    this.cutoffFrequency = 0.0;
-    this.state = 0.0;
-    this.coeff = 0.0;
-    this.output = {
-      LPF1: 0.0,
-      HPF1: 0.0,
-      APF1: 0.0,
-      ANM_LPF1: 0.0,
-    };
-    this.update(1000);
+  let fc = 0.0; // cutoff frequency
+  let sn = 0.0; // state
+
+  // Coefficients
+  const coeff = {
+    a: 0.0, // alpha
+    b: 1.0, // beta (only used in Korg35 and Moog)
+  };
+
+  // Outputs
+  const out = {
+    LP: 0.0, // low pass
+    HP: 0.0, // high pass
+    AP: 0.0, // all pass
+    ALP: 0.0, // "analog" low pass (used in Korg35 and Moog)
+  };
+
+  function update(cutoffFrequency: number) {
+    if (cutoffFrequency === fc) return;
+    fc = cutoffFrequency;
+    const g = Math.tan(TWO_PI * fc * halfSamplePeriod);
+    coeff.a = g / (1.0 + g);
   }
 
-  update(cutoff: number) {
-    if (cutoff === this.cutoffFrequency) return;
-    this.cutoffFrequency = cutoff;
-    const g = Math.tan(TWO_PI * this.cutoffFrequency * this.halfSamplePeriod);
-    this.coeff = g / (1.0 + g);
+  function process(xn: number) {
+    const vn = (xn - sn) * coeff.a;
+
+    out.LP = (xn - sn) * coeff.a + sn;
+    out.HP = xn - out.LP;
+    out.AP = out.LP - out.HP;
+    out.ALP = out.LP + coeff.a * out.HP;
+    sn = vn + out.LP;
+    return out;
   }
 
-  process(xn: number) {
-    const vn = (xn - this.state) * this.coeff;
-
-    this.output.LPF1 = (xn - this.state) * this.coeff + this.state;
-    this.output.HPF1 = xn - this.output.LPF1;
-    this.output.APF1 = this.output.LPF1 - this.output.HPF1;
-    this.output.ANM_LPF1 = this.output.LPF1 + this.coeff * this.output.HPF1;
-    this.state = vn + this.output.LPF1;
-    return this.output;
+  // Used in Korg35 and Moog
+  function fb() {
+    return sn * coeff.b;
   }
+
+  return { coeff, process, update, fb };
 }
