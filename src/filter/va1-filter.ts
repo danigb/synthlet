@@ -1,7 +1,7 @@
 import { TWO_PI } from "../shared/math";
 
 /**
- * Virtual analog first order filter
+ * Virtual Analog first order filter
  *
  * Outputs low pass, high pass, all pass and low pass with analog FNG
  */
@@ -41,5 +41,6 @@ export class VA1Filter {
     this.output.APF1 = this.output.LPF1 - this.output.HPF1;
     this.output.ANM_LPF1 = this.output.LPF1 + this.coeff * this.output.HPF1;
     this.state = vn + this.output.LPF1;
+    return this.output;
   }
 }

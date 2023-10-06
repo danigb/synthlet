@@ -3,7 +3,7 @@ import { TWO_PI } from "../shared/math";
 /**
  * Second order state variable filter
  */
-export class VasvFilter {
+export class Va2Filter {
   coeff_alpha: number;
   coeff_alpha0: number;
   coeff_rho: number;
