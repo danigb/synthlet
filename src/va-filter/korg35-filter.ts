@@ -41,7 +41,7 @@ export function Korg35Filter(sampleRate: number) {
     if (cutoffFrequency == fc && resonance == q) return;
 
     fc = cutoffFrequency;
-    q = resonance;
+    coeff.K = q = resonance;
     coeff.g = Math.tan(TWO_PI * fc * halfSamplePeriod);
     coeff.a = coeff.g / (1.0 + coeff.g);
     coeff.b = 1.0 / (1.0 - coeff.K * coeff.a + coeff.K * coeff.a * coeff.a);

@@ -18,7 +18,7 @@ export class VaFilterWorklet extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    const filterType = parameters.filterType[0];
+    const filterType = parameters.type[0];
     const frequency = parameters.frequency[0];
     const resonance = parameters.resonance[0];
     this.processor.setParams(filterType, frequency, resonance);

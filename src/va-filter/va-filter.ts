@@ -37,7 +37,7 @@ export const VA_FILTER_TYPE_NAMES = [
 ];
 
 export const VaFilterParams: ParamsDef = {
-  filterType: { min: 0, max: 14, defaultValue: 1 },
+  type: { min: 0, max: 14, defaultValue: 1 },
   frequency: { min: 0, max: 10000, defaultValue: 1000 },
   resonance: { min: 0, max: 1, defaultValue: 0.5 },
 } as const;
