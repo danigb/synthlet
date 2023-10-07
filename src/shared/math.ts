@@ -1,6 +1,10 @@
 export const PI = Math.PI;
 export const TWO_PI = 2.0 * PI;
 export const PI_SQUARED = PI * PI;
+export const EPSILON = 1e-9; // Epsilon: a very small number to avoid division by zero
+
+export const max = Math.max;
+export const min = Math.min;
 
 const B: number = 4.0 / PI;
 const C: number = -4.0 / PI_SQUARED;

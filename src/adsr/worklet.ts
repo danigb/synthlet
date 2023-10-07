@@ -1,7 +1,15 @@
-import { toWorkletParams } from "../worklet-utils";
-import { Adsr, AdsrParams } from "./adsr";
+import { ParamsDef, toWorkletParams } from "../worklet-utils";
+import { Adsr } from "./adsr";
 
-const ADSR_PARAMS = toWorkletParams(AdsrParams);
+export const AdsrParams: ParamsDef = {
+  gate: { min: 0, max: 1, defaultValue: 0 },
+  attack: { min: 0, max: 10, defaultValue: 0.01 },
+  decay: { min: 0, max: 10, defaultValue: 0.1 },
+  sustain: { min: 0, max: 1, defaultValue: 0.5 },
+  release: { min: 0, max: 10, defaultValue: 0.3 },
+} as const;
+
+const PARAMS_DESCRIPTORS = toWorkletParams(AdsrParams);
 
 export class AdsrWorklet extends AudioWorkletProcessor {
   dt: number;
@@ -41,7 +49,7 @@ export class AdsrWorklet extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return ADSR_PARAMS;
+    return PARAMS_DESCRIPTORS;
   }
 }
 
