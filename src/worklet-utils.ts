@@ -3,7 +3,7 @@ export type ParamsDef = Record<string, ParamDef>;
 type ParamDef = {
   min: number;
   max: number;
-  defaultValue: number;
+  def: number;
   type?: "k" | "a";
 };
 export type GenerateNodeType<T extends ParamsDef> = AudioWorkletNode & {
@@ -73,7 +73,7 @@ export function addParams(node: AudioWorkletNode, params: ParamsDef) {
 
 export function toWorkletParams(params: ParamsDef) {
   return Object.keys(params).map((name) => {
-    const { min: minValue, max: maxValue, defaultValue } = params[name];
+    const { min: minValue, max: maxValue, def: defaultValue } = params[name];
     return { name, minValue, maxValue, defaultValue, automationRate: "k-rate" };
   });
 }
