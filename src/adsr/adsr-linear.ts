@@ -1,4 +1,5 @@
 import { EPSILON, clamp, max } from "../shared/math";
+import { Trigger } from "../shared/trigger";
 
 // An linear ADSR envelope generator
 export function AdsrLinear(sampleRate: number) {

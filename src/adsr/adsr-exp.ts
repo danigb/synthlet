@@ -1,5 +1,6 @@
 import { EPSILON, clamp } from "../shared/math";
 import { RcFilter } from "../shared/rc-filter";
+import { Trigger } from "../shared/trigger";
 
 export function AdsrExp(sampleRate: number) {
   // state machine

@@ -21,10 +21,10 @@ export class AdsrWorklet extends AudioWorkletProcessor {
 
   constructor(options) {
     super();
-    this.#set(options.processorOptions.type === "linear" ? "linear" : "exp");
+    this.#set(options?.processorOptions?.type === "linear" ? "linear" : "exp");
 
     this.port.onmessage = (event) => {
-      const newType = event.data.type === "linear" ? "linear" : "exp";
+      const newType = event.data?.type === "linear" ? "linear" : "exp";
       if (this.t !== newType) this.#set(newType);
     };
   }
@@ -33,6 +33,7 @@ export class AdsrWorklet extends AudioWorkletProcessor {
     this.t = newType;
     this.p =
       newType === "linear" ? AdsrLinear(sampleRate) : AdsrExp(sampleRate);
+    this.p.setParams(0, 0.01, 0.1, 0.5, 0.3);
   }
 
   process(
