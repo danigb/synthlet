@@ -67,6 +67,7 @@ export class Adsr {
     this.releaseTCO = this.decayTCO;
 
     this.setParams(
+      0,
       AdsrParams.attack.def,
       AdsrParams.decay.def,
       AdsrParams.sustain.def,
@@ -87,12 +88,14 @@ export class Adsr {
   }
 
   setParams(
+    gate: number,
     attack: number,
     decay: number,
     sustain: number,
     release: number
   ): void {
     // Sustain needs to be first
+    this.setGate(gate);
     this.setSustainLevel(sustain);
     this.setAttackTime(attack);
     this.setDecayTime(decay);

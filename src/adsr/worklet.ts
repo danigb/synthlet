@@ -1,4 +1,5 @@
 import { ParamsDef, toWorkletParams } from "../worklet-utils";
+import { Adsr } from "./adsr";
 import { AdsrExp } from "./adsr-exp";
 import { AdsrLinear } from "./adsr-linear";
 
@@ -12,11 +13,14 @@ export const AdsrParams: ParamsDef = {
 
 const PARAMS_DESCRIPTORS = toWorkletParams(AdsrParams);
 
-type Adsr = ReturnType<typeof AdsrLinear> | ReturnType<typeof AdsrExp>;
+type CurrentAdsr =
+  | ReturnType<typeof AdsrLinear>
+  | ReturnType<typeof AdsrExp>
+  | Adsr;
 type AdsrType = "linear" | "exp";
 
 export class AdsrWorklet extends AudioWorkletProcessor {
-  p: Adsr;
+  p: CurrentAdsr;
   t: AdsrType;
 
   constructor(options) {
@@ -32,7 +36,7 @@ export class AdsrWorklet extends AudioWorkletProcessor {
   #set(newType: AdsrType) {
     this.t = newType;
     this.p =
-      newType === "linear" ? AdsrLinear(sampleRate) : AdsrExp(sampleRate);
+      newType === "linear" ? AdsrLinear(sampleRate) : new Adsr(sampleRate);
     this.p.setParams(0, 0.01, 0.1, 0.5, 0.3);
   }
 

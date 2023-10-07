@@ -6,7 +6,7 @@ export class Trigger {
   hi: boolean = false;
 
   process(x: number, min = 0, max = 1) {
-    this.hi = x <= min ? false : x >= max ? true : this.hi;
+    this.hi = x >= 1 && !this.hi ? true : false;
     return this.hi;
   }
 }
