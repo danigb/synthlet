@@ -6,3 +6,7 @@ export type ParamDef = {
   def: number;
   type?: "k" | "a";
 };
+
+export type GenerateParamsMap<T extends ParamsDef> = {
+  [K in keyof T]: number[];
+};

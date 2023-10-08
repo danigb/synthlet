@@ -11,7 +11,9 @@ export class WtOscillatorWorklet extends AudioWorkletProcessor {
     this.p = WtOscillator(sampleRate);
     this.port.onmessage = (event) => {
       if (event.data.type === "AUDIO") {
-        this.p.setBuffer(event.data.buffer);
+        const buffer = event.data.buffer;
+        const len = event.data.wavetableLength ?? 256;
+        this.p.setBuffer(event.data.buffer, len);
         this.port.postMessage({
           type: "RECEIVED",
           len: event.data.buffer.length,
@@ -25,13 +27,8 @@ export class WtOscillatorWorklet extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    const gate = parameters.gate[0];
-    const speed = parameters.speed[0];
-    this.p.setParams(gate, speed);
-    const output = outputs[0];
-    for (let i = 0; i < output.length; i++) {
-      this.p.fillAudioMono(output[i]);
-    }
+    this.p.setParams(parameters);
+    this.p.fillAudioMono(outputs[0][0]);
     return true;
   }
 
