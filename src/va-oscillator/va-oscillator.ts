@@ -34,14 +34,14 @@ export const VA_OSCILLATOR_PARAMS = {
 };
 
 export const VaOscillatorParams: ParamsDef = {
-  waveform: { min: 0, max: 8, defaultValue: VA_OSCILLATOR_PARAMS.waveform },
+  waveform: { min: 0, max: 8, def: VA_OSCILLATOR_PARAMS.waveform },
   frequency: {
     min: 0,
     max: 10000,
-    defaultValue: VA_OSCILLATOR_PARAMS.frequency,
+    def: VA_OSCILLATOR_PARAMS.frequency,
   },
-  mix: { min: 0, max: 1, defaultValue: VA_OSCILLATOR_PARAMS.mix },
-  pulseWidth: { min: 0, max: 1, defaultValue: VA_OSCILLATOR_PARAMS.pulseWidth },
+  mix: { min: 0, max: 1, def: VA_OSCILLATOR_PARAMS.mix },
+  pulseWidth: { min: 0, max: 1, def: VA_OSCILLATOR_PARAMS.pulseWidth },
 } as const;
 
 /**

@@ -1,8 +1,8 @@
 import { ParamsDef } from "../worklet-utils";
 
 export const PcmOscillatorParams: ParamsDef = {
-  gate: { min: 0, max: 1, defaultValue: 0 },
-  speed: { min: -100, max: 100, defaultValue: 1 },
+  gate: { min: 0, max: 1, def: 0 },
+  speed: { min: -100, max: 100, def: 1 },
 } as const;
 
 export function PcmOscillator(sampleRate: number) {
