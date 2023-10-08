@@ -1,6 +1,6 @@
+import { ParamsDef } from "../params-utils";
 import { Clock } from "../shared/clock";
 import { TWO_PI, bipolar, clamp } from "../shared/math";
-import { ParamsDef } from "../worklet-utils";
 
 export enum VaOscillatorWaveform {
   Sine = 0,

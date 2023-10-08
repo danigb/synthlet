@@ -1,4 +1,4 @@
-import { ParamsDef } from "../worklet-utils";
+import { ParamsDef } from "../params-utils";
 import { Exciter } from "./exciter/exciter";
 import { HighShelfFilter } from "./filters/high-self-filter";
 import { LP2Filter } from "./filters/lp2-filter";

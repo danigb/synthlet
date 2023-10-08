@@ -1,3 +1,4 @@
+import { ParamsDef } from "../params-utils";
 import { Clock } from "../shared/clock";
 import { FadeInModulator } from "../shared/fade-in-modulator";
 import {
@@ -11,7 +12,6 @@ import {
 } from "../shared/math";
 import { NoiseGenerator } from "../shared/noise-generator";
 import { Timer } from "../shared/timer";
-import { ParamsDef } from "../worklet-utils";
 
 export enum LfoWaveform {
   Triangle = 0,

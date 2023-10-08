@@ -1,11 +1,5 @@
-export type ParamsDef = Record<string, ParamDef>;
+import { ParamsDef } from "./params-utils";
 
-type ParamDef = {
-  min: number;
-  max: number;
-  def: number;
-  type?: "k" | "a";
-};
 export type GenerateNodeType<T extends ParamsDef> = AudioWorkletNode & {
   [K in keyof T]: AudioParam;
 };
