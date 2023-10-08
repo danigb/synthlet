@@ -1,3 +1,7 @@
+import {
+  ReadAudioBufferLinear,
+  readBufferLinear,
+} from "../audio-buffer/read-buffer-linear";
 import { GenerateParamsMap, ParamsDef } from "../params-utils";
 
 export const WtOscillatorParamsDef: ParamsDef = {
@@ -10,18 +14,19 @@ type WtOscillatorParamsMap = GenerateParamsMap<typeof WtOscillatorParamsDef>;
 export function WtOscillator(sampleRate: number) {
   let $frequency = 440;
   let $morphFrequency = 0.005;
-  let $buffer: Float32Array | null = null;
+  let $buffer: ReadAudioBufferLinear | null;
   let $wtLen = 256;
   let $wtCount = 0;
   let $wtCurrent = 0;
   let $wtOffset = 0;
 
   function setBuffer(buffer: Float32Array, wavetableLength) {
-    $buffer = buffer;
+    $buffer = readBufferLinear(buffer);
     $wtLen = Math.min(wavetableLength, buffer.length);
     $wtCount = Math.floor(buffer.length / $wtLen);
     $wtCurrent = 0;
     $wtOffset = 0;
+    $buffer.set(0, $wtCurrent * $wtLen, $wtLen);
   }
 
   function setParams(params: WtOscillatorParamsMap) {
@@ -31,17 +36,9 @@ export function WtOscillator(sampleRate: number) {
   function fillAudioMono(output: Float32Array) {
     if (!$buffer || !$wtCount) return;
 
-    let baseIndex = $wtCurrent * $wtLen;
-    const inc = 1;
-    $frequency / $wtLen / 44100;
-    let index = baseIndex + $wtOffset;
-
+    const inc = $frequency / 440;
     for (let i = 0; i < output.length; i++) {
-      output[i] = $buffer[index];
-      index += 1;
-      if (index === $wtLen) {
-        index = 0;
-      }
+      output[i] = $buffer.read(inc);
     }
   }
 

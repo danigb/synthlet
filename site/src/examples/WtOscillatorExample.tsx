@@ -2,14 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { Slider } from "src/Slider";
+import { midiToFreq } from "src/midiToFreq";
 import {
   Adsr,
   AdsrNode,
   Lfo,
   LfoNode,
   LfoWaveform,
-  PcmOscillator,
-  PcmOscillatorNode,
+  WtOscillator,
+  WtOscillatorNode,
   loadSynthlet,
 } from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
@@ -18,7 +19,7 @@ import { getAudioContext } from "../audio-context";
 
 class Synth {
   lfo: LfoNode;
-  pcm: PcmOscillatorNode;
+  wt: WtOscillatorNode;
   env: AdsrNode;
 
   static params = {
@@ -27,10 +28,10 @@ class Synth {
     },
     lfo: {
       frequency: 4,
-      gain: 1000,
+      gain: 1,
       waveform: LfoWaveform.RandSampleHold,
     },
-    pcm: {
+    wt: {
       frequency: 100,
       resonance: 0.8,
     },
@@ -41,16 +42,19 @@ class Synth {
       waveform: LfoWaveform.Sine,
       frequency: 0.01,
     });
-    this.pcm = PcmOscillator(context, {
+    this.wt = WtOscillator(context, {
       source: audioBuffer,
       speed: 1,
     });
-    this.lfo.connect(this.pcm.speed);
+    // this.lfo.connect(this.wt.speed);
     this.env = Adsr(context);
-    this.pcm.connect(this.env).connect(context.destination);
+    this.wt.connect(context.destination); // this.env).connect(context.destination);
   }
 
   pressKey({ note }: { note: number }) {
+    const freq = midiToFreq(note);
+    console.log("pressKey", note, freq);
+    this.wt.frequency.setValueAtTime(freq, this.context.currentTime);
     this.env.gate.setValueAtTime(1, this.context.currentTime);
   }
   releaseKey({ note }: { note: number }) {
@@ -59,7 +63,7 @@ class Synth {
 
   destroy() {
     this.lfo.disconnect();
-    this.pcm.disconnect();
+    this.wt.disconnect();
     this.env.disconnect();
   }
 }
@@ -74,10 +78,10 @@ function audioBufferLoader(url: string) {
 }
 
 const loadAudio = audioBufferLoader(
-  "https://smpldsnds.github.io/archiveorg-mellotron/MKII%20VIBES/C2%20VIBES.m4a"
+  "https://smpldsnds.github.io/wavedit-online/samples/FAIRLIGH.WAV"
 );
 
-export function PcmOscillatorExample({ className }: { className?: string }) {
+export function WtOscillatorExample({ className }: { className?: string }) {
   const [active, setActive] = useState(false);
   const [synth, setSynth] = useState<Synth | undefined>(undefined);
   const [speed, setSpeed] = useState(1);
@@ -102,12 +106,10 @@ export function PcmOscillatorExample({ className }: { className?: string }) {
   return (
     <div className={className}>
       <div className="flex gap-2 items-end">
-        <h1 className="text-3xl text-emerald-500">PcmOscillator</h1>
+        <h1 className="text-3xl text-teal-500">WtOscillator</h1>
         <button
           className={`px-2 py-1 rounded ${
-            active
-              ? "bg-emerald-500 text-zinc-800"
-              : "bg-zinc-700 text-emerald-500"
+            active ? "bg-teal-500 text-zinc-800" : "bg-zinc-700 text-teal-500"
           }`}
           onClick={() => setActive((active) => !active)}
         >
@@ -116,15 +118,10 @@ export function PcmOscillatorExample({ className }: { className?: string }) {
       </div>
       <div className={`${active ? "" : "opacity-25"}`}>
         <p className="mb-4">
-          An oscillator though
-          <span className="text-emerald-600"> Filter </span>
-          controlled by a<span className="text-emerald-600"> Lfo </span>
-          and an
-          <span className="text-emerald-600"> Adsr </span>
-          envelope
+          A<span className="text-teal-600"> Wavetable Oscillator </span>
         </p>
 
-        <label className="text-zinc-200">PcmOscillator</label>
+        <label className="text-zinc-200">WtOscillator</label>
         <div className="flex gap-2 mb-2 text-zinc-400">
           <Slider
             name="Speed"
@@ -132,7 +129,7 @@ export function PcmOscillatorExample({ className }: { className?: string }) {
             min={-3}
             max={3}
             onChange={setSpeed}
-            param={synth?.pcm.speed}
+            param={synth?.wt.speed}
           />
         </div>
       </div>
@@ -152,7 +149,7 @@ export function PcmOscillatorExample({ className }: { className?: string }) {
       </div>
       <div className="">
         <PianoKeyboard
-          borderColor="border-emerald-700"
+          borderColor="border-teal-700"
           onPress={(note) => {
             synth?.pressKey(note);
           }}
