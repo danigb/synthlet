@@ -4,7 +4,7 @@ import { loadKarplusStrongOscillatorNode } from "./karplus-strong/index";
 import { loadLfoNode } from "./lfo/index";
 import { loadPcmOscillatorNode } from "./pcm-oscillator/index";
 import { loadSequencerNode } from "./sequencer/index";
-import { chain, createTrigger } from "./utils/index";
+import { chain, createKeyboard, createTrigger } from "./utils/index";
 import { loadVaFilterNode } from "./va-filter/index";
 import { loadVaOscillator, loadVaOscillatorNode } from "./va-oscillator/index";
 import { loadWtOscillatorNode } from "./wt-oscillator/index";
@@ -45,12 +45,14 @@ export async function loadSynthlet(context: AudioContext) {
     loadVaOscillator(context),
   ]);
   const trigger = () => createTrigger(context);
+  const keyboard = () => createKeyboard(context);
 
   return {
-    context,
     adsr,
+    chain,
+    context,
+    keyboard,
     osc,
     trigger,
-    chain,
   };
 }

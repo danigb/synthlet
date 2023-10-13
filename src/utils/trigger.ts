@@ -25,3 +25,42 @@ export function createTrigger(context: AudioContext): Trigger {
     },
   };
 }
+
+export type Pitch = {
+  freq(freq: number, time?: number): void;
+  midi(number: number, time?: number): void;
+  connect(destination: AudioNode): void;
+  disconnect(destination?: AudioNode): void;
+};
+
+export function createFrequencySource(context: AudioContext): Pitch {
+  let node: ConstantSourceNode | null = new ConstantSourceNode(context, {
+    offset: 440,
+  });
+
+  return {
+    freq(freq: number, time = 0) {
+      node?.offset.setValueAtTime(freq, time);
+    },
+    midi(number: number, time = 0) {
+      node?.offset.setValueAtTime(440 * Math.pow(2, (number - 69) / 12), time);
+    },
+    connect: node.connect.bind(node),
+    disconnect: () => {
+      node?.disconnect();
+      node = null;
+    },
+  };
+}
+
+export type Keyboard = {
+  gate: Trigger;
+  freq: Pitch;
+};
+
+export function createKeyboard(context: AudioContext): Keyboard {
+  return {
+    gate: createTrigger(context),
+    freq: createFrequencySource(context),
+  };
+}
