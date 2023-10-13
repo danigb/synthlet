@@ -4,6 +4,7 @@ import { AdsrExample } from "src/examples/AdsrExample";
 import { KarplusExample } from "src/examples/KarplusExample";
 import { LfoExample } from "src/examples/LfoExample";
 import { PcmOscillatorExample } from "src/examples/PcmOscillatorExample";
+import { SequencerExample } from "src/examples/SequencerExample";
 import { VaFilterExample } from "src/examples/VaFilterExample";
 import { VaOscillatorExample } from "src/examples/VaOscillatorExample";
 import { WtOscillatorExample } from "src/examples/WtOscillatorExample";
@@ -31,6 +32,7 @@ export default function Home() {
           <KarplusExample />
           <LfoExample />
           <AdsrExample />
+          <SequencerExample />
         </div>
       </main>
     </>

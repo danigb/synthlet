@@ -5,18 +5,16 @@ const PARAM_DESCRIPTORS = toWorkletParams(PARAMS);
 
 export class WtOscillatorWorklet extends AudioWorkletProcessor {
   p: ReturnType<typeof WtOscillator>;
-  s: number;
-  stop: boolean;
+  d: boolean;
 
   constructor() {
     super();
-    this.s = 0;
-    this.stop = false;
+    this.d = false;
     this.p = WtOscillator(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "STOP":
-          this.stop = true;
+        case "DISCONNECT":
+          this.d = true;
           break;
         case "WAVE_TABLE":
           this.p.setWavetable(
@@ -33,7 +31,7 @@ export class WtOscillatorWorklet extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    if (this.stop) {
+    if (this.d) {
       return false;
     }
     this.p.setParams(parameters);

@@ -35,6 +35,7 @@ export function workletNodeConstructor<N, O extends NodeOptions>(
     });
     addParams(node, params);
     if (options) setWorkletOptions(options, node, params);
+    addDisconnect(node);
     return node as N;
   };
 }
@@ -58,7 +59,7 @@ export function addDisconnect(node: AudioWorkletNode) {
   (node as any).disconnect = (output: any) => {
     _disconnect(output);
     if (!output) {
-      node.port.postMessage({ type: "STOP" });
+      node.port.postMessage({ type: "DISCONNECT" });
     }
   };
 }
