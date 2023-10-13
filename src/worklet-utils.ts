@@ -1,10 +1,9 @@
 import { ParamsDef } from "./params-utils";
-import {
-  ParamSource,
-  connectParamSource,
-  getParamsSources,
-  isParamSource,
-} from "./utils/connect";
+
+export type ParamSource = {
+  connect: (node: any) => void;
+  disconnect: () => void;
+};
 
 export type GenerateNodeType<T extends ParamsDef> = AudioWorkletNode & {
   [K in keyof T]: AudioParam;
@@ -15,21 +14,14 @@ export type GenerateNodeOptions<T extends ParamsDef> = {
 };
 
 export function loadWorklet<N, O extends NodeOptions>(
-  code: string,
+  loadWorklet: (context: AudioContext) => Promise<unknown>,
   name: string,
   params: ParamsDef
 ) {
   const init = new WeakMap<AudioContext, Promise<void>>();
 
   return async function load(context: AudioContext) {
-    let ready = init.get(context);
-    if (!ready) {
-      const blob = new Blob([code], { type: "application/javascript" });
-      const url = URL.createObjectURL(blob);
-      ready = context.audioWorklet.addModule(url);
-      init.set(context, ready);
-    }
-    await ready;
+    await loadWorklet(context);
     return function (options?: O) {
       const node = new AudioWorkletNode(context, name, {
         numberOfInputs: 1,
@@ -122,4 +114,30 @@ export function toWorkletParams(params: ParamsDef) {
     const { min: minValue, max: maxValue, init: defaultValue } = params[name];
     return { name, minValue, maxValue, defaultValue, automationRate: "k-rate" };
   });
+}
+
+export function isParamSource(value: any): value is ParamSource {
+  return (
+    value &&
+    typeof value.connect === "function" &&
+    typeof value.disconnect === "function"
+  );
+}
+
+export function getParamsSources(node: AudioNode) {
+  if (!(node as any)._paramSources) {
+    (node as any)._paramSources = [];
+  }
+  const _paramSources: ParamSource[] = (node as any)._paramSources;
+  return _paramSources;
+}
+
+export function connectParamSource(
+  node: AudioNode,
+  param: AudioParam,
+  source: ParamSource
+) {
+  const sources = getParamsSources(node);
+  source.connect(param);
+  sources.push(source);
 }

@@ -13,12 +13,12 @@ export {
   VaOscillatorWaveform,
 } from "./va-oscillator";
 
+export const loadVaOscillatorNode = loadWorkletNode(PROCESSOR);
 export const loadVaOscillator = loadWorklet<
   VaOscillatorNode,
   VaOscillatorOptions
->(PROCESSOR, "VaOscillatorWorklet", PARAMS);
+>(loadVaOscillatorNode, "VaOscillatorWorklet", PARAMS);
 
-export const loadVaOscillatorNode = loadWorkletNode(PROCESSOR);
 export type VaOscillatorOptions = GenerateNodeOptions<typeof PARAMS>;
 export type VaOscillatorNode = GenerateNodeType<typeof PARAMS>;
 

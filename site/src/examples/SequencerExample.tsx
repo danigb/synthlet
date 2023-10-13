@@ -1,13 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { getAudioContext } from "src/audio-context";
-import {
-  Adsr,
-  Trigger,
-  VaOscillator,
-  chain,
-  createTrigger,
-  loadSynthletNodes,
-} from "synthlet";
+import { Trigger, chain, loadSynthlet } from "synthlet";
 
 type Synth = {
   gate: Trigger;
@@ -21,15 +14,15 @@ export function SequencerExample() {
 
   useEffect(() => {
     if (!active) return;
-    loadSynthletNodes(getAudioContext()).then((context) => {
+    loadSynthlet(getAudioContext()).then((S) => {
       console.log("CREATE SYNTH");
-      const gate = createTrigger(context);
+      const gate = S.trigger();
       synth.current = {
         gate,
         disconnect: chain(
-          VaOscillator(context, { frequency: 440 }),
-          Adsr(context, { gate }),
-          context.destination
+          S.osc({ frequency: 440 }),
+          S.adsr({ gate }),
+          S.context.destination
         ),
       };
     });

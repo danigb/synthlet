@@ -4,8 +4,7 @@ import { loadKarplusStrongOscillatorNode } from "./karplus-strong/index";
 import { loadLfoNode } from "./lfo/index";
 import { loadPcmOscillatorNode } from "./pcm-oscillator/index";
 import { loadSequencerNode } from "./sequencer/index";
-import { chain } from "./utils/connect";
-import { createTrigger } from "./utils/trigger";
+import { chain, createTrigger } from "./utils/index";
 import { loadVaFilterNode } from "./va-filter/index";
 import { loadVaOscillator, loadVaOscillatorNode } from "./va-oscillator/index";
 import { loadWtOscillatorNode } from "./wt-oscillator/index";
@@ -17,13 +16,10 @@ export * from "./lfo/index";
 export * from "./mika/index";
 export * from "./pcm-oscillator/index";
 export * from "./sequencer/index";
-export { chain } from "./utils/connect";
-export * from "./utils/trigger";
+export * from "./utils/index";
 export * from "./va-filter/index";
 export * from "./va-oscillator/index";
 export * from "./wt-oscillator/index";
-
-export { createTrigger } from "./utils/trigger";
 
 export async function loadSynthletNodes(context: AudioContext) {
   await Promise.all([
@@ -40,14 +36,18 @@ export async function loadSynthletNodes(context: AudioContext) {
   return context;
 }
 
+type PromiseType<T> = T extends Promise<infer U> ? U : never;
+export type Synthlet = PromiseType<ReturnType<typeof loadSynthlet>>;
+
 export async function loadSynthlet(context: AudioContext) {
   const [adsr, osc] = await Promise.all([
     loadAdsr(context),
     loadVaOscillator(context),
   ]);
-  const trigger = createTrigger(context);
+  const trigger = () => createTrigger(context);
 
   return {
+    context,
     adsr,
     osc,
     trigger,

@@ -13,7 +13,7 @@ export type AdsrOptions = GenerateNodeOptions<typeof PARAMS>;
 export type AdsrNode = GenerateNodeType<typeof PARAMS>;
 
 export const loadAdsr = loadWorklet<AdsrNode, AdsrOptions>(
-  PROCESSOR,
+  loadAdsrNode,
   "AdsrWorklet",
   PARAMS
 );

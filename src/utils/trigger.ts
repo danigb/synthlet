@@ -5,8 +5,10 @@ export type Trigger = {
   disconnect(destination?: AudioNode): void;
 };
 
-export function createTrigger(context: AudioContext) {
-  let node: ConstantSourceNode | null = context.createConstantSource();
+export function createTrigger(context: AudioContext): Trigger {
+  let node: ConstantSourceNode | null = new ConstantSourceNode(context, {
+    offset: 0,
+  });
   node.start();
 
   return {
