@@ -34,12 +34,12 @@ export function workletNodeConstructor<N, O extends NodeOptions>(
       numberOfOutputs: 1,
     });
     addParams(node, params);
-    if (options) setOptions(options, node, params);
+    if (options) setWorkletOptions(options, node, params);
     return node as N;
   };
 }
 
-export function setOptions(
+export function setWorkletOptions(
   options: NodeOptions,
   node: AudioWorkletNode,
   params: ParamsDef
@@ -51,6 +51,16 @@ export function setOptions(
       node.parameters.get(name)?.setValueAtTime(value, 0);
     }
   });
+}
+
+export function addDisconnect(node: AudioWorkletNode) {
+  const _disconnect = node.disconnect.bind(node);
+  (node as any).disconnect = (output: any) => {
+    _disconnect(output);
+    if (!output) {
+      node.port.postMessage({ type: "STOP" });
+    }
+  };
 }
 
 function addParam(name: string, node: AudioWorkletNode) {

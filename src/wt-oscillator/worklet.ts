@@ -19,8 +19,8 @@ export class WtOscillatorWorklet extends AudioWorkletProcessor {
           this.stop = true;
           break;
         case "WAVE_TABLE":
-          this.p.setBuffer(
-            event.data.buffer,
+          this.p.setWavetable(
+            event.data.data,
             event.data.wavetableLength ?? 256
           );
           break;

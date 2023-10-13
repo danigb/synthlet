@@ -26,7 +26,7 @@ export function WtOscillator(sampleRate: number) {
     $nextBuffer.window(((window + 1) % $wtLen) * $wtLen, $wtLen);
   }
 
-  function setBuffer(buffer: Float32Array, wavetableLength: number) {
+  function setWavetable(buffer: Float32Array, wavetableLength: number) {
     $wtLen = Math.min(wavetableLength, buffer.length);
     $wtCount = Math.floor(buffer.length / $wtLen);
     $currentBuffer = readBufferLinear(buffer);
@@ -51,9 +51,9 @@ export function WtOscillator(sampleRate: number) {
     }
   }
   function fillAudioMono(output: Float32Array) {
-    if (!$currentBuffer || !$wtCount) return;
+    if (!$currentBuffer || !$wtCount || !$wtLen) return;
 
-    const inc = $frequency / 440;
+    const inc = $frequency / 220;
     for (let i = 0; i < output.length; i++) {
       const morph = $morphPhasor.tick();
       const current = $currentBuffer.read(inc);
@@ -69,5 +69,5 @@ export function WtOscillator(sampleRate: number) {
     return $window.val;
   }
 
-  return { setBuffer, setParams, fillAudioMono, debug };
+  return { setWavetable, setParams, fillAudioMono, debug };
 }

@@ -1,24 +1,27 @@
-import { GenerateNodeType, addParams, loadWorklet } from "../worklet-utils";
+import {
+  GenerateNodeOptions,
+  GenerateNodeType,
+  addDisconnect,
+  addParams,
+  loadWorklet,
+  setWorkletOptions,
+} from "../worklet-utils";
 import { PROCESSOR } from "./processor";
 import { WtOscillatorParamsDef } from "./wt-oscillator";
 
-export { decodeWavetable } from "./decode-wavetable";
+export * from "./load-wavetable";
 
 export const loadWtOscillator = loadWorklet(PROCESSOR);
 
-// FIXME: This is not working. Don't know why
-// export type WtOscillatorOptions = GenerateNodeOptions<
-//   typeof WtOscillatorParamsDef
-// > & {
-//   source: AudioBuffer;
-// };
+export type WtOscillatorOptions = GenerateNodeOptions<
+  typeof WtOscillatorParamsDef
+>;
 
-export type WtOscillatorOptions = {
-  source: AudioBuffer;
-  frequency?: number;
-  morphFrequency?: number;
+export type WtOscillatorNode = GenerateNodeType<
+  typeof WtOscillatorParamsDef
+> & {
+  setWavetable: (wavetable: Float32Array, length: number) => void;
 };
-export type WtOscillatorNode = GenerateNodeType<typeof WtOscillatorParamsDef>;
 
 export const WtOscillator = (
   context: AudioContext,
@@ -29,17 +32,16 @@ export const WtOscillator = (
     numberOfOutputs: 1,
   });
   addParams(node, WtOscillatorParamsDef);
+  if (options) setWorkletOptions(options, node, WtOscillatorParamsDef);
+  addDisconnect(node);
 
-  const _disconnect = node.disconnect.bind(node);
-  (node as any).disconnect = (output: any) => {
-    _disconnect(output);
-    if (!output) {
-      node.port.postMessage({ type: "STOP" });
-    }
+  (node as any).setWavetable = (wavetable: Float32Array, length: number) => {
+    node.port.postMessage({
+      type: "WAVE_TABLE",
+      data: wavetable,
+      wavetableLength: length,
+    });
   };
 
-  const audioBuffer = options.source;
-  const channelData = audioBuffer.getChannelData(0);
-  node.port.postMessage({ type: "WAVE_TABLE", buffer: channelData });
   return node as WtOscillatorNode;
 };

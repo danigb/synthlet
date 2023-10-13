@@ -11,7 +11,9 @@ import {
   LfoWaveform,
   WtOscillator,
   WtOscillatorNode,
+  fetchWavetableList,
   loadSynthlet,
+  loadWavetable,
 } from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
@@ -34,19 +36,19 @@ class Synth {
   };
   out: GainNode;
 
-  constructor(public context: AudioContext, audioBuffer: AudioBuffer) {
-    this.out = new GainNode(context, { gain: 0.1 });
+  constructor(public context: AudioContext, wavetableData: Float32Array) {
+    this.out = new GainNode(context, { gain: 0.2 });
     this.lfo = Lfo(context, {
       waveform: LfoWaveform.Sine,
       frequency: 0.01,
     });
     this.wt = WtOscillator(context, {
-      source: audioBuffer,
       morphFrequency: 1,
     });
+    this.wt.setWavetable(wavetableData, 256);
     // this.lfo.connect(this.wt.speed);
     this.env = Adsr(context);
-    this.wt.connect(this.out).connect(context.destination); // this.env).connect(context.destination);
+    this.wt.connect(this.out).connect(this.env).connect(context.destination);
   }
 
   pressKey({ note }: { note: number }) {
@@ -64,25 +66,24 @@ class Synth {
     this.wt.disconnect();
     this.env.disconnect();
   }
+
+  loadWavetable(name: string) {
+    loadWavetable(name).then((wavetableData) => {
+      this.wt.setWavetable(wavetableData, 256);
+    });
+  }
 }
-
-function audioBufferLoader(url: string) {
-  let promise: Promise<AudioBuffer> | undefined = undefined;
-
-  return () =>
-    (promise ??= fetch(url)
-      .then((res) => res.arrayBuffer())
-      .then((audioData) => getAudioContext().decodeAudioData(audioData)));
-}
-
-const loadAudio = audioBufferLoader(
-  "https://smpldsnds.github.io/wavedit-online/samples/FAIRLIGH.WAV"
-);
 
 export function WtOscillatorExample({ className }: { className?: string }) {
   const [active, setActive] = useState(false);
   const [synth, setSynth] = useState<Synth | undefined>(undefined);
   const [morphFrequency, setMorphFrequency] = useState(1);
+  const [waveform, setWaveform] = useState("FAIRLIGH");
+  const [waveformTypes, setWaveformTypes] = useState<string[]>([]);
+
+  useEffect(() => {
+    fetchWavetableList().then(setWaveformTypes);
+  }, []);
 
   useEffect(() => {
     if (!active) return;
@@ -90,9 +91,9 @@ export function WtOscillatorExample({ className }: { className?: string }) {
     let synth: Synth | undefined = undefined;
 
     loadSynthlet(getAudioContext())
-      .then(loadAudio)
-      .then((audioBuffer) => {
-        synth = new Synth(getAudioContext(), audioBuffer);
+      .then(() => loadWavetable("FAIRLIGH"))
+      .then((wavetableData) => {
+        synth = new Synth(getAudioContext(), wavetableData);
         setSynth(synth);
       });
 
@@ -121,6 +122,22 @@ export function WtOscillatorExample({ className }: { className?: string }) {
 
         <label className="text-zinc-200">WtOscillator</label>
         <div className="flex gap-2 mb-2 text-zinc-400">
+          <select
+            className="bg-zinc-700 rounded py-[2px]"
+            value={waveform}
+            onChange={(e) => {
+              const wavetableName = e.target.value;
+              setWaveform(wavetableName);
+              synth?.loadWavetable(wavetableName);
+            }}
+            disabled={!active}
+          >
+            {waveformTypes.map((name) => (
+              <option key={name} value={name}>
+                {name}
+              </option>
+            ))}
+          </select>
           <Slider
             name="Morph Frequency"
             value={morphFrequency}
