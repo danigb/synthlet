@@ -1,13 +1,13 @@
 import {
   GenerateNodeOptions,
   GenerateNodeType,
-  loadWorklet,
+  loadWorkletNode,
   workletNodeConstructor,
 } from "../worklet-utils";
 import { PROCESSOR } from "./processor";
 import { PARAMS } from "./sequencer";
 
-export const loadSequencer = loadWorklet(PROCESSOR);
+export const loadSequencerNode = loadWorkletNode(PROCESSOR);
 
 export type SequencerOptions = GenerateNodeOptions<typeof PARAMS>;
 

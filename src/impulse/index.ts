@@ -1,13 +1,13 @@
 import {
   GenerateNodeOptions,
   GenerateNodeType,
-  loadWorklet,
+  loadWorkletNode,
   workletNodeConstructor,
 } from "../worklet-utils";
 import { ImpulseParams } from "./impulse";
 import { PROCESSOR } from "./processor";
 
-export const loadImpulse = loadWorklet(PROCESSOR);
+export const loadImpulseNode = loadWorkletNode(PROCESSOR);
 export type ImpulseOptions = GenerateNodeOptions<typeof ImpulseParams>;
 export type ImpulseNode = GenerateNodeType<typeof ImpulseParams>;
 

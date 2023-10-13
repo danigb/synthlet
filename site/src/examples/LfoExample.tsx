@@ -9,7 +9,7 @@ import {
   Lfo,
   LfoNode,
   LfoWaveform,
-  loadSynthlet,
+  loadSynthletNodes,
 } from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
@@ -93,7 +93,7 @@ export function LfoExample({ className }: { className?: string }) {
 
   useEffect(() => {
     let synth: LfoExampleSynth | undefined = undefined;
-    loadSynthlet(getAudioContext()).then(() => {
+    loadSynthletNodes(getAudioContext()).then(() => {
       synth = new LfoExampleSynth(getAudioContext());
       setSynth(synth);
     });

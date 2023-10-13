@@ -1,13 +1,12 @@
-import { loadAdsr } from "./adsr/index";
-import { loadImpulse } from "./impulse/index";
-import { loadKarplusStrongOscillator } from "./karplus-strong/index";
-import { loadLfo } from "./lfo/index";
-import { loadMika } from "./mika/index";
-import { loadPcmOscillator } from "./pcm-oscillator/index";
-import { loadSequencer } from "./sequencer/index";
-import { loadVaFilter } from "./va-filter/index";
-import { loadVaOscillator } from "./va-oscillator/index";
-import { loadWtOscillator } from "./wt-oscillator/index";
+import { loadAdsrNode } from "./adsr/index";
+import { loadImpulseNode } from "./impulse/index";
+import { loadKarplusStrongOscillatorNode } from "./karplus-strong/index";
+import { loadLfoNode } from "./lfo/index";
+import { loadPcmOscillatorNode } from "./pcm-oscillator/index";
+import { loadSequencerNode } from "./sequencer/index";
+import { loadVaFilterNode } from "./va-filter/index";
+import { loadVaOscillatorNode } from "./va-oscillator/index";
+import { loadWtOscillatorNode } from "./wt-oscillator/index";
 
 export * from "./adsr/index";
 export * from "./impulse/index";
@@ -20,17 +19,16 @@ export * from "./va-filter/index";
 export * from "./va-oscillator/index";
 export * from "./wt-oscillator/index";
 
-export function loadSynthlet(context: AudioContext) {
+export function loadSynthletNodes(context: AudioContext) {
   return Promise.all([
-    loadAdsr(context),
-    loadImpulse(context),
-    loadKarplusStrongOscillator(context),
-    loadLfo(context),
-    loadMika(context),
-    loadPcmOscillator(context),
-    loadVaFilter(context),
-    loadVaOscillator(context),
-    loadWtOscillator(context),
-    loadSequencer(context),
+    loadAdsrNode(context),
+    loadImpulseNode(context),
+    loadKarplusStrongOscillatorNode(context),
+    loadLfoNode(context),
+    loadPcmOscillatorNode(context),
+    loadVaFilterNode(context),
+    loadVaOscillatorNode(context),
+    loadWtOscillatorNode(context),
+    loadSequencerNode(context),
   ]);
 }

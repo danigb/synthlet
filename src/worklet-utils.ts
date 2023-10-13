@@ -7,7 +7,7 @@ export type GenerateNodeOptions<T extends ParamsDef> = {
   [K in keyof T]: number;
 };
 
-export function loadWorklet<T>(code: string) {
+export function loadWorkletNode<T>(code: string) {
   const init = new WeakMap<AudioContext, Promise<void>>();
 
   return async function load(context: AudioContext) {

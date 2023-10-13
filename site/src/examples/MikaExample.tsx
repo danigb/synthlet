@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Adsr, Mika, MikaNode, loadSynthlet } from "synthlet";
+import { Adsr, Mika, MikaNode, loadSynthletNodes } from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
 import { Slider } from "../Slider";
@@ -42,7 +42,7 @@ export function MikaExample({ className }: { className?: string }) {
 
   useEffect(() => {
     let synth: MikaExampleSynth | undefined = undefined;
-    loadSynthlet(getAudioContext()).then(() => {
+    loadSynthletNodes(getAudioContext()).then(() => {
       synth = new MikaExampleSynth(getAudioContext());
       setSynth(synth);
     });

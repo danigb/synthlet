@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { getAudioContext } from "src/audio-context";
-import { loadSynthlet } from "../../../dist";
+import { loadSynthletNodes } from "../../../dist";
 
 export function SequencerExample() {
   const [isPlaying, setIsPlaying] = useState(false);
 
   useEffect(() => {
-    loadSynthlet(getAudioContext());
+    loadSynthletNodes(getAudioContext());
   }, []);
 
   return (

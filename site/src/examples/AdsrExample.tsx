@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Adsr, AdsrNode, Impulse, ImpulseNode, loadSynthlet } from "synthlet";
+import {
+  Adsr,
+  AdsrNode,
+  Impulse,
+  ImpulseNode,
+  loadSynthletNodes,
+} from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
 import { Slider } from "../Slider";
@@ -53,7 +59,7 @@ export function AdsrExample({ className }: { className?: string }) {
 
   useEffect(() => {
     let synth: AdsrExampleSynth | undefined = undefined;
-    loadSynthlet(getAudioContext()).then(() => {
+    loadSynthletNodes(getAudioContext()).then(() => {
       synth = new AdsrExampleSynth(getAudioContext());
       setSynth(synth);
     });

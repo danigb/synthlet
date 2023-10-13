@@ -12,7 +12,7 @@ import {
   VaFilter,
   VaFilterNode,
   VaFilterType,
-  loadSynthlet,
+  loadSynthletNodes,
 } from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
@@ -83,7 +83,7 @@ export function VaFilterExample({ className }: { className?: string }) {
   useEffect(() => {
     if (!active) return;
     let synth: Synth | undefined = undefined;
-    loadSynthlet(getAudioContext()).then(() => {
+    loadSynthletNodes(getAudioContext()).then(() => {
       synth = new Synth(getAudioContext());
       setSynth(synth);
     });

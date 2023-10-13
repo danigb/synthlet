@@ -1,8 +1,8 @@
-import { GenerateNodeType, addParams, loadWorklet } from "../worklet-utils";
+import { GenerateNodeType, addParams, loadWorkletNode } from "../worklet-utils";
 import { PcmOscillatorParams } from "./pcm-oscillator";
 import { PROCESSOR } from "./processor";
 
-export const loadPcmOscillator = loadWorklet(PROCESSOR);
+export const loadPcmOscillatorNode = loadWorkletNode(PROCESSOR);
 export type PcmOscillatorOptions = {
   source: AudioBuffer;
   gate?: number;

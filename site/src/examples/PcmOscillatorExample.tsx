@@ -10,7 +10,7 @@ import {
   LfoWaveform,
   PcmOscillator,
   PcmOscillatorNode,
-  loadSynthlet,
+  loadSynthletNodes,
 } from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
@@ -87,7 +87,7 @@ export function PcmOscillatorExample({ className }: { className?: string }) {
 
     let synth: Synth | undefined = undefined;
 
-    loadSynthlet(getAudioContext())
+    loadSynthletNodes(getAudioContext())
       .then(loadAudio)
       .then((audioBuffer) => {
         synth = new Synth(getAudioContext(), audioBuffer);
