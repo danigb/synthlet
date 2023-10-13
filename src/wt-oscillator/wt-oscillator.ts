@@ -26,7 +26,7 @@ export function WtOscillator(sampleRate: number) {
     $wtCount = Math.floor(buffer.length / $wtLen);
     $wtCurrent = 0;
     $wtOffset = 0;
-    $buffer.set(0, $wtCurrent * $wtLen, $wtLen);
+    $buffer.window($wtCurrent * $wtLen, $wtLen);
   }
 
   function setParams(params: WtOscillatorParamsMap) {

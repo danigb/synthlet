@@ -1,9 +1,6 @@
-export type ReadAudioBufferLinear = {
-  read(inc: number): number;
-  set(index: number, bottom?: number, top?: number): void;
-};
+export type ReadAudioBufferLinear = ReturnType<typeof readBufferLinear>;
 
-export function readBufferLinear(buffer: Float32Array): ReadAudioBufferLinear {
+export function readBufferLinear(buffer: Float32Array) {
   const $buffer = buffer;
   let $len = buffer.length;
   let $index = 0;
@@ -23,11 +20,15 @@ export function readBufferLinear(buffer: Float32Array): ReadAudioBufferLinear {
     return y;
   }
 
-  function set(index: number, bottom?: number, len?: number) {
+  function window(bottom: number, len: number) {
     $bottom = Math.floor(bottom ?? 0);
     $len = Math.floor(Math.min(len ?? $len, $buffer.length));
+    $index = $index % $len;
+  }
+
+  function set(index: number) {
     $index = index % $len;
   }
 
-  return { read, set };
+  return { read, set, window };
 }

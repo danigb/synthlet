@@ -62,13 +62,13 @@ describe("readBufferLinear", () => {
     expect(reader.read(1)).toEqual(2);
   });
 
-  it("can set bounds", () => {
+  it("can set window", () => {
     const { reader } = setup(10);
-    reader.set(0, 5, 3);
+    reader.window(5, 3);
     let output = [1, 1, 1, 1, 1].map((inc) => reader.read(inc));
     expect(output).toEqual([5, 6, 7, 5, 6]);
-    reader.set(0, 5, 3);
+    reader.window(5, 4);
     output = [-1, -1, -1, -1, -1].map((inc) => reader.read(inc));
-    expect(output).toEqual([5, 7, 6, 5, 7]);
+    expect(output).toEqual([7, 6, 5, 8, 7]);
   });
 });
