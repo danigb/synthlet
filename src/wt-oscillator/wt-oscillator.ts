@@ -3,12 +3,12 @@ import { Counter } from "../dsp/counter";
 import { Phasor } from "../dsp/phasor";
 import { GenerateParamsMap, ParamsDef } from "../params-utils";
 
-export const WtOscillatorParamsDef: ParamsDef = {
+export const PARAMS: ParamsDef = {
   frequency: { min: 0, max: 20000, init: 440 },
   morphFrequency: { min: 0, max: 10, init: 0.005 },
 };
 
-type WtOscillatorParamsMap = GenerateParamsMap<typeof WtOscillatorParamsDef>;
+type WtOscillatorParamsMap = GenerateParamsMap<typeof PARAMS>;
 
 export function WtOscillator(sampleRate: number) {
   const NO_BUFFER = new Float32Array(0);

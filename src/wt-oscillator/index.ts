@@ -7,19 +7,15 @@ import {
   setWorkletOptions,
 } from "../worklet-utils";
 import { PROCESSOR } from "./processor";
-import { WtOscillatorParamsDef } from "./wt-oscillator";
+import { PARAMS } from "./wt-oscillator";
 
 export * from "./load-wavetable";
 
 export const loadWtOscillator = loadWorklet(PROCESSOR);
 
-export type WtOscillatorOptions = GenerateNodeOptions<
-  typeof WtOscillatorParamsDef
->;
+export type WtOscillatorOptions = GenerateNodeOptions<typeof PARAMS>;
 
-export type WtOscillatorNode = GenerateNodeType<
-  typeof WtOscillatorParamsDef
-> & {
+export type WtOscillatorNode = GenerateNodeType<typeof PARAMS> & {
   setWavetable: (wavetable: Float32Array, length: number) => void;
 };
 
@@ -31,8 +27,8 @@ export const WtOscillator = (
     numberOfInputs: 0,
     numberOfOutputs: 1,
   });
-  addParams(node, WtOscillatorParamsDef);
-  if (options) setWorkletOptions(options, node, WtOscillatorParamsDef);
+  addParams(node, PARAMS);
+  if (options) setWorkletOptions(options, node, PARAMS);
   addDisconnect(node);
 
   (node as any).setWavetable = (wavetable: Float32Array, length: number) => {

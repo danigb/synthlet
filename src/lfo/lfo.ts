@@ -54,7 +54,7 @@ const LFO_PARAMS = {
   quantize: 0,
 };
 
-export const LfoParamsDef: ParamsDef = {
+export const PARAMS: ParamsDef = {
   waveform: { min: 0, max: 9, init: LFO_PARAMS.waveform },
   frequency: { min: 0.001, max: 200, init: LFO_PARAMS.frequency },
   offset: { min: 0.0, max: 10000, init: LFO_PARAMS.offset },
@@ -86,7 +86,7 @@ export class Lfo {
     this.renderComplete = false;
 
     // --- initialize with current value
-    this.lfoClock.setFrequency(LfoParamsDef.frequency.init);
+    this.lfoClock.setFrequency(PARAMS.frequency.init);
 
     // --- to setup correct start phases, avoid clicks
     switch (this.params.waveform) {
@@ -200,8 +200,8 @@ export class Lfo {
   ) {
     this.params.waveform = clamp(
       Math.floor(waveform),
-      LfoParamsDef.waveform.min,
-      LfoParamsDef.waveform.max
+      PARAMS.waveform.min,
+      PARAMS.waveform.max
     );
     this.lfoClock.setFrequency(frequency);
     this.params.gain = gain;
