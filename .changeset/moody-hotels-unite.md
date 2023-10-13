@@ -1,0 +1,5 @@
+---
+"synthlet": minor
+---
+
+Wavetable oscillator

@@ -57,32 +57,6 @@ On the other hand, Tone.js provides most of the things you need to create music 
 - [BasicSynth: Creating a Music Synthesizer in Software](https://basicsynth.com/index.php?page=book)
 - [Paul Bachelor's DSP Algorithms](https://paulbatchelor.github.io/sndkit/algos/)
 
-#### Roadmap
-
-- Envelope Generators
-  - [x] ADSR
-  - [ ] ASD
-  - [ ] AD
-- LFOs
-  - [x] Sin, Saw
-  - [x] Sample&Hold
-- VA Oscillators
-  - [x] Blep algorithms
-  - [x] Noise algorithms
-- Wavetable Oscillators
-- PCM Oscillators
-  - [ ] One-shot pcm oscillator
-- FM Oscillators
-- KarplusString Oscillators
-  - [ ] Basic Karplus-String generator
-- Granular Oscillators
-- VA Filters
-  - [x] 1-pole
-  - [x] 2-pole
-  - [x] Korg35
-  - [ ] Moog
-  - [ ] Diode
-
 ## Setup
 
 #### Package
@@ -157,3 +131,5 @@ A low frequency oscillator with several waveforms and extras.
 #### Virtual Analog Oscillator
 
 Oscillator based on Blip algorithm
+
+#### Wavetable Oscillator
