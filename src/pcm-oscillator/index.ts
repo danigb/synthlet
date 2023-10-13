@@ -14,7 +14,7 @@ export type PcmOscillatorOptions = {
 };
 export type PcmOscillatorNode = GenerateNodeType<typeof PcmOscillatorParams>;
 
-export const PcmOscillator = (
+export const createPcmOscillator = (
   context: AudioContext,
   options: PcmOscillatorOptions
 ) => {
@@ -32,3 +32,6 @@ export const PcmOscillator = (
   };
   return node as PcmOscillatorNode;
 };
+
+/** @deprecated */
+export const PcmOscillator = createPcmOscillator;

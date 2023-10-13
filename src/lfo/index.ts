@@ -1,6 +1,7 @@
 import {
   GenerateNodeOptions,
   GenerateNodeType,
+  loadWorklet,
   loadWorkletProcessor,
   workletNodeConstructor,
 } from "../worklet-utils";
@@ -14,6 +15,12 @@ export type LfoOptions = GenerateNodeOptions<typeof PARAMS>;
 export type LfoNode = GenerateNodeType<typeof PARAMS>;
 
 export const Lfo = workletNodeConstructor<LfoNode, LfoOptions>(
+  "LfoWorklet",
+  PARAMS
+);
+
+export const loadLfo = loadWorklet<LfoNode, LfoOptions>(
+  loadLfoNode,
   "LfoWorklet",
   PARAMS
 );

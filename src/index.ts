@@ -1,9 +1,9 @@
 import { loadAdsr, loadAdsrNode } from "./adsr/index";
-import { loadImpulseNode } from "./impulse/index";
+import { loadImpulse, loadImpulseNode } from "./impulse/index";
 import { loadKarplusStrongOscillatorNode } from "./karplus-strong/index";
-import { loadLfoNode } from "./lfo/index";
+import { loadLfo, loadLfoNode } from "./lfo/index";
 import { loadPcmOscillatorNode } from "./pcm-oscillator/index";
-import { loadSequencerNode } from "./sequencer/index";
+import { loadSequencer, loadSequencerNode } from "./sequencer/index";
 import { chain, createKeyboard, createTrigger } from "./utils/index";
 import { loadVaFilterNode } from "./va-filter/index";
 import { loadVaOscillator, loadVaOscillatorNode } from "./va-oscillator/index";
@@ -40,19 +40,25 @@ type PromiseType<T> = T extends Promise<infer U> ? U : never;
 export type Synthlet = PromiseType<ReturnType<typeof loadSynthlet>>;
 
 export async function loadSynthlet(context: AudioContext) {
-  const [adsr, osc] = await Promise.all([
+  const [adsr, impulse, lfo, sequencer, osc] = await Promise.all([
     loadAdsr(context),
+    loadImpulse(context),
+    loadLfo(context),
+    loadSequencer(context),
     loadVaOscillator(context),
   ]);
   const trigger = () => createTrigger(context);
   const keyboard = () => createKeyboard(context);
 
   return {
+    impulse,
     adsr,
     chain,
     context,
+    lfo,
     keyboard,
     osc,
+    sequencer,
     trigger,
   };
 }
