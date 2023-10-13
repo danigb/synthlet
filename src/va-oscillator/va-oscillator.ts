@@ -33,7 +33,7 @@ export const VA_OSCILLATOR_PARAMS = {
   mix: 0.5,
 };
 
-export const VaOscillatorParams: ParamsDef = {
+export const PARAMS: ParamsDef = {
   waveform: { min: 0, max: 8, init: VA_OSCILLATOR_PARAMS.waveform },
   frequency: {
     min: 0,

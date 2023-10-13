@@ -4,7 +4,7 @@ import { Adsr } from "./adsr";
 import { AdsrExp } from "./adsr-exp";
 import { AdsrLinear } from "./adsr-linear";
 
-export const AdsrParams: ParamsDef = {
+export const PARAMS: ParamsDef = {
   gate: { min: 0, max: 1, init: 0 },
   attack: { min: 0, max: 10, init: 0.01 },
   decay: { min: 0, max: 10, init: 0.1 },
@@ -12,7 +12,7 @@ export const AdsrParams: ParamsDef = {
   release: { min: 0, max: 10, init: 0.3 },
 } as const;
 
-const PARAMS_DESCRIPTORS = toWorkletParams(AdsrParams);
+const PARAMS_DESCRIPTORS = toWorkletParams(PARAMS);
 
 type CurrentAdsr =
   | ReturnType<typeof AdsrLinear>
