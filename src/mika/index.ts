@@ -1,17 +1,17 @@
 import {
   GenerateNodeOptions,
   GenerateNodeType,
-  createProcessorLoader,
-  createWorkletConstructor,
+  createConstructor,
+  createLoader,
 } from "../worklet-utils";
 import { MikaParams } from "./mika";
 import { PROCESSOR } from "./processor";
 
-export const loadMikaNode = createProcessorLoader(PROCESSOR);
+export const loadMikaNode = createLoader(PROCESSOR);
 export type MikaOptions = GenerateNodeOptions<typeof MikaParams>;
 export type MikaNode = GenerateNodeType<typeof MikaParams>;
 
-export const Mika = createWorkletConstructor<MikaNode, MikaOptions>(
+export const Mika = createConstructor<MikaNode, MikaOptions>(
   "MikaWorklet",
   MikaParams
 );

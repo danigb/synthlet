@@ -1,8 +1,8 @@
 import {
   GenerateNodeOptions,
   GenerateNodeType,
-  createProcessorLoader,
-  createWorkletConstructor,
+  createConstructor,
+  createLoader,
   loadWorklet,
 } from "../worklet-utils";
 import { PARAMS } from "./lfo";
@@ -13,10 +13,7 @@ export { LFO_WAVEFORM_NAMES, LfoMode, LfoWaveform } from "./lfo";
 export type LfoOptions = GenerateNodeOptions<typeof PARAMS>;
 export type LfoNode = GenerateNodeType<typeof PARAMS>;
 
-export const Lfo = createWorkletConstructor<LfoNode, LfoOptions>(
-  "LfoWorklet",
-  PARAMS
-);
+export const Lfo = createConstructor<LfoNode, LfoOptions>("LfoWorklet", PARAMS);
 
-export const loadLfoNode = createProcessorLoader(PROCESSOR);
+export const loadLfoNode = createLoader(PROCESSOR);
 export const loadLfo = loadWorklet(loadLfoNode, Lfo);

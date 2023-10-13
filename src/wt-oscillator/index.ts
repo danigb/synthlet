@@ -3,7 +3,7 @@ import {
   GenerateNodeType,
   addDisconnect,
   addParams,
-  createProcessorLoader,
+  createLoader,
   setWorkletOptions,
 } from "../worklet-utils";
 import { PROCESSOR } from "./processor";
@@ -11,7 +11,7 @@ import { PARAMS } from "./wt-oscillator";
 
 export * from "./load-wavetable";
 
-export const loadWtOscillatorNode = createProcessorLoader(PROCESSOR);
+export const loadWtOscillatorNode = createLoader(PROCESSOR);
 
 export type WtOscillatorOptions = GenerateNodeOptions<typeof PARAMS>;
 

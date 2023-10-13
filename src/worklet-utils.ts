@@ -29,7 +29,7 @@ export function loadWorklet<N, O extends NodeOptions>(
   };
 }
 
-export function createProcessorLoader<T>(code: string): WorkletProcessorLoader {
+export function createLoader<T>(code: string): WorkletProcessorLoader {
   const init = new WeakMap<AudioContext, Promise<void>>();
 
   return async function load(context: AudioContext) {
@@ -44,7 +44,7 @@ export function createProcessorLoader<T>(code: string): WorkletProcessorLoader {
   };
 }
 
-export function createWorkletConstructor<N, O extends NodeOptions>(
+export function createConstructor<N, O extends NodeOptions>(
   name: string,
   params: ParamsDef
 ): WorkletConstructor<N, O> {

@@ -1,7 +1,7 @@
 import {
   GenerateNodeType,
   addParams,
-  createProcessorLoader,
+  createLoader,
   loadWorklet,
 } from "../worklet-utils";
 import { PARAMS } from "./pcm-oscillator";
@@ -32,7 +32,7 @@ export const PcmOscillator = (
   };
   return node as PcmOscillatorNode;
 };
-export const loadPcmOscillatorNode = createProcessorLoader(PROCESSOR);
+export const loadPcmOscillatorNode = createLoader(PROCESSOR);
 export const loadPcmOscillator = loadWorklet(
   loadPcmOscillatorNode,
   PcmOscillator
