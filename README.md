@@ -55,6 +55,7 @@ On the other hand, Tone.js provides most of the things you need to create music 
 
 - [Designing Synth Plugins 2nd Edition](http://www.willpirkle.com/)
 - [BasicSynth: Creating a Music Synthesizer in Software](https://basicsynth.com/index.php?page=book)
+- [Paul Bachelor's DSP Algorithms](https://paulbatchelor.github.io/sndkit/algos/)
 
 #### Roadmap
 

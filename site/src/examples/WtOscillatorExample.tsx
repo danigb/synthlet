@@ -31,24 +31,22 @@ class Synth {
       gain: 1,
       waveform: LfoWaveform.RandSampleHold,
     },
-    wt: {
-      frequency: 100,
-      resonance: 0.8,
-    },
   };
+  out: GainNode;
 
   constructor(public context: AudioContext, audioBuffer: AudioBuffer) {
+    this.out = new GainNode(context, { gain: 0.1 });
     this.lfo = Lfo(context, {
       waveform: LfoWaveform.Sine,
       frequency: 0.01,
     });
     this.wt = WtOscillator(context, {
       source: audioBuffer,
-      speed: 1,
+      morphFrequency: 1,
     });
     // this.lfo.connect(this.wt.speed);
     this.env = Adsr(context);
-    this.wt.connect(context.destination); // this.env).connect(context.destination);
+    this.wt.connect(this.out).connect(context.destination); // this.env).connect(context.destination);
   }
 
   pressKey({ note }: { note: number }) {
@@ -84,7 +82,7 @@ const loadAudio = audioBufferLoader(
 export function WtOscillatorExample({ className }: { className?: string }) {
   const [active, setActive] = useState(false);
   const [synth, setSynth] = useState<Synth | undefined>(undefined);
-  const [speed, setSpeed] = useState(1);
+  const [morphFrequency, setMorphFrequency] = useState(1);
 
   useEffect(() => {
     if (!active) return;
@@ -124,12 +122,12 @@ export function WtOscillatorExample({ className }: { className?: string }) {
         <label className="text-zinc-200">WtOscillator</label>
         <div className="flex gap-2 mb-2 text-zinc-400">
           <Slider
-            name="Speed"
-            value={speed}
-            min={-3}
-            max={3}
-            onChange={setSpeed}
-            param={synth?.wt.speed}
+            name="Morph Frequency"
+            value={morphFrequency}
+            min={0}
+            max={10}
+            onChange={setMorphFrequency}
+            param={synth?.wt.morphFrequency}
           />
         </div>
       </div>

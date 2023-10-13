@@ -1,7 +1,6 @@
-import {
-  ReadAudioBufferLinear,
-  readBufferLinear,
-} from "../audio-buffer/read-buffer-linear";
+import { readBufferLinear } from "../audio-buffer/read-buffer-linear";
+import { Counter } from "../dsp/counter";
+import { Phasor } from "../dsp/phasor";
 import { GenerateParamsMap, ParamsDef } from "../params-utils";
 
 export const WtOscillatorParamsDef: ParamsDef = {
@@ -12,35 +11,63 @@ export const WtOscillatorParamsDef: ParamsDef = {
 type WtOscillatorParamsMap = GenerateParamsMap<typeof WtOscillatorParamsDef>;
 
 export function WtOscillator(sampleRate: number) {
+  const NO_BUFFER = new Float32Array(0);
   let $frequency = 440;
-  let $morphFrequency = 0.005;
-  let $buffer: ReadAudioBufferLinear | null;
-  let $wtLen = 256;
+  let $morphPhasor = new Phasor(sampleRate, 0.5);
+  let $window = new Counter(0);
+  let $currentBuffer = readBufferLinear(NO_BUFFER);
+  let $nextBuffer = readBufferLinear(NO_BUFFER);
+  let $wtLen = 0;
   let $wtCount = 0;
-  let $wtCurrent = 0;
-  let $wtOffset = 0;
 
-  function setBuffer(buffer: Float32Array, wavetableLength) {
-    $buffer = readBufferLinear(buffer);
+  // Internal
+  function setWindow(window: number) {
+    $currentBuffer.window((window % $wtLen) * $wtLen, $wtLen);
+    $nextBuffer.window(((window + 1) % $wtLen) * $wtLen, $wtLen);
+  }
+
+  function setBuffer(buffer: Float32Array, wavetableLength: number) {
     $wtLen = Math.min(wavetableLength, buffer.length);
     $wtCount = Math.floor(buffer.length / $wtLen);
-    $wtCurrent = 0;
-    $wtOffset = 0;
-    $buffer.window($wtCurrent * $wtLen, $wtLen);
+    $currentBuffer = readBufferLinear(buffer);
+    $nextBuffer = readBufferLinear(buffer);
+    $window = new Counter($wtCount);
+    setWindow($window.val);
+  }
+
+  function debug() {
+    return {
+      $frequency,
+      $window: $window.val,
+      $wtCount,
+      $wtLen,
+    };
   }
 
   function setParams(params: WtOscillatorParamsMap) {
     $frequency = params.frequency[0];
-    $morphFrequency = params.morphFrequency[0];
+    if ($wtCount > 0) {
+      $morphPhasor.freq(params.morphFrequency[0]);
+    }
   }
   function fillAudioMono(output: Float32Array) {
-    if (!$buffer || !$wtCount) return;
+    if (!$currentBuffer || !$wtCount) return;
 
     const inc = $frequency / 440;
     for (let i = 0; i < output.length; i++) {
-      output[i] = $buffer.read(inc);
+      const morph = $morphPhasor.tick();
+      const current = $currentBuffer.read(inc);
+      const next = $nextBuffer.read(inc);
+
+      output[i] = (1 - morph) * current + morph * next;
+      const currentWindow = $window.val;
+      const nextWindow = $window.tick(morph);
+      if (currentWindow !== nextWindow) {
+        setWindow(nextWindow);
+      }
     }
+    return $window.val;
   }
 
-  return { setBuffer, setParams, fillAudioMono };
+  return { setBuffer, setParams, fillAudioMono, debug };
 }

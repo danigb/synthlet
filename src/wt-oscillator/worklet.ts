@@ -5,19 +5,25 @@ const PARAM_DESCRIPTORS = toWorkletParams(WtOscillatorParamsDef);
 
 export class WtOscillatorWorklet extends AudioWorkletProcessor {
   p: ReturnType<typeof WtOscillator>;
+  s: number;
+  stop: boolean;
 
   constructor() {
     super();
+    this.s = 0;
+    this.stop = false;
     this.p = WtOscillator(sampleRate);
     this.port.onmessage = (event) => {
-      if (event.data.type === "WAVE_TABLE") {
-        const buffer = event.data.buffer;
-        const len = event.data.wavetableLength ?? 256;
-        this.p.setBuffer(buffer, len);
-        this.port.postMessage({
-          type: "WT RECEIVED",
-          len: event.data.buffer.length,
-        });
+      switch (event.data.type) {
+        case "STOP":
+          this.stop = true;
+          break;
+        case "WAVE_TABLE":
+          this.p.setBuffer(
+            event.data.buffer,
+            event.data.wavetableLength ?? 256
+          );
+          break;
       }
     };
   }
@@ -27,6 +33,9 @@ export class WtOscillatorWorklet extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
+    if (this.stop) {
+      return false;
+    }
     this.p.setParams(parameters);
     this.p.fillAudioMono(outputs[0][0]);
     return true;

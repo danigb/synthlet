@@ -5,7 +5,7 @@ export const ImpulseParams: ParamsDef = {
 } as const;
 
 /**
- * Impulse produce a series of single-sample impulses at a specified frequencyuency.
+ * Impulse produce a series of single-sample impulses at a specified frequency.
  * @see https://paulbatchelor.github.io/sndkit/metro/
  */
 export class Impulse {

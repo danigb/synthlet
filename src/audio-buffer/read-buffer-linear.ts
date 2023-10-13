@@ -1,5 +1,9 @@
 export type ReadAudioBufferLinear = ReturnType<typeof readBufferLinear>;
 
+export function silenceBuffer(length: number) {
+  return new Float32Array(length).fill(0);
+}
+
 export function readBufferLinear(buffer: Float32Array) {
   const $buffer = buffer;
   let $len = buffer.length;
