@@ -11,7 +11,7 @@ import {
 } from "./pcm-oscillator/index";
 import { loadSequencer, loadSequencerProcessor } from "./sequencer/index";
 import { chain, createKeyboard, createTrigger } from "./utils/index";
-import { loadVaFilterProcessor } from "./va-filter/index";
+import { loadVaFilter, loadVaFilterProcessor } from "./va-filter/index";
 import {
   loadVaOscillator,
   loadVaOscillatorProcessor,
@@ -49,7 +49,7 @@ type PromiseType<T> = T extends Promise<infer U> ? U : never;
 export type Synthlet = PromiseType<ReturnType<typeof loadSynthlet>>;
 
 export async function loadSynthlet(context: AudioContext) {
-  const [adsr, impulse, ks, lfo, pcm, sequencer, filter, osc, wt] =
+  const [adsr, impulse, ksosc, lfo, pcmosc, sequencer, vafilter, vaosc, wtosc] =
     await Promise.all([
       loadAdsr(context),
       loadImpulse(context),
@@ -57,7 +57,7 @@ export async function loadSynthlet(context: AudioContext) {
       loadLfo(context),
       loadPcmOscillator(context),
       loadSequencer(context),
-      loadVaFilterProcessor(context),
+      loadVaFilter(context),
       loadVaOscillator(context),
       loadWtOscillatorProcessor(context),
     ]);
@@ -68,15 +68,15 @@ export async function loadSynthlet(context: AudioContext) {
     adsr,
     chain,
     context,
-    filter,
     impulse,
     keyboard,
-    ks,
+    ksosc,
     lfo,
-    osc,
-    pcm,
+    pcmosc,
     sequencer,
     trigger,
-    wt,
+    vafilter,
+    vaosc,
+    wtosc,
   };
 }

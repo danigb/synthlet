@@ -15,12 +15,18 @@ export function SequencerExample() {
   useEffect(() => {
     if (!active) return;
     loadSynthlet(getAudioContext()).then((S) => {
-      console.log("CREATE SYNTH");
       const gate = S.trigger();
       synth.current = {
         gate,
         disconnect: chain(
-          S.osc({ frequency: 440 }),
+          S.vaosc({ frequency: 440 }),
+          S.vafilter({
+            frequency: S.lfo({
+              frequency: 0.1,
+              gain: 2000,
+              offset: 1440,
+            }),
+          }),
           S.adsr({ gate }),
           S.context.destination
         ),
