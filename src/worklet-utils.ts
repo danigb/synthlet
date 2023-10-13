@@ -1,13 +1,35 @@
 import { ParamsDef } from "./params-utils";
 
+export type ParamSource = {
+  connect: (node: any) => void;
+  disconnect: () => void;
+};
+
 export type GenerateNodeType<T extends ParamsDef> = AudioWorkletNode & {
   [K in keyof T]: AudioParam;
 };
+type NodeOptions = Record<string, any>;
 export type GenerateNodeOptions<T extends ParamsDef> = {
-  [K in keyof T]: number;
+  [K in keyof T]: number | ParamSource;
 };
 
-export function loadWorklet<T>(code: string) {
+type WorkletProcessorLoader = (context: AudioContext) => Promise<unknown>;
+type WorkletConstructor<N, O extends NodeOptions> = (
+  context: AudioContext,
+  options?: O
+) => N;
+
+export function loadWorklet<N, O extends NodeOptions>(
+  loadWorklet: WorkletProcessorLoader,
+  createWorklet: WorkletConstructor<N, O>
+) {
+  return async function load(context: AudioContext) {
+    await loadWorklet(context);
+    return (options?: O) => createWorklet(context, options);
+  };
+}
+
+export function createLoader<T>(code: string): WorkletProcessorLoader {
   const init = new WeakMap<AudioContext, Promise<void>>();
 
   return async function load(context: AudioContext) {
@@ -22,12 +44,10 @@ export function loadWorklet<T>(code: string) {
   };
 }
 
-type NodeOptions = Record<string, number | undefined>;
-
-export function workletNodeConstructor<N, O extends NodeOptions>(
+export function createConstructor<N, O extends NodeOptions>(
   name: string,
   params: ParamsDef
-) {
+): WorkletConstructor<N, O> {
   return (context: AudioContext, options?: O) => {
     const node = new AudioWorkletNode(context, name, {
       numberOfInputs: 1,
@@ -35,6 +55,7 @@ export function workletNodeConstructor<N, O extends NodeOptions>(
     });
     addParams(node, params);
     if (options) setWorkletOptions(options, node, params);
+    addDisconnect(node);
     return node as N;
   };
 }
@@ -45,10 +66,16 @@ export function setWorkletOptions(
   params: ParamsDef
 ) {
   Object.keys(options).forEach((name) => {
-    const param = params[name];
+    const paramDef = params[name];
+    if (!paramDef) return;
+    const param = node.parameters.get(name);
+    if (!param) return;
+
     const value = options[name];
-    if (param && typeof value === "number") {
-      node.parameters.get(name)?.setValueAtTime(value, 0);
+    if (typeof value === "number") {
+      param.setValueAtTime(value, 0);
+    } else if (isParamSource(value)) {
+      connectParamSource(node, param, value);
     }
   });
 }
@@ -56,9 +83,10 @@ export function setWorkletOptions(
 export function addDisconnect(node: AudioWorkletNode) {
   const _disconnect = node.disconnect.bind(node);
   (node as any).disconnect = (output: any) => {
+    getParamsSources(node).forEach((source) => source.disconnect());
     _disconnect(output);
     if (!output) {
-      node.port.postMessage({ type: "STOP" });
+      node.port.postMessage({ type: "DISCONNECT" });
     }
   };
 }
@@ -80,4 +108,30 @@ export function toWorkletParams(params: ParamsDef) {
     const { min: minValue, max: maxValue, init: defaultValue } = params[name];
     return { name, minValue, maxValue, defaultValue, automationRate: "k-rate" };
   });
+}
+
+export function isParamSource(value: any): value is ParamSource {
+  return (
+    value &&
+    typeof value.connect === "function" &&
+    typeof value.disconnect === "function"
+  );
+}
+
+export function getParamsSources(node: AudioNode) {
+  if (!(node as any)._paramSources) {
+    (node as any)._paramSources = [];
+  }
+  const _paramSources: ParamSource[] = (node as any)._paramSources;
+  return _paramSources;
+}
+
+export function connectParamSource(
+  node: AudioNode,
+  param: AudioParam,
+  source: ParamSource
+) {
+  const sources = getParamsSources(node);
+  source.connect(param);
+  sources.push(source);
 }

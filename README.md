@@ -5,9 +5,10 @@
 Collection of synth modules implemented as AudioWorklets written in Typescript. Currently, dsp is mostly a port of Will Pirkle's Designing Synth Plugins 2nd Edition book. Thanks Will 🙌
 
 ```ts
-import { loadSynthlet } from "synthlet";
+import { loadSynthletNodes } from "synthlet";
 
-const { osc, filter, chain, adsr, now, trigger, param } = loadSynthlet(context);
+const { osc, filter, chain, adsr, now, trigger, param } =
+  loadSynthletNodes(context);
 
 // A WebAudio normal oscillator
 
@@ -76,9 +77,9 @@ npm i synthlet
 The first step is to load the worklets into an AudioContext. The simplest way is to load them all:
 
 ```js
-import { loadSynthlet } from "synthlet";
+import { loadSynthletNodes } from "synthlet";
 
-const Synthlet = await loadSynthlet(new AudioContext());
+const Synthlet = await loadSynthletNodes(new AudioContext());
 
 const osc = Synthlet.osc({ frequency: 440 }).connect(destination);
 
@@ -89,9 +90,9 @@ osc.disconnect();
 But you can choose which ones to load if you don't need or want the full library:
 
 ```js
-import { loadKarplusStrongOscillator } from "synthlet";
+import { loadKarplusStrongOscillatorProcessor } from "synthlet";
 
-const ks = await loadKarplusStrongOscillator(context);
+const ks = await loadKarplusStrongOscillatorProcessor(context);
 
 const osc = ks({ note: 60 }).connect(context.destination);
 osc.disconnect();
@@ -102,9 +103,9 @@ osc.disconnect();
 The load function returns a promise to a function that create audio nodes:
 
 ```js
-import { loadLfo } from "synthlet";
+import { loadLfoProcessor } from "synthlet";
 
-const createLfo = await loadLfo(context);
+const createLfo = await loadLfoProcessor(context);
 const lfo = createLfo({ frequency: 10 }); // lfo is an AudioNode
 ```
 

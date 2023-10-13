@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import {
   KarplusStrongOscillator,
   KarplusStrongOscillatorNode,
-  loadSynthlet,
+  loadSynthletNodes,
 } from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
@@ -43,7 +43,7 @@ export function KarplusExample({ className }: { className?: string }) {
 
   useEffect(() => {
     let synth: KarplusExampleSynth | undefined = undefined;
-    loadSynthlet(getAudioContext()).then(() => {
+    loadSynthletNodes(getAudioContext()).then(() => {
       synth = new KarplusExampleSynth(getAudioContext());
       setSynth(synth);
     });

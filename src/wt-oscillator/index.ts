@@ -3,6 +3,7 @@ import {
   GenerateNodeType,
   addDisconnect,
   addParams,
+  createLoader,
   loadWorklet,
   setWorkletOptions,
 } from "../worklet-utils";
@@ -11,7 +12,7 @@ import { PARAMS } from "./wt-oscillator";
 
 export * from "./load-wavetable";
 
-export const loadWtOscillator = loadWorklet(PROCESSOR);
+export const loadWtOscillatorProcessor = createLoader(PROCESSOR);
 
 export type WtOscillatorOptions = GenerateNodeOptions<typeof PARAMS>;
 
@@ -21,7 +22,7 @@ export type WtOscillatorNode = GenerateNodeType<typeof PARAMS> & {
 
 export const WtOscillator = (
   context: AudioContext,
-  options: WtOscillatorOptions
+  options?: WtOscillatorOptions
 ) => {
   const node = new AudioWorkletNode(context, "WtOscillatorWorklet", {
     numberOfInputs: 0,
@@ -41,3 +42,8 @@ export const WtOscillator = (
 
   return node as WtOscillatorNode;
 };
+
+export const loadWtOscillator = loadWorklet(
+  loadWtOscillatorProcessor,
+  WtOscillator
+);

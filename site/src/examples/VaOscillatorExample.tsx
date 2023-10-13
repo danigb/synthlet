@@ -8,7 +8,7 @@ import {
   VaOscillator,
   VaOscillatorNode,
   VaOscillatorWaveform,
-  loadSynthlet,
+  loadSynthletNodes,
 } from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
 import { PianoKeyboard } from "../PianoKeyboard";
@@ -54,7 +54,7 @@ export function VaOscillatorExample({ className }: { className?: string }) {
 
   useEffect(() => {
     let synth: Synth | undefined = undefined;
-    loadSynthlet(getAudioContext()).then(() => {
+    loadSynthletNodes(getAudioContext()).then(() => {
       synth = new Synth(getAudioContext());
       setSynth(synth);
     });

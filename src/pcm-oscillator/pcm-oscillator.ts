@@ -1,6 +1,6 @@
 import { ParamsDef } from "../params-utils";
 
-export const PcmOscillatorParams: ParamsDef = {
+export const PARAMS: ParamsDef = {
   gate: { min: 0, max: 1, init: 0 },
   speed: { min: -100, max: 100, init: 1 },
 } as const;

@@ -1,7 +1,7 @@
 import { toWorkletParams } from "../worklet-utils";
-import { VaOscillator, VaOscillatorParams } from "./va-oscillator";
+import { PARAMS, VaOscillator } from "./va-oscillator";
 
-const PARAM_DESCRIPTORS = toWorkletParams(VaOscillatorParams);
+const PARAM_DESCRIPTORS = toWorkletParams(PARAMS);
 
 export class VaOscillatorWorklet extends AudioWorkletProcessor {
   oscillator: VaOscillator;

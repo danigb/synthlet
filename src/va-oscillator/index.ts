@@ -1,24 +1,28 @@
 import {
   GenerateNodeOptions,
   GenerateNodeType,
+  createConstructor,
+  createLoader,
   loadWorklet,
-  workletNodeConstructor,
 } from "../worklet-utils";
 import { PROCESSOR } from "./processor";
-import { VaOscillatorParams } from "./va-oscillator";
+import { PARAMS } from "./va-oscillator";
 
+// Export constants and enums
 export {
   VA_OSCILLATOR_WAVEFORM_NAMES,
   VaOscillatorWaveform,
 } from "./va-oscillator";
 
-export const loadVaOscillator = loadWorklet(PROCESSOR);
-export type VaOscillatorOptions = GenerateNodeOptions<
-  typeof VaOscillatorParams
->;
-export type VaOscillatorNode = GenerateNodeType<typeof VaOscillatorParams>;
+export type VaOscillatorOptions = GenerateNodeOptions<typeof PARAMS>;
+export type VaOscillatorNode = GenerateNodeType<typeof PARAMS>;
 
-export const VaOscillator = workletNodeConstructor<
+export const loadVaOscillatorProcessor = createLoader(PROCESSOR);
+export const VaOscillator = createConstructor<
   VaOscillatorNode,
   VaOscillatorOptions
->("VaOscillatorWorklet", VaOscillatorParams);
+>("VaOscillatorWorklet", PARAMS);
+export const loadVaOscillator = loadWorklet(
+  loadVaOscillatorProcessor,
+  VaOscillator
+);

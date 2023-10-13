@@ -12,7 +12,7 @@ import {
   WtOscillator,
   WtOscillatorNode,
   fetchWavetableList,
-  loadSynthlet,
+  loadSynthletNodes,
   loadWavetable,
 } from "synthlet";
 import { ConnectMidi } from "../ConnectMidi";
@@ -90,7 +90,7 @@ export function WtOscillatorExample({ className }: { className?: string }) {
 
     let synth: Synth | undefined = undefined;
 
-    loadSynthlet(getAudioContext())
+    loadSynthletNodes(getAudioContext())
       .then(() => loadWavetable("FAIRLIGH"))
       .then((wavetableData) => {
         synth = new Synth(getAudioContext(), wavetableData);

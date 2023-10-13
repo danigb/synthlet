@@ -8,7 +8,7 @@ enum Stage {
   Release,
 }
 
-export const AdsrParams: ParamsDef = {
+export const PARAMS: ParamsDef = {
   gate: { min: 0, max: 1, init: 0 },
   attack: { min: 0, max: 10, init: 0.01 },
   decay: { min: 0, max: 10, init: 0.1 },
@@ -68,10 +68,10 @@ export class Adsr {
 
     this.setParams(
       0,
-      AdsrParams.attack.init,
-      AdsrParams.decay.init,
-      AdsrParams.sustain.init,
-      AdsrParams.release.init
+      PARAMS.attack.init,
+      PARAMS.decay.init,
+      PARAMS.sustain.init,
+      PARAMS.release.init
     );
   }
 
