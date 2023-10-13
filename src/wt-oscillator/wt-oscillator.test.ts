@@ -25,7 +25,6 @@ describe("PcmOscillator", () => {
     osc.fillAudioMono(output);
     expect(Array.from(output)).toMatchInlineSnapshot(`
       [
-        1,
         1.100000023841858,
         1.2000000476837158,
         1.2999999523162842,
@@ -45,6 +44,7 @@ describe("PcmOscillator", () => {
         1.7000000476837158,
         1.7999999523162842,
         1.899999976158142,
+        2,
       ]
     `);
   });

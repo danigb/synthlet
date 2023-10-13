@@ -8,10 +8,10 @@ describe("Counter", () => {
     const output1 = [0, 0, 0, 0, 0, 0, 0].map(() =>
       counter.tick(phasor.tick())
     );
-    expect(output1).toEqual([0, 0, 1, 1, 2, 2, 0]);
+    expect(output1).toEqual([0, 1, 1, 2, 2, 0, 0]);
     const output2 = [0, 0, 0, 0, 0, 0, 0].map(() =>
       counter.tick(phasor.tick())
     );
-    expect(output2).toEqual([0, 1, 1, 2, 2, 0, 0]);
+    expect(output2).toEqual([1, 1, 2, 2, 0, 0, 1]);
   });
 });

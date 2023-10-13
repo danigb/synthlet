@@ -31,14 +31,10 @@ export class Phasor {
     this.inc = freq / this.sampleRate;
   }
 
-  tick() {
-    const prev = this.phase;
-    this.phase += this.inc;
-    if (this.phase >= 1.0) {
-      this.phase -= 1.0;
-    } else if (this.phase <= -1.0) {
-      this.phase += 1.0;
-    }
-    return prev;
+  tick(steps = 1) {
+    this.phase += steps * this.inc;
+    while (this.phase >= 1.0) this.phase -= 1.0;
+    while (this.phase <= -1.0) this.phase += 1.0;
+    return this.phase;
   }
 }
