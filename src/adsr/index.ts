@@ -2,13 +2,13 @@ import {
   GenerateNodeOptions,
   GenerateNodeType,
   loadWorklet,
-  loadWorkletNode,
+  loadWorkletProcessor,
   workletNodeConstructor,
 } from "../worklet-utils";
 import { PARAMS } from "./adsr";
 import { PROCESSOR } from "./processor";
 
-export const loadAdsrNode = loadWorkletNode(PROCESSOR);
+export const loadAdsrNode = loadWorkletProcessor(PROCESSOR);
 export type AdsrOptions = GenerateNodeOptions<typeof PARAMS>;
 export type AdsrNode = GenerateNodeType<typeof PARAMS>;
 

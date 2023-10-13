@@ -35,7 +35,7 @@ export function loadWorklet<N, O extends NodeOptions>(
   };
 }
 
-export function loadWorkletNode<T>(code: string) {
+export function loadWorkletProcessor<T>(code: string) {
   const init = new WeakMap<AudioContext, Promise<void>>();
 
   return async function load(context: AudioContext) {
