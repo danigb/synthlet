@@ -35,15 +35,6 @@ export function WtOscillator(sampleRate: number) {
     setWindow($window.val);
   }
 
-  function debug() {
-    return {
-      $frequency,
-      $window: $window.val,
-      $wtCount,
-      $wtLen,
-    };
-  }
-
   function setParams(params: WtOscillatorParamsMap) {
     $frequency = params.frequency[0];
     if ($wtCount > 0) {
@@ -69,5 +60,5 @@ export function WtOscillator(sampleRate: number) {
     return $window.val;
   }
 
-  return { setWavetable, setParams, fillAudioMono, debug };
+  return { setWavetable, setParams, fillAudioMono };
 }
