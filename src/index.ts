@@ -4,6 +4,7 @@ import { loadKarplusStrongOscillatorNode } from "./karplus-strong/index";
 import { loadLfoNode } from "./lfo/index";
 import { loadPcmOscillatorNode } from "./pcm-oscillator/index";
 import { loadSequencerNode } from "./sequencer/index";
+import { loadTrigger } from "./trigger/index";
 import { loadVaFilterNode } from "./va-filter/index";
 import { loadVaOscillatorNode } from "./va-oscillator/index";
 import { loadWtOscillatorNode } from "./wt-oscillator/index";
@@ -31,4 +32,10 @@ export function loadSynthletNodes(context: AudioContext) {
     loadWtOscillatorNode(context),
     loadSequencerNode(context),
   ]);
+}
+
+export async function loadSynthlet(context: AudioContext) {
+  const [trigger] = await Promise.all([loadTrigger(context)]);
+
+  return { trigger };
 }
