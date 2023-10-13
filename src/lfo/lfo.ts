@@ -1,3 +1,4 @@
+import { ParamsDef } from "../params-utils";
 import { Clock } from "../shared/clock";
 import { FadeInModulator } from "../shared/fade-in-modulator";
 import {
@@ -11,7 +12,6 @@ import {
 } from "../shared/math";
 import { NoiseGenerator } from "../shared/noise-generator";
 import { Timer } from "../shared/timer";
-import { ParamsDef } from "../worklet-utils";
 
 export enum LfoWaveform {
   Triangle = 0,
@@ -56,7 +56,7 @@ const LFO_PARAMS = {
 
 export const LfoParamsDef: ParamsDef = {
   waveform: { min: 0, max: 9, def: LFO_PARAMS.waveform },
-  frequency: { min: 0.02, max: 200, def: LFO_PARAMS.frequency },
+  frequency: { min: 0.001, max: 200, def: LFO_PARAMS.frequency },
   offset: { min: 0.0, max: 10000, def: LFO_PARAMS.offset },
   gain: { min: 0, max: 1000, def: LFO_PARAMS.gain },
   quantize: { min: 0, max: 1000, def: LFO_PARAMS.quantize },

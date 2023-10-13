@@ -1,11 +1,11 @@
-import { ParamsDef } from "../worklet-utils";
+import { ParamsDef } from "../params-utils";
 
 export const ImpulseParams: ParamsDef = {
   frequency: { min: 0, max: 10000, def: 1 },
 } as const;
 
 /**
- * Impulse produce a series of single-sample impulses at a specified frequencyuency.
+ * Impulse produce a series of single-sample impulses at a specified frequency.
  * @see https://paulbatchelor.github.io/sndkit/metro/
  */
 export class Impulse {

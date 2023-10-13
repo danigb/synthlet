@@ -1,4 +1,4 @@
-import { ParamsDef } from "../worklet-utils";
+import { ParamsDef } from "../params-utils";
 
 export const PcmOscillatorParams: ParamsDef = {
   gate: { min: 0, max: 1, def: 0 },

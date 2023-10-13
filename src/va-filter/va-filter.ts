@@ -1,4 +1,4 @@
-import { ParamsDef } from "../worklet-utils";
+import { ParamsDef } from "../params-utils";
 import { Korg35Filter } from "./korg35-filter";
 import { Va1Filter } from "./va1-filter";
 import { Va2Filter } from "./va2-filter";

@@ -26,7 +26,7 @@
     "test": "jest",
     "build": "yarn worklet && yarn build:lib",
     "build:lib": "tsup src/index.ts --dts --format esm,cjs",
-    "worklet": "npm run adsr && npm run osc && npm run impulse && npm run mika && npm run lfo && npm run karplus && npm run filter && npm run pcm",
+    "worklet": "npm run adsr && npm run osc && npm run impulse && npm run mika && npm run lfo && npm run karplus && npm run filter && npm run pcm && npm run wt",
     "adsr": "esbuild src/adsr/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/adsr/processor.ts",
     "filter": "esbuild src/va-filter/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/va-filter/processor.ts",
     "impulse": "esbuild src/impulse/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/impulse/processor.ts",
@@ -34,7 +34,8 @@
     "lfo": "esbuild src/lfo/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/lfo/processor.ts",
     "mika": "esbuild src/mika/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/mika/processor.ts",
     "osc": "esbuild src/va-oscillator/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/va-oscillator/processor.ts",
-    "pcm": "esbuild src/pcm-oscillator/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/pcm-oscillator/processor.ts"
+    "pcm": "esbuild src/pcm-oscillator/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/pcm-oscillator/processor.ts",
+    "wt": "esbuild src/wt-oscillator/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/wt-oscillator/processor.ts"
   },
   "jest": {
     "preset": "ts-jest"

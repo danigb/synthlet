@@ -6,6 +6,7 @@ import { LfoExample } from "src/examples/LfoExample";
 import { PcmOscillatorExample } from "src/examples/PcmOscillatorExample";
 import { VaFilterExample } from "src/examples/VaFilterExample";
 import { VaOscillatorExample } from "src/examples/VaOscillatorExample";
+import { WtOscillatorExample } from "src/examples/WtOscillatorExample";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,6 +25,7 @@ export default function Home() {
 
         <div className="flex flex-col gap-8">
           <VaOscillatorExample />
+          <WtOscillatorExample />
           <PcmOscillatorExample />
           <VaFilterExample />
           <KarplusExample />
