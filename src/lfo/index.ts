@@ -15,5 +15,5 @@ export type LfoNode = GenerateNodeType<typeof PARAMS>;
 
 export const Lfo = createConstructor<LfoNode, LfoOptions>("LfoWorklet", PARAMS);
 
-export const loadLfoNode = createLoader(PROCESSOR);
-export const loadLfo = loadWorklet(loadLfoNode, Lfo);
+export const loadLfoProcessor = createLoader(PROCESSOR);
+export const loadLfo = loadWorklet(loadLfoProcessor, Lfo);

@@ -16,5 +16,5 @@ export const Sequencer = createConstructor<SequencerNode, SequencerOptions>(
   "SequencerWorklet",
   PARAMS
 );
-export const loadSequencerNode = createLoader(PROCESSOR);
-export const loadSequencer = loadWorklet(loadSequencerNode, Sequencer);
+export const loadSequencerProcessor = createLoader(PROCESSOR);
+export const loadSequencer = loadWorklet(loadSequencerProcessor, Sequencer);

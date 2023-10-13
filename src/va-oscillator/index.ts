@@ -17,9 +17,12 @@ export {
 export type VaOscillatorOptions = GenerateNodeOptions<typeof PARAMS>;
 export type VaOscillatorNode = GenerateNodeType<typeof PARAMS>;
 
-export const loadVaOscillatorNode = createLoader(PROCESSOR);
+export const loadVaOscillatorProcessor = createLoader(PROCESSOR);
 export const VaOscillator = createConstructor<
   VaOscillatorNode,
   VaOscillatorOptions
 >("VaOscillatorWorklet", PARAMS);
-export const loadVaOscillator = loadWorklet(loadVaOscillatorNode, VaOscillator);
+export const loadVaOscillator = loadWorklet(
+  loadVaOscillatorProcessor,
+  VaOscillator
+);

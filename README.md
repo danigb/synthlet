@@ -90,9 +90,9 @@ osc.disconnect();
 But you can choose which ones to load if you don't need or want the full library:
 
 ```js
-import { loadKarplusStrongOscillatorNode } from "synthlet";
+import { loadKarplusStrongOscillatorProcessor } from "synthlet";
 
-const ks = await loadKarplusStrongOscillatorNode(context);
+const ks = await loadKarplusStrongOscillatorProcessor(context);
 
 const osc = ks({ note: 60 }).connect(context.destination);
 osc.disconnect();
@@ -103,9 +103,9 @@ osc.disconnect();
 The load function returns a promise to a function that create audio nodes:
 
 ```js
-import { loadLfoNode } from "synthlet";
+import { loadLfoProcessor } from "synthlet";
 
-const createLfo = await loadLfoNode(context);
+const createLfo = await loadLfoProcessor(context);
 const lfo = createLfo({ frequency: 10 }); // lfo is an AudioNode
 ```
 

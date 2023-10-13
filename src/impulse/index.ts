@@ -15,5 +15,5 @@ export const Impulse = createConstructor<ImpulseNode, ImpulseOptions>(
   "ImpulseWorklet",
   ImpulseParams
 );
-export const loadImpulseNode = createLoader(PROCESSOR);
-export const loadImpulse = loadWorklet(loadImpulseNode, Impulse);
+export const loadImpulseProcessor = createLoader(PROCESSOR);
+export const loadImpulse = loadWorklet(loadImpulseProcessor, Impulse);
