@@ -9,11 +9,11 @@ enum Stage {
 }
 
 export const AdsrParams: ParamsDef = {
-  gate: { min: 0, max: 1, def: 0 },
-  attack: { min: 0, max: 10, def: 0.01 },
-  decay: { min: 0, max: 10, def: 0.1 },
-  sustain: { min: 0, max: 1, def: 0.5 },
-  release: { min: 0, max: 10, def: 0.3 },
+  gate: { min: 0, max: 1, init: 0 },
+  attack: { min: 0, max: 10, init: 0.01 },
+  decay: { min: 0, max: 10, init: 0.1 },
+  sustain: { min: 0, max: 1, init: 0.5 },
+  release: { min: 0, max: 10, init: 0.3 },
 } as const;
 
 /**
@@ -68,10 +68,10 @@ export class Adsr {
 
     this.setParams(
       0,
-      AdsrParams.attack.def,
-      AdsrParams.decay.def,
-      AdsrParams.sustain.def,
-      AdsrParams.release.def
+      AdsrParams.attack.init,
+      AdsrParams.decay.init,
+      AdsrParams.sustain.init,
+      AdsrParams.release.init
     );
   }
 

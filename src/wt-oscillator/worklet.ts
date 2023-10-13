@@ -1,7 +1,7 @@
 import { toWorkletParams } from "../worklet-utils";
-import { WtOscillator, WtOscillatorParamsDef } from "./wt-oscillator";
+import { PARAMS, WtOscillator } from "./wt-oscillator";
 
-const PARAM_DESCRIPTORS = toWorkletParams(WtOscillatorParamsDef);
+const PARAM_DESCRIPTORS = toWorkletParams(PARAMS);
 
 export class WtOscillatorWorklet extends AudioWorkletProcessor {
   p: ReturnType<typeof WtOscillator>;

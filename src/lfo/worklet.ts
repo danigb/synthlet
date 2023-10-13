@@ -1,7 +1,7 @@
 import { toWorkletParams } from "../worklet-utils";
-import { Lfo, LfoParamsDef } from "./lfo";
+import { Lfo, PARAMS } from "./lfo";
 
-const DESCRIPTORS = toWorkletParams(LfoParamsDef);
+const DESCRIPTORS = toWorkletParams(PARAMS);
 
 export class LfoWorklet extends AudioWorkletProcessor {
   lfo: Lfo;
