@@ -7,8 +7,8 @@ import { PluckFilterType, PluckPosFilter } from "./filters/pluck-pos-filter";
 import { Resonator } from "./resonator/resonator";
 
 export const KarplusStrongOscillatorParams: ParamsDef = {
-  gate: { min: 0, max: 1, def: 0 },
-  frequency: { min: 0, max: 10000, def: 1 },
+  gate: { min: 0, max: 1, init: 0 },
+  frequency: { min: 0, max: 10000, init: 1 },
 } as const;
 
 function tanhWaveShaper(xn: number, saturation: number): number {

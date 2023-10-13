@@ -1,8 +1,8 @@
 import { ParamsDef } from "../params-utils";
 
 export const PcmOscillatorParams: ParamsDef = {
-  gate: { min: 0, max: 1, def: 0 },
-  speed: { min: -100, max: 100, def: 1 },
+  gate: { min: 0, max: 1, init: 0 },
+  speed: { min: -100, max: 100, init: 1 },
 } as const;
 
 export function PcmOscillator(sampleRate: number) {

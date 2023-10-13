@@ -37,9 +37,9 @@ export const VA_FILTER_TYPE_NAMES = [
 ];
 
 export const VaFilterParams: ParamsDef = {
-  type: { min: 0, max: 14, def: 1 },
-  frequency: { min: 0, max: 10000, def: 1000 },
-  resonance: { min: 0, max: 1, def: 0.5 },
+  type: { min: 0, max: 14, init: 1 },
+  frequency: { min: 0, max: 10000, init: 1000 },
+  resonance: { min: 0, max: 1, init: 0.5 },
 } as const;
 
 type Processor = (x: number) => number;
@@ -85,8 +85,8 @@ export class VaFilter {
     // Set default params
     this.setParams(
       VaFilterType.VA1_LP,
-      VaFilterParams.frequency.def,
-      VaFilterParams.resonance.def
+      VaFilterParams.frequency.init,
+      VaFilterParams.resonance.init
     );
   }
 

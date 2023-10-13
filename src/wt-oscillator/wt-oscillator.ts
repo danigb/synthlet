@@ -4,8 +4,8 @@ import { Phasor } from "../dsp/phasor";
 import { GenerateParamsMap, ParamsDef } from "../params-utils";
 
 export const WtOscillatorParamsDef: ParamsDef = {
-  frequency: { min: 0, max: 20000, def: 440 },
-  morphFrequency: { min: 0, max: 10, def: 0.005 },
+  frequency: { min: 0, max: 20000, init: 440 },
+  morphFrequency: { min: 0, max: 10, init: 0.005 },
 };
 
 type WtOscillatorParamsMap = GenerateParamsMap<typeof WtOscillatorParamsDef>;

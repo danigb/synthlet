@@ -3,7 +3,7 @@ export type ParamsDef = Record<string, ParamDef>;
 export type ParamDef = {
   min: number;
   max: number;
-  def: number;
+  init: number;
   type?: "k" | "a";
 };
 
