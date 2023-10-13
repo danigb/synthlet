@@ -1,9 +1,9 @@
 import {
   GenerateNodeOptions,
   GenerateNodeType,
+  createProcessorLoader,
+  createWorkletConstructor,
   loadWorklet,
-  loadWorkletProcessor,
-  workletNodeConstructor,
 } from "../worklet-utils";
 import { PROCESSOR } from "./processor";
 import { PARAMS } from "./va-oscillator";
@@ -13,7 +13,7 @@ export {
   VaOscillatorWaveform,
 } from "./va-oscillator";
 
-export const loadVaOscillatorNode = loadWorkletProcessor(PROCESSOR);
+export const loadVaOscillatorNode = createProcessorLoader(PROCESSOR);
 export const loadVaOscillator = loadWorklet<
   VaOscillatorNode,
   VaOscillatorOptions
@@ -22,7 +22,7 @@ export const loadVaOscillator = loadWorklet<
 export type VaOscillatorOptions = GenerateNodeOptions<typeof PARAMS>;
 export type VaOscillatorNode = GenerateNodeType<typeof PARAMS>;
 
-export const VaOscillator = workletNodeConstructor<
+export const VaOscillator = createWorkletConstructor<
   VaOscillatorNode,
   VaOscillatorOptions
 >("VaOscillatorWorklet", PARAMS);

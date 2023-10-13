@@ -13,6 +13,12 @@ export type GenerateNodeOptions<T extends ParamsDef> = {
   [K in keyof T]: number | ParamSource;
 };
 
+type WorkletProcessorLoader = (context: AudioContext) => Promise<unknown>;
+type WorkletConstructor<N, O extends NodeOptions> = (
+  context: AudioContext,
+  options?: O
+) => N;
+
 export function loadWorklet<N, O extends NodeOptions>(
   loadWorklet: (context: AudioContext) => Promise<unknown>,
   name: string,
@@ -35,7 +41,7 @@ export function loadWorklet<N, O extends NodeOptions>(
   };
 }
 
-export function loadWorkletProcessor<T>(code: string) {
+export function createProcessorLoader<T>(code: string): WorkletProcessorLoader {
   const init = new WeakMap<AudioContext, Promise<void>>();
 
   return async function load(context: AudioContext) {
@@ -50,10 +56,10 @@ export function loadWorkletProcessor<T>(code: string) {
   };
 }
 
-export function workletNodeConstructor<N, O extends NodeOptions>(
+export function createWorkletConstructor<N, O extends NodeOptions>(
   name: string,
   params: ParamsDef
-) {
+): WorkletConstructor<N, O> {
   return (context: AudioContext, options?: O) => {
     const node = new AudioWorkletNode(context, name, {
       numberOfInputs: 1,

@@ -1,7 +1,7 @@
 import { toWorkletParams } from "../worklet-utils";
-import { PcmOscillator, PcmOscillatorParams } from "./pcm-oscillator";
+import { PARAMS, PcmOscillator } from "./pcm-oscillator";
 
-const PARAM_DESCRIPTORS = toWorkletParams(PcmOscillatorParams);
+const PARAM_DESCRIPTORS = toWorkletParams(PARAMS);
 
 export class PcmOscillatorWorklet extends AudioWorkletProcessor {
   p: ReturnType<typeof PcmOscillator>;

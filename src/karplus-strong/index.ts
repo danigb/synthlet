@@ -1,13 +1,13 @@
 import {
   GenerateNodeOptions,
   GenerateNodeType,
-  loadWorkletProcessor,
-  workletNodeConstructor,
+  createProcessorLoader,
+  createWorkletConstructor,
 } from "../worklet-utils";
 import { KarplusStrongOscillatorParams } from "./karplus-strong-oscillator";
 import { PROCESSOR } from "./processor";
 
-export const loadKarplusStrongOscillatorNode = loadWorkletProcessor(PROCESSOR);
+export const loadKarplusStrongOscillatorNode = createProcessorLoader(PROCESSOR);
 export type KarplusStrongOscillatorOptions = GenerateNodeOptions<
   typeof KarplusStrongOscillatorParams
 >;
@@ -15,7 +15,7 @@ export type KarplusStrongOscillatorNode = GenerateNodeType<
   typeof KarplusStrongOscillatorParams
 >;
 
-export const KarplusStrongOscillator = workletNodeConstructor<
+export const KarplusStrongOscillator = createWorkletConstructor<
   KarplusStrongOscillatorNode,
   KarplusStrongOscillatorOptions
 >("KarplusStrongOscillatorWorklet", KarplusStrongOscillatorParams);
