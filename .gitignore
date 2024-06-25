@@ -4,3 +4,4 @@ src/*.js
 dist/
 .next
 tmp/
+.DS_Store
