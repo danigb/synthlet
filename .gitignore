@@ -5,3 +5,5 @@ dist/
 .next
 tmp/
 .DS_Store
+.turbo
+coverage
