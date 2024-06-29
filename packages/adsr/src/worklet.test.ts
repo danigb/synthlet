@@ -1,11 +1,10 @@
 import { getProcessorName } from "./index";
-import { createWorkletTestContext } from "./__test__/utils";
 
 describe("AdsrWorkletNode", () => {
   let Worklet: any;
 
   beforeAll(async () => {
-    createWorkletTestContext();
+    createWorkletTestContext(4410);
     Worklet = (await import("./worklet")).AdsrWorkletProcessor;
   });
 
@@ -20,3 +19,21 @@ describe("AdsrWorkletNode", () => {
     expect(Worklet.parameterDescriptors).toMatchSnapshot();
   });
 });
+
+function createWorkletTestContext(sampleRate = 10, ctx: any = global) {
+  ctx.sampleRate = sampleRate;
+  ctx.registerProcessor = jest.fn();
+  ctx.AudioWorkletProcessor = class AudioWorkletNodeStub {
+    port: {
+      postMessage: jest.Mock<any, any, any>;
+      onmessage: jest.Mock<any, any, any>;
+    };
+
+    constructor() {
+      this.port = {
+        postMessage: jest.fn(),
+        onmessage: jest.fn(),
+      };
+    }
+  };
+}
