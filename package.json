@@ -1,4 +1,6 @@
 {
+  "name": "synthlet-workspace",
+  "private": true,
   "workspaces": [
     "packages/*"
   ],
