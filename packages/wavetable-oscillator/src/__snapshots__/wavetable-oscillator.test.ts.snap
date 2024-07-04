@@ -1,0 +1,91 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`WavetableOscillator renders a single plane 1`] = `
+Float32Array [
+  1,
+  1.5,
+  2,
+  2.5,
+  3,
+  3.5,
+  4,
+  4.5,
+  5,
+  5.5,
+]
+`;
+
+exports[`WavetableOscillator renders a single plane 2`] = `
+Float32Array [
+  6,
+  6.5,
+  7,
+  7.5,
+  8,
+  8.5,
+  9,
+  9.5,
+  10,
+  5.5,
+]
+`;
+
+exports[`WavetableOscillator renders a single plane 3`] = `
+Float32Array [
+  1,
+  1.5,
+  2,
+  2.5,
+  3,
+  3.5,
+  4,
+  4.5,
+  5,
+  5.5,
+]
+`;
+
+exports[`WavetableOscillator renders two planes 1`] = `
+Float32Array [
+  11,
+  23,
+  35,
+  47,
+  59,
+  61,
+  73,
+  85,
+  97,
+  109,
+]
+`;
+
+exports[`WavetableOscillator renders two planes 2`] = `
+Float32Array [
+  11,
+  123,
+  135,
+  147,
+  159,
+  161,
+  173,
+  185,
+  197,
+  209,
+]
+`;
+
+exports[`WavetableOscillator renders two planes 3`] = `
+Float32Array [
+  111,
+  163,
+  145,
+  127,
+  109,
+  81,
+  63,
+  45,
+  27,
+  9,
+]
+`;

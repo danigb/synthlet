@@ -1,0 +1,27 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`WavetableOscillatorWorkletNode has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 220,
+    "maxValue": 20000,
+    "minValue": 0,
+    "name": "baseFrequency",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 440,
+    "maxValue": 20000,
+    "minValue": 0,
+    "name": "frequency",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.05,
+    "maxValue": 10,
+    "minValue": 0,
+    "name": "morphFrequency",
+  },
+]
+`;
