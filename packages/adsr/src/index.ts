@@ -137,5 +137,11 @@ function createWorkletNode(
   node.gateOff = (time = audioContext.currentTime) => {
     node.gate.setValueAtTime(0, time);
   };
+  let _disconnect = node.disconnect.bind(node);
+  node.disconnect = (param?, output?, input?) => {
+    node.port.postMessage({ type: "DISCONNECT" });
+    // @ts-ignore
+    return _disconnect(param, output, input);
+  };
   return node;
 }

@@ -11,7 +11,7 @@ export class AdsrWorkletProcessor extends AudioWorkletProcessor {
     this.p = Adsr(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "STOP":
+        case "DISCONNECT":
           this.r = false;
           break;
       }
