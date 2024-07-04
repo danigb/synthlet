@@ -1,0 +1,15 @@
+{
+  "compilerOptions": {
+    "declaration": true,
+    "declarationDir": "./dist",
+    "strict": true,
+    "module": "ES2022",
+    "noImplicitAny": true,
+    "outDir": "./dist",
+    "target": "esnext",
+    "esModuleInterop": true,
+    "moduleResolution": "node"
+  },
+  "include": ["packages/**/*.ts", "../../packages/**/*"],
+  "exclude": ["node_modules", "**/dist/**/*"]
+}

@@ -1,0 +1,55 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`AdsrWorkletNode has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "gate",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.01,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "attack",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.1,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "decay",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.5,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "sustain",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.3,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "release",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 20000,
+    "minValue": 0,
+    "name": "offset",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 20000,
+    "minValue": -20000,
+    "name": "gain",
+  },
+]
+`;

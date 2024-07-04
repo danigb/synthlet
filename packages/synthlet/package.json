@@ -1,0 +1,30 @@
+{
+  "name": "synthlet",
+  "version": "0.1.0",
+  "description": "AudioWorklet synth modules",
+  "keywords": [
+    "modular",
+    "synthesizer",
+    "webaudio",
+    "control-voltage"
+  ],
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "author": "danigb@gmail.com",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@synthlet/adsr": "^0.1.0",
+    "@synthlet/noise": "^0.1.0"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
+    "lint": "tsc --noEmit"
+  }
+}
