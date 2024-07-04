@@ -44,6 +44,7 @@ npm i @synthlet/adsr
 
 ## Documentation
 
-- [ADSR](/packages/adsr/README.md)
-- [Noise](/packages/noise/README.md)
-- [WavetableOscillator](/packages/wavetable-oscilllator/README.md)
+- [ADSR](/packages/adsr)
+- [Noise](/packages/noise)
+- [StateVariableFilter](/packages/state-variable-filter)
+- [WavetableOscillator](/packages/wavetable-oscilllator)
