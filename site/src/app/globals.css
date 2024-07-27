@@ -30,6 +30,19 @@ a {
   @apply text-emerald-500 hover:text-emerald-300;
 }
 
+article.markdown {
+  @apply my-8 max-w-4xl mx-auto prose prose-invert prose-zinc;
+
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply text-emerald-500;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

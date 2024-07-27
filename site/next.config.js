@@ -1,3 +1,4 @@
+const withMDX = require("@next/mdx")();
 const repo = "synthlet";
 const isDeploy = process.env.DEPLOY || false;
 
@@ -9,9 +10,12 @@ if (isDeploy) {
   basePath = `/${repo}`;
 }
 /** @type {import('next').NextConfig} */
-export default {
+const nextConfig = {
+  pageExtensions: ["mdx", "tsx"],
   output: "export",
   assetPrefix,
   basePath,
   reactStrictMode: true,
 };
+
+module.exports = withMDX(nextConfig);
