@@ -10,12 +10,14 @@ export function clamp(value: number, min: number, max: number): number {
 }
 
 export enum SVFilterType {
+  ByPass = 0,
   LowPass = 1,
   BandPass = 2,
   HighPass = 3,
 }
 
 export type Inputs = {
+  filterType: number[];
   frequency: number[];
   resonance: number[];
 };
@@ -27,14 +29,14 @@ export type Inputs = {
  * https://github.com/Ardour/ardour/blob/71e049202c017c0a546f39b455bdc9e4be182f06/libs/plugins/a-eq.lv2/a-eq.c
  * https://github.com/SoundStacks/cmajor/blob/main/standard_library/std_library_filters.cmajor#L157
  */
-export function SVFilter(sampleRate: number, type = SVFilterType.LowPass) {
+export function SVFilter(sampleRate: number) {
   // Params
   let $frequency = 1000;
   let $resonance = 0.5;
+  let $type = SVFilterType.LowPass;
 
   const period = 0.5 / sampleRate;
   const pi2 = 2 * Math.PI;
-  const freqCoef = 2.0 * sampleRate * period;
 
   let d = 0;
   let a = 0;
@@ -45,7 +47,8 @@ export function SVFilter(sampleRate: number, type = SVFilterType.LowPass) {
   let band = 0;
   let low = 0;
 
-  function read(inputs: Inputs) {
+  function update(inputs: Inputs) {
+    $type = inputs.filterType[0];
     if (
       inputs.frequency[0] !== $frequency ||
       inputs.resonance[0] !== $resonance
@@ -62,8 +65,7 @@ export function SVFilter(sampleRate: number, type = SVFilterType.LowPass) {
     }
   }
 
-  function fill(input: Float32Array, output: Float32Array, inputs: Inputs) {
-    read(inputs);
+  function fill(input: Float32Array, output: Float32Array) {
     for (let i = 0; i < input.length; i++) {
       const x = input[i];
       high = (x - g1 * z0 - z1) * d;
@@ -72,12 +74,14 @@ export function SVFilter(sampleRate: number, type = SVFilterType.LowPass) {
       z0 = a * high + band;
       z1 = a * band + low;
       output[i] =
-        type === SVFilterType.LowPass
+        $type === SVFilterType.LowPass
           ? low
-          : type === SVFilterType.HighPass
+          : $type === SVFilterType.HighPass
           ? high
-          : band;
+          : $type === SVFilterType.BandPass
+          ? band
+          : x;
     }
   }
-  return { fill };
+  return { update, fill };
 }

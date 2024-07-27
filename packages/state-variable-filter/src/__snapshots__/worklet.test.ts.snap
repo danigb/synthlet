@@ -4,6 +4,13 @@ exports[`ProcessorNode has parameter descriptors 1`] = `
 [
   {
     "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 3,
+    "minValue": 0,
+    "name": "filterType",
+  },
+  {
+    "automationRate": "k-rate",
     "defaultValue": 1000,
     "maxValue": 20000,
     "minValue": 16,

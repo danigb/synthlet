@@ -3,6 +3,13 @@ import { SVFilter } from "./filter";
 export class Processor extends AudioWorkletProcessor {
   static parameterDescriptors = [
     {
+      name: "filterType",
+      defaultValue: 1,
+      minValue: 0,
+      maxValue: 3,
+      automationRate: "k-rate",
+    },
+    {
       name: "frequency",
       defaultValue: 1000,
       minValue: 16,
@@ -18,12 +25,12 @@ export class Processor extends AudioWorkletProcessor {
     },
   ];
 
-  u: ReturnType<typeof SVFilter>;
+  f: ReturnType<typeof SVFilter>;
   r: boolean; // running
 
   constructor() {
     super();
-    this.u = SVFilter(sampleRate);
+    this.f = SVFilter(sampleRate);
     this.r = true;
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -41,8 +48,9 @@ export class Processor extends AudioWorkletProcessor {
   ) {
     const input = inputs[0][0];
     const output = outputs[0][0];
+    this.f.update(parameters);
     if (input && output) {
-      this.u.fill(input, output, parameters);
+      this.f.fill(input, output);
     }
     return this.r;
   }
