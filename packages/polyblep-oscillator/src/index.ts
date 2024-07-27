@@ -13,7 +13,7 @@ type PolyblepOscillatorParams = {
   frequency: number;
 };
 
-export function getProcessorName() {
+export function getPolyblepOscillatorProcessorName() {
   return "PolyBLEPWorkletProcessor"; // Can't import from worklet because globals
 }
 
@@ -22,13 +22,13 @@ const PARAM_NAMES = ["waveform", "frequency"] as const;
 /**
  * A PolyBLEP Oscillator AudioWorkletNode
  */
-export type PolyblepWorkletNode = AudioWorkletNode & {
+export type PolyblepOscillatorWorkletNode = AudioWorkletNode & {
   type: PolyblepWaveformType;
   waveform: AudioParam;
   frequency: AudioParam;
 };
 
-export function getWorkletUrl() {
+function getWorkletUrl() {
   const blob = new Blob([PROCESSOR], { type: "application/javascript" });
   return URL.createObjectURL(blob);
 }
@@ -37,17 +37,21 @@ export function getWorkletUrl() {
  * Create a PolyblepOscillator worklet node
  * @param audioContext
  * @param options
- * @returns PolyblepWorkletNode
+ * @returns PolyblepOscillatorWorkletNode
  */
 export function createPolyblepOscillator(
   audioContext: AudioContext,
   options: Partial<PolyblepOscillatorOptions> = {}
-): PolyblepWorkletNode {
+): PolyblepOscillatorWorkletNode {
   const params = optionsToParams(options);
-  const node = new AudioWorkletNode(audioContext, getProcessorName(), {
-    numberOfInputs: 1,
-    numberOfOutputs: 1,
-  }) as PolyblepWorkletNode;
+  const node = new AudioWorkletNode(
+    audioContext,
+    getPolyblepOscillatorProcessorName(),
+    {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+    }
+  ) as PolyblepOscillatorWorkletNode;
 
   for (const paramName of PARAM_NAMES) {
     const param = node.parameters.get(paramName)!;

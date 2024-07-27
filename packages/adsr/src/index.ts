@@ -1,6 +1,6 @@
 import { PROCESSOR } from "./processor";
 
-export type ProcessorOptions = {
+export type AdsrProcessorOptions = {
   mode?: "generator" | "modulator";
 };
 
@@ -14,6 +14,9 @@ export type AdsrParams = {
   gain: number;
 };
 
+/**
+ * An ADSR WorkletNode
+ */
 export type AdsrWorkletNode = AudioWorkletNode & {
   gate: AudioParam;
   attack: AudioParam;
@@ -36,11 +39,11 @@ const PARAM_NAMES = [
   "gain",
 ] as const;
 
-export function getProcessorName() {
+export function getAdsrProcessorName() {
   return "AdsrWorkletProcessor"; // Can't import from worklet because globals
 }
 
-export function getWorkletUrl() {
+function getWorkletUrl() {
   const blob = new Blob([PROCESSOR], { type: "application/javascript" });
   return URL.createObjectURL(blob);
 }
@@ -82,7 +85,7 @@ export function registerAdsrWorkletOnce(
  * It can be used to modulate amplitude of another signal.
  *
  * @param audioContext - The AudioContext
- * @returns AudioWorkletNode
+ * @returns AdsrWorkletNode
  * @example
  * ```
  * const osc = audioContext.createOscillator();
@@ -97,7 +100,7 @@ export function registerAdsrWorkletOnce(
 export function createVca(
   audioContext: AudioContext,
   params?: Partial<AdsrParams>
-): AudioWorkletNode {
+): AdsrWorkletNode {
   return createWorkletNode(audioContext, { mode: "modulator" });
 }
 
@@ -105,21 +108,21 @@ export function createVca(
  * Create a ADSR AudioWorkletNode.
  * It can be used to modulate other parameters
  * @param audioContext
- * @returns
+ * @returns AdsrWorkletNode
  */
 export function createAdsr(
   audioContext: AudioContext,
   params?: Partial<AdsrParams>
-): AudioWorkletNode {
+): AdsrWorkletNode {
   return createWorkletNode(audioContext, { mode: "generator" }, params);
 }
 
 function createWorkletNode(
   audioContext: AudioContext,
-  processorOptions: ProcessorOptions,
+  processorOptions: AdsrProcessorOptions,
   params: Partial<AdsrParams> = {}
-): AudioWorkletNode {
-  const node = new AudioWorkletNode(audioContext, getProcessorName(), {
+): AdsrWorkletNode {
+  const node = new AudioWorkletNode(audioContext, getAdsrProcessorName(), {
     numberOfInputs: 1,
     numberOfOutputs: 1,
     processorOptions,

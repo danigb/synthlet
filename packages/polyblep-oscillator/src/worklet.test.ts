@@ -1,4 +1,4 @@
-import { getProcessorName } from "./index";
+import { getPolyblepOscillatorProcessorName } from "./index";
 
 describe("ProcessorNode", () => {
   let Processor: any;
@@ -11,7 +11,7 @@ describe("ProcessorNode", () => {
 
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
-      getProcessorName(),
+      getPolyblepOscillatorProcessorName(),
       Processor
     );
   });

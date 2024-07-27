@@ -19,12 +19,15 @@ export {
   registerWavetableOscillatorWorkletOnce,
 } from "@synthlet/wavetable-oscillator";
 
-export function registerSynthletOnce(context: AudioContext) {
+export type * from "@synthlet/adsr";
+export type * from "@synthlet/polyblep-oscillator";
+
+export function registerSynthletOnce(context: AudioContext): Promise<void> {
   return Promise.all([
     registerAdsrWorkletOnce(context),
     registerNoiseWorkletOnce(context),
     registerPolyblepOscillatorWorkletOnce(context),
     registerStateVariableFilterWorkletOnce(context),
     registerWavetableOscillatorWorkletOnce(context),
-  ]);
+  ]).then(() => {});
 }
