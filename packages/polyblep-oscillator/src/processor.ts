@@ -1,0 +1,1 @@
+export const PROCESSOR = `"use strict";(()=>{var e=class extends AudioWorkletProcessor{static parameterDescriptors=[{name:"frequency",defaultValue:1e3,minValue:16,maxValue:2e4,automationRate:"k-rate"}];r;constructor(){super(),this.r=!0,this.port.onmessage=t=>{switch(t.data.type){case"STOP":this.r=!1;break}}}process(t,a,s){let o=a[0][0];return this.r}};})();`;
