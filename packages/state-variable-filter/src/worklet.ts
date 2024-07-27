@@ -39,8 +39,8 @@ export class Processor extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    let input = inputs[0][0];
-    let output = outputs[0][0];
+    const input = inputs[0][0];
+    const output = outputs[0][0];
     if (input && output) {
       this.u.fill(input, output, parameters);
     }
