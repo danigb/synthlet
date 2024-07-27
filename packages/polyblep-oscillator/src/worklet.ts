@@ -36,7 +36,7 @@ export class Processor extends AudioWorkletProcessor {
     ];
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "STOP":
+        case "DISCONNECT":
           this.r = false;
           break;
       }
