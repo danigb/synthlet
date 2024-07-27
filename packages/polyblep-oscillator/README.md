@@ -16,6 +16,7 @@ npm i @synthlet/polyblep-oscillator
 
 ## References
 
+- https://paulbatchelor.github.io/sndkit/blep/
 - https://www.martin-finke.de/articles/audio-plugins-018-polyblep-oscillator/
 - https://www.metafunction.co.uk/post/all-about-digital-oscillators-part-2-blits-bleps
 - https://github.com/cmajor-lang/cmajor/blob/main/standard_library/std_library_oscillators.cmajor
