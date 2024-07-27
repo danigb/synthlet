@@ -3,15 +3,13 @@
 > Noise generator module for [synthlet](https://github.com/danigb/synthlet)
 
 ```ts
-import { registerNoiseWorkletOnce, createWhiteNoise } from "@synthlet/adsr";
+import { registerNoiseWorkletOnce, createWhiteNoise } from "@synthlet/noise";
 
 const audioContext = new AudioContext();
 
 await registerNoiseWorkletOnce(audioContext);
 
-// Create a VCA (Voltage Controlled Amplifier)
 const noise = createWhiteNoise();
-// Connect the noise to the output
 noise.connect(audioContext.destination);
 ```
 

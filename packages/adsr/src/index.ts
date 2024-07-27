@@ -111,7 +111,7 @@ export function createAdsr(
   audioContext: AudioContext,
   params?: Partial<AdsrParams>
 ): AudioWorkletNode {
-  return createWorkletNode(audioContext, { mode: "generator" });
+  return createWorkletNode(audioContext, { mode: "generator" }, params);
 }
 
 function createWorkletNode(

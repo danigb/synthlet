@@ -1,6 +1,6 @@
 {
   "name": "synthlet",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AudioWorklet synth modules",
   "keywords": [
     "modular",
@@ -22,6 +22,7 @@
   "dependencies": {
     "@synthlet/adsr": "^0.1.0",
     "@synthlet/noise": "^0.1.0",
+    "@synthlet/polyblep-oscillator": "^0.1.0",
     "@synthlet/state-variable-filter": "^0.1.0",
     "@synthlet/wavetable-oscillator": "^0.1.0"
   },

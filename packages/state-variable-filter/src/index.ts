@@ -82,9 +82,9 @@ function createWorkletNode(
 
   for (const paramName of PARAM_NAMES) {
     const param = node.parameters.get(paramName)!;
-    const value = params[paramName as keyof StateVariableFilterParams];
-    if (typeof value === "number") param.value = value;
     node[paramName] = param;
+    const value = params[paramName as keyof StateVariableFilterParams];
+    if (typeof value === "number") param.setValueAtTime(value, 0);
   }
   let _disconnect = node.disconnect.bind(node);
   node.disconnect = (param?, output?, input?) => {
