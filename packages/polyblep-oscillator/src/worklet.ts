@@ -60,3 +60,5 @@ export class Processor extends AudioWorkletProcessor {
     return this.r;
   }
 }
+
+registerProcessor("PolyBLEPWorkletProcessor", Processor);
