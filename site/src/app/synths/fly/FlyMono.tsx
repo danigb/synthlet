@@ -2,6 +2,7 @@
 
 import { createSynthAudioContext } from "@/audio-context";
 import { AdsrControls } from "@/components/AdsrControls";
+import { FrequencySelector } from "@/components/FrequencySelector";
 import { GateControls } from "@/components/GateControls";
 import { StateVariableFilterControls } from "@/components/StateVariableFilterControls";
 import { useEffect, useState } from "react";
@@ -12,11 +13,17 @@ import {
   createStateVariableFilter,
   createVca,
   PolyblepOscillatorWorkletNode,
+  PolyblepWaveformType,
   StateVariableFilterWorkletNode,
 } from "synthlet";
 
 export function FlyMono() {
+  const WAVEFORM_TYPES = ["sine", "sawtooth", "square", "triangle"] as const;
+
   const [synth, setSynth] = useState<FlyMonoSynth | null>(null);
+  const [selectedWaveform, setSelectedWaveform] = useState<string>(
+    WAVEFORM_TYPES[0]
+  );
 
   useEffect(() => {
     createSynthAudioContext().then((context) => {
@@ -31,11 +38,32 @@ export function FlyMono() {
       </h1>
 
       <div className="mt-4">
-        <GateControls
-          onGateChanged={(on) => {
-            synth.gate(on);
-          }}
-        />
+        <h2 className="border-b border-blue-400">Oscillator</h2>
+        <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
+          <p className="text-right">type</p>
+          <select
+            className="bg-blue-700 p-1 rounded border-blue-300 col-span-3"
+            value={selectedWaveform}
+            onChange={(e) => {
+              setSelectedWaveform(e.target.value);
+              synth.osc.type = e.target.value as PolyblepWaveformType;
+            }}
+          >
+            {WAVEFORM_TYPES.map((type) => (
+              <option key={type}>{type}</option>
+            ))}
+          </select>
+          <FrequencySelector
+            onChange={(freq) => {
+              return synth.osc.frequency.setValueAtTime(freq, 0);
+            }}
+            label="frequency"
+            initial={440}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4">
         <h2 className="border-b border-blue-400">Filter</h2>
         <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
           <StateVariableFilterControls
@@ -47,6 +75,7 @@ export function FlyMono() {
             }}
           />
           <AdsrControls
+            adsr={[0.01, 0.1, 0.5, 0.1]}
             onAttackChanged={(attack) => {
               synth.filterEnv.attack.setValueAtTime(attack, 0);
             }}
@@ -67,6 +96,7 @@ export function FlyMono() {
         <h2 className="border-b border-blue-400">Amplifier</h2>
         <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
           <AdsrControls
+            adsr={[0.01, 0.1, 0.5, 0.1]}
             onAttackChanged={(attack) => {
               synth.vca.attack.setValueAtTime(attack, 0);
             }}
@@ -82,6 +112,11 @@ export function FlyMono() {
           />
         </div>
       </div>
+      <GateControls
+        onGateChanged={(on) => {
+          synth.gate(on);
+        }}
+      />
     </div>
   ) : (
     <p>Creating synth...</p>
@@ -96,7 +131,6 @@ class FlyMonoSynth {
   $gate: ConstantSourceNode;
 
   constructor(public readonly context: AudioContext) {
-    console.log("CREATE fly");
     this.$gate = new ConstantSourceNode(context, { offset: 0 });
     this.osc = createPolyblepOscillator(context);
     this.filter = createStateVariableFilter(context, {
@@ -113,7 +147,6 @@ class FlyMonoSynth {
     this.$gate.connect(this.filterEnv.gate);
     this.$gate.connect(this.vca.gate);
     this.$gate.start();
-    console.log("ready");
   }
 
   gate(on: boolean) {

@@ -12,7 +12,6 @@ export function StateVariableFilterControls({
     <>
       <Slider
         label="frequency"
-        labelClassName="text-right"
         inputClassName="col-span-2"
         min={0}
         max={200}
@@ -23,7 +22,6 @@ export function StateVariableFilterControls({
       />
       <Slider
         label="resonance"
-        labelClassName="text-right"
         inputClassName="col-span-2"
         min={0.01}
         max={40}

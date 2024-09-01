@@ -9,7 +9,7 @@ export function Slider({
   step = 1,
   transform = (x) => x,
   inputClassName,
-  labelClassName,
+  labelClassName = "text-right",
   valueClassName,
 }: {
   label: string;
