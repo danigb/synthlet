@@ -1,4 +1,6 @@
-const withMDX = require("@next/mdx")();
+import nextMDX from "@next/mdx";
+import rehypeHighlight from "rehype-highlight";
+
 const repo = "synthlet";
 const isDeploy = process.env.DEPLOY || false;
 
@@ -18,4 +20,11 @@ const nextConfig = {
   reactStrictMode: true,
 };
 
-module.exports = withMDX(nextConfig);
+const withMDX = nextMDX({
+  options: {
+    remarkPlugins: [],
+    rehypePlugins: [rehypeHighlight],
+  },
+});
+
+export default withMDX(nextConfig);

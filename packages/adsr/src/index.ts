@@ -101,7 +101,7 @@ export function createVca(
   audioContext: AudioContext,
   params?: Partial<AdsrParams>
 ): AdsrWorkletNode {
-  return createWorkletNode(audioContext, { mode: "modulator" });
+  return createWorkletNode(audioContext, { mode: "modulator" }, params);
 }
 
 /**

@@ -1,11 +1,13 @@
 "use client";
 
 import { createSynthAudioContext } from "@/audio-context";
-import { Slider } from "@/components/Slider";
-import { midiToFreq } from "@/midi";
+import { AdsrControls } from "@/components/AdsrControls";
+import { GateControls } from "@/components/GateControls";
+import { StateVariableFilterControls } from "@/components/StateVariableFilterControls";
 import { useEffect, useState } from "react";
 import {
   AdsrWorkletNode,
+  createAdsr,
   createPolyblepOscillator,
   createStateVariableFilter,
   createVca,
@@ -29,18 +31,34 @@ export function FlyMono() {
       </h1>
 
       <div className="mt-4">
+        <GateControls
+          onGateChanged={(on) => {
+            synth.gate(on);
+          }}
+        />
         <h2 className="border-b border-blue-400">Filter</h2>
         <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
-          <Slider
-            label="frequency"
-            labelClassName="text-right"
-            inputClassName="col-span-2"
-            min={0}
-            max={127}
-            step={0.1}
-            initial={69}
-            transform={midiToFreq}
-            onChange={() => {}}
+          <StateVariableFilterControls
+            onFrequencyChanged={(freq) => {
+              synth.filterEnv.gain.setValueAtTime(freq, 0);
+            }}
+            onResonanceChanged={(res) => {
+              synth.filter.resonance.setValueAtTime(res, 0);
+            }}
+          />
+          <AdsrControls
+            onAttackChanged={(attack) => {
+              synth.filterEnv.attack.setValueAtTime(attack, 0);
+            }}
+            onDecayChanged={(decay) => {
+              synth.filterEnv.decay.setValueAtTime(decay, 0);
+            }}
+            onSustainChanged={(sustain) => {
+              synth.filterEnv.sustain.setValueAtTime(sustain, 0);
+            }}
+            onReleaseChanged={(release) => {
+              synth.filterEnv.release.setValueAtTime(release, 0);
+            }}
           />
         </div>
       </div>
@@ -48,64 +66,21 @@ export function FlyMono() {
       <div className="mt-4">
         <h2 className="border-b border-blue-400">Amplifier</h2>
         <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
-          <Slider
-            label="attack"
-            labelClassName="text-right"
-            inputClassName="col-span-2"
-            min={0.1}
-            max={10}
-            step={0.1}
-            initial={0.2}
-            onChange={() => {}}
-          />
-          <Slider
-            label="decay"
-            labelClassName="text-right"
-            inputClassName="col-span-2"
-            min={0.1}
-            max={10}
-            step={0.1}
-            initial={0.2}
-            onChange={() => {}}
-          />
-          <Slider
-            label="sustain"
-            labelClassName="text-right"
-            inputClassName="col-span-2"
-            min={0.1}
-            max={1}
-            step={0.01}
-            initial={0.8}
-            onChange={() => {}}
-          />
-          <Slider
-            label="release"
-            labelClassName="text-right"
-            inputClassName="col-span-2"
-            min={0.1}
-            max={100}
-            step={0.2}
-            initial={0.2}
-            onChange={() => {}}
+          <AdsrControls
+            onAttackChanged={(attack) => {
+              synth.vca.attack.setValueAtTime(attack, 0);
+            }}
+            onDecayChanged={(decay) => {
+              synth.vca.decay.setValueAtTime(decay, 0);
+            }}
+            onSustainChanged={(sustain) => {
+              synth.vca.sustain.setValueAtTime(sustain, 0);
+            }}
+            onReleaseChanged={(release) => {
+              synth.vca.release.setValueAtTime(release, 0);
+            }}
           />
         </div>
-      </div>
-
-      <div className="mt-4">
-        <button
-          className="border border-white px-1 rounded opacity-70 hover:opacity-80"
-          onMouseDown={() => {
-            synth.vca.gateOn();
-          }}
-          onMouseUp={() => {
-            synth.vca.gateOff();
-          }}
-          onMouseLeave={() => {
-            synth.vca.gateOff();
-          }}
-        >
-          Gate
-        </button>
       </div>
     </div>
   ) : (
@@ -117,19 +92,32 @@ class FlyMonoSynth {
   osc: PolyblepOscillatorWorkletNode;
   filter: StateVariableFilterWorkletNode;
   vca: AdsrWorkletNode;
+  filterEnv: AdsrWorkletNode;
+  $gate: ConstantSourceNode;
 
   constructor(public readonly context: AudioContext) {
     console.log("CREATE fly");
+    this.$gate = new ConstantSourceNode(context, { offset: 0 });
     this.osc = createPolyblepOscillator(context);
     this.filter = createStateVariableFilter(context, {
       type: "lowpass",
-      frequency: 5000,
+      frequency: 10,
     });
-    this.vca = createVca(context);
+    this.filterEnv = createAdsr(context, { gain: 5000, gate: 0 });
+    this.filterEnv.connect(this.filter.frequency);
+    this.vca = createVca(context, { gate: 0 });
     this.osc
-      .connect(this.filter)
       .connect(this.vca)
+      .connect(this.filter)
       .connect(context.destination);
+    this.$gate.connect(this.filterEnv.gate);
+    this.$gate.connect(this.vca.gate);
+    this.$gate.start();
     console.log("ready");
+  }
+
+  gate(on: boolean) {
+    let value = on ? 1 : 0;
+    this.$gate.offset.value = value;
   }
 }
