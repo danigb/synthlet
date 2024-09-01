@@ -10,6 +10,7 @@ export default function HomePage() {
       <div className="mt-8 flex flex-col gap-2">
         <h2 className="text-xl">Examples</h2>
         <Link href={`/synths/fly`}>Fly monophonic synthesizer</Link>
+        <Link href={`/synths/crow`}>Crow wavetable synthesizer</Link>
       </div>
     </main>
   );

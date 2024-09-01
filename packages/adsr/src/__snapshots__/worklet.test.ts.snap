@@ -12,14 +12,14 @@ exports[`AdsrWorkletNode has parameter descriptors 1`] = `
   {
     "automationRate": "k-rate",
     "defaultValue": 0.01,
-    "maxValue": 1,
+    "maxValue": 10,
     "minValue": 0,
     "name": "attack",
   },
   {
     "automationRate": "k-rate",
     "defaultValue": 0.1,
-    "maxValue": 1,
+    "maxValue": 10,
     "minValue": 0,
     "name": "decay",
   },
@@ -33,7 +33,7 @@ exports[`AdsrWorkletNode has parameter descriptors 1`] = `
   {
     "automationRate": "k-rate",
     "defaultValue": 0.3,
-    "maxValue": 1,
+    "maxValue": 100,
     "minValue": 0,
     "name": "release",
   },

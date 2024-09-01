@@ -9,7 +9,7 @@ export function Slider({
   step = 1,
   transform = (x) => x,
   inputClassName,
-  labelClassName,
+  labelClassName = "text-right",
   valueClassName,
 }: {
   label: string;
@@ -23,7 +23,7 @@ export function Slider({
   inputClassName?: string;
   valueClassName?: string;
 }) {
-  const [value, setValue] = useState(transform(initial));
+  const [value, setValue] = useState(initial);
   return (
     <>
       <p className={labelClassName}>{label}</p>
@@ -35,12 +35,12 @@ export function Slider({
         step={step}
         value={value}
         onChange={(e) => {
-          const value = transform(e.target.valueAsNumber);
+          const value = e.target.valueAsNumber;
           setValue(value);
-          onChange(value);
+          onChange(transform(value));
         }}
       />
-      <p className={valueClassName}>{value.toFixed(2)}</p>
+      <p className={valueClassName}>{transform(value).toFixed(2)}</p>
     </>
   );
 }

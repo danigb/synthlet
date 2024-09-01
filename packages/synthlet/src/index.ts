@@ -15,8 +15,9 @@ export {
   registerStateVariableFilterWorkletOnce,
 } from "@synthlet/state-variable-filter";
 export {
-  createWavetableOscillatorNode,
+  createWavetableOscillator,
   registerWavetableOscillatorWorkletOnce,
+  WavetableLoader,
 } from "@synthlet/wavetable-oscillator";
 
 export type * from "@synthlet/adsr";

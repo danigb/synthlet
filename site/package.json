@@ -12,13 +12,21 @@
     "deploy:build": "DEPLOY=true next build"
   },
   "dependencies": {
+    "@mdx-js/loader": "^3.0.1",
+    "@mdx-js/react": "^3.0.1",
+    "@next/mdx": "^14.2.5",
+    "@types/mdx": "^2.0.13",
     "gh-pages": "^6.1.1",
+    "highlight.js": "^11.10.0",
     "next": "14.2.5",
     "react": "^18",
     "react-dom": "^18",
-    "synthlet": "../packages/synthlet"
+    "rehype-highlight": "^7.0.0",
+    "synthlet": "../packages/synthlet",
+    "tailwind-highlightjs": "^2.0.1"
   },
   "devDependencies": {
+    "@tailwindcss/typography": "^0.5.13",
     "@types/node": "^20",
     "@types/react": "^18",
     "@types/react-dom": "^18",

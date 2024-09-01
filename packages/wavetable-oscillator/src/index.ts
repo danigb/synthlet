@@ -1,6 +1,8 @@
 import { PROCESSOR } from "./processor";
 import { Wavetable, WavetableLoader } from "./wavetable-loader";
 
+export { WavetableLoader } from "./wavetable-loader";
+
 export type ProcessorOptions = {};
 
 export type WavetableParams = {
@@ -9,7 +11,7 @@ export type WavetableParams = {
   morphFrequency: number;
 };
 
-export type WavetableWorkletNode = AudioWorkletNode & {
+export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
   baseFrequency: AudioParam;
   frequency: AudioParam;
   morphFrequency: AudioParam;
@@ -42,22 +44,6 @@ export function loadWavetable(
   return new WavetableLoader(url, wavetableLength).onLoad();
 }
 
-function isSupported(audioContext: AudioContext): boolean {
-  return (
-    audioContext.audioWorklet &&
-    typeof audioContext.audioWorklet.addModule === "function"
-  );
-}
-
-function isRegistered(audioContext: AudioContext): boolean {
-  return (audioContext.audioWorklet as any).__SYNTHLET_ADSR_REGISTERED__;
-}
-
-function register(audioContext: AudioContext): Promise<void> {
-  (audioContext.audioWorklet as any).__SYNTHLET_ADSR_REGISTERED__ = true;
-  return audioContext.audioWorklet.addModule(getWorkletUrl());
-}
-
 /**
  * Register the AudioWorklet processor in the AudioContext.
  * No matter how many times is called, it will register only once.
@@ -77,18 +63,15 @@ export function registerWavetableOscillatorWorkletOnce(
 /**
  * Creates a Wavetable Oscillator node.
  */
-export function createWavetableOscillatorNode() {}
-
-function createWorkletNode(
+export function createWavetableOscillator(
   audioContext: AudioContext,
-  processorOptions: ProcessorOptions,
   params: Partial<WavetableParams> = {}
-): AudioWorkletNode {
+): WavetableOscillatorWorkletNode {
   const node = new AudioWorkletNode(audioContext, getProcessorName(), {
     numberOfInputs: 1,
     numberOfOutputs: 1,
-    processorOptions,
-  }) as WavetableWorkletNode;
+    processorOptions: {},
+  }) as WavetableOscillatorWorkletNode;
 
   for (const paramName of PARAM_NAMES) {
     const param = node.parameters.get(paramName)!;
@@ -112,4 +95,20 @@ function createWorkletNode(
     return _disconnect(param, output, input);
   };
   return node;
+}
+
+function isSupported(audioContext: AudioContext): boolean {
+  return (
+    audioContext.audioWorklet &&
+    typeof audioContext.audioWorklet.addModule === "function"
+  );
+}
+
+function isRegistered(audioContext: AudioContext): boolean {
+  return (audioContext.audioWorklet as any).__SYNTHLET_WT_OSC_REGISTERED__;
+}
+
+function register(audioContext: AudioContext): Promise<void> {
+  (audioContext.audioWorklet as any).__SYNTHLET_WT_OSC_REGISTERED__ = true;
+  return audioContext.audioWorklet.addModule(getWorkletUrl());
 }

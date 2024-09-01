@@ -1,4 +1,4 @@
-function createGate() {
+function createGateDetector() {
   let current = false;
   return (gate: number): boolean | undefined => {
     if (current === false && gate >= 0.9) {
@@ -58,7 +58,7 @@ export function Adsr(sampleRate: number) {
   const release = { b: 0, c: 0 };
 
   // Internal state
-  const gateChange = createGate();
+  const detectGate = createGateDetector();
   let stage: Stage = Stage.Idle;
   let current = 0;
 
@@ -109,21 +109,21 @@ export function Adsr(sampleRate: number) {
   }
 
   function _readParams(params: AdsrParams) {
-    const gate = gateChange(params.gate[0]);
-    if (gate === true) {
-      stage = Stage.Attack;
-    } else if (gate === false) {
-      stage = Stage.Release;
-    }
-
+    $offset = params.offset[0];
+    $gain = params.gain[0];
     _updateAdsr(
       params.attack[0],
       params.decay[0],
       params.sustain[0],
       params.release[0]
     );
-    $offset = params.offset[0];
-    $gain = params.gain[0];
+
+    const gate = detectGate(params.gate[0]);
+    if (gate === true) {
+      stage = Stage.Attack;
+    } else if (gate === false) {
+      stage = Stage.Release;
+    }
   }
 
   function _updateAdsr(

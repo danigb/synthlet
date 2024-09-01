@@ -1,6 +1,6 @@
 import { WavetableOscillator } from "./wavetable-oscillator";
 
-export class WavetableOscillatorWorklet extends AudioWorkletProcessor {
+export class WavetableOscillatorWorkletProcessor extends AudioWorkletProcessor {
   static parameterDescriptors = [
     {
       name: "baseFrequency",
@@ -54,4 +54,7 @@ export class WavetableOscillatorWorklet extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor("WavetableWorkletProcessor", WavetableOscillatorWorklet);
+registerProcessor(
+  "WavetableWorkletProcessor",
+  WavetableOscillatorWorkletProcessor
+);

@@ -1,6 +1,7 @@
-import type { Config } from "tailwindcss";
+import typography from "@tailwindcss/typography";
+import highlight from "tailwind-highlightjs";
 
-const config: Config = {
+const config = {
   content: [
     "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
     "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
@@ -14,7 +15,15 @@ const config: Config = {
           "conic-gradient(from 180deg at 50% 50%, var(--tw-gradient-stops))",
       },
     },
+    hljs: {
+      theme: "atom-one-dark",
+    },
   },
-  plugins: [],
+  plugins: [typography, highlight],
+  safelist: [
+    {
+      pattern: /hljs+/,
+    },
+  ],
 };
 export default config;

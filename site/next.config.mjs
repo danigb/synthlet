@@ -1,3 +1,6 @@
+import nextMDX from "@next/mdx";
+import rehypeHighlight from "rehype-highlight";
+
 const repo = "synthlet";
 const isDeploy = process.env.DEPLOY || false;
 
@@ -9,9 +12,19 @@ if (isDeploy) {
   basePath = `/${repo}`;
 }
 /** @type {import('next').NextConfig} */
-export default {
+const nextConfig = {
+  pageExtensions: ["mdx", "tsx"],
   output: "export",
   assetPrefix,
   basePath,
   reactStrictMode: true,
 };
+
+const withMDX = nextMDX({
+  options: {
+    remarkPlugins: [],
+    rehypePlugins: [rehypeHighlight],
+  },
+});
+
+export default withMDX(nextConfig);

@@ -30,6 +30,20 @@ a {
   @apply text-emerald-500 hover:text-emerald-300;
 }
 
+article.markdown {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+  }
+
+  a {
+    @apply text-emerald-500 no-underline hover:underline;
+  }
+}
+
 @layer utilities {
   .text-balance {
     text-wrap: balance;

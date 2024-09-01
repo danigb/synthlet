@@ -1,0 +1,34 @@
+# Syntlet documentation
+
+The gist:
+
+```ts
+import {
+  registerSynthletOnce,
+  createVca,
+  createStateVariableFilter
+  createPolyblepOscillator,
+} from "synthlet";
+
+const audioContext = new AudioContext();
+await registerSynthletOnce(audioContext);
+
+// Simplest synth: Oscillator -> Filter -> Amplifier
+const osc = createPolyblepOscillator(audioContext, { type: "saw", frequency: 440 });
+const filter = createStateVariableFilter(audioContext, { type: "lowpass", frequency: 4000 });
+const vca = createVca(audioContext, { attack: 0.1, release: 0.5 });
+osc.connect(filter).connect(vca).connect(audioContext.destination);
+
+// Change parameters
+osc.frequency.value = 1200;
+
+// Start sound
+vca.gateOn();
+
+// Stop sound
+vca.gateOff();
+```
+
+## Oscillators and audio sources
+
+- [PolyblepOscillator](/docs/polyblep-oscilllator)
