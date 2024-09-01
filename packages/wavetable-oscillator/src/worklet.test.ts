@@ -2,23 +2,25 @@ import { getProcessorName } from "./index";
 import { createWorkletTestContext } from "./test-utils";
 
 describe("WavetableOscillatorWorkletNode", () => {
-  let WavetableOscillatorWorklet: any;
+  let WavetableOscillatorWorkletProcessor: any;
   const sampleRate = 40;
 
   beforeAll(async () => {
     createWorkletTestContext(sampleRate);
-    WavetableOscillatorWorklet = (await import("./worklet"))
-      .WavetableOscillatorWorklet;
+    WavetableOscillatorWorkletProcessor = (await import("./worklet"))
+      .WavetableOscillatorWorkletProcessor;
   });
 
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
       getProcessorName(),
-      WavetableOscillatorWorklet
+      WavetableOscillatorWorkletProcessor
     );
   });
 
   it("has parameter descriptors", () => {
-    expect(WavetableOscillatorWorklet.parameterDescriptors).toMatchSnapshot();
+    expect(
+      WavetableOscillatorWorkletProcessor.parameterDescriptors
+    ).toMatchSnapshot();
   });
 });
