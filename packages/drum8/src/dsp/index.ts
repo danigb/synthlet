@@ -12,9 +12,48 @@ export function createSine(sampleRate: number, frequency: number) {
     next(): number {
       const out = Math.sin(phase * PI2);
       phase += inc;
-      if (phase >= 1) {
-        phase -= 1;
+      if (phase >= 1) phase -= 1;
+      return out;
+    },
+  };
+}
+
+export function decaySine(
+  sampleRate: number,
+  startFreq: number,
+  endFreq: number
+) {
+  if (endFreq > startFreq) throw Error("endFreq must be less than startFreq");
+
+  const invsr = 1 / sampleRate;
+  let gate = false;
+  let phase = 0;
+  let freqInc = (endFreq - startFreq) * invsr;
+  let freq = startFreq;
+  let dur = 1;
+
+  return {
+    update(trigger: number, duration: number) {
+      if (trigger === 1) {
+        if (!gate) {
+          gate = true;
+          freq = startFreq;
+        }
+      } else {
+        gate = false;
       }
+
+      if (duration !== dur) {
+        dur = duration;
+        console.log("duration", duration);
+        freqInc = (endFreq - startFreq) * duration * invsr;
+      }
+    },
+    next(): number {
+      const out = Math.sin(phase * PI2);
+      if (freq > endFreq) freq += freqInc;
+      phase += freq * invsr;
+      if (phase >= 1) phase -= 1;
       return out;
     },
   };
@@ -147,9 +186,9 @@ export function createEnvelope(
   // Convert seconds to time constants
   let gate = false;
   let attack = attackTime;
-  let release = decayTime;
+  let decay = decayTime;
   let attackEnv = Math.exp(-1.0 / (attack * sampleRate));
-  let decayEnv = Math.exp(-1.0 / (release * sampleRate));
+  let decayEnv = Math.exp(-1.0 / (decay * sampleRate));
 
   let mode = MODE_ZERO;
   let prev = 0;
@@ -166,11 +205,11 @@ export function createEnvelope(
       }
       if (attackTime !== attack) {
         attack = attackTime;
-        attackEnv = Math.exp(-1.0 / (attack * sampleRate));
+        attackEnv = Math.exp(-1.0 / (Math.max(attack, 0.01) * sampleRate));
       }
-      if (decayTime !== release) {
-        release = decayTime;
-        decayEnv = Math.exp(-1.0 / (release * sampleRate));
+      if (decayTime !== decay) {
+        decay = decayTime;
+        decayEnv = Math.exp(-1.0 / (Math.max(decay, 0.01) * sampleRate));
       }
     },
     next(): number {
