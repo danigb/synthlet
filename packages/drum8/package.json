@@ -1,7 +1,7 @@
 {
-  "name": "@synthlet/noise",
+  "name": "@synthlet/drum8",
   "version": "0.1.0",
-  "description": "Noise generator module for Synthlet",
+  "description": "Drum synth module for Synthlet",
   "keywords": [
     "noise"
   ],

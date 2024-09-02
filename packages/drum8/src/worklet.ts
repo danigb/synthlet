@@ -1,6 +1,4 @@
 export class Drum8WorkletProcessor extends AudioWorkletProcessor {
-  static parameterDescriptors = [];
-
   r: boolean; // running
 
   constructor() {
@@ -20,10 +18,28 @@ export class Drum8WorkletProcessor extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
+    const output = outputs[0][0];
+    const gate = parameters.gate[0];
+
     for (let i = 0; i < outputs[0][0].length; i++) {
-      outputs[0][0][i] = Math.random() * 2 - 1;
+      output[i] = gate === 1 ? Math.random() * 2 - 1 : 0;
     }
     return this.r;
+  }
+
+  static get parameterDescriptors() {
+    return [
+      ["gate", 0, 0, 1],
+      ["attack", 0.01, 0, 10],
+      ["decay", 0.1, 0, 10],
+      ["hold", 0, 0, 10],
+    ].map(([name, defaultValue, minValue, maxValue]) => ({
+      name,
+      defaultValue,
+      minValue,
+      maxValue,
+      automationRate: "k-rate",
+    }));
   }
 }
 

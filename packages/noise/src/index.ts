@@ -19,22 +19,6 @@ export function getWorkletUrl() {
   return URL.createObjectURL(blob);
 }
 
-function isSupported(audioContext: AudioContext): boolean {
-  return (
-    audioContext.audioWorklet &&
-    typeof audioContext.audioWorklet.addModule === "function"
-  );
-}
-
-function isRegistered(audioContext: AudioContext): boolean {
-  return (audioContext.audioWorklet as any).__SYNTHLET_NOISE_REGISTERED__;
-}
-
-function register(audioContext: AudioContext): Promise<void> {
-  (audioContext.audioWorklet as any).__SYNTHLET_NOISE_REGISTERED__ = true;
-  return audioContext.audioWorklet.addModule(getWorkletUrl());
-}
-
 /**
  * Register the AudioWorklet processor in the AudioContext.
  * No matter how many times is called, it will register only once.
@@ -80,4 +64,20 @@ function createWorkletNode(
   };
 
   return node;
+}
+
+function isSupported(audioContext: AudioContext): boolean {
+  return (
+    audioContext.audioWorklet &&
+    typeof audioContext.audioWorklet.addModule === "function"
+  );
+}
+
+function isRegistered(audioContext: AudioContext): boolean {
+  return (audioContext.audioWorklet as any).__SYNTHLET_NOISE_REGISTERED__;
+}
+
+function register(audioContext: AudioContext): Promise<void> {
+  (audioContext.audioWorklet as any).__SYNTHLET_NOISE_REGISTERED__ = true;
+  return audioContext.audioWorklet.addModule(getWorkletUrl());
 }
