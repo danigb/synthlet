@@ -15,7 +15,9 @@ import {
 import { useEffect, useState } from "react";
 import {
   AdsrWorkletNode,
+  ChorusWorkletNode,
   createAdsr,
+  createChorus,
   createLfo,
   createPolyblepOscillator,
   createStateVariableFilter,
@@ -151,6 +153,19 @@ export function FlyMono() {
           />
         </div>
       </div>
+      <div className="mt-4">
+        <h2 className="border-b border-blue-400">Effects</h2>
+        <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
+          <p>Chorus</p>
+          <Checkbox
+            label="Bypass"
+            initial={true}
+            onChange={(value) => {
+              synth.chorus.setBypass(value);
+            }}
+          />
+        </div>
+      </div>
       <GateControls
         onGateChanged={(on) => {
           synth.gate(on);
@@ -162,6 +177,33 @@ export function FlyMono() {
   );
 }
 
+function Checkbox({
+  label,
+  initial,
+  onChange,
+}: {
+  label: string;
+  initial: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  const [value, setValue] = useState(initial);
+
+  return (
+    <label>
+      <input
+        className="mr-2"
+        type="checkbox"
+        checked={value}
+        onChange={(e) => {
+          setValue(e.target.checked);
+          onChange(e.target.checked);
+        }}
+      />
+      {label}
+    </label>
+  );
+}
+
 class FlyMonoSynth {
   osc: PolyblepOscillatorWorkletNode;
   filter: StateVariableFilterWorkletNode;
@@ -169,6 +211,7 @@ class FlyMonoSynth {
   filterEnv: AdsrWorkletNode;
   $gate: ConstantSourceNode;
   lfo: LfoWorklet;
+  chorus: ChorusWorkletNode;
 
   constructor(public readonly context: AudioContext) {
     this.$gate = new ConstantSourceNode(context, { offset: 0 });
@@ -183,9 +226,12 @@ class FlyMonoSynth {
     this.filterEnv = createAdsr(context, { gain: 5000, gate: 0 });
     this.filterEnv.connect(this.filter.frequency);
     this.vca = createVca(context, { gate: 0 });
+    this.chorus = createChorus(context);
+    this.chorus.setBypass(true);
     this.osc
       .connect(this.vca)
       .connect(this.filter)
+      .connect(this.chorus)
       .connect(context.destination);
 
     this.lfo.connect(this.osc.frequency);

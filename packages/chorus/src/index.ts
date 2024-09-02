@@ -6,7 +6,7 @@ export type ProcessorOptions = {
 
 type ParamInput = number | ((param: AudioParam) => void);
 
-export type ChorusParams = {
+export type ChorusInputParams = {
   enable1: ParamInput;
   enable2: ParamInput;
   lfoRate1: ParamInput;
@@ -14,13 +14,21 @@ export type ChorusParams = {
 };
 
 export type ChorusWorkletNode = AudioWorkletNode & {
+  bypass: AudioParam;
   enable1: AudioParam;
   enable2: AudioParam;
   lfoRate1: AudioParam;
   lfoRate2: AudioParam;
+  setBypass(value: boolean): void;
 };
 
-const PARAM_NAMES = ["enable1", "enable2", "lfoRate1", "lfoRate2"] as const;
+const PARAM_NAMES = [
+  "bypass",
+  "enable1",
+  "enable2",
+  "lfoRate1",
+  "lfoRate2",
+] as const;
 
 export function getProcessorName() {
   return "ChorusWorkletProcessor"; // Can't import from worklet because globals
@@ -33,17 +41,18 @@ export function getWorkletUrl() {
 
 export function createChorus(
   audioContext: AudioContext,
-  params: Partial<ChorusParams> = {}
-): AudioWorkletNode {
+  params: Partial<ChorusInputParams> = {}
+): ChorusWorkletNode {
   const node = new AudioWorkletNode(audioContext, getProcessorName(), {
     numberOfInputs: 1,
     numberOfOutputs: 1,
+    outputChannelCount: [2],
     processorOptions: {},
   }) as ChorusWorkletNode;
 
   for (const paramName of PARAM_NAMES) {
     const param = node.parameters.get(paramName)!;
-    const value = params[paramName as keyof ChorusParams];
+    const value = params[paramName as keyof ChorusInputParams];
     if (typeof value === "number") param.value = value;
     if (typeof value === "function") value(param);
     node[paramName] = param;
@@ -54,6 +63,10 @@ export function createChorus(
     node.port.postMessage({ type: "DISCONNECT" });
     // @ts-ignore
     return _disconnect(param, output, input);
+  };
+
+  node.setBypass = (value: boolean) => {
+    node.bypass.value = value ? 1 : 0;
   };
 
   return node;
