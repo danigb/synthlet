@@ -1,29 +1,23 @@
 import { LfoWaveform } from "./lfo";
+import {
+  getLfoWaveformTypes,
+  lfoWaveformFromType,
+  lfoWaveformToType,
+  LfoWaveformType,
+} from "./lfo_waveform_type";
 import { PROCESSOR } from "./processor";
 
 export const PROCESSOR_NAME = "LfoProcessor";
-export { LfoWaveform, PROCESSOR };
 
-export const LFO_TYPES = [
-  "Impulse",
-  "Sine",
-  "Triangle",
-  "RampUp",
-  "RampDown",
-  "Square",
-  "ExpRampUp",
-  "ExpRampDown",
-  "ExpTriangle",
-  "RandSampleHold",
-] as const;
-
-export type LfoWaveformType = (typeof LFO_TYPES)[number];
+export { getLfoWaveformTypes, LfoWaveform, PROCESSOR };
+export type { LfoWaveformType };
 
 export type LfoWorklet = AudioWorkletNode & {
   waveform: AudioParam;
   frequency: AudioParam;
   gain: AudioParam;
   offset: AudioParam;
+  type: LfoWaveformType;
 };
 
 const PARAM_NAMES = ["waveform", "frequency", "gain", "offset"] as const;
@@ -37,24 +31,6 @@ export type LfoParams = {
 };
 
 let LC_TYPES: string[] | undefined;
-/**
- * Get LfoWaveform number from a string or number
- * @param type
- * @returns
- */
-export function getLfoWaveform(
-  type: string | number | undefined
-): number | undefined {
-  LC_TYPES ??= LFO_TYPES.map((type) => type.toLowerCase());
-  if (typeof type === "number") {
-    return type >= 0 && type < LC_TYPES.length ? type : undefined;
-  } else if (typeof type === "string") {
-    const index = LC_TYPES.indexOf(type.toLowerCase() as LfoWaveformType);
-    return index === -1 ? undefined : index;
-  } else {
-    return undefined;
-  }
-}
 
 /**
  * Create a LFO AudioWorkletNode.
@@ -80,6 +56,16 @@ export function createLfo(
     if (typeof value === "number") param.value = value;
     node[paramName] = param;
   }
+
+  Object.defineProperty(node, "type", {
+    get() {
+      return lfoWaveformToType(this.waveform.value);
+    },
+    set(value: string) {
+      const waveform = lfoWaveformFromType(value);
+      if (waveform !== undefined) this.waveform.setValueAtTime(waveform, 0);
+    },
+  });
 
   let _disconnect = node.disconnect.bind(node);
   node.disconnect = (param?, output?, input?) => {
