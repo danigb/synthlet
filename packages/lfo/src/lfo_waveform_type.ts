@@ -8,7 +8,7 @@ const TYPES = [
   "ExpRampUp",
   "ExpRampDown",
   "ExpTriangle",
-  "RandSampleHold",
+  "RandSampleAndHold",
 ] as const;
 
 export type LfoWaveformType = (typeof TYPES)[number];
