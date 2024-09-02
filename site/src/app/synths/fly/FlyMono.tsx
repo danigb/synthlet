@@ -17,7 +17,7 @@ import {
   AdsrWorkletNode,
   ChorusWorkletNode,
   createAdsr,
-  createChorus,
+  createChorusT,
   createLfo,
   createPolyblepOscillator,
   createStateVariableFilter,
@@ -226,7 +226,7 @@ class FlyMonoSynth {
     this.filterEnv = createAdsr(context, { gain: 5000, gate: 0 });
     this.filterEnv.connect(this.filter.frequency);
     this.vca = createVca(context, { gate: 0 });
-    this.chorus = createChorus(context);
+    this.chorus = createChorusT(context);
     this.chorus.setBypass(true);
     this.osc
       .connect(this.vca)

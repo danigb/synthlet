@@ -39,7 +39,7 @@ export function getWorkletUrl() {
   return URL.createObjectURL(blob);
 }
 
-export function createChorus(
+export function createChorusT(
   audioContext: AudioContext,
   params: Partial<ChorusInputParams> = {}
 ): ChorusWorkletNode {
@@ -79,7 +79,7 @@ export function createChorus(
  * @param audioContext
  * @returns A promise that resolves when the processor is registered
  */
-export function registerChorusWorkletOnce(
+export function registerChorusTWorkletOnce(
   audioContext: AudioContext
 ): Promise<void> {
   if (!isSupported(audioContext)) throw Error("AudioWorklet not supported");

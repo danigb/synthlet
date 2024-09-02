@@ -1,11 +1,11 @@
-# @synthlet/chorus
+# @synthlet/chorus-t
 
-> Chorus audio effect audio worklet
+> Chorus (based on TAL Noisemaker) audio effect
 
 Part of [synthlet](https://github.com/danigb/synthlet) modular synthesis.
 
 ```ts
-import { registerChorusWorkletOnce, createChorus } from "synthlet"; // or "@synthlet/chorus";
+import { registerChorusWorkletOnce, createChorus } from "synthlet"; // or "@synthlet/chorus-t";
 
 const audioContext = new AudioContext();
 
