@@ -41,14 +41,13 @@ export class Drum8WorkletProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     const ATTACK = 0.01;
     const DECAY = 0.5;
-    const SNAP = 0.2;
     return [
       ["gate", 0, 0, 1],
-      ["attack", ATTACK, 0, 10],
+      ["attack", ATTACK, 0, 2],
       ["decay", DECAY, 0, 10],
-      ["level", 100, 0, 128],
-      ["snap", SNAP, 0, 128],
-      ["tone", 20, 0, 128],
+      ["level", 0.8, 0, 1],
+      ["snap", 0.2, 0, 1],
+      ["tone", 0.2, 0, 1],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,
       defaultValue,

@@ -53,36 +53,64 @@ function Drum8Sound({
       >
         {type}
       </button>
-      {tone && <p>Tone:</p>}
+
+      <SynthParam
+        name="Decay"
+        max={2}
+        onChange={(value) => {
+          synth.node.decay.value = value;
+        }}
+      />
       {tone && (
-        <input
-          type="range"
-          min={0}
-          max={127}
-          value={toneValue}
-          onChange={(event) => {
-            const tone = event.target.valueAsNumber;
-            setToneValue(tone);
+        <SynthParam
+          name="Tone"
+          onChange={(tone) => {
             synth.node.tone.value = tone;
           }}
         />
       )}
-      {snap && <p>Snap:</p>}
       {snap && (
-        <input
-          type="range"
-          min={0}
-          max={127}
-          step={1}
-          value={snapValue}
-          onChange={(event) => {
-            const snap = event.target.valueAsNumber;
-            setToneValue(snap);
-            synth.node.snap.value = snap;
+        <SynthParam
+          name="Snap"
+          onChange={(tone) => {
+            synth.node.snap.value = tone;
           }}
         />
       )}
     </div>
+  );
+}
+
+function SynthParam({
+  name,
+  max = 1,
+  step = 0.01,
+  onChange,
+}: {
+  name: string;
+  max?: number;
+  step?: number;
+  onChange: (value: number) => void;
+}) {
+  const [value, setValue] = useState<number>(0.2 * max);
+
+  return (
+    <>
+      <label htmlFor={name}>{name}</label>
+      <input
+        type="range"
+        min={0}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => {
+          const value = event.target.valueAsNumber;
+          setValue(value);
+          onChange(value);
+        }}
+      />
+      <p>{max !== 1 ? value.toFixed(2) : (value * 100).toFixed(0)}</p>
+    </>
   );
 }
 

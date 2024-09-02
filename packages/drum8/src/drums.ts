@@ -3,7 +3,6 @@ import {
   createEnvelope,
   createFilter,
   createFixedSin2,
-  createGate,
   createNoise,
   createSine,
 } from "./dsp";
@@ -24,12 +23,10 @@ export const Kick: Instrument = (sampleRate) => {
   const click = createClick(sampleRate, 1);
   const env = createEnvelope(sampleRate, 0.1, 0.1);
   const lpf = createFilter(sampleRate, 0, 1.0);
-  const gate = createGate();
 
   return (output, params) => {
     env.update(params.gate[0], params.attack[0], params.decay[0]);
-    lpf.update(200 + 20 * params.tone[0]);
-    gate.update(params.gate[0]);
+    lpf.update(200 + 200 * params.tone[0]);
     for (let i = 0; i < output.length; i++) {
       output[i] = lpf.process(sin.next() * env.next() + click.next());
     }
