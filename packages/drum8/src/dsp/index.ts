@@ -45,7 +45,6 @@ export function decaySine(
 
       if (duration !== dur) {
         dur = duration;
-        console.log("duration", duration);
         freqInc = (endFreq - startFreq) * duration * invsr;
       }
     },

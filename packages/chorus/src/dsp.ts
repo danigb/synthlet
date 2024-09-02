@@ -25,13 +25,11 @@ export function createChorus(sampleRate: number) {
       isChorus1Enabled = enable1 === 1;
       isChorus2Enabled = enable2 === 1;
       if (lfoRate1 !== _lfoRate1) {
-        console.log("lfoRate1", lfoRate1);
         _lfoRate1 = lfoRate1;
         ch1L.setLfoRate(lfoRate1);
         ch1R.setLfoRate(lfoRate1);
       }
       if (lfoRate2 !== _lfoRate2) {
-        console.log("lfoRate1", lfoRate1);
         _lfoRate2 = lfoRate2;
         ch2L.setLfoRate(lfoRate2);
         ch2R.setLfoRate(lfoRate2);
