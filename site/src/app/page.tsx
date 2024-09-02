@@ -11,6 +11,7 @@ export default function HomePage() {
         <h2 className="text-xl">Examples</h2>
         <Link href={`/synths/fly`}>Fly monophonic synthesizer</Link>
         <Link href={`/synths/crow`}>Crow wavetable synthesizer</Link>
+        <Link href={`/synths/drum8`}>Drum8 synthesizer</Link>
       </div>
     </main>
   );
