@@ -4,11 +4,19 @@ import { createSynthAudioContext } from "@/audio-context";
 import { AdsrControls } from "@/components/AdsrControls";
 import { FrequencySelector } from "@/components/FrequencySelector";
 import { GateControls } from "@/components/GateControls";
+import { Selector } from "@/components/Selector";
+import { Slider } from "@/components/Slider";
 import { StateVariableFilterControls } from "@/components/StateVariableFilterControls";
+import {
+  getLfoWaveformTypes,
+  LfoWaveformType,
+  LfoWorklet,
+} from "@synthlet/lfo";
 import { useEffect, useState } from "react";
 import {
   AdsrWorkletNode,
   createAdsr,
+  createLfo,
   createPolyblepOscillator,
   createStateVariableFilter,
   createVca,
@@ -21,9 +29,6 @@ export function FlyMono() {
   const WAVEFORM_TYPES = ["sine", "sawtooth", "square", "triangle"] as const;
 
   const [synth, setSynth] = useState<FlyMonoSynth | null>(null);
-  const [selectedWaveform, setSelectedWaveform] = useState<string>(
-    WAVEFORM_TYPES[0]
-  );
 
   useEffect(() => {
     createSynthAudioContext().then((context) => {
@@ -40,25 +45,59 @@ export function FlyMono() {
       <div className="mt-4">
         <h2 className="border-b border-blue-400">Oscillator</h2>
         <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
-          <p className="text-right">type</p>
-          <select
-            className="bg-blue-700 p-1 rounded border-blue-300 col-span-3"
-            value={selectedWaveform}
-            onChange={(e) => {
-              setSelectedWaveform(e.target.value);
-              synth.osc.type = e.target.value as PolyblepWaveformType;
+          <Selector
+            name="type"
+            selectClassName="bg-blue-700 p-1 rounded border-blue-300 col-span-3"
+            values={WAVEFORM_TYPES}
+            initialValue={WAVEFORM_TYPES[1]}
+            onChange={(value) => {
+              synth.osc.type = value as PolyblepWaveformType;
             }}
-          >
-            {WAVEFORM_TYPES.map((type) => (
-              <option key={type}>{type}</option>
-            ))}
-          </select>
+          />
           <FrequencySelector
             onChange={(freq) => {
               return synth.osc.frequency.setValueAtTime(freq, 0);
             }}
             label="frequency"
             initial={440}
+          />
+          <Slider
+            label="Mod"
+            inputClassName="col-span-2"
+            min={0}
+            max={100}
+            step={1}
+            initial={0}
+            onChange={(value) => {
+              synth.lfo.gain.setValueAtTime(value, 0);
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <h2 className="border-b border-blue-400">LFO</h2>
+        <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
+          <Selector
+            name="type"
+            selectClassName="bg-blue-700 p-1 rounded border-blue-300 col-span-3"
+            values={getLfoWaveformTypes()}
+            initialValue={"Triangle"}
+            onChange={(value) => {
+              synth.lfo.type = value as LfoWaveformType;
+            }}
+            initialize
+          />
+          <Slider
+            label="Frequency"
+            inputClassName="col-span-2"
+            min={1}
+            max={100}
+            step={1}
+            initial={10}
+            onChange={(value) => {
+              synth.lfo.frequency.setValueAtTime(value, 0);
+            }}
           />
         </div>
       </div>
@@ -129,10 +168,14 @@ class FlyMonoSynth {
   vca: AdsrWorkletNode;
   filterEnv: AdsrWorkletNode;
   $gate: ConstantSourceNode;
+  lfo: LfoWorklet;
 
   constructor(public readonly context: AudioContext) {
     this.$gate = new ConstantSourceNode(context, { offset: 0 });
     this.osc = createPolyblepOscillator(context);
+    this.lfo = createLfo(context, {
+      frequency: 1,
+    });
     this.filter = createStateVariableFilter(context, {
       type: "lowpass",
       frequency: 10,
@@ -144,6 +187,8 @@ class FlyMonoSynth {
       .connect(this.vca)
       .connect(this.filter)
       .connect(context.destination);
+
+    this.lfo.connect(this.osc.frequency);
     this.$gate.connect(this.filterEnv.gate);
     this.$gate.connect(this.vca.gate);
     this.$gate.start();

@@ -59,7 +59,15 @@ npm i @synthlet/adsr
 
 #### Modulators
 
+- [LFO](/packages/lfo)
+
+#### Effects
+
 - [StateVariableFilter](/packages/state-variable-filter)
+
+#### Synth modules
+
+- [Drum8](/packages/drum8)
 
 ## References
 
