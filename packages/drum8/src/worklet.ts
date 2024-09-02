@@ -1,9 +1,25 @@
+import { Generator, Kick, Snare } from "./drums";
+
+function createInstrument(type: string): Generator {
+  switch (type) {
+    case "kick":
+      return Kick(sampleRate);
+    case "snare":
+      return Snare(sampleRate);
+    default:
+      throw new Error("Invalid instrument: " + type);
+  }
+}
+
 export class Drum8WorkletProcessor extends AudioWorkletProcessor {
   r: boolean; // running
+  g: (output: Float32Array, params: any) => void;
 
-  constructor() {
+  constructor(options: any) {
     super();
     this.r = true;
+    const type = options?.processorOptions?.type ?? "";
+    this.g = createInstrument(type);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISCONNECT":
@@ -18,21 +34,21 @@ export class Drum8WorkletProcessor extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    const output = outputs[0][0];
-    const gate = parameters.gate[0];
-
-    for (let i = 0; i < outputs[0][0].length; i++) {
-      output[i] = gate === 1 ? Math.random() * 2 - 1 : 0;
-    }
+    this.g(outputs[0][0], parameters);
     return this.r;
   }
 
   static get parameterDescriptors() {
+    const ATTACK = 0.01;
+    const DECAY = 0.5;
+    const SNAP = 0.2;
     return [
       ["gate", 0, 0, 1],
-      ["attack", 0.01, 0, 10],
-      ["decay", 0.1, 0, 10],
-      ["hold", 0, 0, 10],
+      ["attack", ATTACK, 0, 10],
+      ["decay", DECAY, 0, 10],
+      ["level", 100, 0, 128],
+      ["snap", SNAP, 0, 128],
+      ["tone", 20, 0, 128],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,
       defaultValue,

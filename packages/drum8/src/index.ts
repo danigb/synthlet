@@ -1,5 +1,19 @@
 import { PROCESSOR } from "./processor";
 
+export type Drum8ModuleType =
+  | "clave"
+  | "conga"
+  | "cowbell"
+  | "cymbal"
+  | "handclap"
+  | "hihat-closed"
+  | "hihat-open"
+  | "kick"
+  | "maracas"
+  | "rimshot"
+  | "snare"
+  | "tom";
+
 export type Drum8Params = {
   gate: number;
   attack: number;
@@ -14,12 +28,21 @@ export type Drum8WorkletNode = AudioWorkletNode & {
   gate: AudioParam;
   attack: AudioParam;
   decay: AudioParam;
-  hold: AudioParam;
+  level: AudioParam;
+  tone: AudioParam;
+  snap: AudioParam;
   gateOn: (time?: number) => void;
   gateOff: (time?: number) => void;
 };
 
-const PARAM_NAMES = ["gate", "attack", "decay", "hold"] as const;
+const PARAM_NAMES = [
+  "gate",
+  "attack",
+  "decay",
+  "level",
+  "snap",
+  "tone",
+] as const;
 
 export function getDrum8ProcessorName() {
   return "Drum8WorkletProcessor"; // Can't import from worklet because globals
@@ -71,12 +94,16 @@ export function registerDrum8WorkletOnce(
 
 export function createDrum8(
   audioContext: AudioContext,
+  moduleType: Drum8ModuleType,
   params: Partial<Drum8Params> = {}
 ): Drum8WorkletNode {
+  console.log({ moduleType, params });
   const node = new AudioWorkletNode(audioContext, getDrum8ProcessorName(), {
     numberOfInputs: 1,
     numberOfOutputs: 1,
-    processorOptions: {},
+    processorOptions: {
+      type: moduleType,
+    },
   }) as Drum8WorkletNode;
 
   for (const paramName of PARAM_NAMES) {
