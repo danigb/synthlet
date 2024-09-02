@@ -1,0 +1,1 @@
+export const PROCESSOR = `"use strict";(()=>{var e=class extends AudioWorkletProcessor{static parameterDescriptors=[];r;constructor(){super(),this.r=!0,this.port.onmessage=s=>{switch(s.data.type){case"DISCONNECT":this.r=!1;break}}}process(s,t,o){for(let r=0;r<t[0][0].length;r++)t[0][0][r]=Math.random()*2-1;return this.r}};registerProcessor("ChorusWorkletProcessor",e);})();`;
