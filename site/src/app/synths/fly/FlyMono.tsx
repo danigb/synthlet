@@ -4,11 +4,14 @@ import { createSynthAudioContext } from "@/audio-context";
 import { AdsrControls } from "@/components/AdsrControls";
 import { FrequencySelector } from "@/components/FrequencySelector";
 import { GateControls } from "@/components/GateControls";
+import { Slider } from "@/components/Slider";
 import { StateVariableFilterControls } from "@/components/StateVariableFilterControls";
+import { LfoWorklet } from "@synthlet/lfo";
 import { useEffect, useState } from "react";
 import {
   AdsrWorkletNode,
   createAdsr,
+  createLfo,
   createPolyblepOscillator,
   createStateVariableFilter,
   createVca,
@@ -59,6 +62,34 @@ export function FlyMono() {
             }}
             label="frequency"
             initial={440}
+          />
+          <Slider
+            label="Mod"
+            inputClassName="col-span-2"
+            min={0}
+            max={100}
+            step={1}
+            initial={0}
+            onChange={(value) => {
+              synth.lfo.gain.setValueAtTime(value, 0);
+            }}
+          />
+        </div>
+      </div>
+
+      <div className="mt-4">
+        <h2 className="border-b border-blue-400">LFO</h2>
+        <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
+          <Slider
+            label="Frequency"
+            inputClassName="col-span-2"
+            min={1}
+            max={100}
+            step={1}
+            initial={10}
+            onChange={(value) => {
+              synth.lfo.frequency.setValueAtTime(value, 0);
+            }}
           />
         </div>
       </div>
@@ -129,10 +160,14 @@ class FlyMonoSynth {
   vca: AdsrWorkletNode;
   filterEnv: AdsrWorkletNode;
   $gate: ConstantSourceNode;
+  lfo: LfoWorklet;
 
   constructor(public readonly context: AudioContext) {
     this.$gate = new ConstantSourceNode(context, { offset: 0 });
     this.osc = createPolyblepOscillator(context);
+    this.lfo = createLfo(context, {
+      frequency: 1,
+    });
     this.filter = createStateVariableFilter(context, {
       type: "lowpass",
       frequency: 10,
@@ -144,6 +179,8 @@ class FlyMonoSynth {
       .connect(this.vca)
       .connect(this.filter)
       .connect(context.destination);
+
+    this.lfo.connect(this.osc.frequency);
     this.$gate.connect(this.filterEnv.gate);
     this.$gate.connect(this.vca.gate);
     this.$gate.start();
