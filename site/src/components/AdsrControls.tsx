@@ -31,6 +31,7 @@ export function AdsrControls({
         step={0.1}
         initial={adsr[0]}
         onChange={onAttackChanged}
+        units="secs"
       />
       <Slider
         label="decay"
@@ -40,6 +41,7 @@ export function AdsrControls({
         step={0.1}
         initial={adsr[1]}
         onChange={onDecayChanged}
+        units="secs"
       />
       <Slider
         label="sustain"
@@ -58,6 +60,7 @@ export function AdsrControls({
         step={0.2}
         initial={adsr[3]}
         onChange={onReleaseChanged}
+        units="secs"
       />
     </>
   );

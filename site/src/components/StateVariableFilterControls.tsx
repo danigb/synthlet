@@ -1,4 +1,3 @@
-import { midiToFreq } from "@/midi";
 import { Slider } from "./Slider";
 
 export function StateVariableFilterControls({
@@ -14,11 +13,11 @@ export function StateVariableFilterControls({
         label="frequency"
         inputClassName="col-span-2"
         min={0}
-        max={200}
+        max={20000}
         step={1}
-        initial={150}
-        transform={midiToFreq}
+        initial={16000}
         onChange={onFrequencyChanged}
+        units="Hz"
       />
       <Slider
         label="resonance"

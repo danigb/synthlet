@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@synthlet/adsr": "^0.1.0",
+    "@synthlet/chorus-t": "^0.1.0",
     "@synthlet/drum8": "^0.1.0",
     "@synthlet/lfo": "^0.1.0",
     "@synthlet/noise": "^0.1.0",

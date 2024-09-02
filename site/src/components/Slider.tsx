@@ -11,6 +11,7 @@ export function Slider({
   inputClassName,
   labelClassName = "text-right",
   valueClassName,
+  units,
 }: {
   label: string;
   min: number;
@@ -22,6 +23,7 @@ export function Slider({
   labelClassName?: string;
   inputClassName?: string;
   valueClassName?: string;
+  units?: string;
 }) {
   const [value, setValue] = useState(initial);
   return (
@@ -40,7 +42,10 @@ export function Slider({
           onChange(transform(value));
         }}
       />
-      <p className={valueClassName}>{transform(value).toFixed(2)}</p>
+      <p className={valueClassName}>
+        {transform(value).toFixed(2)}
+        {units}
+      </p>
     </>
   );
 }

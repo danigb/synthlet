@@ -4,14 +4,34 @@ export type ProcessorOptions = {
   type?: "white";
 };
 
-export type NoiseParams = {};
+type ParamInput = number | ((param: AudioParam) => void);
 
-export type NoiseWorkletNode = AudioWorkletNode & {};
+export type ChorusInputParams = {
+  enable1: ParamInput;
+  enable2: ParamInput;
+  lfoRate1: ParamInput;
+  lfoRate2: ParamInput;
+};
 
-const PARAM_NAMES = [] as const;
+export type ChorusWorkletNode = AudioWorkletNode & {
+  bypass: AudioParam;
+  enable1: AudioParam;
+  enable2: AudioParam;
+  lfoRate1: AudioParam;
+  lfoRate2: AudioParam;
+  setBypass(value: boolean): void;
+};
+
+const PARAM_NAMES = [
+  "bypass",
+  "enable1",
+  "enable2",
+  "lfoRate1",
+  "lfoRate2",
+] as const;
 
 export function getProcessorName() {
-  return "NoiseWorkletProcessor"; // Can't import from worklet because globals
+  return "ChorusWorkletProcessor"; // Can't import from worklet because globals
 }
 
 export function getWorkletUrl() {
@@ -19,32 +39,34 @@ export function getWorkletUrl() {
   return URL.createObjectURL(blob);
 }
 
-/**
- * Create a white noise AudioWorkletNode.
- *
- * @param audioContext - The AudioContext
- * @returns NoiseAudioWorkletNode
- */
-export function createWhiteNoise(audioContext: AudioContext): AudioWorkletNode {
-  return createWorkletNode(audioContext, { type: "white" });
-}
-
-function createWorkletNode(
+export function createChorusT(
   audioContext: AudioContext,
-  processorOptions: ProcessorOptions,
-  params: Partial<NoiseParams> = {}
-): AudioWorkletNode {
+  params: Partial<ChorusInputParams> = {}
+): ChorusWorkletNode {
   const node = new AudioWorkletNode(audioContext, getProcessorName(), {
     numberOfInputs: 1,
     numberOfOutputs: 1,
-    processorOptions,
-  }) as NoiseWorkletNode;
+    outputChannelCount: [2],
+    processorOptions: {},
+  }) as ChorusWorkletNode;
+
+  for (const paramName of PARAM_NAMES) {
+    const param = node.parameters.get(paramName)!;
+    const value = params[paramName as keyof ChorusInputParams];
+    if (typeof value === "number") param.value = value;
+    if (typeof value === "function") value(param);
+    node[paramName] = param;
+  }
 
   let _disconnect = node.disconnect.bind(node);
   node.disconnect = (param?, output?, input?) => {
     node.port.postMessage({ type: "DISCONNECT" });
     // @ts-ignore
     return _disconnect(param, output, input);
+  };
+
+  node.setBypass = (value: boolean) => {
+    node.bypass.value = value ? 1 : 0;
   };
 
   return node;
@@ -57,7 +79,7 @@ function createWorkletNode(
  * @param audioContext
  * @returns A promise that resolves when the processor is registered
  */
-export function registerNoiseWorkletOnce(
+export function registerChorusTWorkletOnce(
   audioContext: AudioContext
 ): Promise<void> {
   if (!isSupported(audioContext)) throw Error("AudioWorklet not supported");
@@ -74,10 +96,10 @@ function isSupported(audioContext: AudioContext): boolean {
 }
 
 function isRegistered(audioContext: AudioContext): boolean {
-  return (audioContext.audioWorklet as any).__SYNTHLET_NOISE_REGISTERED__;
+  return (audioContext.audioWorklet as any).__SYNTHLET_CHORUS_REGISTERED__;
 }
 
 function register(audioContext: AudioContext): Promise<void> {
-  (audioContext.audioWorklet as any).__SYNTHLET_NOISE_REGISTERED__ = true;
+  (audioContext.audioWorklet as any).__SYNTHLET_CHORUS_REGISTERED__ = true;
   return audioContext.audioWorklet.addModule(getWorkletUrl());
 }
