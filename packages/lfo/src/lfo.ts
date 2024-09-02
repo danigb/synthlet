@@ -31,16 +31,26 @@ function concaveTransform(coeff = 5.0 / 12.0) {
 
 function createSampleAndHold(): Gen {
   let value = rand();
-  return (phase, prev) => {
-    if (phase < prev) value = rand();
-    return value;
+  return (phase, nextPhase) => {
+    const out = value;
+    if (nextPhase < phase) value = rand();
+    return out;
+  };
+}
+
+function createImpulse(): Gen {
+  let active = true;
+
+  return (phase, nextPhase) => {
+    const out = active ? 1 : 0;
+    active = nextPhase < phase;
+    return out;
   };
 }
 
 const concave = concaveTransform();
 type Gen = (phase: number, prev: number) => number;
-const impulse: Gen = (phase, nextPhase) =>
-  phase === 0 || phase > nextPhase ? 1 : 0;
+const impulse = createImpulse();
 const sine: Gen = (phase) => Math.sin(phase * 2 * Math.PI);
 const triangle: Gen = (phase) => 1.0 - 2.0 * Math.abs(bipolar(phase));
 const rampUp: Gen = (phase) => bipolar(phase);
@@ -100,7 +110,6 @@ export function Lfo(sampleRate: number, initialWaveform = LfoWaveform.Sine) {
   // State
   let gen: Gen = generators[initialWaveform] ?? sine;
   let phase = 0;
-  let nextPhase = 0;
 
   function read(params: Params) {
     if (params.waveform[0] !== $waveform) {
@@ -114,25 +123,24 @@ export function Lfo(sampleRate: number, initialWaveform = LfoWaveform.Sine) {
 
   function kgen(output: Float32Array, params: Params) {
     read(params);
-    phase = nextPhase;
-    nextPhase += output.length * dt * $frequency;
+    let nextPhase = phase + output.length * dt * $frequency;
     if (nextPhase >= 1) {
       nextPhase -= 1;
     }
     const value = gen(phase, nextPhase) * $gain + $offset;
     output.fill(value);
+    phase = nextPhase;
   }
 
   function agen(output: Float32Array, params: Params) {
     read(params);
     for (let i = 0; i < output.length; i++) {
-      phase = nextPhase;
-      nextPhase += dt * $frequency;
+      let nextPhase = phase + dt * $frequency;
       if (nextPhase >= 1) {
         nextPhase -= 1;
       }
-
       output[i] = gen(phase, nextPhase) * $gain + $offset;
+      phase = nextPhase;
     }
   }
 
