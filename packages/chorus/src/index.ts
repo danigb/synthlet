@@ -4,11 +4,23 @@ export type ProcessorOptions = {
   type?: "white";
 };
 
-export type ChorusParams = {};
+type ParamInput = number | ((param: AudioParam) => void);
 
-export type ChorusWorkletNode = AudioWorkletNode & {};
+export type ChorusParams = {
+  enable1: ParamInput;
+  enable2: ParamInput;
+  lfoRate1: ParamInput;
+  lfoRate2: ParamInput;
+};
 
-const PARAM_NAMES = [] as const;
+export type ChorusWorkletNode = AudioWorkletNode & {
+  enable1: AudioParam;
+  enable2: AudioParam;
+  lfoRate1: AudioParam;
+  lfoRate2: AudioParam;
+};
+
+const PARAM_NAMES = ["enable1", "enable2", "lfoRate1", "lfoRate2"] as const;
 
 export function getProcessorName() {
   return "ChorusWorkletProcessor"; // Can't import from worklet because globals
@@ -28,6 +40,14 @@ export function createChorus(
     numberOfOutputs: 1,
     processorOptions: {},
   }) as ChorusWorkletNode;
+
+  for (const paramName of PARAM_NAMES) {
+    const param = node.parameters.get(paramName)!;
+    const value = params[paramName as keyof ChorusParams];
+    if (typeof value === "number") param.value = value;
+    if (typeof value === "function") value(param);
+    node[paramName] = param;
+  }
 
   let _disconnect = node.disconnect.bind(node);
   node.disconnect = (param?, output?, input?) => {
