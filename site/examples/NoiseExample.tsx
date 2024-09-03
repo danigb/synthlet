@@ -5,21 +5,28 @@ import { createNoiseNode, getNoiseTypes, NoiseWorkletNode } from "synthlet";
 import { useSynth } from "./useSynth";
 
 export function NoiseExample() {
-  return (
-    <ExampleButton label="Start Noise example">
-      <NoiseSynthUI />
-    </ExampleButton>
+  const [open, setOpen] = useState(false);
+
+  return open ? (
+    <NoiseSynthUI onClose={() => setOpen(false)} />
+  ) : (
+    <button
+      className="border px-2 py-1 rounded bg-fd-secondary"
+      onClick={() => setOpen(true)}
+    >
+      Start Noise example
+    </button>
   );
 }
 
-function NoiseSynthUI() {
+function NoiseSynthUI({ onClose }: { onClose: () => void }) {
   const [selectedNoiseType, setSelectedNoiseType] = useState(0);
   const [volume, setVolume] = useState(-60);
   const synth = useSynth((context) => new NoiseSynth(context));
   if (!synth) return null;
 
   return (
-    <div className="bg-slate-800 text-white p-2 border border-slate-600 rounded">
+    <div className="bg-fd-card text-fd-foreground p-2 border rounded">
       <div className="text-xl mb-4">Noise generator example</div>
       <div className="flex items-center gap-2">
         <div className="w-16 text-right">Type:</div>
@@ -27,7 +34,6 @@ function NoiseSynthUI() {
           className="p-1 rounded bg-slate-700 text-slate-200"
           value={selectedNoiseType}
           onChange={(e) => {
-            console.log(e.target.value);
             const noiseType = parseInt(e.target.value);
             setSelectedNoiseType(noiseType);
             synth.noise.type.setValueAtTime(noiseType, 0);
@@ -40,7 +46,7 @@ function NoiseSynthUI() {
           ))}
         </select>
       </div>
-      <div className="flex items-center gap-2 mt-1">
+      <div className="flex items-center gap-2 mb-4">
         <div className="w-16 text-right">Volume:</div>
         <input
           type="range"
@@ -58,6 +64,13 @@ function NoiseSynthUI() {
         />
         <div>{volume <= -60 ? "Muted" : volume + "dB"}</div>
       </div>
+
+      <button
+        className="border px-2 py-1 rounded bg-fd-secondary"
+        onClick={onClose}
+      >
+        Close
+      </button>
     </div>
   );
 }

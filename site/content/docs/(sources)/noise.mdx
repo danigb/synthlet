@@ -30,9 +30,7 @@ noise.type.value = NoiseType.PINK_COOPER;
 
 - `type`: The type of noise to generate. Can be one of:
   - 0 `NoiseType.WHITE_RND`: White noise that uses `Math.rand` for random numbers.
-  - 1 `NoiseType.WHITE_FAST`: White noise that uses this algorithm https://www.musicdsp.org/en/latest/Synthesis/216-fast-whitenoise-generator.html
-  - 10 `NoiseType.PINK_RND`: Pink noise based on this [Cooper Baker algorithm](http://www.cooperbaker.com/home/code/pink%20noise/)
-  - 11: `NoiseType.PINK_LARRY_TRAMMEL`: Pink noise based on this [Larry Trammel algorithm](https://www.ridgerat-tech.us/pink/newpink.htm)
+  - 10: `NoiseType.PINK_TRAMMEL`: Pink noise based on this [Larry Trammel algorithm](https://www.ridgerat-tech.us/pink/newpink.htm)
 
 Since type is an audio param, any arbitrary value can be used, but only the above values are valid. If you suply an invalid value, a warning will be printed and the noise will default to white random.
 

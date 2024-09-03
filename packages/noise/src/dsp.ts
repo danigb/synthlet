@@ -2,9 +2,8 @@ export type NoiseAlgorithm = (output: Float32Array) => void;
 
 export enum NoiseType {
   WHITE_RND = 0,
-  WHITE_FAST = 1,
-  PINK_COOPER = 10,
-  PINK_LARRY_TRAMMEL = 11,
+  PINK_TRAMMEL = 10,
+  PINK_COOPER = 11,
 }
 
 export function getNoiseAlgorithm(
@@ -14,12 +13,10 @@ export function getNoiseAlgorithm(
   switch (type) {
     case NoiseType.WHITE_RND:
       return whiteRnd;
-    case NoiseType.WHITE_FAST:
-      return createWhiteFast();
+    case NoiseType.PINK_TRAMMEL:
+      return createPinkLarryTrammel();
     case NoiseType.PINK_COOPER:
       return createPinkCooper(sampleRate);
-    case NoiseType.PINK_LARRY_TRAMMEL:
-      return createPinkLarryTrammel();
     default:
       console.warn("Unknown noise type: " + type);
       return whiteRnd;
@@ -30,20 +27,6 @@ function whiteRnd(output: Float32Array) {
   for (let i = 0; i < output.length; i++) {
     output[i] = Math.random() * 2 - 1;
   }
-}
-
-// Fast white noise from https://www.musicdsp.org/en/latest/Synthesis/216-fast-whitenoise-generator.html
-function createWhiteFast(): NoiseAlgorithm {
-  const SCALE = 2.0 / 0xffffffff;
-  let g_x1 = 0x67452301;
-  let g_x2 = 0xefcdab89;
-  return (output) => {
-    for (let i = 0; i < output.length; i++) {
-      g_x1 ^= g_x2;
-      output[i] = g_x2 * SCALE;
-      g_x2 += g_x1;
-    }
-  };
 }
 
 // Pink noise from http://www.cooperbaker.com/home/code/pink%20noise/
