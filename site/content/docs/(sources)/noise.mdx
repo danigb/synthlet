@@ -3,9 +3,11 @@ title: Noise
 description: Noise
 ---
 
+`@synthlet/noise`
+
 import { NoiseExample } from "../../../examples/NoiseExample";
 
-A Noise generator. Currently only white and pink noise are supported.
+A Noise generator. Currently white and pink noise are supported.
 
 ```ts
 import { registerNoiseWorkletOnce, createNoiseNode, NoiseType } from "synthlet";
@@ -19,7 +21,7 @@ const noise = createNoiseNode(audioContext, {
 noise.connect(audioContext.destination);
 
 // Change the algorithm
-noise.type.value = NoiseType.PINK_COOPER;
+noise.type.value = NoiseType.PINK_TRAMMEL;
 ```
 
 ## Example
