@@ -12,7 +12,7 @@ export class Processor extends AudioWorkletProcessor {
     {
       name: "frequency",
       defaultValue: 1000,
-      minValue: 16,
+      minValue: 20,
       maxValue: 20000,
       automationRate: "k-rate",
     },
