@@ -1,0 +1,46 @@
+---
+title: VCA
+description: A Voltage Controlled Amplifier module
+---
+
+This is a Voltage Controlled Amplifier (VCA) module. It is used to control the amplitude of an audio signal.
+
+In essence is an ADSR envelope contected to a gain control.
+
+[![npm version](https://img.shields.io/npm/v/%40synthlet%2Fadsr)](https://www.npmjs.com/package/@synthlet/adsr)
+
+## Example
+
+```ts
+import { createVcaNode, createADSRNode } from "synthlet";
+
+const osc = new OscillatorNode(audioContext, {
+  frequency: 440,
+});
+const vca = createVcaNode(audioContext, {
+  gain: 0.5,
+  attack: 0.1,
+  decay: 0.1,
+  sustain: 0.5,
+  release: 0.1,
+});
+
+osc.connect(vca).connect(audioContext.destination);
+
+// Start the envelope (start attack phase)
+vca.gate.setValueAtTime(1, audioContext.currentTime);
+
+// Stop the envelope (start release phase)
+vca.gate.setValueAtTime(0, audioContext.currentTime + 1);
+```
+
+## Parameters
+
+Same as [adsr](/docs/modifiers/adsr):
+
+- `attack`: The attack time in seconds. Default is 0.1.
+- `decay`: The decay time in seconds. Default is 0.1.
+- `sustain`: The sustain level. Default is 0.5.
+- `release`: The release time in seconds. Default is 0.1.
+- `offset`: The start offset. Default is 0.
+- `gain`: The gain. Default is 1. It is the maximum amplitude after the attach and affects the sustain level. For example, a gain of 100 and sustain of 0.5 will make the sustain level to be 50.

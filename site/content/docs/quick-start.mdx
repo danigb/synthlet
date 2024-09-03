@@ -1,0 +1,94 @@
+---
+title: Get started
+description: How to get started with Synthlet
+---
+
+Synthlet is a collection of audio modules implemented as [AudioWorkletNodes](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorklet).
+
+The main goal of this project is to learn digital signal processing for my own, so don't expect a full-featured audio library. However, I'm trying to make it as useful as possible for my own projects.
+
+<Callout title="Synthlet is still experimental" type="warn">
+  Currently Synthlet is under development and not ready for production use. Use
+  at your own risk.
+</Callout>
+
+## Install
+
+You can installl all modules using the `synthlet` package:
+
+```package-install
+synthlet
+```
+
+## Register worklet processors
+
+Before you can create any module, you need to register the worklet processors. You can do this by calling the `registerSynthlet` to register all modules at once:
+
+```js
+import { registerSynthlet } from "synthlet";
+
+const audioContext = new audioContext();
+await registerSynthlet(audioContext);
+```
+
+<Callout title="Register is async" type="warn">
+  `registerSynthlet` (and all register functions) are async, so ensure you await
+  for the result before creating any modules.
+</Callout>
+
+## Example
+
+A simple archetipical monophonic synthesizer consist of an oscillator connected to a filter connected to an amplifier with an envelope. This is how to do it with Synthlet:
+
+```js
+const osc = createPolyblepOscillatorNode(audioContext, {
+  frequency: 440,
+});
+const filter = createStateVariableFilterNode(audioContext, {
+  type: "lowpass",
+  frequency: 5000,
+  resonance: 2,
+});
+const vca = createVcaNode(audioContext, {});
+
+osc.connect(filter).connect(vca).connect(audioContext.destination);
+
+// Trigger the envelope
+vca.gate.value = 1;
+```
+
+At this point you should able to hear some sound. If you don't hear anything, check the browser console for any errors.
+
+<Callout title="No start required" type="warn">
+  Unlike the standard WebAudio API, Synthlet modules start automatically. No
+  need to call the `start` method on the module to start it.
+</Callout>
+
+Read more about how to use the modules in the [guide](/docs/guide).
+
+## Installing individual modules
+
+If you want to optimize for bundle size, you can use the individual module packages and register each module individually.
+
+Install:
+
+```package-install
+@synthlet/polyblep-oscillator
+```
+
+And register:
+
+```js
+import { registerPolyblepOscillator } from "@synthlet/polyblep-oscillator";
+import { registerPolyblepOscillator } from "synthlet";
+
+const audioContext = new audioContext();
+await registerPolyblepOscillator(audioContext);
+```
+
+## What is Next?
+
+<Cards>
+  <Card title="Learn more about Next.js" href="https://nextjs.org/docs" />
+  <Card title="Learn more about Fumadocs" href="https://fumadocs.vercel.app" />
+</Cards>

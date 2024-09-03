@@ -1,0 +1,31 @@
+---
+title: ChorusT
+description: A chorus effect based on the TAL-Noisemaker one
+---
+
+A Chorus effect based on the TAL-Noisemaker that in turn models a Roland Juno-60 chorus.
+
+## Example
+
+```ts
+import { createChorusTNode } from "synthlet";
+
+const osc = new OscillatorNode(audioContext);
+const chorus = createChorusTNode(audioContext, {
+  rate: 0.5,
+  depth: 0.5,
+  feedback: 0.5,
+});
+
+osc.connect(chorus).connect(audioContext.destination);
+
+chorus.lfoRate1.value = 0.2;
+```
+
+## Parameters
+
+- `lfoRate1`: The rate of the first LFO in Hz. Default is 0.5
+- `lfoRate2`: The rate of the second LFO in Hz. Default is 0.83
+- `enable1`: Enable (1) or not (0) the first LFO. Default is 1 (enabled)
+- `enable2`: Enable (1) or not (0) the second LFO. Default is 1 (enabled)
+- `bypass`: Bypass the effect. Default is 0 (not bypassed)

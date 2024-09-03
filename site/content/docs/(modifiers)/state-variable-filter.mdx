@@ -1,0 +1,35 @@
+---
+title: SVFilter
+description: A State Variable Filter module
+---
+
+A filter implemented with a state variable filter algorithm.
+
+## Example
+
+```ts
+import { createSVFilterNode, SVFilterType } from "synthlet";
+
+const audioContext = new AudioContext();
+const osc = new OscillatorNode(audioContext);
+const filter = createSVFilterNode(audioContext, {
+  type: SVFilterType.LOWPASS,
+  frequency: 440,
+  Q: 1,
+});
+
+osc.connect(filter).connect(audioContext.destination);
+
+filter.frequency.value = 880;
+filter.resonance.value = 3;
+```
+
+## Parameters
+
+- `filterType`: the type of the filter. Range: [0-3]
+  - `0`: lowpass
+  - `1`: highpass
+  - `2`: bandpass
+  - `3`: bypass
+- `frequency`: the frequency of the filter in Hz. Default is 440Hz. Range: [20-2000]
+- `resonance`: the resonance of the filter. Default is 1. Range: [0-40]
