@@ -1,3 +1,6 @@
+// DON'T EDIT THIS FILE unless inside scripts/_worklet.ts
+// use ./scripts/copy_files.ts to copy this file to the right place
+// the goal is to avoid external dependencies on packages
 export type ParamInput = number | ((param: AudioParam) => void) | string;
 
 type DisconnectFn = typeof AudioNode.prototype.disconnect;
