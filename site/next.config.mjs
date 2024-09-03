@@ -1,30 +1,10 @@
-import nextMDX from "@next/mdx";
-import rehypeHighlight from "rehype-highlight";
+import { createMDX } from "fumadocs-mdx/next";
 
-const repo = "synthlet";
-const isDeploy = process.env.DEPLOY || false;
+const withMDX = createMDX();
 
-let assetPrefix = "/";
-let basePath = "";
-
-if (isDeploy) {
-  assetPrefix = `/${repo}/`;
-  basePath = `/${repo}`;
-}
 /** @type {import('next').NextConfig} */
-const nextConfig = {
-  pageExtensions: ["mdx", "tsx"],
-  output: "export",
-  assetPrefix,
-  basePath,
+const config = {
   reactStrictMode: true,
 };
 
-const withMDX = nextMDX({
-  options: {
-    remarkPlugins: [],
-    rehypePlugins: [rehypeHighlight],
-  },
-});
-
-export default withMDX(nextConfig);
+export default withMDX(config);
