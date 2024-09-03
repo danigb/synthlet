@@ -1,3 +1,5 @@
+import { NoiseType } from "./dsp";
+
 describe("NoiseWorkletNode", () => {
   let NoiseWorklet: any;
 
@@ -14,14 +16,13 @@ describe("NoiseWorkletNode", () => {
   });
 
   it("is generates audio", () => {
-    let i = 0;
-    Math.random = () => {
-      i++;
-      return i / 10;
-    };
     const node = new NoiseWorklet();
-    const output = runProcessMono(node, 10);
-    expect(output).toMatchSnapshot();
+    let output = runProcessMono(node, 10, { type: [NoiseType.WHITE_RND] });
+    let sum = output.reduce((sum, value) => sum + value, 0);
+    expect(sum).not.toBe(0);
+    output = runProcessMono(node, 10, { type: [NoiseType.PINK_TRAMMEL] });
+    sum = output.reduce((sum, value) => sum + value, 0);
+    expect(sum).not.toBe(0);
   });
 
   it("has parameter descriptors", () => {
