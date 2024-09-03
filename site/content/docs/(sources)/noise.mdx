@@ -3,9 +3,9 @@ title: Noise
 description: Noise
 ---
 
-A Noise generator. Currently only white and pink noise are supported.
+import { NoiseExample } from "../../../examples/NoiseExample";
 
-Example:
+A Noise generator. Currently only white and pink noise are supported.
 
 ```ts
 import { registerNoiseWorkletOnce, createNoiseNode, NoiseType } from "synthlet";
@@ -21,6 +21,10 @@ noise.connect(audioContext.destination);
 // Change the algorithm
 noise.type.value = NoiseType.PINK_COOPER;
 ```
+
+## Example
+
+<NoiseExample />
 
 ## Parameters
 

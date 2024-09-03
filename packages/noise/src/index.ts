@@ -16,12 +16,12 @@ export type NoiseInputParams = {
   type: ParamInput;
 };
 
-export function getNoiseTypes() {
+export function getNoiseTypes(): { name: string; value: number }[] {
   return [
-    { name: "WHITE_RND", value: NoiseType.WHITE_RND },
-    { name: "WHITE_FAST", value: NoiseType.WHITE_FAST },
-    { name: "PINK_COOPER", value: NoiseType.PINK_COOPER },
-    { name: "PINK_LARRY_TRAMMEL", value: NoiseType.PINK_LARRY_TRAMMEL },
+    { name: "White Random", value: NoiseType.WHITE_RND },
+    { name: "White Fast", value: NoiseType.WHITE_FAST },
+    { name: "Pink Cooper", value: NoiseType.PINK_COOPER },
+    { name: "Pink Larry Trammel", value: NoiseType.PINK_LARRY_TRAMMEL },
   ];
 }
 

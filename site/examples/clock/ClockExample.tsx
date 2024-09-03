@@ -1,7 +1,7 @@
 "use client";
 
 import { createSynthAudioContext } from "@/app/audio-context";
-import { Slider } from "@/app/components/Slider";
+import { Slider } from "@/components/Slider";
 import { Drum8WorkletNode } from "@synthlet/drum8";
 import { useEffect, useState } from "react";
 import { ClockWorkletNode, createClockNode, createDrum8Node } from "synthlet";
