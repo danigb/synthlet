@@ -1,5 +1,3 @@
-import { getProcessorName } from "./index";
-
 describe("NoiseWorkletNode", () => {
   let NoiseWorklet: any;
 
@@ -10,7 +8,7 @@ describe("NoiseWorkletNode", () => {
 
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
-      getProcessorName(),
+      "NoiseWorkletProcessor",
       NoiseWorklet
     );
   });

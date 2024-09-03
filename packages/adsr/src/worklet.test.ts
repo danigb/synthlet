@@ -1,5 +1,3 @@
-import { getAdsrProcessorName } from "./index";
-
 describe("AdsrWorkletNode", () => {
   let Worklet: any;
 
@@ -10,7 +8,7 @@ describe("AdsrWorkletNode", () => {
 
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
-      getAdsrProcessorName(),
+      "AdsrWorkletProcessor",
       Worklet
     );
   });

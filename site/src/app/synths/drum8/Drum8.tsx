@@ -3,7 +3,7 @@
 import { createSynthAudioContext } from "@/audio-context";
 import { Drum8ModuleType, Drum8WorkletNode } from "@synthlet/drum8";
 import { useEffect, useState } from "react";
-import { createDrum8 } from "synthlet";
+import { createDrum8Node } from "synthlet";
 
 export function Drum8() {
   return (
@@ -45,10 +45,10 @@ function Drum8Sound({
       <button
         className="capitalize border p-1 rounded border-orange-300"
         onMouseDown={() => {
-          synth.node.gateOn();
+          synth.node.setGate(true);
         }}
         onMouseUp={() => {
-          synth.node.gateOff();
+          synth.node.setGate(false);
         }}
       >
         {type}
@@ -117,7 +117,7 @@ function SynthParam({
 export class Drum8Synth {
   node: Drum8WorkletNode;
   constructor(context: AudioContext, type: Drum8ModuleType) {
-    this.node = createDrum8(context, type);
+    this.node = createDrum8Node(context, { type });
     this.node.connect(context.destination);
   }
 }

@@ -4,7 +4,7 @@ import { createSynthAudioContext } from "@/audio-context";
 import { Slider } from "@/components/Slider";
 import { Drum8WorkletNode } from "@synthlet/drum8";
 import { useEffect, useState } from "react";
-import { ClockWorkletNode, createClock, createDrum8 } from "synthlet";
+import { ClockWorkletNode, createClockNode, createDrum8Node } from "synthlet";
 
 export function ClockExample() {
   const [synth, setSynth] = useState<ClockSynth | null>(null);
@@ -59,8 +59,9 @@ class ClockSynth {
 
   constructor(context: AudioContext) {
     this.out = new GainNode(context);
-    this.clock = createClock(context);
-    this.kick = createDrum8(context, "kick", {
+    this.clock = createClockNode(context);
+    this.kick = createDrum8Node(context, {
+      type: "kick",
       gate: 0,
     });
     this.kick.connect(this.out).connect(context.destination);

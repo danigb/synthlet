@@ -1,6 +1,6 @@
 import { createChorus } from "./dsp";
 
-export class ChorusWorkletProcessor extends AudioWorkletProcessor {
+export class ChorusTWorkletProcessor extends AudioWorkletProcessor {
   r: boolean; // running
   p: ReturnType<typeof createChorus>;
 
@@ -59,4 +59,4 @@ export class ChorusWorkletProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor("ChorusWorkletProcessor", ChorusWorkletProcessor);
+registerProcessor("ChorusTWorkletProcessor", ChorusTWorkletProcessor);

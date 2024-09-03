@@ -1,5 +1,5 @@
 import {
-  createPolyblepOscillator,
+  createPolyblepOscillatorNode,
   registerPolyblepOscillatorWorkletOnce,
 } from "./index";
 
@@ -16,7 +16,7 @@ describe("PolyblepOscillator", () => {
   it("creates the worklet node with default parameters", () => {
     // @ts-ignore
     global.AudioWorkletNode = AudioWorkletNodeMock;
-    const node = createPolyblepOscillator(
+    const node = createPolyblepOscillatorNode(
       new AudioContextMock().asAudioContext()
     );
     expect(node.frequency.value).toBe(440);
@@ -27,7 +27,7 @@ describe("PolyblepOscillator", () => {
   it("changes the waveform using type property", () => {
     // @ts-ignore
     global.AudioWorkletNode = AudioWorkletNodeMock;
-    const node = createPolyblepOscillator(
+    const node = createPolyblepOscillatorNode(
       new AudioContextMock().asAudioContext()
     );
     expect(node.waveform.value).toBe(1);

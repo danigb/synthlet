@@ -1,9 +1,8 @@
+import { createRegistrar, createWorkletConstructor } from "./_worklet";
 import { PROCESSOR } from "./processor";
 import { Wavetable, WavetableLoader } from "./wavetable-loader";
 
 export { WavetableLoader } from "./wavetable-loader";
-
-export type ProcessorOptions = {};
 
 export type WavetableParams = {
   baseFrequency: number;
@@ -18,22 +17,32 @@ export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
   setWavetable: (wavetable: Float32Array, wavetableLength: number) => void;
 };
 
-const PARAM_NAMES = ["baseFrequency", "frequency", "morphFrequency"] as const;
+export const registerWavetableOscillatorWorkletOnce = createRegistrar(
+  "WT_OSC",
+  PROCESSOR
+);
 
-export function getProcessorName() {
-  return "WavetableWorkletProcessor"; // Can't import from worklet because globals
-}
+export const creteWavetableOscillatorNode = createWorkletConstructor<
+  WavetableOscillatorWorkletNode,
+  WavetableParams
+>({
+  processorName: "WavetableOscillatorWorkletProcessor",
+  paramNames: ["baseFrequency", "frequency", "morphFrequency"] as const,
+  workletOptions: () => ({
+    numberOfInputs: 0,
+    numberOfOutputs: 1,
+  }),
+  postCreate(node) {
+    node.setWavetable = (wavetable, wavetableLength) => {
+      node.port.postMessage({
+        type: "WAVETABLE",
+        wavetable,
+        wavetableLength,
+      });
+    };
+  },
+});
 
-export function getWorkletUrl() {
-  const blob = new Blob([PROCESSOR], { type: "application/javascript" });
-  return URL.createObjectURL(blob);
-}
-
-/**
- * Load a wavetable
- * @param url
- * @param wavetableLength
- */
 export function loadWavetable(
   nameOrUrl: string,
   wavetableLength = 256
@@ -42,73 +51,4 @@ export function loadWavetable(
     ? nameOrUrl
     : `https://smpldsnds.github.io/wavedit-online/samples/${nameOrUrl.toUpperCase()}.WAV`;
   return new WavetableLoader(url, wavetableLength).onLoad();
-}
-
-/**
- * Register the AudioWorklet processor in the AudioContext.
- * No matter how many times is called, it will register only once.
- *
- * @param audioContext
- * @returns A promise that resolves when the processor is registered
- */
-export function registerWavetableOscillatorWorkletOnce(
-  audioContext: AudioContext
-): Promise<void> {
-  if (!isSupported(audioContext)) throw Error("AudioWorklet not supported");
-  return isRegistered(audioContext)
-    ? Promise.resolve()
-    : register(audioContext);
-}
-
-/**
- * Creates a Wavetable Oscillator node.
- */
-export function createWavetableOscillator(
-  audioContext: AudioContext,
-  params: Partial<WavetableParams> = {}
-): WavetableOscillatorWorkletNode {
-  const node = new AudioWorkletNode(audioContext, getProcessorName(), {
-    numberOfInputs: 1,
-    numberOfOutputs: 1,
-    processorOptions: {},
-  }) as WavetableOscillatorWorkletNode;
-
-  for (const paramName of PARAM_NAMES) {
-    const param = node.parameters.get(paramName)!;
-    const value = params[paramName as keyof WavetableParams];
-    if (typeof value === "number") param.value = value;
-    node[paramName] = param;
-  }
-
-  node.setWavetable = (wavetable, wavetableLength) => {
-    node.port.postMessage({
-      type: "WAVETABLE",
-      wavetable,
-      wavetableLength,
-    });
-  };
-
-  let _disconnect = node.disconnect.bind(node);
-  node.disconnect = (param?, output?, input?) => {
-    node.port.postMessage({ type: "DISCONNECT" });
-    // @ts-ignore
-    return _disconnect(param, output, input);
-  };
-  return node;
-}
-
-function isSupported(audioContext: AudioContext): boolean {
-  return (
-    audioContext.audioWorklet &&
-    typeof audioContext.audioWorklet.addModule === "function"
-  );
-}
-
-function isRegistered(audioContext: AudioContext): boolean {
-  return (audioContext.audioWorklet as any).__SYNTHLET_WT_OSC_REGISTERED__;
-}
-
-function register(audioContext: AudioContext): Promise<void> {
-  (audioContext.audioWorklet as any).__SYNTHLET_WT_OSC_REGISTERED__ = true;
-  return audioContext.audioWorklet.addModule(getWorkletUrl());
 }

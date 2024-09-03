@@ -1,5 +1,5 @@
 import {
-  createStateVariableFilter,
+  createStateVariableFilterNode,
   registerStateVariableFilterWorkletOnce,
 } from "./index";
 
@@ -16,7 +16,7 @@ describe("PolyblepOscillator", () => {
   it("creates the worklet node with default parameters", () => {
     // @ts-ignore
     global.AudioWorkletNode = AudioWorkletNodeMock;
-    const node = createStateVariableFilter(
+    const node = createStateVariableFilterNode(
       new AudioContextMock().asAudioContext()
     );
     expect(node.frequency.value).toBe(4000);
@@ -27,7 +27,7 @@ describe("PolyblepOscillator", () => {
   it("changes the waveform using type property", () => {
     // @ts-ignore
     global.AudioWorkletNode = AudioWorkletNodeMock;
-    const node = createStateVariableFilter(
+    const node = createStateVariableFilterNode(
       new AudioContextMock().asAudioContext()
     );
     expect(node.filterType.value).toBe(1);
