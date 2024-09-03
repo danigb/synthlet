@@ -8,12 +8,20 @@ import { PROCESSOR } from "./processor";
 export const registerImpulseWorkletOnce = createRegistrar("IMPULSE", PROCESSOR);
 
 export type ImpulseInputParams = {
-  gate: ParamInput;
+  trigger: ParamInput;
 };
 
-export const createImpulseNode = createWorkletConstructor({
+export type ImpulseWorkletNode = AudioWorkletNode & {
+  trigger: AudioParam;
+  dispose(): void;
+};
+
+export const createImpulseNode = createWorkletConstructor<
+  ImpulseWorkletNode,
+  ImpulseInputParams
+>({
   processorName: "ImpulseProcessor",
-  paramNames: ["gate"],
+  paramNames: ["trigger"],
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,

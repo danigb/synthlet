@@ -10,6 +10,7 @@ export { NoiseType };
 
 export type NoiseWorkletNode = AudioWorkletNode & {
   type: AudioParam;
+  dispose(): void;
 };
 
 export type NoiseInputParams = {

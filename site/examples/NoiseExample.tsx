@@ -78,39 +78,20 @@ function NoiseSynthUI({ onClose }: { onClose: () => void }) {
 class NoiseSynth {
   gain: GainNode;
   noise: NoiseWorkletNode;
+  connect: typeof GainNode.prototype.connect;
+
   constructor(context: AudioContext) {
     this.gain = new GainNode(context, { gain: 0 });
 
     this.noise = createNoiseNode(context, {
       type: "White Random",
     });
-    this.noise.connect(this.gain).connect(context.destination);
+    this.noise.connect(this.gain);
+    this.connect = this.gain.connect.bind(this.gain);
   }
 
-  disconnect() {
+  dispose() {
     this.gain.disconnect();
-    this.noise.disconnect();
+    this.noise.dispose();
   }
-}
-
-function ExampleButton({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
-  const [show, setShow] = useState(false);
-  if (show) return children;
-
-  return (
-    <button
-      className="border border-white p-2 rounded opacity-50"
-      onClick={() => {
-        setShow(true);
-      }}
-    >
-      {label}
-    </button>
-  );
 }

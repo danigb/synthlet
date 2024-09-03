@@ -1,9 +1,11 @@
 // DON'T EDIT THIS FILE unless inside scripts/_worklet.ts
 // use ./scripts/copy_files.ts to copy this file to the right place
 // the goal is to avoid external dependencies on packages
-export type ParamInput = number | ((param: AudioParam) => void) | string;
-
-type DisconnectFn = typeof AudioNode.prototype.disconnect;
+export type ParamInput =
+  | number
+  | ((param: AudioParam) => () => void)
+  | string
+  | AudioNode;
 
 type CreateWorkletOptions<N, P> = {
   processorName: string;
@@ -13,11 +15,15 @@ type CreateWorkletOptions<N, P> = {
   validateParams?: (params: Partial<P>) => void;
 };
 
+type DisposableAudioWorkletNode = AudioWorkletNode & {
+  dispose: () => void;
+};
+
 export function createWorkletConstructor<
   N extends AudioWorkletNode,
   P extends Record<string, ParamInput>
 >(options: CreateWorkletOptions<N, P>) {
-  return (audioContext: AudioContext, params: Partial<P> = {}) => {
+  return (audioContext: AudioContext, params: Partial<P> = {}): N => {
     options.validateParams?.(params);
     const node = new AudioWorkletNode(
       audioContext,
@@ -26,46 +32,71 @@ export function createWorkletConstructor<
     ) as N;
 
     (node as any).__PROCESSOR_NAME__ = options.processorName;
-    decorateWorkletNode(node, options.paramNames, params);
+    const connected = connectAll(node, options.paramNames, params);
     options.postCreate?.(node);
-
-    return node;
+    return disposable(node, connected);
   };
 }
 
-function decorateWorkletNode(
+type ConnectedUnit = AudioNode | (() => void) | undefined;
+
+export function connectAll(
   node: any,
   paramNames: readonly string[],
-  params: any
-) {
-  for (const paramName of paramNames) {
-    const param = node.parameters.get(paramName)!;
-    const value = params[paramName];
-    if (typeof value === "number") param.value = value;
-    if (typeof value === "function") value(param);
-    node[paramName] = param;
-  }
-  const _disconnect: DisconnectFn = node.disconnect.bind(node);
+  inputs: any
+): ConnectedUnit[] {
+  const connected: ConnectedUnit[] = [];
 
-  // Must be a fn to use arguments
-  function disconnectWorklet() {
-    node.port.postMessage({ type: "DISCONNECT" });
-    switch (arguments.length) {
-      case 0:
-        return _disconnect();
-      case 1:
-        return _disconnect(arguments[0] as number);
-      case 2:
-        return _disconnect(arguments[0] as AudioNode, arguments[1] as number);
-      default:
-        return _disconnect(
-          arguments[0] as AudioNode,
-          arguments[1] as number,
-          arguments[2] as number
-        );
+  for (const paramName of paramNames) {
+    if (node.parameters) {
+      node[paramName] = node.parameters.get(paramName);
+    }
+    const param = node[paramName];
+    const input = inputs[paramName];
+    if (typeof input === "number") {
+      param.value = input;
+    } else if (input instanceof AudioNode) {
+      param.value = 0;
+      input.connect(param);
+      connected.push(input);
+    } else if (typeof input === "function") {
+      connected.push(input(param));
     }
   }
-  node.disconnect = disconnectWorklet;
+
+  return connected;
+}
+
+type Disposable = { dispose: () => void };
+
+export function disposable<T extends AudioNode>(
+  node: T,
+  connected?: ConnectedUnit[]
+): T & Disposable {
+  let disposed = false;
+  return Object.assign(node, {
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+
+      node.disconnect();
+      (node as any).port?.postMessage({ type: "DISCONNECT" });
+      if (!connected) return;
+
+      while (connected.length) {
+        const conn = connected.pop();
+        if (conn instanceof AudioNode) {
+          if (typeof (conn as any).dispose === "function") {
+            (conn as any).dispose?.();
+          } else {
+            conn.disconnect();
+          }
+        } else if (typeof conn === "function") {
+          conn();
+        }
+      }
+    },
+  });
 }
 
 export function createRegistrar(workletName: string, processor: string) {

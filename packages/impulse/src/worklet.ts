@@ -22,7 +22,7 @@ export class ImpulseProcessor extends AudioWorkletProcessor {
   ) {
     outputs[0][0].fill(0);
 
-    if (parameters.gate[0] === 1) {
+    if (parameters.trigger[0] === 1) {
       if (!this.g) {
         this.g = true;
         outputs[0][0][0] = 1;
@@ -35,7 +35,7 @@ export class ImpulseProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [["gate", 0, 0, 1]].map(
+    return [["trigger", 0, 0, 1]].map(
       ([name, defaultValue, minValue, maxValue]) => ({
         name,
         defaultValue,

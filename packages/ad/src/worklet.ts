@@ -1,4 +1,4 @@
-export class ADProcessor extends AudioWorkletProcessor {
+export class AdProcessor extends AudioWorkletProcessor {
   r: boolean; // running
   d: ReturnType<typeof createEnvelope>;
 
@@ -21,7 +21,7 @@ export class ADProcessor extends AudioWorkletProcessor {
     parameters: any
   ) {
     this.d.update(
-      parameters.gate[0],
+      parameters.trigger[0],
       parameters.attack[0],
       parameters.decay[0]
     );
@@ -32,7 +32,7 @@ export class ADProcessor extends AudioWorkletProcessor {
 
   static get parameterDescriptors() {
     return [
-      ["gate", 0, 0, 1],
+      ["trigger", 0, 0, 1],
       ["attack", 0.01, 0, 10],
       ["decay", 0.1, 0, 10],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
@@ -45,10 +45,10 @@ export class ADProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor("ADProcessor", ADProcessor);
+registerProcessor("AdProcessor", AdProcessor);
 
 // Attack-Decay envelope based on https://paulbatchelor.github.io/sndkit/env/
-export function createEnvelope(
+function createEnvelope(
   sampleRate: number,
   attackTime: number,
   decayTime: number
@@ -72,6 +72,7 @@ export function createEnvelope(
     update(trigger: number, attackTime: number, decayTime: number) {
       if (trigger === 1) {
         if (!gate) {
+          console.log("trigger", trigger);
           gate = true;
           mode = MODE_ATTACK;
         }
