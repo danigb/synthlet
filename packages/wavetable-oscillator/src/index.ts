@@ -2,8 +2,6 @@ import { createRegistrar, createWorkletConstructor } from "./_worklet";
 import { PROCESSOR } from "./processor";
 import { Wavetable, WavetableLoader } from "./wavetable-loader";
 
-export { WavetableLoader } from "./wavetable-loader";
-
 export type WavetableParams = {
   baseFrequency: number;
   frequency: number;
@@ -14,7 +12,7 @@ export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
   baseFrequency: AudioParam;
   frequency: AudioParam;
   morphFrequency: AudioParam;
-  setWavetable: (wavetable: Float32Array, wavetableLength: number) => void;
+  setWavetable: (wavetable: { data: Float32Array; length: number }) => void;
 };
 
 export const registerWavetableOscillatorWorkletOnce = createRegistrar(
@@ -33,11 +31,11 @@ export const createWavetableOscillatorNode = createWorkletConstructor<
     numberOfOutputs: 1,
   }),
   postCreate(node) {
-    node.setWavetable = (wavetable, wavetableLength) => {
+    node.setWavetable = (wavetable) => {
       node.port.postMessage({
         type: "WAVETABLE",
-        wavetable,
-        wavetableLength,
+        wavetable: wavetable.data,
+        length: wavetable.length,
       });
     };
   },
@@ -51,4 +49,8 @@ export function loadWavetable(
     ? nameOrUrl
     : `https://smpldsnds.github.io/wavedit-online/samples/${nameOrUrl.toUpperCase()}.WAV`;
   return new WavetableLoader(url, wavetableLength).onLoad();
+}
+
+export function fetchWavetableNames(): Promise<string[]> {
+  return WavetableLoader.fetchAvailableNames();
 }
