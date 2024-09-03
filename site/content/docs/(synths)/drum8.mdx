@@ -3,4 +3,27 @@ title: Drum8
 description: Drum synthesizer modeled after a famous eighty drum machine
 ---
 
-## Mono synth
+`@synthlet/drum8`
+
+A drum generator. Currently only Kick and Snare are implemented.
+
+```ts
+import { registerDrum8WorkletOnce, createDrum8Node, Drum8Type } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerDrum8WorkletOnce(audioContext);
+
+const drum8 = createDrum8Node(audioContext, {
+  type: Drum8Type.KICK,
+});
+```
+
+## Parameters
+
+- `type`: The type of drum to generate.
+  - 0 or `Drum8Type.KICK`
+  - 1 or `Drum8Type.SNARE`
+- `gate`: The gate trigger. 0 means off, 1 means on.
+- `duration`: The duration of the sound in abstract units. Range [0, 1]. Default is 0.1.
+- `tone`: The tone of the drum. Range: [0, 1]. Default depends on the drum type.
+- `snap`: The amount of snap of the drum. Range: [0, 1]. Default depends on the drum type.

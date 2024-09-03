@@ -7,6 +7,11 @@ import {
   decaySine,
 } from "./dsp";
 
+export enum Drum8Type {
+  KICK = 0,
+  SNARE = 1,
+}
+
 type Params = {
   gate: number[];
   attack: number[];
@@ -15,10 +20,22 @@ type Params = {
   snap: number[];
 };
 
-export type Generator = (output: Float32Array, params: Params) => void;
+type Generator = (output: Float32Array, params: Params) => void;
 type Instrument = (sampleRate: number) => Generator;
 
-export const Kick: Instrument = (sampleRate) => {
+export function createInstrument(type: number): Generator {
+  switch (type) {
+    case Drum8Type.KICK:
+      return Kick(sampleRate);
+    case Drum8Type.SNARE:
+      return Snare(sampleRate);
+    default:
+      console.warn("Invalid Drum8 type: ", type);
+      return Kick(sampleRate);
+  }
+}
+
+const Kick: Instrument = (sampleRate) => {
   const sin = decaySine(sampleRate, 90, 48);
   const click = createClick(sampleRate, 1);
   const env = createEnvelope(sampleRate, 0.1, 0.1);
@@ -35,7 +52,7 @@ export const Kick: Instrument = (sampleRate) => {
   };
 };
 
-export const Snare: Instrument = (sampleRate) => {
+const Snare: Instrument = (sampleRate) => {
   const noise = createNoise(sampleRate);
   const envNoise = createEnvelope(sampleRate, 0.1, 0.1);
   const snap = createFixedSin2(sampleRate, 238, 1, 476, 1);
