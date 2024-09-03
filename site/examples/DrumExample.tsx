@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ClaveDrum, KickDrum } from "synthlet";
+import { ClaveDrum, KickDrum, SnareDrum } from "synthlet";
 import { CreateSynth, Synth, useSynth } from "./useSynth";
 
 type DrumSynth = Synth & {
@@ -14,6 +14,8 @@ function getSynth(instrumentName: string) {
       return KickDrum;
     case "Clave":
       return ClaveDrum;
+    case "Snare":
+      return SnareDrum;
     default:
       throw Error(`Unknown instrument: ${instrumentName}`);
   }
@@ -28,6 +30,7 @@ export function DrumExample<T extends DrumSynth>({
 
   return open ? (
     <DrumExampleUI
+      instrumentName={instrumentName}
       onClose={() => setOpen(false)}
       createSynth={getSynth(instrumentName)}
     />
@@ -42,9 +45,11 @@ export function DrumExample<T extends DrumSynth>({
 }
 
 function DrumExampleUI<T extends DrumSynth>({
+  instrumentName,
   onClose,
   createSynth,
 }: {
+  instrumentName: string;
   onClose: () => void;
   createSynth: CreateSynth<T>;
 }) {
@@ -55,7 +60,7 @@ function DrumExampleUI<T extends DrumSynth>({
 
   return (
     <div className="bg-fd-card text-fd-foreground p-2 border rounded">
-      <div className="text-xl mb-4">Kick example</div>
+      <div className="text-xl mb-4">{instrumentName} example</div>
 
       <div className="flex items-center gap-2 mb-4">
         <button
