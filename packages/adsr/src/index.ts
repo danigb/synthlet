@@ -1,17 +1,19 @@
+import {
+  createRegistrar,
+  createWorkletConstructor,
+  ParamInput,
+} from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export type AdsrProcessorOptions = {
-  mode?: "generator" | "modulator";
-};
-
 export type AdsrParams = {
-  gate: number;
-  attack: number;
-  decay: number;
-  sustain: number;
-  release: number;
-  offset: number;
-  gain: number;
+  mode: "generator" | "modulator";
+  gate: ParamInput;
+  attack: ParamInput;
+  decay: ParamInput;
+  sustain: ParamInput;
+  release: ParamInput;
+  offset: ParamInput;
+  gain: ParamInput;
 };
 
 /**
@@ -25,8 +27,7 @@ export type AdsrWorkletNode = AudioWorkletNode & {
   release: AudioParam;
   offset: AudioParam;
   gain: AudioParam;
-  gateOn: (time?: number) => void;
-  gateOff: (time?: number) => void;
+  setGate: (gate: boolean, time?: number) => void;
 };
 
 const PARAM_NAMES = [
@@ -39,112 +40,38 @@ const PARAM_NAMES = [
   "gain",
 ] as const;
 
-export function getAdsrProcessorName() {
-  return "AdsrWorkletProcessor"; // Can't import from worklet because globals
-}
-
-/**
- * Create a VCA (Voltage Controller Amplifier) AudioWorkletNode.
- * It can be used to modulate amplitude of another signal.
- *
- * @param audioContext - The AudioContext
- * @returns AdsrWorkletNode
- * @example
- * ```
- * const osc = audioContext.createOscillator();
- * osc.start();
- * const vca = createVCA(audioContext);
- * osc.connect(vca).connect(audioContext.destination);
- * vca.gateOn();
- * vca.gateOff(audioContext.now + 1)
- *
- * ```
- */
-export function createVca(
+export function createVcaNode(
   audioContext: AudioContext,
-  params?: Partial<AdsrParams>
-): AdsrWorkletNode {
-  return createWorkletNode(audioContext, { mode: "modulator" }, params);
-}
-
-/**
- * Create a ADSR AudioWorkletNode.
- * It can be used to modulate other parameters
- * @param audioContext
- * @returns AdsrWorkletNode
- */
-export function createAdsr(
-  audioContext: AudioContext,
-  params?: Partial<AdsrParams>
-): AdsrWorkletNode {
-  return createWorkletNode(audioContext, { mode: "generator" }, params);
-}
-
-function createWorkletNode(
-  audioContext: AudioContext,
-  processorOptions: AdsrProcessorOptions,
   params: Partial<AdsrParams> = {}
 ): AdsrWorkletNode {
-  const node = new AudioWorkletNode(audioContext, getAdsrProcessorName(), {
-    numberOfInputs: 1,
-    numberOfOutputs: 1,
-    processorOptions,
-  }) as AdsrWorkletNode;
-
-  for (const paramName of PARAM_NAMES) {
-    const param = node.parameters.get(paramName)!;
-    const value = params[paramName as keyof AdsrParams];
-    if (typeof value === "number") param.value = value;
-    node[paramName] = param;
-  }
-  node.gateOn = (time = audioContext.currentTime) => {
-    node.gate.setValueAtTime(1, time);
-  };
-  node.gateOff = (time = audioContext.currentTime) => {
-    node.gate.setValueAtTime(0, time);
-  };
-  let _disconnect = node.disconnect.bind(node);
-  node.disconnect = (param?, output?, input?) => {
-    node.port.postMessage({ type: "DISCONNECT" });
-    // @ts-ignore
-    return _disconnect(param, output, input);
-  };
-  return node;
+  params.mode = "modulator";
+  return createAdsrNode(audioContext, params);
 }
 
-function getWorkletUrl() {
-  const blob = new Blob([PROCESSOR], { type: "application/javascript" });
-  return URL.createObjectURL(blob);
+export function createAdsrGenNode(
+  audioContext: AudioContext,
+  params: Partial<AdsrParams> = {}
+): AdsrWorkletNode {
+  params.mode = "generator";
+  return createAdsrNode(audioContext, params);
 }
 
-/**
- * Register the AudioWorklet processor in the AudioContext.
- * No matter how many times is called, it will register only once.
- *
- * @param audioContext
- * @returns A promise that resolves when the processor is registered
- */
-export function registerAdsrWorkletOnce(
-  audioContext: AudioContext
-): Promise<void> {
-  if (!isSupported(audioContext)) throw Error("AudioWorklet not supported");
-  return isRegistered(audioContext)
-    ? Promise.resolve()
-    : register(audioContext);
-}
-
-function isSupported(audioContext: AudioContext): boolean {
-  return (
-    audioContext.audioWorklet &&
-    typeof audioContext.audioWorklet.addModule === "function"
-  );
-}
-
-function isRegistered(audioContext: AudioContext): boolean {
-  return (audioContext.audioWorklet as any).__SYNTHLET_ADSR_REGISTERED__;
-}
-
-function register(audioContext: AudioContext): Promise<void> {
-  (audioContext.audioWorklet as any).__SYNTHLET_ADSR_REGISTERED__ = true;
-  return audioContext.audioWorklet.addModule(getWorkletUrl());
-}
+export const registerAdsrWorkletOnce = createRegistrar("ADSR", PROCESSOR);
+export const createAdsrNode = createWorkletConstructor<
+  AdsrWorkletNode,
+  AdsrParams
+>({
+  processorName: "AdsrWorkletProcessor",
+  paramNames: PARAM_NAMES,
+  workletOptions(params) {
+    return {
+      numberOfInputs: params.mode === "modulator" ? 1 : 0,
+      numberOfOutputs: 1,
+    };
+  },
+  postCreate(node) {
+    node.setGate = (gate, time = 0) => {
+      node.gate.setValueAtTime(gate ? 1 : 0, time);
+    };
+  },
+});

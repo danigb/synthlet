@@ -1,5 +1,3 @@
-import { getStateVariableFilterProcessorName } from "./index";
-
 describe("ProcessorNode", () => {
   let Processor: any;
   const sampleRate = 40;
@@ -11,7 +9,7 @@ describe("ProcessorNode", () => {
 
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
-      getStateVariableFilterProcessorName(),
+      "StateVariableFilterWorkletProcessor",
       Processor
     );
   });

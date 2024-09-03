@@ -1,4 +1,3 @@
-import { getProcessorName } from "./index";
 import { createWorkletTestContext } from "./test-utils";
 
 describe("WavetableOscillatorWorkletNode", () => {
@@ -13,7 +12,7 @@ describe("WavetableOscillatorWorkletNode", () => {
 
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
-      getProcessorName(),
+      "WavetableOscillatorWorkletProcessor",
       WavetableOscillatorWorkletProcessor
     );
   });

@@ -1,0 +1,73 @@
+---
+title: Guide
+description: How to use Synthlet modules
+---
+
+This guide will show you how to use the Synthlet modules.
+
+## Create modules
+
+To create a module, you need to call the `create<Module>Node` function that will return an instance of an [AudioWorkletNode](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode)
+
+The create function will take two arguments, the `audioContext` and an object with optional configuration and initial values of each parameter:
+
+```js
+const osc = createPolyblepOscillatorNode(audioContext, {
+  frequency: 440,
+});
+
+const lfo = createLfoNode(audioContext, {
+  attack: 0.1,
+  decay: 0.1,
+  sustain: 0.5,
+  release: 0.1,
+});
+```
+
+## Connect modules to the audio graph
+
+Since returning nodes are normal [AudioWorkletNodes](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode/AudioWorkletNode) , you can [connect](https://developer.mozilla.org/en-US/docs/Web/API/AudioNode/connect) them to the audio graph as you would with any other node:
+
+```js
+// Connect a module to another
+osc.connect(audioContext.destination);
+
+// Connect a module to a parameter (modulation)
+adsr.connect(osc.frequency);
+```
+
+## Controlling Parameters
+
+Each module has a set of parameters exposed as [AudioParam](https://developer.mozilla.org/en-US/docs/Web/API/AudioParam) that you can control using the `value` property the same way as you would with any other Web Audio API node:
+
+```js
+osc.frequency.value = 880;
+adsr.attack.value = 0.5;
+```
+
+## Start and stop
+
+There are no `start` and `stop` methods in Synthlet modules, sources are started by default.
+
+<Callout title="No start/stop" type="warn">
+  Unlike the standard WebAudio API, Synthlet modules starts automatically.
+</Callout>
+
+The modules that needs some kind of start/stop (envelopes, sequencers, etc...) the control is managed with parameters too. For example, `start` and `stop` methods are normally replaced by a `gate` parameter that you can control using the `setValueAtTime` method:
+
+```js
+adsr.gate.value = 1; // equivalent to start()
+adsr.gate.value = 0; // equivalent to stop()
+```
+
+The advantage is that you can use a module to start/stop other modules. Evertying can be connected.
+
+## Disconnect
+
+To disconnect a module from the audio graph, you can use the `disconnect` method in the same way as you would with any other Web Audio API node:
+
+```js
+adsr.disconnect();
+```
+
+Once disconnected, the module will stop processing audio and can't be connected again.

@@ -3,37 +3,30 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
     "build": "next build",
+    "dev": "next dev",
     "start": "next start",
-    "lint": "next lint",
-    "deploy": "npm run deploy:build && npm run deploy:github",
-    "deploy:github": "npm run deploy:build && gh-pages -d out/ -t true",
-    "deploy:build": "DEPLOY=true next build"
+    "postinstall": "fumadocs-mdx"
   },
   "dependencies": {
-    "@mdx-js/loader": "^3.0.1",
-    "@mdx-js/react": "^3.0.1",
-    "@next/mdx": "^14.2.5",
-    "@types/mdx": "^2.0.13",
-    "gh-pages": "^6.1.1",
-    "highlight.js": "^11.10.0",
-    "next": "14.2.5",
-    "react": "^18",
-    "react-dom": "^18",
-    "rehype-highlight": "^7.0.0",
-    "synthlet": "../packages/synthlet",
-    "tailwind-highlightjs": "^2.0.1"
+    "fumadocs-core": "13.4.4",
+    "fumadocs-docgen": "^1.2.0",
+    "fumadocs-mdx": "10.0.0",
+    "fumadocs-typescript": "^2.1.0",
+    "fumadocs-ui": "13.4.4",
+    "lucide-react": "^0.438.0",
+    "next": "^14.2.7",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@tailwindcss/typography": "^0.5.13",
-    "@types/node": "^20",
-    "@types/react": "^18",
-    "@types/react-dom": "^18",
-    "eslint": "^8",
-    "eslint-config-next": "14.2.5",
-    "postcss": "^8",
-    "tailwindcss": "^3.4.1",
-    "typescript": "^5"
+    "@types/mdx": "^2.0.13",
+    "@types/node": "22.5.2",
+    "@types/react": "^18.3.5",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.42",
+    "tailwindcss": "^3.4.10",
+    "typescript": "^5.5.4"
   }
 }

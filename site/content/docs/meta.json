@@ -1,0 +1,13 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "quick-start",
+    "guide",
+    "---Available Modules---",
+    "(sources)",
+    "(modifiers)",
+    "(modulators)",
+    "(effects)",
+    "(synths)"
+  ]
+}

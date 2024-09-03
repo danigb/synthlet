@@ -1,0 +1,31 @@
+---
+title: Noise
+description: Noise
+---
+
+A Noise generator. Currently only white noise is supported.
+
+Example:
+
+```ts
+import { registerNoiseWorkletOnce, createNoiseNode } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerNoiseWorkletOnce(audioContext);
+
+const noise = createNoiseNode(audioContext, {
+  type: "white",
+});
+noise.connect(audioContext.destination);
+```
+
+## Parameters
+
+## References
+
+- https://en.wikipedia.org/wiki/Colors_of_noise
+- Pink noise algorithms: https://www.firstpr.com.au/dsp/pink-noise/
+- Pink noise implementation: https://ccrma.stanford.edu/~jos/sasp/Example_Synthesis_1_F_Noise.html
+- https://github.com/Stenzel/newshadeofpink
+- https://dsp.stackexchange.com/questions/62342/understanding-voss-mccartney-pink-noise-generation-algorithm
+- http://www.cooperbaker.com/home/code/pink%20noise/

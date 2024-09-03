@@ -55,6 +55,6 @@ export class WavetableOscillatorWorkletProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor(
-  "WavetableWorkletProcessor",
+  "WavetableOscillatorWorkletProcessor",
   WavetableOscillatorWorkletProcessor
 );

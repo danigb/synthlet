@@ -1,0 +1,36 @@
+---
+title: ADSR
+description: An ADSR envelope generator module
+---
+
+This is an ADSR envelope generator module that can be used to modulate any other parameter.
+
+Is based on the code by [Will Pirkle](https://www.willpirkle.com/) from his [Synth Book](https://www.willpirkle.com/synthbook/).
+
+# Example
+
+```ts
+import { createADSRNode } from "synthlet";
+
+const adsr = createADSRNode(audioContext, {
+  attack: 0.1,
+  decay: 0.1,
+  sustain: 0.5,
+  release: 0.1,
+});
+const filter = createStateVariableFilterNode(audioContext, {
+  frequency: 440,
+  Q: 1,
+  type: "lowpass",
+});
+adsr.connect(filter.frequency);
+```
+
+#### Parameters
+
+- `attack`: The attack time in seconds. Default is 0.1.
+- `decay`: The decay time in seconds. Default is 0.1.
+- `sustain`: The sustain level. Default is 0.5.
+- `release`: The release time in seconds. Default is 0.1.
+- `offset`: The start offset. Default is 0.
+- `gain`: The gain. Default is 1. It is the maximum amplitude after the attach and affects the sustain level. For example, a gain of 100 and sustain of 0.5 will make the sustain level to be 50.
