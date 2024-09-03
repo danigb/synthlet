@@ -30,11 +30,11 @@ const PARAM_NAMES = [
   "lfoRate2",
 ] as const;
 
-export function getProcessorName() {
+function getProcessorName() {
   return "ChorusWorkletProcessor"; // Can't import from worklet because globals
 }
 
-export function getWorkletUrl() {
+function getWorkletUrl() {
   const blob = new Blob([PROCESSOR], { type: "application/javascript" });
   return URL.createObjectURL(blob);
 }

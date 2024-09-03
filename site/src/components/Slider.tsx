@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function Slider({
   label,
@@ -12,6 +12,7 @@ export function Slider({
   labelClassName = "text-right",
   valueClassName,
   units,
+  initialize,
 }: {
   label: string;
   min: number;
@@ -24,8 +25,15 @@ export function Slider({
   inputClassName?: string;
   valueClassName?: string;
   units?: string;
+  initialize?: boolean;
 }) {
   const [value, setValue] = useState(initial);
+
+  useEffect(() => {
+    if (initialize) onChange(initial);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialize]);
+
   return (
     <>
       <p className={labelClassName}>{label}</p>

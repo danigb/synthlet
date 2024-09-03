@@ -28,13 +28,15 @@ export class ClockWorkletProcessor extends AudioWorkletProcessor {
       this.bpm = parameters.bpm[0];
       this.i = this.bpm / 60 / sampleRate;
     }
-    let phase = this.p;
-    for (let i = 0; i < outputs[0][0].length; i++) {
-      outputs[0][0][i] = phase;
-      phase += this.i;
-      if (phase >= 1) phase -= 1;
-    }
-    this.p = phase;
+    let nextPhase = this.p + outputs[0][0].length * this.i;
+    if (nextPhase > 1) nextPhase -= 1;
+
+    let fill = nextPhase < this.p ? 1 : this.p;
+
+    outputs[0][0].fill(fill);
+
+    this.p = nextPhase;
+
     return this.r;
   }
 

@@ -12,6 +12,7 @@ export default function HomePage() {
         <Link href={`/synths/fly`}>Fly monophonic synthesizer</Link>
         <Link href={`/synths/crow`}>Crow wavetable synthesizer</Link>
         <Link href={`/synths/drum8`}>Drum8 synthesizer</Link>
+        <Link href={`/example/clock`}>Clock test</Link>
       </div>
     </main>
   );
