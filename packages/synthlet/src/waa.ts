@@ -19,9 +19,11 @@ export type ParamNode = ConstantSourceNode & {
 
 export function createConstantSource(
   context: AudioContext,
-  options: ConstantSourceOptions = {}
+  options?: ConstantSourceOptions
 ): ParamNode {
-  const node = new ConstantSourceNode(context, options) as ParamNode;
+  const node = new ConstantSourceNode(context, {
+    offset: options?.offset ?? 0,
+  }) as ParamNode;
   node.start();
   node.value = node.offset;
   return disposable(node);
@@ -41,4 +43,21 @@ export function createOscillator(
   osc.start();
   const conn = connectAll(osc, ["frequency", "detune"], inputs);
   return disposable(osc, conn);
+}
+
+type FilterInputs = {
+  type: BiquadFilterType;
+  frequency: ParamInput;
+  detune: ParamInput;
+  Q: ParamInput;
+  gain: ParamInput;
+};
+
+export function createFilter(
+  context: AudioContext,
+  inputs: Partial<FilterInputs> = {}
+) {
+  const filter = new BiquadFilterNode(context, { type: inputs.type });
+  const conn = connectAll(filter, ["frequency", "detune", "Q", "gain"], inputs);
+  return disposable(filter, conn);
 }
