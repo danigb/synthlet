@@ -22,7 +22,7 @@ export const registerWavetableOscillatorWorkletOnce = createRegistrar(
   PROCESSOR
 );
 
-export const creteWavetableOscillatorNode = createWorkletConstructor<
+export const createWavetableOscillatorNode = createWorkletConstructor<
   WavetableOscillatorWorkletNode,
   WavetableParams
 >({

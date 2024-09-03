@@ -8,6 +8,7 @@ import { Selector } from "@/components/Selector";
 import { Slider } from "@/components/Slider";
 import { StateVariableFilterControls } from "@/components/StateVariableFilterControls";
 import {
+  createLfoNode,
   getLfoWaveformTypes,
   LfoWaveformType,
   LfoWorklet,
@@ -15,13 +16,12 @@ import {
 import { useEffect, useState } from "react";
 import {
   AdsrWorkletNode,
-  ChorusWorkletNode,
-  createAdsr,
-  createChorusT,
-  createLfo,
-  createPolyblepOscillator,
-  createStateVariableFilter,
-  createVca,
+  ChorusTWorkletNode,
+  createAdsrGenNode,
+  createChorusTNode,
+  createPolyblepOscillatorNode,
+  createStateVariableFilterNode,
+  createVcaNode,
   PolyblepOscillatorWorkletNode,
   PolyblepWaveformType,
   StateVariableFilterWorkletNode,
@@ -211,22 +211,22 @@ class FlyMonoSynth {
   filterEnv: AdsrWorkletNode;
   $gate: ConstantSourceNode;
   lfo: LfoWorklet;
-  chorus: ChorusWorkletNode;
+  chorus: ChorusTWorkletNode;
 
   constructor(public readonly context: AudioContext) {
     this.$gate = new ConstantSourceNode(context, { offset: 0 });
-    this.osc = createPolyblepOscillator(context);
-    this.lfo = createLfo(context, {
+    this.osc = createPolyblepOscillatorNode(context);
+    this.lfo = createLfoNode(context, {
       frequency: 1,
     });
-    this.filter = createStateVariableFilter(context, {
+    this.filter = createStateVariableFilterNode(context, {
       type: "lowpass",
       frequency: 10,
     });
-    this.filterEnv = createAdsr(context, { gain: 5000, gate: 0 });
+    this.filterEnv = createAdsrGenNode(context, { gain: 5000, gate: 0 });
     this.filterEnv.connect(this.filter.frequency);
-    this.vca = createVca(context, { gate: 0 });
-    this.chorus = createChorusT(context);
+    this.vca = createVcaNode(context, { gate: 0 });
+    this.chorus = createChorusTNode(context);
     this.chorus.setBypass(true);
     this.osc
       .connect(this.vca)

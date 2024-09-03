@@ -6,16 +6,13 @@ import { FrequencySelector } from "@/components/FrequencySelector";
 import { GateControls } from "@/components/GateControls";
 import { Slider } from "@/components/Slider";
 import {
+  createWavetableOscillatorNode,
   loadWavetable,
   WavetableLoader,
   WavetableOscillatorWorkletNode,
 } from "@synthlet/wavetable-oscillator";
 import { useEffect, useState } from "react";
-import {
-  AdsrWorkletNode,
-  createVca,
-  createWavetableOscillator,
-} from "synthlet";
+import { AdsrWorkletNode, createVcaNode } from "synthlet";
 
 export function CrowMono() {
   const [synth, setSynth] = useState<CrowMonoSynth | null>(null);
@@ -115,10 +112,10 @@ class CrowMonoSynth {
 
   constructor(public readonly context: AudioContext, wavetableName: string) {
     this.$gate = new ConstantSourceNode(context, { offset: 0 });
-    this.osc = createWavetableOscillator(context, {
+    this.osc = createWavetableOscillatorNode(context, {
       morphFrequency: 1,
     });
-    this.vca = createVca(context, { gate: 0 });
+    this.vca = createVcaNode(context, { gate: 0 });
     this.osc.connect(this.vca).connect(context.destination);
     this.$gate.connect(this.vca.gate);
     this.$gate.start();
