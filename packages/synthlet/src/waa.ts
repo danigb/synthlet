@@ -13,22 +13,6 @@ export function createGain(
   return disposable(node, conns);
 }
 
-export type ParamNode = ConstantSourceNode & {
-  value: AudioParam;
-};
-
-export function createConstantSource(
-  context: AudioContext,
-  options?: ConstantSourceOptions
-): ParamNode {
-  const node = new ConstantSourceNode(context, {
-    offset: options?.offset ?? 0,
-  }) as ParamNode;
-  node.start();
-  node.value = node.offset;
-  return disposable(node);
-}
-
 type OscillatorInputs = {
   type: OscillatorType;
   frequency: ParamInput;

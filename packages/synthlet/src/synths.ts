@@ -1,18 +1,14 @@
 import { AdInputParams, AdWorkletNode, createAdNode } from "@synthlet/ad";
 import { createImpulseNode } from "@synthlet/impulse";
 import { createNoiseNode, NoiseType } from "@synthlet/noise";
+import { createParamNode, ParamType } from "@synthlet/param";
 import { disposable } from "./_worklet";
-import {
-  createConstantSource,
-  createFilter,
-  createGain,
-  createOscillator,
-} from "./waa";
+import { createFilter, createGain, createOscillator } from "./waa";
 
 const $ = {
   osc: createOscillator,
   gain: createGain,
-  param: createConstantSource,
+  param: createParamNode,
   ad: createAdNode,
   pulse: createImpulseNode,
   filter: createFilter,
@@ -25,23 +21,29 @@ const $ = {
 
 export type DrumNode = GainNode & {
   trigger: AudioParam;
-  env: AdWorkletNode;
+  volume: AudioParam;
   dispose(): void;
 };
 export type KickDrumNode = DrumNode & {};
 
 export function KickDrum(context: AudioContext): KickDrumNode {
   const trigger = $.param(context);
+  const volume = $.param(context, { type: ParamType.DB_TO_GAIN, input: -6 });
+
   const osc = $.osc(context, { type: "sine", frequency: 48 });
   const click = $.pulse(context, { trigger });
 
-  const env = $.ad(context, { trigger, attack: 0.01, decay: 0.1 });
-  const out = $.gain(context, { gain: env }) as KickDrumNode;
-  out.env = env;
-  out.trigger = trigger.offset;
+  const env = $.gain(context, {
+    gain: $.ad(context, { trigger, attack: 0.01, decay: 0.1 }),
+  });
+  const out = $.gain(context, { gain: volume }) as KickDrumNode;
 
-  click.connect(out);
-  osc.connect(out);
+  click.connect(env);
+  osc.connect(env);
+  env.connect(out);
+
+  out.trigger = trigger.input;
+  out.volume = volume.input;
   return disposable(out, [osc, env, trigger, click]);
 }
 
@@ -49,11 +51,21 @@ export type SnareDrumNode = DrumNode & {};
 
 export function SnareDrum(context: AudioContext): SnareDrumNode {
   const trigger = $.param(context);
+  const volume = $.param(context, { type: ParamType.DB_TO_GAIN, input: -6 });
+  const tone = $.param(context, { input: 0.7 });
 
   const snap = $.gain(context, {
     gain: $.ad(context, { trigger, attack: 0.01, decay: 0.1 }),
   });
-  $.osc(context, { type: "sine", frequency: 238 }).connect(snap);
+  $.osc(context, {
+    type: "sine",
+    frequency: $.param(context, {
+      input: tone,
+      type: ParamType.LINEAR,
+      min: 200,
+      max: 300,
+    }),
+  }).connect(snap);
   $.osc(context, { type: "sine", frequency: 476 }).connect(snap);
 
   const noise = $.noise(context, { type: NoiseType.WHITE });
@@ -63,11 +75,12 @@ export function SnareDrum(context: AudioContext): SnareDrumNode {
   });
   noise.connect(lpf).connect(tail);
 
-  const out = $.gain(context, { gain: 1 }) as SnareDrumNode;
+  const out = $.gain(context, { gain: volume }) as SnareDrumNode;
   snap.connect(out);
   tail.connect(out);
 
-  out.trigger = trigger.offset;
+  out.trigger = trigger.input;
+  out.volume = volume.input;
 
   return disposable(out, [snap, tail, lpf]);
 }
@@ -88,6 +101,6 @@ export function ClaveDrum(context: AudioContext): ClaveDrumNode {
   osc.connect(bpf).connect(out);
 
   out.env = env;
-  out.trigger = trigger.offset;
+  out.trigger = trigger.input;
   return disposable(out, [osc, env, trigger]);
 }
