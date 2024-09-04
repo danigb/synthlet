@@ -37,7 +37,7 @@ export class WavetableOscillatorWorkletProcessor extends AudioWorkletProcessor {
         case "WAVETABLE":
           this.u.set(event.data.wavetable, event.data.wavetableLength);
           break;
-        case "DISCONNECT":
+        case "DISPOSE":
           this.r = false;
           break;
       }

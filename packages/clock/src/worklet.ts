@@ -12,7 +12,7 @@ export class ClockWorkletProcessor extends AudioWorkletProcessor {
     this.p = 0;
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "DISCONNECT":
+        case "DISPOSE":
           this.r = false;
           break;
       }

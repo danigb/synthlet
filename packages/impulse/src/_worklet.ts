@@ -81,7 +81,7 @@ export function disposable<T extends AudioNode>(
       disposed = true;
 
       node.disconnect();
-      (node as any).port?.postMessage({ type: "DISCONNECT" });
+      (node as any).port?.postMessage({ type: "DISPOSE" });
       if (!connected) return;
 
       while (connected.length) {

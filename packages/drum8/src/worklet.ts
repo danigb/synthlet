@@ -12,7 +12,7 @@ export class Drum8WorkletProcessor extends AudioWorkletProcessor {
     this.g = createInstrument(this.t);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "DISCONNECT":
+        case "DISPOSE":
           this.r = false;
           break;
       }

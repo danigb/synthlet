@@ -8,7 +8,7 @@ export class AdProcessor extends AudioWorkletProcessor {
     this.d = createEnvelope(sampleRate, 0.01, 0.1);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "DISCONNECT":
+        case "DISPOSE":
           this.r = false;
           break;
       }

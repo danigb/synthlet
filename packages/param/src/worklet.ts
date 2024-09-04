@@ -12,7 +12,7 @@ export class ParamProcessor extends AudioWorkletProcessor {
     this.c = getConverter(this.t);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "DISCONNECT":
+        case "DISPOSE":
           this.r = false;
           break;
       }

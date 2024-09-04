@@ -16,7 +16,7 @@ Some synthesizers are provided for convenience. They are implemented by connecti
 ```ts
 import { KickDrum } from "synthlet";
 
-const kick = new KickDrum(audioContext);
+const kick = KickDrum(audioContext);
 kick.trigger.value = 1;
 kick.tone.value = 0.5;
 ```
@@ -28,7 +28,7 @@ kick.tone.value = 0.5;
 ```ts
 import { SnareDrum } from "synthlet";
 
-const snare = new SnareDrum(audioContext);
+const snare = SnareDrum(audioContext);
 snare.trigger.value = 1;
 snare.tone.value = 0.5;
 ```
@@ -40,7 +40,7 @@ snare.tone.value = 0.5;
 ```ts
 import { ClaveDrum } from "synthlet";
 
-const clave = new ClaveDrum(audioContext);
+const clave = ClaveDrum(audioContext);
 clave.trigger.value = 1;
 clave.tone.value = 0.5;
 ```
