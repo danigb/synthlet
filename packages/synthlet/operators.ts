@@ -1,9 +1,15 @@
-import { createAdNode } from "@synthlet/ad";
+import { AdInputParams, createAdNode } from "@synthlet/ad";
+import { createClipAmpNode } from "@synthlet/clip-amp";
 import { createImpulseNode } from "@synthlet/impulse";
 import { createNoiseNode } from "@synthlet/noise";
 import { createParamNode, ParamType } from "@synthlet/param";
 import { DisposableAudioNode, ParamInput } from "./src/_worklet";
-import { createFilter, createGain, createOscillator } from "./src/waa";
+import {
+  createConstantNode,
+  createFilter,
+  createGain,
+  createOscillator,
+} from "./src/waa";
 
 export function createOperators(context: AudioContext) {
   const set = new Set<DisposableAudioNode>();
@@ -60,13 +66,32 @@ export function createOperators(context: AudioContext) {
       add(createAdNode(context, { trigger, attack, decay })),
 
     // Amplifiers
-    amp: (gain?: ParamInput) => createGain(context, { gain }),
-    ad: (trigger: ParamInput, attack?: ParamInput, decay?: ParamInput) =>
-      createGain(context, {
-        gain: createAdNode(context, { trigger, attack, decay }),
-      }),
+    amp: (gain?: ParamInput) =>
+      add(createClipAmpNode(context, { postGain: gain })),
+    softClip: (pre: number, post: number, type: number) =>
+      add(
+        createClipAmpNode(context, {
+          preGain: pre,
+          postGain: post,
+          clipType: type,
+        })
+      ),
 
-    // Filters
+    // Attack-Decay
+    ad: (
+      trigger: ParamInput,
+      attack?: ParamInput,
+      decay?: ParamInput,
+      params?: Partial<AdInputParams>
+    ) =>
+      add(
+        createGain(context, {
+          gain: createAdNode(context, { trigger, attack, decay, ...params }),
+        })
+      ),
+
+    // === FILTERS ===
+    // Low Pass Filter
     lpf: (frequency?: ParamInput, Q?: ParamInput) =>
       add(createFilter(context, { type: "lowpass", frequency, Q })),
     bpf: (frequency?: ParamInput, Q?: ParamInput) =>
@@ -81,6 +106,19 @@ export function createOperators(context: AudioContext) {
         _dispose?.();
         disposables.forEach((d) => d.dispose());
       };
+    },
+
+    // Math
+    add: (...inputs: ParamInput[]) => {
+      const g = createGain(context, { gain: 1 });
+      inputs.forEach((input) => {
+        if (typeof input === "number") {
+          add(createConstantNode(context, input)).connect(g);
+        } else if (input instanceof AudioNode) {
+          input.connect(g);
+        }
+      });
+      return add(g);
     },
   };
 }

@@ -1,3 +1,4 @@
+import { ClipType } from "@synthlet/clip-amp";
 import { createOperators } from "../operators";
 
 export type DrumNode = AudioNode & {
@@ -13,11 +14,13 @@ export function KickDrum(context: AudioContext): KickDrumNode {
 
   const trigger = op.trigger();
   const volume = op.volume();
-  const tone = op.param();
+  const tone = op.linear(30, 100, 0.2);
+
+  const toneEnv = op.ad(trigger, 0.1, 0.5, { offset: 40, gain: 50 });
 
   const out = op.serial(
-    op.mix([op.sine(100), op.pulse(trigger)], op.ad(trigger, 0.01, 0.1)),
-    op.amp(volume)
+    op.mix([op.sine(tone), op.pulse(trigger)], op.ad(trigger, 0.01, 0.1)),
+    op.softClip(3, 0.5, ClipType.Tanh)
   );
 
   return Object.assign(out, {

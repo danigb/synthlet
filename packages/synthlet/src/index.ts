@@ -1,6 +1,7 @@
 import { registerAdWorkletOnce } from "@synthlet/ad";
 import { registerAdsrWorkletOnce } from "@synthlet/adsr";
 import { registerChorusTWorkletOnce } from "@synthlet/chorus-t";
+import { registerClipAmpWorkletOnce } from "@synthlet/clip-amp";
 import { registerClockWorkletOnce } from "@synthlet/clock";
 import { registerDrum8WorkletOnce } from "@synthlet/drum8";
 import { registerImpulseWorkletOnce } from "@synthlet/impulse";
@@ -14,6 +15,7 @@ import { registerWavetableOscillatorWorkletOnce } from "@synthlet/wavetable-osci
 export * from "@synthlet/ad";
 export * from "@synthlet/adsr";
 export * from "@synthlet/chorus-t";
+export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
 export * from "@synthlet/drum8";
 export * from "@synthlet/impulse";
@@ -31,6 +33,7 @@ export function registerSynthletOnce(context: AudioContext): Promise<void> {
     registerAdWorkletOnce(context),
     registerAdsrWorkletOnce(context),
     registerChorusTWorkletOnce(context),
+    registerClipAmpWorkletOnce(context),
     registerClockWorkletOnce(context),
     registerDrum8WorkletOnce(context),
     registerImpulseWorkletOnce(context),

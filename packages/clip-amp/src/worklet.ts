@@ -11,7 +11,7 @@ export class ClipAmpProcessor extends AudioWorkletProcessor {
     this.r = true;
     this.g = false;
     this.t = 0;
-    this.fn = getClipFn(this.t);
+    this.fn = getClipFn(0);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -45,8 +45,8 @@ export class ClipAmpProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
       ["clipType", 0, 0, 10],
-      ["preGain", 2, 0, 10],
-      ["postGain", 0.5, 0, 10],
+      ["preGain", 1, 0, 10],
+      ["postGain", 1, 0, 10],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,
       defaultValue,

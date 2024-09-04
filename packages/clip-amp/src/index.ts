@@ -5,6 +5,8 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
+export { ClipType } from "./dsp";
+
 export const registerClipAmpWorkletOnce = createRegistrar(
   "CLIP-AMP",
   PROCESSOR
@@ -30,7 +32,7 @@ export const createClipAmpNode = createWorkletConstructor<
   processorName: "ClipAmpProcessor",
   paramNames: ["clipType", "preGain", "postGain"],
   workletOptions: () => ({
-    numberOfInputs: 0,
+    numberOfInputs: 1,
     numberOfOutputs: 1,
   }),
 });
