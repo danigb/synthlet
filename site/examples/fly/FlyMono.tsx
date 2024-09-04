@@ -1,6 +1,6 @@
 "use client";
 
-import { createSynthAudioContext } from "@/audio-context";
+import { createSynthAudioContext } from "@/app/audio-context";
 import { AdsrControls } from "@/components/AdsrControls";
 import { FrequencySelector } from "@/components/FrequencySelector";
 import { GateControls } from "@/components/GateControls";

@@ -1,14 +1,14 @@
 "use client";
 
-import { createSynthAudioContext } from "@/audio-context";
+import { createSynthAudioContext } from "@/app/audio-context";
 import { AdsrControls } from "@/components/AdsrControls";
 import { FrequencySelector } from "@/components/FrequencySelector";
 import { GateControls } from "@/components/GateControls";
 import { Slider } from "@/components/Slider";
 import {
   createWavetableOscillatorNode,
+  fetchWavetableNames,
   loadWavetable,
-  WavetableLoader,
   WavetableOscillatorWorkletNode,
 } from "@synthlet/wavetable-oscillator";
 import { useEffect, useState } from "react";
@@ -24,7 +24,7 @@ export function CrowMono() {
     createSynthAudioContext().then((context) => {
       setSynth(new CrowMonoSynth(context, "ACCESS_V"));
     });
-    WavetableLoader.fetchAvailableNames().then((names) => {
+    fetchWavetableNames().then((names) => {
       names.sort();
       setAvailableNames(names);
     });
@@ -129,7 +129,7 @@ class CrowMonoSynth {
 
   setWavetable(name: string) {
     loadWavetable(name).then((wavetable) => {
-      this.osc.setWavetable(wavetable.data, wavetable.length);
+      this.osc.setWavetable(wavetable);
     });
   }
 }

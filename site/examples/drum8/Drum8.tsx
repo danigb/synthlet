@@ -1,7 +1,7 @@
 "use client";
 
-import { createSynthAudioContext } from "@/audio-context";
-import { Drum8ModuleType, Drum8WorkletNode } from "@synthlet/drum8";
+import { createSynthAudioContext } from "@/app/audio-context";
+import { Drum8Type, Drum8WorkletNode } from "@synthlet/drum8";
 import { useEffect, useState } from "react";
 import { createDrum8Node } from "synthlet";
 
@@ -12,8 +12,8 @@ export function Drum8() {
         Drum8 drums synthesizer
       </h1>
       <div className="mt-4 flex flex-col gap-2">
-        <Drum8Sound type="kick" tone snap />
-        <Drum8Sound type="snare" tone snap />
+        <Drum8Sound type={Drum8Type.KICK} tone snap />
+        <Drum8Sound type={Drum8Type.SNARE} tone snap />
       </div>
     </div>
   );
@@ -24,7 +24,7 @@ function Drum8Sound({
   tone,
   snap,
 }: {
-  type: Drum8ModuleType;
+  type: Drum8Type;
   tone?: boolean;
   snap?: boolean;
 }) {
@@ -116,7 +116,7 @@ function SynthParam({
 
 export class Drum8Synth {
   node: Drum8WorkletNode;
-  constructor(context: AudioContext, type: Drum8ModuleType) {
+  constructor(context: AudioContext, type: Drum8Type) {
     this.node = createDrum8Node(context, { type });
     this.node.connect(context.destination);
   }

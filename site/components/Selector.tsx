@@ -1,8 +1,6 @@
 import { useEffect, useState } from "react";
 
-type SelectorValue<T> = T | { name: string; value: T };
-
-export function Selector<T>({
+export function Selector({
   name,
   initialValue,
   values,
@@ -11,19 +9,14 @@ export function Selector<T>({
   initialize,
 }: {
   name: string;
-  values: readonly SelectorValue<T>[];
-  onChange: (value: T) => void;
+  values: readonly string[];
+  onChange: (value: string) => void;
   initialValue: string;
   selectClassName?: string;
   initialize?: boolean;
   format?: (value: string) => string;
 }) {
   const [value, setValue] = useState<string>(initialValue);
-
-  const valueOf = (value: SelectorValue<T>) =>
-    typeof value === "string" ? value : value.value;
-  const nameOf = (value: SelectorValue<T>) =>
-    typeof value === "string" ? value : value.name;
 
   useEffect(() => {
     if (initialize) {
@@ -44,7 +37,7 @@ export function Selector<T>({
         }}
       >
         {values.map((value) => (
-          <option key={valueOf(value)}>{nameOf(value)}</option>
+          <option key={value}>{value}</option>
         ))}
       </select>
     </>
