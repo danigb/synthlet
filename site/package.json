@@ -8,8 +8,9 @@
     "start": "next start",
     "postinstall": "fumadocs-mdx",
     "deploy": "npm run deploy:build && npm run deploy:github",
-    "deploy:github": "npm run deploy:build && gh-pages -d out/ -t true",
-    "deploy:build": "DEPLOY=true next build"
+    "deploy:github": "npm run deploy:build && npm run deploy:fix && gh-pages -d out/ -t true",
+    "deploy:build": "DEPLOY=true next build",
+    "deploy:fix": "cp out/docs/quick-start.html out/docs/index.html"
   },
   "dependencies": {
     "fumadocs-core": "13.4.4",
