@@ -8,7 +8,7 @@ const isDeploy = process.env.DEPLOY || false;
 let assetPrefix = "/";
 let basePath = "";
 
-if (isDeploy) {
+if (isDeploy || true) {
   assetPrefix = `/${repo}/`;
   basePath = `/${repo}`;
 }
