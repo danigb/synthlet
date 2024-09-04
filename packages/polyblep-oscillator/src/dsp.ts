@@ -30,12 +30,10 @@ export function createPolyblepOscillator(sampleRate: number) {
     frequency: number
   ) {
     if (type !== waveformType) {
-      console.log("POLYBLEP WT", type);
       type = waveformType;
       gen = GENS[type] ?? sine;
     }
     if (freq !== frequency) {
-      console.log("POLYBLEP FREQ", frequency);
       freq = frequency;
       inc = freq * ivsr;
     }
