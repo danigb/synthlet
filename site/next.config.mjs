@@ -20,6 +20,7 @@ const config = {
   basePath,
   reactStrictMode: true,
   images: {
+    unoptimized: true,
     dangerouslyAllowSVG: true,
     remotePatterns: [
       {

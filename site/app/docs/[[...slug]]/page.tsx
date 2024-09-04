@@ -22,6 +22,14 @@ export default async function Page({
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
+      {(page.data as any).package && (
+        <a href="https://www.npmjs.com/package/@synthlet/clip-amp">
+          <img
+            alt="npm package"
+            src="https://img.shields.io/npm/v/@synthlet/clip-amp"
+          />
+        </a>
+      )}
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription>{page.data.description}</DocsDescription>
       <DocsBody>

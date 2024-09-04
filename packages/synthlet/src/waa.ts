@@ -13,6 +13,12 @@ export function createGain(
   return disposable(node, conns);
 }
 
+export function createConstantNode(context: AudioContext, value: number) {
+  const node = new ConstantSourceNode(context, { offset: value });
+  node.start();
+  return disposable(node);
+}
+
 type OscillatorInputs = {
   type: OscillatorType;
   frequency: ParamInput;

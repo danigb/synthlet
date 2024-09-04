@@ -1,10 +1,28 @@
 ---
-Title: Clip Amplifier
-Description: An two-gain stage amplifier with clipping
+title: Clip Amplifier
+description: An two-gain stage amplifier with clipping
+package: clip-amp
 ---
 
-`@synthlet/clip-amp` is a two-gain stage amplifier with clipping.
+```ts
+import {
+  createClipAmpNode,
+  registerClipAmpWorkletOnce,
+  ClipType,
+} from "synthlet"; // or "@synthlet/clip-amp";
 
-It is useful to add distortion to an audio signal.
+const audioContext = new AudioContext();
+registerClipAmpWorkletOnce(audioContext);
 
-[![npm version](https://img.shields.io/npm/v/%40synthlet%2Fclip-amp)](https://www.npmjs.com/package/@synthlet/clip-amp)
+const amp = createClipAmpNode(audioContext, {
+  clipType: ClipType.TANH,
+  preGain: 3,
+  postGain: 0.3,
+});
+```
+
+## Parameters
+
+- `clipType`: Clip type, currently only `ClipType.TANH`, or `ClipType.BYPASS`
+- `preGain`: Gain before clipping.
+- `postGain`: Gain after clipping.

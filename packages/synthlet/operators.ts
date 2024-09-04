@@ -11,11 +11,25 @@ import {
   createOscillator,
 } from "./src/waa";
 
+export type Operators = ReturnType<typeof createOperators>;
+
 export function createOperators(context: AudioContext) {
   const set = new Set<DisposableAudioNode>();
+
   const add = <T extends DisposableAudioNode>(node: T): T => {
+    if (!set.has(node)) console.log("ADD", node);
     set.add(node);
     return node;
+  };
+  const disposer = (node: AudioNode) => {
+    const _dispose = (node as any).dispose;
+    const disposables = Array.from(set).filter((d) => d !== node);
+    set.clear();
+    console.log("DISPOSER", node, disposables);
+    return () => {
+      _dispose?.();
+      disposables.forEach((d) => d.dispose());
+    };
   };
 
   return {
@@ -97,17 +111,6 @@ export function createOperators(context: AudioContext) {
     bpf: (frequency?: ParamInput, Q?: ParamInput) =>
       add(createFilter(context, { type: "bandpass", frequency, Q })),
 
-    // Dispose
-    disposer: (node: AudioNode) => {
-      const _dispose = (node as any).dispose;
-      const disposables = Array.from(set).filter((d) => d !== node);
-      set.clear();
-      return () => {
-        _dispose?.();
-        disposables.forEach((d) => d.dispose());
-      };
-    },
-
     // Math
     add: (...inputs: ParamInput[]) => {
       const g = createGain(context, { gain: 1 });
@@ -120,5 +123,11 @@ export function createOperators(context: AudioContext) {
       });
       return add(g);
     },
+
+    // Dispose
+    synth<T extends AudioNode>(node: T): T & DisposableAudioNode {
+      return Object.assign(node, { dispose: disposer(node) });
+    },
+    disposer,
   };
 }

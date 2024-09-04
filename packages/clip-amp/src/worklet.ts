@@ -35,8 +35,10 @@ export class ClipAmpProcessor extends AudioWorkletProcessor {
     const input = inputs[0][0];
     const output = outputs[0][0];
 
-    for (let i = 0; i < input.length; i++) {
-      output[i] = this.fn(input[i] * pre) * post;
+    if (input && output) {
+      for (let i = 0; i < input.length; i++) {
+        output[i] = this.fn(input[i] * pre) * post;
+      }
     }
 
     return this.r;

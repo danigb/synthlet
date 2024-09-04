@@ -11,6 +11,7 @@ import { registerParamWorkletOnce } from "@synthlet/param";
 import { registerPolyblepOscillatorWorkletOnce } from "@synthlet/polyblep-oscillator";
 import { registerStateVariableFilterWorkletOnce } from "@synthlet/state-variable-filter";
 import { registerWavetableOscillatorWorkletOnce } from "@synthlet/wavetable-oscillator";
+import { createOperators, Operators } from "../operators";
 
 export * from "@synthlet/ad";
 export * from "@synthlet/adsr";
@@ -25,6 +26,14 @@ export * from "@synthlet/param";
 export * from "@synthlet/polyblep-oscillator";
 export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/wavetable-oscillator";
+
+// experimental API
+export function synthlet<T extends AudioNode>(fn: (op: Operators) => T) {
+  return (context: AudioContext) => {
+    const op = createOperators(context);
+    return fn(op);
+  };
+}
 
 export * from "./synths";
 

@@ -15,17 +15,9 @@ export class AdProcessor extends AudioWorkletProcessor {
     };
   }
 
-  process(
-    _inputs: Float32Array[][],
-    outputs: Float32Array[][],
-    parameters: any
-  ) {
-    this.d.update(
-      parameters.trigger[0],
-      parameters.attack[0],
-      parameters.decay[0]
-    );
-    this.d.gen(outputs[0][0]);
+  process(_inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
+    this.d.update(params.trigger[0], params.attack[0], params.decay[0]);
+    this.d.gen(outputs[0][0], params.offset[0], params.gain[0]);
 
     return this.r;
   }
@@ -35,6 +27,8 @@ export class AdProcessor extends AudioWorkletProcessor {
       ["trigger", 0, 0, 1],
       ["attack", 0.01, 0, 10],
       ["decay", 0.1, 0, 10],
+      ["offset", 0, 0, 20000],
+      ["gain", 1, 0, 10000],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,
       defaultValue,
@@ -72,7 +66,6 @@ function createEnvelope(
     update(trigger: number, attackTime: number, decayTime: number) {
       if (trigger === 1) {
         if (!gate) {
-          console.log("trigger", trigger);
           gate = true;
           mode = MODE_ATTACK;
         }
@@ -88,7 +81,7 @@ function createEnvelope(
         decayEnv = Math.exp(-1.0 / (Math.max(decay, 0.001) * sampleRate));
       }
     },
-    gen(output: Float32Array) {
+    gen(output: Float32Array, offset: number, gain: number) {
       let out = 0;
       for (let i = 0; i < output.length; i++) {
         switch (mode) {
@@ -117,7 +110,7 @@ function createEnvelope(
             break;
         }
 
-        output[i] = out;
+        output[i] = offset + out * gain;
       }
     },
   };
