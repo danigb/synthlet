@@ -1,3 +1,14 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+btn {
+  @apply border px-2 py-1 rounded;
+}
+
+btn.btn-primary {
+  @apply bg-fd-primary;
+}
+btn.btn-secondary {
+  @apply bg-fd-secondary;
+}

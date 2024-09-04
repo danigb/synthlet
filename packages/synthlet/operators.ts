@@ -2,7 +2,7 @@ import { AdInputParams, createAdNode } from "@synthlet/ad";
 import { createClipAmpNode } from "@synthlet/clip-amp";
 import { createImpulseNode } from "@synthlet/impulse";
 import { createNoiseNode } from "@synthlet/noise";
-import { createParamNode, ParamType } from "@synthlet/param";
+import { createParamNode, ParamType, ParamWorkletNode } from "@synthlet/param";
 import { DisposableAudioNode, ParamInput } from "./src/_worklet";
 import {
   createConstantNode,
@@ -125,9 +125,34 @@ export function createOperators(context: AudioContext) {
     },
 
     // Dispose
-    synth<T extends AudioNode>(node: T): T & DisposableAudioNode {
-      return Object.assign(node, { dispose: disposer(node) });
+    synth<T extends AudioNode, P extends ControlParams>(
+      node: T,
+      params?: P
+    ): T & DisposableAudioNode & ParamWorkletNodeToInputs<P> {
+      return Object.assign(node, {
+        dispose: disposer(node),
+        ...convertParamsToInputs(params),
+      });
     },
     disposer,
   };
+}
+
+type ControlParams = Record<string, ParamWorkletNode>;
+
+type ParamWorkletNodeToInputs<T extends ControlParams> = {
+  [K in keyof T]: T[K]["input"];
+};
+
+function convertParamsToInputs<P extends ControlParams>(
+  params?: P
+): ParamWorkletNodeToInputs<P> {
+  const inputs = {} as ParamWorkletNodeToInputs<P>;
+
+  if (params) {
+    for (const key in params) {
+      inputs[key] = params[key].input;
+    }
+  }
+  return inputs;
 }
