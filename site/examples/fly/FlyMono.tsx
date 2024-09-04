@@ -23,7 +23,6 @@ import {
   createStateVariableFilterNode,
   createVcaNode,
   PolyblepOscillatorWorkletNode,
-  PolyblepWaveformType,
   StateVariableFilterWorkletNode,
 } from "synthlet";
 
@@ -47,15 +46,6 @@ export function FlyMono() {
       <div className="mt-4">
         <h2 className="border-b border-blue-400">Oscillator</h2>
         <div className="mt-2 grid grid-cols-4 gap-2 w-[30rem]">
-          <Selector
-            name="type"
-            selectClassName="bg-blue-700 p-1 rounded border-blue-300 col-span-3"
-            values={WAVEFORM_TYPES}
-            initialValue={WAVEFORM_TYPES[1]}
-            onChange={(value) => {
-              synth.osc.type = value as PolyblepWaveformType;
-            }}
-          />
           <FrequencySelector
             onChange={(freq) => {
               return synth.osc.frequency.setValueAtTime(freq, 0);

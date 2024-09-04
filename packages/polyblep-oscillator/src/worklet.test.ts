@@ -1,17 +1,15 @@
-import { getPolyblepOscillatorProcessorName } from "./index";
-
 describe("ProcessorNode", () => {
   let Processor: any;
   const sampleRate = 40;
 
   beforeAll(async () => {
     createWorkletTestContext(sampleRate);
-    Processor = (await import("./worklet")).Processor;
+    Processor = (await import("./worklet")).PolyBLEProcessor;
   });
 
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
-      getPolyblepOscillatorProcessorName(),
+      "PolyBLEProcessor",
       Processor
     );
   });
@@ -24,7 +22,7 @@ describe("ProcessorNode", () => {
     const processor = new Processor();
     const { inputs, outputs } = createInputsOutputs({ length: sampleRate });
     const params = {
-      waveform: [0],
+      type: [0],
       frequency: [2],
     };
     processor.process(inputs, outputs, params);
@@ -34,7 +32,7 @@ describe("ProcessorNode", () => {
     const processor = new Processor();
     const { inputs, outputs } = createInputsOutputs({ length: sampleRate });
     const params = {
-      waveform: [1],
+      type: [1],
       frequency: [2],
     };
     processor.process(inputs, outputs, params);
@@ -44,7 +42,7 @@ describe("ProcessorNode", () => {
     const processor = new Processor();
     const { inputs, outputs } = createInputsOutputs({ length: sampleRate });
     const params = {
-      waveform: [2],
+      type: [2],
       frequency: [2],
     };
     processor.process(inputs, outputs, params);
@@ -54,7 +52,7 @@ describe("ProcessorNode", () => {
     const processor = new Processor();
     const { inputs, outputs } = createInputsOutputs({ length: sampleRate });
     const params = {
-      waveform: [3],
+      type: [3],
       frequency: [2],
     };
     processor.process(inputs, outputs, params);

@@ -11,19 +11,19 @@ export function useSynth<T extends Synth>(createSynth: CreateSynth<T>) {
   const [synth, setSynth] = useState<T | null>(null);
 
   useEffect(() => {
-    console.log("connecting");
+    console.log("useSynth connecting");
     let bye = false;
     let synth: T;
     createSynthAudioContext().then((context) => {
       if (bye) return;
       synth = createSynth(context);
       synth.connect(context.destination);
-      console.log("connected", synth);
+      console.log("useSynth connected", synth);
       setSynth(synth);
     });
     return () => {
       bye = true;
-      console.log("disconnecting", synth);
+      console.log("useSynth dispose", synth);
       synth?.dispose();
     };
   }, []);

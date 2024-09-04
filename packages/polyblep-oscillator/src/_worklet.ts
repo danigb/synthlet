@@ -59,6 +59,7 @@ export function connectAll(
     if (typeof input === "number") {
       param.value = input;
     } else if (input instanceof AudioNode) {
+      console.log("POLY CNNECT", paramName, input);
       param.value = 0;
       input.connect(param);
       connected.push(input);
@@ -72,7 +73,7 @@ export function connectAll(
 
 export function disposable<T extends AudioNode>(
   node: T,
-  connected?: ConnectedUnit[]
+  dependencies?: ConnectedUnit[]
 ): T & DisposableAudioNode {
   let disposed = false;
   return Object.assign(node, {
@@ -82,10 +83,10 @@ export function disposable<T extends AudioNode>(
 
       node.disconnect();
       (node as any).port?.postMessage({ type: "DISPOSE" });
-      if (!connected) return;
+      if (!dependencies) return;
 
-      while (connected.length) {
-        const conn = connected.pop();
+      while (dependencies.length) {
+        const conn = dependencies.pop();
         if (conn instanceof AudioNode) {
           if (typeof (conn as any).dispose === "function") {
             (conn as any).dispose?.();

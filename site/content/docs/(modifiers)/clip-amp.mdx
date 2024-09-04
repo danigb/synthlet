@@ -1,0 +1,28 @@
+---
+title: Clip Amplifier
+description: An two-gain stage amplifier with clipping
+package: clip-amp
+---
+
+```ts
+import {
+  createClipAmpNode,
+  registerClipAmpWorkletOnce,
+  ClipType,
+} from "synthlet"; // or "@synthlet/clip-amp";
+
+const audioContext = new AudioContext();
+registerClipAmpWorkletOnce(audioContext);
+
+const amp = createClipAmpNode(audioContext, {
+  clipType: ClipType.TANH,
+  preGain: 3,
+  postGain: 0.3,
+});
+```
+
+## Parameters
+
+- `clipType`: Clip type, currently only `ClipType.TANH`, or `ClipType.BYPASS`
+- `preGain`: Gain before clipping.
+- `postGain`: Gain after clipping.

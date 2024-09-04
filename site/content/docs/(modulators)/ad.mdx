@@ -3,11 +3,11 @@ title: AD Envelope
 description: An Attack-Release exponential envelope generator
 ---
 
+import { AttackDecayExample } from "../../../examples/AttackDecayExample";
+
 This is a one-stage envelope generator useful to create percusive sounds.
 
 Unlike ADSR, this envelope can finish before the gate is released.
-
-# Example
 
 ```ts
 import { createAdNode, registerAdWorkletOnce } from "synthlet";
@@ -28,8 +28,12 @@ ad.connect(amp.gain);
 ad.trigger.value = 1;
 ```
 
-#### Parameters
+<AttackDecayExample />
+
+## Parameters
 
 - `attack`: The attack time in seconds. Default is 0.1.
 - `decay`: The decay time in seconds. Default is 0.1.
 - `trigger`: The envelope trigger. 1 means start. You need to move the trigger back to 1 to restart the envelope.
+- `offset`: The offset of the envelope. Default is 0.
+- `gain`: The gain of the envelope. Default is 1.

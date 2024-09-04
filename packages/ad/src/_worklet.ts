@@ -57,6 +57,7 @@ export function connectAll(
     const param = node[paramName];
     const input = inputs[paramName];
     if (typeof input === "number") {
+      console.log("SET", paramName, input);
       param.value = input;
     } else if (input instanceof AudioNode) {
       param.value = 0;
@@ -72,7 +73,7 @@ export function connectAll(
 
 export function disposable<T extends AudioNode>(
   node: T,
-  connected?: ConnectedUnit[]
+  dependencies?: ConnectedUnit[]
 ): T & DisposableAudioNode {
   let disposed = false;
   return Object.assign(node, {
@@ -82,10 +83,10 @@ export function disposable<T extends AudioNode>(
 
       node.disconnect();
       (node as any).port?.postMessage({ type: "DISPOSE" });
-      if (!connected) return;
+      if (!dependencies) return;
 
-      while (connected.length) {
-        const conn = connected.pop();
+      while (dependencies.length) {
+        const conn = dependencies.pop();
         if (conn instanceof AudioNode) {
           if (typeof (conn as any).dispose === "function") {
             (conn as any).dispose?.();

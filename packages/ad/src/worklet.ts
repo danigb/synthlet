@@ -5,7 +5,7 @@ export class AdProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.r = true;
-    this.d = createEnvelope(sampleRate, 0.01, 0.1);
+    this.d = createEnvelope(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -15,17 +15,9 @@ export class AdProcessor extends AudioWorkletProcessor {
     };
   }
 
-  process(
-    _inputs: Float32Array[][],
-    outputs: Float32Array[][],
-    parameters: any
-  ) {
-    this.d.update(
-      parameters.trigger[0],
-      parameters.attack[0],
-      parameters.decay[0]
-    );
-    this.d.gen(outputs[0][0]);
+  process(_inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
+    this.d.update(params.trigger[0], params.attack[0], params.decay[0]);
+    this.d.gen(outputs[0][0], params.offset[0], params.gain[0]);
 
     return this.r;
   }
@@ -35,6 +27,8 @@ export class AdProcessor extends AudioWorkletProcessor {
       ["trigger", 0, 0, 1],
       ["attack", 0.01, 0, 10],
       ["decay", 0.1, 0, 10],
+      ["offset", 0, 0, 20000],
+      ["gain", 1, 0, 10000],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,
       defaultValue,
@@ -48,22 +42,22 @@ export class AdProcessor extends AudioWorkletProcessor {
 registerProcessor("AdProcessor", AdProcessor);
 
 // Attack-Decay envelope based on https://paulbatchelor.github.io/sndkit/env/
-function createEnvelope(
-  sampleRate: number,
-  attackTime: number,
-  decayTime: number
-) {
+function createEnvelope(sampleRate: number) {
   const MODE_ZERO = 0;
   const MODE_ATTACK = 1;
   const MODE_DECAY = 2;
   const EPS = 5e-8;
 
+  // This time constants are obtained empirically
+  const attackTime2Tau = sampleRate * 0.05;
+  const decayTime2Tau = sampleRate * 0.1;
+
   // Convert seconds to time constants
   let gate = false;
-  let attack = attackTime;
-  let decay = decayTime;
-  let attackEnv = Math.exp(-1.0 / (attack * sampleRate));
-  let decayEnv = Math.exp(-1.0 / (decay * sampleRate));
+  let attack = 0.1;
+  let decay = 0.1;
+  let attackEnv = Math.exp(-1.0 / (0.1 * attackTime2Tau));
+  let decayEnv = Math.exp(-1.0 / (0.1 * decayTime2Tau));
 
   let mode = MODE_ZERO;
   let prev = 0;
@@ -72,7 +66,6 @@ function createEnvelope(
     update(trigger: number, attackTime: number, decayTime: number) {
       if (trigger === 1) {
         if (!gate) {
-          console.log("trigger", trigger);
           gate = true;
           mode = MODE_ATTACK;
         }
@@ -81,43 +74,35 @@ function createEnvelope(
       }
       if (attackTime !== attack) {
         attack = attackTime;
-        attackEnv = Math.exp(-1.0 / (Math.max(attack, 0.001) * sampleRate));
+        const tau = Math.max(attack * attackTime2Tau, 0.001);
+        attackEnv = Math.exp(-1.0 / tau);
       }
       if (decayTime !== decay) {
         decay = decayTime;
-        decayEnv = Math.exp(-1.0 / (Math.max(decay, 0.001) * sampleRate));
+        const tau = Math.max(decay * decayTime2Tau, 0.001);
+        decayEnv = Math.exp(-1.0 / tau);
       }
     },
-    gen(output: Float32Array) {
+    gen(output: Float32Array, offset: number, gain: number) {
       let out = 0;
       for (let i = 0; i < output.length; i++) {
-        switch (mode) {
-          case MODE_ATTACK:
-            out = attackEnv * prev + (1.0 - attackEnv);
-
-            if (out - prev <= EPS) {
-              mode = MODE_DECAY;
-            }
-
-            prev = out;
-            break;
-
-          case MODE_DECAY:
-            out = decayEnv * prev;
-            prev = out;
-
-            if (out <= EPS) {
-              mode = MODE_ZERO;
-            }
-            break;
-
-          case MODE_ZERO:
-          default:
-            out = 0;
-            break;
+        if (mode === MODE_ATTACK) {
+          out = attackEnv * prev + (1.0 - attackEnv);
+          if (out - prev <= EPS) {
+            mode = MODE_DECAY;
+          }
+          prev = out;
+        } else if (mode === MODE_DECAY) {
+          out = decayEnv * prev;
+          prev = out;
+          if (out <= EPS) {
+            mode = MODE_ZERO;
+          }
+        } else {
+          out = 0;
         }
 
-        output[i] = out;
+        output[i] = offset + out * gain;
       }
     },
   };
