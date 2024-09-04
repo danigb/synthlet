@@ -200,16 +200,16 @@ exports[`ProcessorNode has parameter descriptors 1`] = `
 [
   {
     "automationRate": "k-rate",
-    "defaultValue": 1,
-    "maxValue": 3,
+    "defaultValue": 0,
+    "maxValue": 10,
     "minValue": 0,
-    "name": "waveform",
+    "name": "type",
   },
   {
     "automationRate": "k-rate",
-    "defaultValue": 1000,
+    "defaultValue": 0,
     "maxValue": 20000,
-    "minValue": 16,
+    "minValue": 0,
     "name": "frequency",
   },
 ]

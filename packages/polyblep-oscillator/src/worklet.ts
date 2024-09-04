@@ -1,39 +1,13 @@
-import { PolyBlep } from "./polyblep";
+import { createPolyblepOscillator } from "./dsp";
 
-type Waveform = () => number;
-
-export class Processor extends AudioWorkletProcessor {
-  static parameterDescriptors = [
-    {
-      name: "waveform",
-      defaultValue: 1,
-      minValue: 0,
-      maxValue: 3,
-      automationRate: "k-rate",
-    },
-    {
-      name: "frequency",
-      defaultValue: 1000,
-      minValue: 16,
-      maxValue: 20000,
-      automationRate: "k-rate",
-    },
-  ];
-
+export class PolyBLEProcessor extends AudioWorkletProcessor {
   r: boolean; // running
-  p: PolyBlep;
-  w: Waveform[];
+  g: ReturnType<typeof createPolyblepOscillator>;
 
   constructor() {
     super();
     this.r = true;
-    this.p = new PolyBlep(sampleRate);
-    this.w = [
-      this.p.sine.bind(this.p),
-      this.p.saw.bind(this.p),
-      this.p.square.bind(this.p),
-      this.p.triangle.bind(this.p),
-    ];
+    this.g = createPolyblepOscillator(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -43,22 +17,26 @@ export class Processor extends AudioWorkletProcessor {
     };
   }
 
-  process(
-    _inputs: Float32Array[][],
-    outputs: Float32Array[][],
-    parameters: any
-  ) {
-    const freq = parameters["frequency"][0];
-    const waveform = parameters["waveform"][0];
-    const fn = this.w[waveform];
-    this.p.setFreq(freq);
-    const output = outputs[0][0];
-    for (let i = 0; i < output.length; i++) {
-      output[i] = fn();
+  process(_inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
+    let output = outputs[0][0];
+    if (output) {
+      this.g(outputs[0][0], params.type[0], params.frequency[0]);
     }
-
     return this.r;
+  }
+
+  static get parameterDescriptors() {
+    return [
+      ["type", 0, 0, 10],
+      ["frequency", 0, 0, 20000],
+    ].map(([name, defaultValue, minValue, maxValue]) => ({
+      name,
+      defaultValue,
+      minValue,
+      maxValue,
+      automationRate: "k-rate",
+    }));
   }
 }
 
-registerProcessor("PolyBLEPWorkletProcessor", Processor);
+registerProcessor("PolyBLEProcessor", PolyBLEProcessor);
