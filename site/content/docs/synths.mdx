@@ -11,14 +11,38 @@ Some synthesizers are provided for convenience. They are implemented by connecti
 
 ### Drums
 
-### Kick
+### KickDrum
 
-<DrumExample instrumentName="Kick" />
+```ts
+import { KickDrum } from "synthlet";
+
+const kick = new KickDrum(audioContext);
+kick.trigger.value = 1;
+kick.tone.value = 0.5;
+```
+
+<DrumExample instrumentName="KickDrum" />
 
 ### Snare
 
-<DrumExample instrumentName="Snare" />
+```ts
+import { SnareDrum } from "synthlet";
+
+const snare = new SnareDrum(audioContext);
+snare.trigger.value = 1;
+snare.tone.value = 0.5;
+```
+
+<DrumExample instrumentName="SnareDrum" />
 
 ### Clave
 
-<DrumExample instrumentName="Clave" />
+```ts
+import { ClaveDrum } from "synthlet";
+
+const clave = new ClaveDrum(audioContext);
+clave.trigger.value = 1;
+clave.tone.value = 0.5;
+```
+
+<DrumExample instrumentName="ClaveDrum" />

@@ -10,11 +10,11 @@ type DrumSynth = Synth & {
 
 function getSynth(instrumentName: string) {
   switch (instrumentName) {
-    case "Kick":
+    case "KickDrum":
       return KickDrum;
-    case "Clave":
+    case "ClaveDrum":
       return ClaveDrum;
-    case "Snare":
+    case "SnareDrum":
       return SnareDrum;
     default:
       throw Error(`Unknown instrument: ${instrumentName}`);
@@ -39,7 +39,7 @@ export function DrumExample<T extends DrumSynth>({
       className="border px-2 py-1 rounded bg-fd-secondary"
       onClick={() => setOpen(true)}
     >
-      Start {instrumentName} example
+      Open example
     </button>
   );
 }
