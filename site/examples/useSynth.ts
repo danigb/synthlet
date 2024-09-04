@@ -1,13 +1,13 @@
 import { createSynthAudioContext } from "@/app/audio-context";
 import { useEffect, useState } from "react";
 
-type Synth = {
-  disconnect: () => void;
+export type CreateSynth<T extends Synth> = (context: AudioContext) => T;
+export type Synth = {
+  connect(destination: AudioNode): void;
+  dispose: () => void;
 };
 
-export function useSynth<T extends Synth>(
-  createSynth: (context: AudioContext) => T
-) {
+export function useSynth<T extends Synth>(createSynth: CreateSynth<T>) {
   const [synth, setSynth] = useState<T | null>(null);
 
   useEffect(() => {
@@ -17,13 +17,14 @@ export function useSynth<T extends Synth>(
     createSynthAudioContext().then((context) => {
       if (bye) return;
       synth = createSynth(context);
+      synth.connect(context.destination);
       console.log("connected", synth);
       setSynth(synth);
     });
     return () => {
       bye = true;
       console.log("disconnecting", synth);
-      synth?.disconnect();
+      synth?.dispose();
     };
   }, []);
 

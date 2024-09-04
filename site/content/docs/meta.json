@@ -3,11 +3,11 @@
   "pages": [
     "quick-start",
     "guide",
+    "synths",
     "---Available Modules---",
     "(sources)",
     "(modifiers)",
     "(modulators)",
-    "(effects)",
-    "(synths)"
+    "(effects)"
   ]
 }

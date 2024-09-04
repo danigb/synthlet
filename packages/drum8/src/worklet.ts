@@ -1,28 +1,18 @@
-import { Generator, Kick, Snare } from "./drums";
-
-function createInstrument(type: string): Generator {
-  switch (type) {
-    case "kick":
-      return Kick(sampleRate);
-    case "snare":
-      return Snare(sampleRate);
-    default:
-      throw new Error("Invalid instrument: " + type);
-  }
-}
+import { createInstrument } from "./instruments";
 
 export class Drum8WorkletProcessor extends AudioWorkletProcessor {
   r: boolean; // running
+  t: number; // type
   g: (output: Float32Array, params: any) => void;
 
   constructor(options: any) {
     super();
     this.r = true;
-    const type = options?.processorOptions?.type ?? "";
-    this.g = createInstrument(type);
+    this.t = 0;
+    this.g = createInstrument(this.t);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "DISCONNECT":
+        case "DISPOSE":
           this.r = false;
           break;
       }
@@ -34,6 +24,9 @@ export class Drum8WorkletProcessor extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
+    if (this.t !== parameters.type[0]) {
+      this.g = createInstrument(parameters.type[0]);
+    }
     this.g(outputs[0][0], parameters);
     return this.r;
   }

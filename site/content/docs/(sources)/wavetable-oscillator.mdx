@@ -1,0 +1,59 @@
+---
+title: Wavetable Oscillator
+description: A morphing wavetable oscillator
+---
+
+`@synthlet/wavetable-oscillator`
+
+This module implements a wavetable oscillator with morphing capabilities.
+
+```ts
+import {
+  createWavetableOscillatorNode,
+  registerWavetableOscillatorWorkletOnce,
+  loadWavetable,
+} from "@synthlet/wavetable-oscillator";
+
+// Register the worklet
+const audioContext = new AudioContext();
+await registerWavetableOscillatorWorkletOnce(audioContext);
+
+// Create the oscillator and connect it to the destination
+const osc = createWavetableOscillatorNode(audioContext, {
+  morphFrequency: 0.1,
+});
+osc.connect(audioContext.destination);
+
+// Load a wavetable
+const wavetable = await loadWavetable(audioContext, "SYNLP10");
+osc.setWavetable(wavetable);
+
+// Change the frequency
+osc.frequency.value = 880;
+```
+
+## Parameters
+
+- `frequency`: The frequency of the oscillator in Hz. Default is 440.
+- `morphFrequency`: The frequency of the morphing in Hz. Default is 0.
+
+## Loading wavetables
+
+WavetableOscillator is compatible with [WaveEdit Online](https://waveeditonline.com/) format.
+
+This package provides a couple of helper functions:
+
+```ts
+import {
+  loadWavetable,
+  fetchWavetableNames,
+} from "@synthlet/wavetable-oscillator";
+
+const wavetableNames = await fetchWavetableNames(); // => ["SYNLP10", "SYNLP165",   ...]
+
+const wavetable = await loadWavetable(audioContext, "SYNLP10");
+
+osc.setWavetable(wavetable);
+```
+
+Wavetables are stored at [smpldsnds wavedit repository](https://github.com/smpldsnds/wavedit-online). The list of available tables is [here](https://smpldsnds.github.io/wavedit-online/samples/files.json)

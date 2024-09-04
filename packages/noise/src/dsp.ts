@@ -1,7 +1,7 @@
 export type NoiseAlgorithm = (output: Float32Array) => void;
 
 export enum NoiseType {
-  WHITE_RND = 0,
+  WHITE = 0,
   PINK_TRAMMEL = 10,
   PINK_COOPER = 11,
 }
@@ -11,7 +11,7 @@ export function getNoiseAlgorithm(
   type: NoiseType
 ): NoiseAlgorithm {
   switch (type) {
-    case NoiseType.WHITE_RND:
+    case NoiseType.WHITE:
       return whiteRnd;
     case NoiseType.PINK_TRAMMEL:
       return createPinkLarryTrammel();

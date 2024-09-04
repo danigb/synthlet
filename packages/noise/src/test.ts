@@ -17,7 +17,7 @@ describe("NoiseWorkletNode", () => {
 
   it("is generates audio", () => {
     const node = new NoiseWorklet();
-    let output = runProcessMono(node, 10, { type: [NoiseType.WHITE_RND] });
+    let output = runProcessMono(node, 10, { type: [NoiseType.WHITE] });
     let sum = output.reduce((sum, value) => sum + value, 0);
     expect(sum).not.toBe(0);
     output = runProcessMono(node, 10, { type: [NoiseType.PINK_TRAMMEL] });

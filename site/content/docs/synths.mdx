@@ -1,0 +1,48 @@
+---
+title: Synths
+description: Available built-in synthesizers
+---
+
+import { DrumExample } from "../../examples/DrumExample";
+
+Some synthesizers are provided for convenience. They are implemented by connecting different modules together.
+
+## Mono
+
+### Drums
+
+### KickDrum
+
+```ts
+import { KickDrum } from "synthlet";
+
+const kick = KickDrum(audioContext);
+kick.trigger.value = 1;
+kick.tone.value = 0.5;
+```
+
+<DrumExample instrumentName="KickDrum" />
+
+### Snare
+
+```ts
+import { SnareDrum } from "synthlet";
+
+const snare = SnareDrum(audioContext);
+snare.trigger.value = 1;
+snare.tone.value = 0.5;
+```
+
+<DrumExample instrumentName="SnareDrum" />
+
+### Clave
+
+```ts
+import { ClaveDrum } from "synthlet";
+
+const clave = ClaveDrum(audioContext);
+clave.trigger.value = 1;
+clave.tone.value = 0.5;
+```
+
+<DrumExample instrumentName="ClaveDrum" />

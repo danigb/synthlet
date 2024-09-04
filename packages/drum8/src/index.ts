@@ -5,22 +5,10 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export type Drum8ModuleType =
-  | "clave"
-  | "conga"
-  | "cowbell"
-  | "cymbal"
-  | "handclap"
-  | "hihat-closed"
-  | "hihat-open"
-  | "kick"
-  | "maracas"
-  | "rimshot"
-  | "snare"
-  | "tom";
+export { Drum8Type } from "./instruments";
 
 export type Drum8InputParams = {
-  type: string;
+  type: ParamInput;
   gate: ParamInput;
   attack: ParamInput;
   decay: ParamInput;
@@ -49,13 +37,10 @@ export const createDrum8Node = createWorkletConstructor<
   Drum8InputParams
 >({
   processorName: "Drum8WorkletProcessor",
-  paramNames: ["gate", "attack", "decay", "level", "snap", "tone"],
-  workletOptions: (params) => ({
+  paramNames: ["type", "gate", "attack", "decay", "level", "snap", "tone"],
+  workletOptions: () => ({
     numberOfInputs: 1,
     numberOfOutputs: 1,
-    processorOptions: {
-      type: params.type,
-    },
   }),
   postCreate: (node) => {
     node.setGate = (gate, time = 0) => {

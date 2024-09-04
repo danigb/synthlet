@@ -10,7 +10,7 @@ export class ChorusTWorkletProcessor extends AudioWorkletProcessor {
     this.p = createChorus(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "DISCONNECT":
+        case "DISPOSE":
           this.r = false;
           break;
       }

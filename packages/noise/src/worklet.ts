@@ -12,7 +12,7 @@ export class NoiseWorkletProcessor extends AudioWorkletProcessor {
     this.d = getNoiseAlgorithm(sampleRate, 0);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "DISCONNECT":
+        case "DISPOSE":
           this.r = false;
           break;
       }

@@ -26,7 +26,7 @@ export class LfoWorkletProcessor extends AudioWorkletProcessor {
     this.r = true;
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "DISCONNECT":
+        case "DISPOSE":
           this.r = false;
           break;
       }
