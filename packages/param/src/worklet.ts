@@ -29,11 +29,10 @@ export class ParamProcessor extends AudioWorkletProcessor {
       this.c = getConverter(this.t);
     }
 
-    outputs[0][0][0] = this.c(
-      inputs[0][0][0] + parameters.input[0],
-      parameters.min[0],
-      parameters.max[0]
-    );
+    const input = inputs[0][0];
+    const inputValue = input ? input[0] : 0;
+    const value = inputValue + parameters.input[0] + parameters.offset[0];
+    outputs[0][0].fill(this.c(value, parameters.min[0], parameters.max[0]));
 
     return this.r;
   }
@@ -42,6 +41,7 @@ export class ParamProcessor extends AudioWorkletProcessor {
     return [
       ["type", 0, 0, 10],
       ["input", 0, 0, 1000000],
+      ["offset", 0, 0, 1000000],
       ["min", 0, 0, 1000000],
       ["max", 1, 0, 1000000],
     ].map(([name, defaultValue, minValue, maxValue]) => ({

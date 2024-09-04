@@ -15,6 +15,9 @@ type CreateWorkletOptions<N, P> = {
   validateParams?: (params: Partial<P>) => void;
 };
 
+export type DisposableAudioNode = AudioNode & { dispose: () => void };
+
+// TODO: replace in createWorkletConstructor
 type DisposableAudioWorkletNode = AudioWorkletNode & {
   dispose: () => void;
 };
@@ -67,12 +70,10 @@ export function connectAll(
   return connected;
 }
 
-type Disposable = { dispose: () => void };
-
 export function disposable<T extends AudioNode>(
   node: T,
   connected?: ConnectedUnit[]
-): T & Disposable {
+): T & DisposableAudioNode {
   let disposed = false;
   return Object.assign(node, {
     dispose() {

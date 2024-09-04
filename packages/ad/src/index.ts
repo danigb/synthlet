@@ -11,6 +11,7 @@ export type AdWorkletNode = AudioWorkletNode & {
   trigger: AudioParam;
   attack: AudioParam;
   decay: AudioParam;
+  dispose(): void;
 };
 
 export type AdInputParams = {

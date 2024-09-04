@@ -63,6 +63,18 @@ function DrumExampleUI<T extends DrumSynth>({
       <div className="text-xl mb-4">{instrumentName} example</div>
 
       <div className="flex items-center gap-2 mb-4">
+        <div>Tone:</div>
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.01}
+          onChange={(e) => {
+            (synth as any).tone.value = e.target.valueAsNumber;
+          }}
+        />
+      </div>
+      <div className="flex items-center gap-2 mb-4">
         <button
           className="border px-2 py-1 rounded bg-fd-primary text-fd-primary-foreground"
           onMouseDown={() => {

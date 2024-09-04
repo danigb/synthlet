@@ -2,7 +2,7 @@ export enum ParamType {
   BYPASS = 0,
   DB_TO_GAIN = 1,
   GAIN_TO_DB = 2,
-  LINEAR = 2,
+  LINEAR = 3,
 }
 
 export type ConvertFn = (input: number, min: number, max: number) => number;
