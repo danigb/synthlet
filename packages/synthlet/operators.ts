@@ -3,6 +3,7 @@ import { createClipAmpNode } from "@synthlet/clip-amp";
 import { createImpulseNode } from "@synthlet/impulse";
 import { createNoiseNode } from "@synthlet/noise";
 import { createParamNode, ParamType, ParamWorkletNode } from "@synthlet/param";
+import { createPolyblepOscillatorNode } from "@synthlet/polyblep-oscillator";
 import { DisposableAudioNode, ParamInput } from "./src/_worklet";
 import {
   createConstantNode,
@@ -17,7 +18,6 @@ export function createOperators(context: AudioContext) {
   const set = new Set<DisposableAudioNode>();
 
   const add = <T extends DisposableAudioNode>(node: T): T => {
-    if (!set.has(node)) console.log("ADD", node);
     set.add(node);
     return node;
   };
@@ -25,7 +25,6 @@ export function createOperators(context: AudioContext) {
     const _dispose = (node as any).dispose;
     const disposables = Array.from(set).filter((d) => d !== node);
     set.clear();
-    console.log("DISPOSER", node, disposables);
     return () => {
       _dispose?.();
       disposables.forEach((d) => d.dispose());
@@ -45,7 +44,6 @@ export function createOperators(context: AudioContext) {
       return destination;
     },
     // Parameters
-    trigger: () => add(createParamNode(context)),
     param: (value?: ParamInput) =>
       add(createParamNode(context, { input: value })),
     dbToGain: (value?: ParamInput) =>
@@ -66,9 +64,11 @@ export function createOperators(context: AudioContext) {
 
     // Oscillators
     sine: (frequency?: ParamInput, detune?: ParamInput) =>
-      add(createOscillator(context, { type: "sine", frequency, detune })),
+      add(createOscillator(context, { type: "sine", frequency })),
     tri: (frequency?: ParamInput, detune?: ParamInput) =>
-      add(createOscillator(context, { type: "triangle", frequency, detune })),
+      add(
+        createPolyblepOscillatorNode(context, { type: "triangle", frequency })
+      ),
 
     white: () => add(createNoiseNode(context)),
 
@@ -76,8 +76,12 @@ export function createOperators(context: AudioContext) {
       add(createImpulseNode(context, { trigger })),
 
     // Envelope generators
-    genAd: (trigger: ParamInput, attack?: ParamInput, decay?: ParamInput) =>
-      add(createAdNode(context, { trigger, attack, decay })),
+    ad: (
+      trigger: ParamInput,
+      attack?: ParamInput,
+      decay?: ParamInput,
+      params?: Partial<AdInputParams>
+    ) => add(createAdNode(context, { trigger, attack, decay, ...params })),
 
     // Amplifiers
     amp: (gain?: ParamInput) =>
@@ -91,8 +95,8 @@ export function createOperators(context: AudioContext) {
         })
       ),
 
-    // Attack-Decay
-    ad: (
+    // Attack-Decay (percussive) envelope
+    perc: (
       trigger: ParamInput,
       attack?: ParamInput,
       decay?: ParamInput,

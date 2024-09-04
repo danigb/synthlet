@@ -12,7 +12,7 @@ export type KickDrumNode = DrumNode & {};
 export function KickDrum(context: AudioContext): KickDrumNode {
   const op = createOperators(context);
 
-  const trigger = op.trigger();
+  const trigger = op.param();
   const volume = op.volume();
   const tone = op.linear(30, 100, 0.2);
 
@@ -36,7 +36,7 @@ export type SnareDrumNode = DrumNode & {};
 export function SnareDrum(context: AudioContext): SnareDrumNode {
   const op = createOperators(context);
 
-  const trigger = op.trigger();
+  const trigger = op.param();
   const volume = op.volume();
   const tone = op.param();
 
@@ -60,7 +60,7 @@ export function ClaveDrum(context: AudioContext): DrumNode {
   const op = createOperators(context);
 
   const volume = op.volume();
-  const trigger = op.trigger();
+  const trigger = op.param();
   const tone = op.linear(1200, 1800, 0.6);
 
   const out = op.serial(

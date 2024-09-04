@@ -9,7 +9,7 @@ export function Slider({
   step = 1,
   transform = (x) => x,
   inputClassName,
-  labelClassName = "text-right",
+  labelClassName,
   valueClassName,
   units,
   initialize,
@@ -36,7 +36,7 @@ export function Slider({
 
   return (
     <>
-      <p className={labelClassName}>{label}</p>
+      <div className={labelClassName}>{label}</div>
       <input
         className={inputClassName}
         type="range"
@@ -50,10 +50,10 @@ export function Slider({
           onChange(transform(value));
         }}
       />
-      <p className={valueClassName}>
+      <div className={valueClassName}>
         {transform(value).toFixed(2)}
         {units}
-      </p>
+      </div>
     </>
   );
 }

@@ -1,0 +1,41 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`AdWorkletNode has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "trigger",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.01,
+    "maxValue": 10,
+    "minValue": 0,
+    "name": "attack",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.1,
+    "maxValue": 10,
+    "minValue": 0,
+    "name": "decay",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 20000,
+    "minValue": 0,
+    "name": "offset",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 10000,
+    "minValue": 0,
+    "name": "gain",
+  },
+]
+`;

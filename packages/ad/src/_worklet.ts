@@ -57,6 +57,7 @@ export function connectAll(
     const param = node[paramName];
     const input = inputs[paramName];
     if (typeof input === "number") {
+      console.log("SET", paramName, input);
       param.value = input;
     } else if (input instanceof AudioNode) {
       param.value = 0;
