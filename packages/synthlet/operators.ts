@@ -2,7 +2,12 @@ import { AdInputParams, createAdNode } from "@synthlet/ad";
 import { createClipAmpNode } from "@synthlet/clip-amp";
 import { createImpulseNode } from "@synthlet/impulse";
 import { createNoiseNode } from "@synthlet/noise";
-import { createParamNode, ParamType, ParamWorkletNode } from "@synthlet/param";
+import {
+  createParamNode,
+  ParamInputParams,
+  ParamType,
+  ParamWorkletNode,
+} from "@synthlet/param";
 import { createPolyblepOscillatorNode } from "@synthlet/polyblep-oscillator";
 import { DisposableAudioNode, ParamInput } from "./src/_worklet";
 import {
@@ -31,6 +36,9 @@ export function createOperators(context: AudioContext) {
     };
   };
 
+  const param = (value?: ParamInput, params?: Partial<ParamInputParams>) =>
+    add(createParamNode(context, { input: value, ...params }));
+
   return {
     // Connect
     serial: (...nodes: AudioNode[]) =>
@@ -43,24 +51,12 @@ export function createOperators(context: AudioContext) {
       nodes.forEach((node) => node.connect(destination));
       return destination;
     },
-    // Parameters
-    param: (value?: ParamInput) =>
-      add(createParamNode(context, { input: value })),
-    dbToGain: (value?: ParamInput) =>
-      add(
-        createParamNode(context, { input: value, type: ParamType.DB_TO_GAIN })
-      ),
-    volume: (offset?: ParamInput) =>
-      add(createParamNode(context, { offset, type: ParamType.DB_TO_GAIN })),
-    linear: (min: ParamInput, max: ParamInput, value?: ParamInput) =>
-      add(
-        createParamNode(context, {
-          input: value,
-          type: ParamType.LINEAR,
-          min,
-          max,
-        })
-      ),
+
+    param: Object.assign(param, {
+      db: (db?: number) => param(db, { type: ParamType.DB_TO_GAIN }),
+      lin: (min: ParamInput, max: ParamInput, value?: ParamInput) =>
+        param(value, { type: ParamType.LINEAR, min, max }),
+    }),
 
     // Oscillators
     sine: (frequency?: ParamInput, detune?: ParamInput) =>

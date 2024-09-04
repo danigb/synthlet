@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 
 export function Slider({
   label,
-  min,
-  max,
-  initial,
+  min = 0,
+  max = 1,
+  initial = 0,
   onChange,
-  step = 1,
+  step,
   transform = (x) => x,
   inputClassName,
   labelClassName,
@@ -15,9 +15,9 @@ export function Slider({
   initialize,
 }: {
   label: string;
-  min: number;
-  max: number;
-  initial: number;
+  min?: number;
+  max?: number;
+  initial?: number;
   onChange: (value: number) => void;
   transform?: (value: number) => number;
   step?: number;
@@ -42,7 +42,7 @@ export function Slider({
         type="range"
         min={min}
         max={max}
-        step={step}
+        step={step ?? "any"}
         value={value}
         onChange={(e) => {
           const value = e.target.valueAsNumber;

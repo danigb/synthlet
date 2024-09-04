@@ -1,11 +1,16 @@
 "use client";
 
+import { Slider } from "@/components/Slider";
 import { useState } from "react";
 import { ClaveDrum, KickDrum, SnareDrum } from "synthlet";
 import { CreateSynth, Synth, useSynth } from "./useSynth";
 
 type DrumSynth = Synth & {
   trigger: AudioParam;
+  volume: AudioParam;
+  tone: AudioParam;
+  decay: AudioParam;
+  dispose(): void;
 };
 
 function getSynth(instrumentName: string) {
@@ -51,7 +56,7 @@ function DrumExampleUI<T extends DrumSynth>({
 }: {
   instrumentName: string;
   onClose: () => void;
-  createSynth: CreateSynth<T>;
+  createSynth: CreateSynth<DrumSynth>;
 }) {
   const [selectedNoiseType, setSelectedNoiseType] = useState(0);
   const [volume, setVolume] = useState(-60);
@@ -62,19 +67,28 @@ function DrumExampleUI<T extends DrumSynth>({
     <div className="bg-fd-card text-fd-foreground p-2 border rounded">
       <div className="text-xl mb-4">{instrumentName} example</div>
 
-      <div className="flex items-center gap-2 mb-4">
-        <div>Tone:</div>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.01}
-          onChange={(e) => {
-            (synth as any).tone.value = e.target.valueAsNumber;
+      <div className="flex items-center gap-2">
+        <Slider
+          label="Tone"
+          labelClassName="w-20 text-right mr-2"
+          onChange={(value) => {
+            synth.tone.value = value;
           }}
         />
       </div>
-      <div className="flex items-center gap-2 mb-4">
+      <div className="flex gap-2">
+        <Slider
+          label="Decay"
+          labelClassName="w-20 text-right mr-2"
+          initial={0.4}
+          initialize
+          units="s"
+          onChange={(value) => {
+            synth.decay.value = value;
+          }}
+        />
+      </div>
+      <div className="flex items-center gap-2 my-4">
         <button
           className="border px-2 py-1 rounded bg-fd-primary text-fd-primary-foreground"
           onMouseDown={() => {
