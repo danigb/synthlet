@@ -17,14 +17,15 @@ export function KickDrum(context: AudioContext): KickDrumNode {
   const volume = op.param.db();
   const tone = op.param.lin(30, 100, 0.2);
 
-  const toneEnv = op.ad(trigger, 0.1, decay, { offset: tone, gain: 50 });
-
   const out = op.serial(
     op.mix(
-      [op.osc.sine(toneEnv), op.impulse(trigger)],
+      [
+        op.osc.sine(op.env.ad(trigger, 0.1, decay, { offset: tone, gain: 50 })),
+        op.impulse(trigger),
+      ],
       op.amp.perc(trigger, 0.01, decay)
     ),
-    op.clip.soft(3, 0.2)
+    op.clip.soft(4, 0.5)
   );
 
   return op.synth(out, { trigger, volume, tone, decay });

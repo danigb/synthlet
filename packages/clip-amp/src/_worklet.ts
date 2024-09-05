@@ -26,6 +26,7 @@ export function createWorkletConstructor<
   P extends Record<string, ParamInput>
 >(options: CreateWorkletOptions<N, P>) {
   return (audioContext: AudioContext, params: Partial<P> = {}): N => {
+    console.log("CIP PARAMS", params);
     options.validateParams?.(params);
     const node = new AudioWorkletNode(
       audioContext,

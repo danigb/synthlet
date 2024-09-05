@@ -1,5 +1,5 @@
 import { AdInputParams, createAdNode } from "@synthlet/ad";
-import { AdsrInputParams, createVcaNode } from "@synthlet/adsr";
+import { AdsrInputParams, createAdsrNode, createVcaNode } from "@synthlet/adsr";
 import {
   ClipAmpInputParams,
   ClipType,
@@ -89,7 +89,6 @@ class OperatorContext {
 export function createOperators(context: AudioContext) {
   const oc = new OperatorContext();
   const param = createParamOperators(context, oc);
-
   const wt = createWavetableOperators(context, oc);
   const oscp = createPolyblepOperators(context, oc);
   const osc = createOscillatorOperators(context, oc);
@@ -97,6 +96,8 @@ export function createOperators(context: AudioContext) {
   const bq = createBiquadFilterOperators(context, oc);
   const noise = createNoiseOperators(context, oc);
   const clip = createClipAmpOperators(context, oc);
+  const env = createEnvelopeGeneratorOperators(context, oc);
+  const conn = createConnectionOperators(context, oc);
 
   return {
     param,
@@ -107,6 +108,8 @@ export function createOperators(context: AudioContext) {
     bq,
     noise,
     clip,
+    env,
+    conn,
 
     // Connect
     serial: (...nodes: AudioNode[]) =>
@@ -122,14 +125,6 @@ export function createOperators(context: AudioContext) {
 
     impulse: (trigger: ParamInput) =>
       oc.add(createImpulseNode(context, { trigger })),
-
-    // Envelope generators
-    ad: (
-      trigger: ParamInput,
-      attack?: ParamInput,
-      decay?: ParamInput,
-      params?: Partial<AdInputParams>
-    ) => oc.add(createAdNode(context, { trigger, attack, decay, ...params })),
 
     // Math
     add: (...inputs: ParamInput[]) => {
@@ -157,17 +152,83 @@ export function createOperators(context: AudioContext) {
   };
 }
 
+function createConnectionOperators(context: AudioContext, oc: OperatorContext) {
+  const chain = (nodes: AudioNode[]) =>
+    nodes.reduce((prev, current) => {
+      prev.connect(current);
+      return current;
+    });
+  const mixInto = <N extends AudioNode>(
+    nodes: AudioNode[],
+    destination: N
+  ): N => {
+    nodes.forEach((node) => node.connect(destination));
+    return destination;
+  };
+
+  function conn(
+    src: AudioNode | AudioNode[],
+    dest?: AudioNode,
+    ...nodes: AudioNode[]
+  ): AudioNode {
+    // Connect src with dest
+    if (Array.isArray(src)) {
+      if (!dest) throw new Error("Destination is required to mix connect");
+      return mixInto(src, dest);
+    } else {
+      if (dest) {
+        src.connect(dest);
+      }
+    }
+    // Connect dest with first node
+    if (dest && nodes && nodes.length) {
+      dest.connect(nodes[0]);
+    }
+    if (nodes) return chain(nodes);
+    else if (dest) return dest;
+    else return src;
+  }
+  return Object.assign(conn, {
+    chain,
+    serial: (...nodes: AudioNode[]) => chain(nodes),
+    mixInto,
+  });
+}
+
+function createEnvelopeGeneratorOperators(
+  context: AudioContext,
+  oc: OperatorContext
+) {
+  const env = (trigger: ParamInput, params?: Partial<AdInputParams>) =>
+    oc.add(createAdsrNode(context, { trigger, ...params }));
+
+  return Object.assign(env, {
+    // Envelope generators
+    ad: (
+      trigger: ParamInput,
+      attack?: ParamInput,
+      decay?: ParamInput,
+      params?: Partial<AdInputParams>
+    ) => oc.add(createAdNode(context, { trigger, attack, decay, ...params })),
+    adsr: (
+      trigger: ParamInput,
+      attack?: ParamInput,
+      decay?: ParamInput,
+      sustain?: ParamInput,
+      release?: ParamInput,
+      params?: Partial<AdsrInputParams>
+    ) => env(trigger, { attack, decay, sustain, release, ...params }),
+  });
+}
+
 function createClipAmpOperators(context: AudioContext, oc: OperatorContext) {
   // Amplifiers
   const clip = (
     clipType?: ParamInput,
     preGain?: ParamInput,
     params?: Partial<ClipAmpInputParams>
-  ) => {
-    return oc.add(
-      createClipAmpNode(context, { type: clipType, preGain, ...params })
-    );
-  };
+  ) =>
+    oc.add(createClipAmpNode(context, { type: clipType, preGain, ...params }));
 
   return Object.assign(clip, {
     soft: (
@@ -186,7 +247,7 @@ function createBiquadFilterOperators(
     type: BiquadFilterType,
     frequency?: ParamInput,
     options?: Partial<BiquadFilterInputs>
-  ) => createBiquadFilter(context, { type, frequency, ...options });
+  ) => oc.add(createBiquadFilter(context, { type, frequency, ...options }));
 
   return Object.assign(bq, {
     lp: (freq?: ParamInput, options?: Partial<BiquadFilterInputs>) =>
