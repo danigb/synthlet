@@ -1,4 +1,5 @@
 import {
+  Connector,
   createRegistrar,
   createWorkletConstructor,
   ParamInput,
@@ -8,11 +9,11 @@ import { PROCESSOR } from "./processor";
 export const registerEuclidWorkletOnce = createRegistrar("IMPULSE", PROCESSOR);
 
 export type EuclidInputParams = {
-  clock: ParamInput;
-  steps: ParamInput;
-  beats: ParamInput;
-  subdivison: ParamInput;
-  rotation: ParamInput;
+  clock?: ParamInput;
+  steps?: ParamInput;
+  beats?: ParamInput;
+  subdivison?: ParamInput;
+  rotation?: ParamInput;
 };
 
 export type EuclidWorkletNode = AudioWorkletNode & {
@@ -35,3 +36,13 @@ export const createEuclidNode = createWorkletConstructor<
     numberOfOutputs: 1,
   }),
 });
+
+export const Euclid = (
+  params?: EuclidInputParams
+): Connector<EuclidWorkletNode> => {
+  let node: EuclidWorkletNode;
+  return (context: AudioContext) => {
+    node ??= createEuclidNode(context, params);
+    return node;
+  };
+};

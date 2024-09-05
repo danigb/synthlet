@@ -1,4 +1,5 @@
 import {
+  Connector,
   createRegistrar,
   createWorkletConstructor,
   ParamInput,
@@ -26,3 +27,13 @@ export const createClockNode = createWorkletConstructor<
 });
 
 export const registerClockWorkletOnce = createRegistrar("CLOCK", PROCESSOR);
+
+const op = (params?: ClockInputParams): Connector<ClockWorkletNode> => {
+  let node: ClockWorkletNode;
+  return (context: AudioContext) => {
+    node ??= createClockNode(context, params);
+    return node;
+  };
+};
+
+export const Clock = op;
