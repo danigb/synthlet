@@ -1,3 +1,19 @@
+export enum LfoType {
+  None = 0,
+  Sine = 1,
+  Triangle = 2,
+  RampUp = 3,
+  RampDown = 4,
+  Square = 5,
+  ExpRampUp = 6,
+  ExpRampDown = 7,
+  ExpTriangle = 8,
+  RandSampleHold = 9,
+  Impulse = 1,
+  // Remember to update worklet PARAMS waveform.max value when adding new waveform
+  // Remember to update index LfoTypes
+}
+
 /**
  * Convert unipolar [0, 1] to bipolar [-1, 1]
  * @param value unipolar value
@@ -48,8 +64,9 @@ function createImpulse(): Gen {
   };
 }
 
-const concave = concaveTransform();
 type Gen = (phase: number, prev: number) => number;
+const concave = concaveTransform();
+const none = () => 0;
 const impulse = createImpulse();
 const sine: Gen = (phase) => Math.sin(phase * 2 * Math.PI);
 const triangle: Gen = (phase) => 1.0 - 2.0 * Math.abs(bipolar(phase));
@@ -69,27 +86,12 @@ type Params = {
   offset: number[];
 };
 
-export enum LfoWaveform {
-  Impulse,
-  Sine,
-  Triangle,
-  RampUp,
-  RampDown,
-  Square,
-  ExpRampUp,
-  ExpRampDown,
-  ExpTriangle,
-  RandSampleHold,
-  // Remember to update worklet PARAMS waveform.max value when adding new waveform
-  // Remember to update index LfoTypes
-}
-
-export function Lfo(sampleRate: number, initialWaveform = LfoWaveform.Sine) {
+export function createLfo(sampleRate: number, initialWaveform = LfoType.Sine) {
   const dt = 1 / sampleRate;
 
   // Init gen functions
   const generators: Gen[] = [
-    impulse,
+    none,
     sine,
     triangle,
     rampUp,
@@ -99,6 +101,7 @@ export function Lfo(sampleRate: number, initialWaveform = LfoWaveform.Sine) {
     expRampDown,
     expTriangle,
     randSampleHold,
+    impulse,
   ];
 
   // Params

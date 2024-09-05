@@ -5,8 +5,7 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export type AdsrParams = {
-  mode: "generator" | "modulator";
+export type AdsrInputParams = {
   gate: ParamInput;
   attack: ParamInput;
   decay: ParamInput;
@@ -27,7 +26,7 @@ export type AdsrWorkletNode = AudioWorkletNode & {
   release: AudioParam;
   offset: AudioParam;
   gain: AudioParam;
-  setGate: (gate: boolean, time?: number) => void;
+  dispose(): void;
 };
 
 const PARAM_NAMES = [
@@ -40,38 +39,37 @@ const PARAM_NAMES = [
   "gain",
 ] as const;
 
-export function createVcaNode(
-  audioContext: AudioContext,
-  params: Partial<AdsrParams> = {}
-): AdsrWorkletNode {
-  params.mode = "modulator";
-  return createAdsrNode(audioContext, params);
-}
-
-export function createAdsrGenNode(
-  audioContext: AudioContext,
-  params: Partial<AdsrParams> = {}
-): AdsrWorkletNode {
-  params.mode = "generator";
-  return createAdsrNode(audioContext, params);
-}
-
 export const registerAdsrWorkletOnce = createRegistrar("ADSR", PROCESSOR);
-export const createAdsrNode = createWorkletConstructor<
+
+export const createVcaNode = createWorkletConstructor<
   AdsrWorkletNode,
-  AdsrParams
+  AdsrInputParams
 >({
   processorName: "AdsrWorkletProcessor",
   paramNames: PARAM_NAMES,
-  workletOptions(params) {
+  workletOptions() {
     return {
-      numberOfInputs: params.mode === "modulator" ? 1 : 0,
+      numberOfInputs: 1,
       numberOfOutputs: 1,
+      processorOptions: {
+        mode: "modulator",
+      },
     };
   },
-  postCreate(node) {
-    node.setGate = (gate, time = 0) => {
-      node.gate.setValueAtTime(gate ? 1 : 0, time);
+});
+export const createAdsrNode = createWorkletConstructor<
+  AdsrWorkletNode,
+  AdsrInputParams
+>({
+  processorName: "AdsrWorkletProcessor",
+  paramNames: PARAM_NAMES,
+  workletOptions() {
+    return {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      processorOptions: {
+        mode: "generator",
+      },
     };
   },
 });

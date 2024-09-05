@@ -9,7 +9,7 @@ export function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-export enum SVFilterType {
+export enum StateVariableFilterType {
   ByPass = 0,
   LowPass = 1,
   BandPass = 2,
@@ -33,7 +33,7 @@ export function SVFilter(sampleRate: number) {
   // Params
   let $frequency = 1000;
   let $resonance = 0.5;
-  let $type = SVFilterType.LowPass;
+  let $type = 0;
 
   const period = 0.5 / sampleRate;
   const pi2 = 2 * Math.PI;
@@ -74,13 +74,7 @@ export function SVFilter(sampleRate: number) {
       z0 = a * high + band;
       z1 = a * band + low;
       output[i] =
-        $type === SVFilterType.LowPass
-          ? low
-          : $type === SVFilterType.HighPass
-          ? high
-          : $type === SVFilterType.BandPass
-          ? band
-          : x;
+        $type === 1 ? low : $type === 2 ? high : $type === 3 ? band : x;
     }
   }
   return { update, fill };

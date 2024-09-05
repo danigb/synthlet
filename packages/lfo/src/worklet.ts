@@ -1,9 +1,9 @@
-import { Lfo, LfoWaveform } from "./lfo";
+import { createLfo } from "./dsp";
 
 export class LfoWorkletProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
-      ["waveform", 1, 0, LfoWaveform.RandSampleHold],
+      ["waveform", 1, 0, 100],
       ["frequency", 10, 0, 200],
       ["gain", 1, 0, 10000],
       ["offset", 0, -1000, 1000],
@@ -17,12 +17,11 @@ export class LfoWorkletProcessor extends AudioWorkletProcessor {
   }
 
   r: boolean; // running
-  u: ReturnType<typeof Lfo>;
+  u: ReturnType<typeof createLfo>;
 
   constructor(options: any) {
     super();
-    const waveform = options?.processorOptions?.waveform ?? LfoWaveform.Sine;
-    this.u = Lfo(sampleRate, waveform);
+    this.u = createLfo(sampleRate, 0);
     this.r = true;
     this.port.onmessage = (event) => {
       switch (event.data.type) {

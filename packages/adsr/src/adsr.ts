@@ -21,7 +21,7 @@ enum Stage {
   Release,
 }
 
-export type AdsrParams = {
+export type AdsrInputParams = {
   gate: number[];
   attack: number[];
   decay: number[];
@@ -39,7 +39,7 @@ export type AdsrParams = {
  * @see https://www.earlevel.com/main/2013/06/01/EG-generators/
  * @see https://github.com/willpirkleaudio/SynthLab/blob/main/source/analogegcore.h
  */
-export function Adsr(sampleRate: number) {
+export function createAdsr(sampleRate: number) {
   // TCO values taken from Will Pirkle's SynthLab
   const FADE_IN_TCO = Math.exp(-1.5);
   const FADE_OUT_TCO = Math.exp(-4.95);
@@ -64,19 +64,12 @@ export function Adsr(sampleRate: number) {
 
   _updateAdsr(0.01, 0.1, 0.5, 0.3);
 
-  return {
-    agen,
-    amod,
-  };
-
-  function amod(input: Float32Array, output: Float32Array, params: AdsrParams) {
-    agen(output, params);
-    for (let i = 0; i < output.length; i++) {
-      output[i] *= input[i];
-    }
-  }
-
-  function agen(output: Float32Array, params: AdsrParams) {
+  return function adsr(
+    modifier: boolean,
+    input: Float32Array,
+    output: Float32Array,
+    params: AdsrInputParams
+  ) {
     _readParams(params);
     for (let i = 0; i < output.length; i++) {
       switch (stage) {
@@ -104,11 +97,11 @@ export function Adsr(sampleRate: number) {
             stage = Stage.Idle;
           }
       }
-      output[i] = current * $gain + $offset;
+      output[i] = (modifier ? input[0] * current : current) * $gain + $offset;
     }
-  }
+  };
 
-  function _readParams(params: AdsrParams) {
+  function _readParams(params: AdsrInputParams) {
     $offset = params.offset[0];
     $gain = params.gain[0];
     _updateAdsr(

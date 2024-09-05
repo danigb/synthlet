@@ -1,4 +1,5 @@
 {
   "title": "Audio Sources",
-  "defaultOpen": true
+  "defaultOpen": true,
+  "pages": ["wavetable", "polyblep", "noise", "impulse"]
 }

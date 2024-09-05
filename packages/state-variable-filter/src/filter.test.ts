@@ -1,4 +1,4 @@
-import { SVFilter } from "./filter";
+import { SVFilter } from "./dsp";
 
 describe("SVFilter", () => {
   it("filters the signal", () => {

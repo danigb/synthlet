@@ -4,7 +4,6 @@
 export type ParamInput =
   | number
   | ((param: AudioParam) => () => void)
-  | string
   | AudioNode;
 
 type CreateWorkletOptions<N, P> = {

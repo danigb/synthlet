@@ -22,7 +22,7 @@ export function KickDrum(context: AudioContext): KickDrumNode {
 
   const out = op.serial(
     op.mix(
-      [op.sine(toneEnv), op.pulse(trigger)],
+      [op.sine(toneEnv), op.impulse(trigger)],
       op.perc(trigger, 0.01, decay)
     ),
     op.softClip(3, 0.5, ClipType.Tanh)

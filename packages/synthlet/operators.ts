@@ -1,4 +1,5 @@
 import { AdInputParams, createAdNode } from "@synthlet/ad";
+import { AdsrInputParams, createVcaNode } from "@synthlet/adsr";
 import { createClipAmpNode } from "@synthlet/clip-amp";
 import { createImpulseNode } from "@synthlet/impulse";
 import { createNoiseNode } from "@synthlet/noise";
@@ -8,7 +9,17 @@ import {
   ParamType,
   ParamWorkletNode,
 } from "@synthlet/param";
-import { createPolyblepOscillatorNode } from "@synthlet/polyblep-oscillator";
+import {
+  createPolyblepOscillatorNode,
+  PolyblepWaveformType,
+} from "@synthlet/polyblep-oscillator";
+import {
+  createWavetableOscillatorNode,
+  loadWavetable,
+  Wavetable,
+  WavetableInputParams,
+  WavetableOscillatorWorkletNode,
+} from "@synthlet/wavetable-oscillator";
 import { DisposableAudioNode, ParamInput } from "./src/_worklet";
 import {
   createConstantNode,
@@ -18,6 +29,30 @@ import {
 } from "./src/waa";
 
 export type Operators = ReturnType<typeof createOperators>;
+
+export class WavetableLoadOperator {
+  node?: WavetableOscillatorWorkletNode;
+  promise?: Promise<Wavetable>;
+
+  constructor(private urlOrName?: string) {}
+
+  register(node: WavetableOscillatorWorkletNode) {
+    this.node = node;
+    if (this.urlOrName) {
+      this.load(this.urlOrName);
+    }
+    return node;
+  }
+
+  load(urlOrName: string) {
+    this.urlOrName = urlOrName;
+    if (!this.node) throw new Error("Node not registered");
+    this.promise = loadWavetable(urlOrName);
+    this.promise.then((wavetable) => {
+      this.node?.setWavetable(wavetable);
+    });
+  }
+}
 
 export function createOperators(context: AudioContext) {
   const set = new Set<DisposableAudioNode>();
@@ -52,23 +87,37 @@ export function createOperators(context: AudioContext) {
       return destination;
     },
 
+    // Params
     param: Object.assign(param, {
       db: (db?: number) => param(db, { type: ParamType.DB_TO_GAIN }),
       lin: (min: ParamInput, max: ParamInput, value?: ParamInput) =>
         param(value, { type: ParamType.LINEAR, min, max }),
     }),
+    table: (urlOrName: string) => new WavetableLoadOperator(urlOrName),
 
     // Oscillators
     sine: (frequency?: ParamInput, detune?: ParamInput) =>
       add(createOscillator(context, { type: "sine", frequency })),
     tri: (frequency?: ParamInput, detune?: ParamInput) =>
       add(
-        createPolyblepOscillatorNode(context, { type: "triangle", frequency })
+        createPolyblepOscillatorNode(context, {
+          type: PolyblepWaveformType.TRIANGLE,
+          frequency,
+        })
+      ),
+    white: () => add(createNoiseNode(context)),
+    wt: (
+      loader: WavetableLoadOperator,
+      frequency?: ParamInput,
+      params?: Partial<WavetableInputParams>
+    ) =>
+      add(
+        loader.register(
+          createWavetableOscillatorNode(context, { frequency, ...params })
+        )
       ),
 
-    white: () => add(createNoiseNode(context)),
-
-    pulse: (trigger: ParamInput) =>
+    impulse: (trigger: ParamInput) =>
       add(createImpulseNode(context, { trigger })),
 
     // Envelope generators
@@ -90,6 +139,12 @@ export function createOperators(context: AudioContext) {
           clipType: type,
         })
       ),
+    vca: (
+      gate: ParamInput,
+      attack?: ParamInput,
+      release?: ParamInput,
+      params?: Partial<AdsrInputParams>
+    ) => add(createVcaNode(context, { gate, attack, release, ...params })),
 
     // Attack-Decay (percussive) envelope
     perc: (

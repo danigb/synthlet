@@ -3,6 +3,8 @@ title: Impulse
 description: Impuse generator
 ---
 
+import { ImpulseExample } from "../../../examples/ImpulseExample";
+
 `@synthlet/impulse`
 
 This module generates an impulse when a gate is opened. Useful to generate a click sound.
@@ -17,6 +19,25 @@ const impulse = createImpulseNode(audioContext);
 impulse.gate.value = 1;
 ```
 
+## Example
+
+```js
+const s = await synthlet(new AudioContext());
+const trigger = s.param();
+const impulse = s.impulse(trigger);
+
+// UI
+onMouseDown(() => (trigger.value = 1));
+onMouseUp(() => (trigger.value = 0));
+```
+
+<ImpulseExample />
+
 ## Parameters
 
-- `gate`: The gate trigger. 0 means off, 1 means on.
+- `trigger`: The gate trigger. 0 means off, 1 means on.
+
+<Callout title="Triggering" type="warn">
+  Once the trigger value is 0, it needs to move back to 0 in order to trigger
+  again.
+</Callout>

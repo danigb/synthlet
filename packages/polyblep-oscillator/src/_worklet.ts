@@ -4,7 +4,6 @@
 export type ParamInput =
   | number
   | ((param: AudioParam) => () => void)
-  | string
   | AudioNode;
 
 type CreateWorkletOptions<N, P> = {
@@ -59,7 +58,6 @@ export function connectAll(
     if (typeof input === "number") {
       param.value = input;
     } else if (input instanceof AudioNode) {
-      console.log("POLY CNNECT", paramName, input);
       param.value = 0;
       input.connect(param);
       connected.push(input);

@@ -1,4 +1,4 @@
-import { SVFilter } from "./filter";
+import { SVFilter } from "./dsp";
 
 export class Processor extends AudioWorkletProcessor {
   static parameterDescriptors = [
