@@ -1,10 +1,12 @@
 // DON'T EDIT THIS FILE unless inside scripts/_worklet.ts
 // use ./scripts/copy_files.ts to copy this file to the right place
 // the goal is to avoid external dependencies on packages
-export type ParamInput =
-  | number
-  | ((param: AudioParam) => () => void)
-  | AudioNode;
+
+// A "Connector" is a function that takes an AudioContext and returns an AudioNode
+// or an custom object with a connect method (that returns a disconnect method)
+export type Connector<N extends AudioNode> = (context: AudioContext) => N;
+
+export type ParamInput = number | Connector<AudioNode> | AudioNode;
 
 type CreateWorkletOptions<N, P> = {
   processorName: string;
@@ -26,7 +28,6 @@ export function createWorkletConstructor<
   P extends Record<string, ParamInput>
 >(options: CreateWorkletOptions<N, P>) {
   return (audioContext: AudioContext, params: Partial<P> = {}): N => {
-    console.log("CIP PARAMS", params);
     options.validateParams?.(params);
     const node = new AudioWorkletNode(
       audioContext,
@@ -41,7 +42,7 @@ export function createWorkletConstructor<
   };
 }
 
-type ConnectedUnit = AudioNode | (() => void) | undefined;
+type ConnectedUnit = AudioNode | (() => void);
 
 export function connectAll(
   node: any,
@@ -63,7 +64,10 @@ export function connectAll(
       input.connect(param);
       connected.push(input);
     } else if (typeof input === "function") {
-      connected.push(input(param));
+      param.value = 0;
+      const source = input(node.context);
+      source.connect(param);
+      connected.push(source);
     }
   }
 

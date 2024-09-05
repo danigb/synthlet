@@ -1,8 +1,10 @@
 import {
+  Connector,
   createRegistrar,
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { ParamType } from "./dsp";
 import { PROCESSOR } from "./processor";
 
 export { ParamType } from "./dsp";
@@ -10,11 +12,11 @@ export { ParamType } from "./dsp";
 export const registerParamWorkletOnce = createRegistrar("PARAM", PROCESSOR);
 
 export type ParamInputParams = {
-  type: ParamInput;
-  input: ParamInput;
-  offset: ParamInput;
-  min: ParamInput;
-  max: ParamInput;
+  type?: ParamInput;
+  input?: ParamInput;
+  offset?: ParamInput;
+  min?: ParamInput;
+  max?: ParamInput;
 };
 
 export type ParamWorkletNode = AudioWorkletNode & {
@@ -37,3 +39,18 @@ export const createParamNode = createWorkletConstructor<
     numberOfOutputs: 1,
   }),
 });
+
+const op = (params?: ParamInputParams): Connector<ParamWorkletNode> => {
+  let node: ParamWorkletNode;
+  return (context: AudioContext) => {
+    node ??= createParamNode(context, params);
+    return node;
+  };
+};
+
+const val = (value: number, params?: ParamInputParams) =>
+  op({ input: value, ...params });
+const db = (value: number, params?: ParamInputParams) =>
+  op({ type: ParamType.DB_TO_GAIN, input: value, ...params });
+
+export const Param = Object.assign(val, { val, db });

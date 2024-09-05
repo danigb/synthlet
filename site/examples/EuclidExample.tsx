@@ -5,14 +5,14 @@ import {
   ClaveDrum,
   createClockNode,
   createEuclidNode,
-  createParamNode,
+  Param,
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
 const createSynth = (context: AudioContext) => {
-  const bpm = createParamNode(context, { input: 120 });
+  const bpm = Param(60);
   const clock = createClockNode(context, { bpm });
   const euclid = createEuclidNode(context, {
     steps: 16,
@@ -21,7 +21,7 @@ const createSynth = (context: AudioContext) => {
     clock,
   });
   const clave = ClaveDrum(context, { trigger: euclid });
-  return assignParams(clave, { bpm });
+  return assignParams(context, clave, { bpm });
 };
 
 function Example() {

@@ -133,7 +133,7 @@ export function createOperators(ac: AudioContext) {
       node: N,
       params?: P
     ): N & DisposableAudioNode & ParamWorkletNodeToInputs<P> {
-      const synth = assignParams(node, params);
+      const synth = assignParams(ac, node, params);
       (synth as any).dispose = oc.disposer(synth);
       return synth as N & DisposableAudioNode & ParamWorkletNodeToInputs<P>;
     },
@@ -141,10 +141,11 @@ export function createOperators(ac: AudioContext) {
 }
 
 export function assignParams<N extends AudioNode, P extends ControlParams>(
+  context: AudioContext,
   node: N,
   params?: P
 ) {
-  return Object.assign(node, convertParamsToInputs(params));
+  return Object.assign(node, convertParamsToInputs(context, params));
 }
 
 function createConnectionOperators(context: AudioContext, oc: OperatorContext) {
@@ -351,20 +352,52 @@ function createPolyblepOperators(context: AudioContext, oc: OperatorContext) {
   });
 }
 
-type ControlParams = Record<string, ParamWorkletNode>;
+// This is difficult to understand code
+// It will try to convert the input Params object to an object of AudioParams
+// It will accept both ParamWorkletNodes (with an input property)
+// and a function that creates ParamWorkletNodes from AudioContext
+type ParamWorkletConnector = (context: AudioContext) => ParamWorkletNode;
+type ControlParamInput = ParamWorkletNode | ParamWorkletConnector;
+
+type ControlParams = Record<string, ControlParamInput>;
 
 type ParamWorkletNodeToInputs<T extends ControlParams> = {
-  [K in keyof T]: T[K]["input"];
+  [K in keyof T]: T[K] extends ParamWorkletNode
+    ? T[K]["input"]
+    : T[K] extends ParamWorkletConnector
+    ? ReturnType<T[K]>["input"]
+    : never;
 };
 
+function isParamWorkletNode(
+  param: ControlParamInput
+): param is ParamWorkletNode {
+  return "input" in param;
+}
+
+function isParamWorkletConnector(
+  param: ControlParamInput
+): param is ParamWorkletConnector {
+  return typeof param === "function";
+}
+
 function convertParamsToInputs<P extends ControlParams>(
+  context: AudioContext,
   params?: P
 ): ParamWorkletNodeToInputs<P> {
   const inputs = {} as ParamWorkletNodeToInputs<P>;
+  if (!params) return inputs;
 
-  if (params) {
-    for (const key in params) {
-      inputs[key] = params[key].input;
+  for (const key in params) {
+    const param = params[key];
+
+    if (isParamWorkletNode(param)) {
+      // Explicit casting to the expected type
+      inputs[key] = param.input as ParamWorkletNodeToInputs<P>[typeof key];
+    } else if (isParamWorkletConnector(param)) {
+      // Explicit casting to the expected type
+      inputs[key] = param(context)
+        .input as ParamWorkletNodeToInputs<P>[typeof key];
     }
   }
   return inputs;
