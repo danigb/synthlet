@@ -13,13 +13,13 @@ export const registerClipAmpWorkletOnce = createRegistrar(
 );
 
 export type ClipAmpInputParams = {
-  clipType: ParamInput;
+  type: ParamInput;
   preGain: ParamInput;
   postGain: ParamInput;
 };
 
 export type ClipAmpWorkletNode = AudioWorkletNode & {
-  clipType: AudioParam;
+  type: AudioParam;
   preGain: AudioParam;
   postGain: AudioParam;
   dispose(): void;
@@ -30,7 +30,7 @@ export const createClipAmpNode = createWorkletConstructor<
   ClipAmpInputParams
 >({
   processorName: "ClipAmpProcessor",
-  paramNames: ["clipType", "preGain", "postGain"],
+  paramNames: ["type", "preGain", "postGain"],
   workletOptions: () => ({
     numberOfInputs: 1,
     numberOfOutputs: 1,

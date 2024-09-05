@@ -1,4 +1,3 @@
-import { ClipType } from "@synthlet/clip-amp";
 import { createOperators } from "../operators";
 
 export type DrumNode = AudioNode & {
@@ -25,7 +24,7 @@ export function KickDrum(context: AudioContext): KickDrumNode {
       [op.osc.sine(toneEnv), op.impulse(trigger)],
       op.amp.perc(trigger, 0.01, decay)
     ),
-    op.softClip(3, 0.5, ClipType.Tanh)
+    op.clip.soft(3, 0.2)
   );
 
   return op.synth(out, { trigger, volume, tone, decay });

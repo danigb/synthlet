@@ -1,6 +1,10 @@
 import { AdInputParams, createAdNode } from "@synthlet/ad";
 import { AdsrInputParams, createVcaNode } from "@synthlet/adsr";
-import { createClipAmpNode } from "@synthlet/clip-amp";
+import {
+  ClipAmpInputParams,
+  ClipType,
+  createClipAmpNode,
+} from "@synthlet/clip-amp";
 import { createImpulseNode } from "@synthlet/impulse";
 import { createNoiseNode } from "@synthlet/noise";
 import {
@@ -92,6 +96,7 @@ export function createOperators(context: AudioContext) {
   const amp = createAmpOperators(context, oc);
   const bq = createBiquadFilterOperators(context, oc);
   const noise = createNoiseOperators(context, oc);
+  const clip = createClipAmpOperators(context, oc);
 
   return {
     param,
@@ -101,6 +106,7 @@ export function createOperators(context: AudioContext) {
     amp,
     bq,
     noise,
+    clip,
 
     // Connect
     serial: (...nodes: AudioNode[]) =>
@@ -124,18 +130,6 @@ export function createOperators(context: AudioContext) {
       decay?: ParamInput,
       params?: Partial<AdInputParams>
     ) => oc.add(createAdNode(context, { trigger, attack, decay, ...params })),
-
-    // Amplifiers
-    clip: (gain?: ParamInput) =>
-      oc.add(createClipAmpNode(context, { postGain: gain })),
-    softClip: (pre: number, post: number, type: number) =>
-      oc.add(
-        createClipAmpNode(context, {
-          preGain: pre,
-          postGain: post,
-          clipType: type,
-        })
-      ),
 
     // Math
     add: (...inputs: ParamInput[]) => {
@@ -161,6 +155,27 @@ export function createOperators(context: AudioContext) {
       });
     },
   };
+}
+
+function createClipAmpOperators(context: AudioContext, oc: OperatorContext) {
+  // Amplifiers
+  const clip = (
+    clipType?: ParamInput,
+    preGain?: ParamInput,
+    params?: Partial<ClipAmpInputParams>
+  ) => {
+    return oc.add(
+      createClipAmpNode(context, { type: clipType, preGain, ...params })
+    );
+  };
+
+  return Object.assign(clip, {
+    soft: (
+      pre: number,
+      postGain: number,
+      params?: Partial<ClipAmpInputParams>
+    ) => clip(ClipType.TANH, pre, { postGain, ...params }),
+  });
 }
 
 function createBiquadFilterOperators(
