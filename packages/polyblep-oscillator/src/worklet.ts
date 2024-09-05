@@ -27,8 +27,8 @@ export class PolyBLEProcessor extends AudioWorkletProcessor {
 
   static get parameterDescriptors() {
     return [
-      ["type", 0, 0, 10],
-      ["frequency", 0, 0, 20000],
+      ["type", 0, 0, 2],
+      ["frequency", 440, 0, 20000],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,
       defaultValue,

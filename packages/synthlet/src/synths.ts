@@ -22,8 +22,8 @@ export function KickDrum(context: AudioContext): KickDrumNode {
 
   const out = op.serial(
     op.mix(
-      [op.sine(toneEnv), op.impulse(trigger)],
-      op.perc(trigger, 0.01, decay)
+      [op.osc.sine(toneEnv), op.impulse(trigger)],
+      op.amp.perc(trigger, 0.01, decay)
     ),
     op.softClip(3, 0.5, ClipType.Tanh)
   );
@@ -43,8 +43,11 @@ export function SnareDrum(context: AudioContext): SnareDrumNode {
 
   const out = op.mix(
     [
-      op.serial(op.white(), op.perc(trigger, 0.01, decay)),
-      op.mix([op.sine(100), op.sine(200)], op.perc(trigger, 0.01, decay)),
+      op.serial(op.noise.white(), op.amp.perc(trigger, 0.01, decay)),
+      op.mix(
+        [op.osc.sine(100), op.osc.sine(200)],
+        op.amp.perc(trigger, 0.01, decay)
+      ),
     ],
     op.amp(volume)
   );
@@ -61,9 +64,10 @@ export function ClaveDrum(context: AudioContext): DrumNode {
   const tone = op.param.lin(1200, 1800, 0.6);
 
   const out = op.serial(
-    op.tri(tone),
-    op.ad(trigger, 0.01, 0.05),
-    op.bpf(tone),
+    op.osc.tri(tone),
+    op.amp.perc(trigger, 0.01, 0.05),
+    op.bq.lp(tone),
+    op.amp(2),
     op.amp(volume)
   );
 

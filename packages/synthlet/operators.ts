@@ -23,10 +23,12 @@ import {
 } from "@synthlet/wavetable-oscillator";
 import { DisposableAudioNode, ParamInput } from "./src/_worklet";
 import {
+  BiquadFilterInputs,
+  createBiquadFilter,
   createConstantNode,
-  createFilter,
   createGain,
   createOscillator,
+  OscillatorInputs,
 } from "./src/waa";
 
 export type Operators = ReturnType<typeof createOperators>;
@@ -49,10 +51,8 @@ export class WavetableLoadOperator {
     this.urlOrName = urlOrName;
     if (!this.node) throw new Error("Node not registered");
     this.promise = loadWavetable(urlOrName);
-    console.log("Loading wavetable", urlOrName);
     this.promise
       .then((wavetable) => {
-        console.log("READY", urlOrName);
         this.node?.setWavetable(wavetable);
       })
       .catch((e) => {
@@ -85,14 +85,23 @@ class OperatorContext {
 export function createOperators(context: AudioContext) {
   const oc = new OperatorContext();
   const param = createParamOperators(context, oc);
-  // Polyblep Oscillator
-  const oscp = (
-    type?: ParamInput,
-    frequency?: ParamInput,
-    params?: Partial<PolyblepOscillatorInputParams>
-  ) => oc.add(createPolyblepOscillatorNode(context, { type, ...params }));
+
+  const wt = createWavetableOperators(context, oc);
+  const oscp = createPolyblepOperators(context, oc);
+  const osc = createOscillatorOperators(context, oc);
+  const amp = createAmpOperators(context, oc);
+  const bq = createBiquadFilterOperators(context, oc);
+  const noise = createNoiseOperators(context, oc);
 
   return {
+    param,
+    wt,
+    oscp,
+    osc,
+    amp,
+    bq,
+    noise,
+
     // Connect
     serial: (...nodes: AudioNode[]) =>
       nodes.reduce((prev, current) => {
@@ -104,38 +113,6 @@ export function createOperators(context: AudioContext) {
       nodes.forEach((node) => node.connect(destination));
       return destination;
     },
-
-    // Params
-    param,
-    table: (urlOrName: string) => new WavetableLoadOperator(urlOrName),
-
-    // Oscillators
-    oscp: Object.assign(oscp, {
-      tri: (frequency?: ParamInput) =>
-        oscp(PolyblepWaveformType.TRIANGLE, frequency),
-      saw: (frequency?: ParamInput) =>
-        oscp(PolyblepWaveformType.SAWTOOTH, frequency),
-    }),
-    sine: (frequency?: ParamInput, detune?: ParamInput) =>
-      oc.add(createOscillator(context, { type: "sine", frequency })),
-    tri: (frequency?: ParamInput, detune?: ParamInput) =>
-      oc.add(
-        createPolyblepOscillatorNode(context, {
-          type: PolyblepWaveformType.TRIANGLE,
-          frequency,
-        })
-      ),
-    white: () => oc.add(createNoiseNode(context)),
-    wt: (
-      loader: WavetableLoadOperator,
-      frequency?: ParamInput,
-      params?: Partial<WavetableInputParams>
-    ) =>
-      oc.add(
-        loader.register(
-          createWavetableOscillatorNode(context, { frequency, ...params })
-        )
-      ),
 
     impulse: (trigger: ParamInput) =>
       oc.add(createImpulseNode(context, { trigger })),
@@ -149,7 +126,7 @@ export function createOperators(context: AudioContext) {
     ) => oc.add(createAdNode(context, { trigger, attack, decay, ...params })),
 
     // Amplifiers
-    amp: (gain?: ParamInput) =>
+    clip: (gain?: ParamInput) =>
       oc.add(createClipAmpNode(context, { postGain: gain })),
     softClip: (pre: number, post: number, type: number) =>
       oc.add(
@@ -159,28 +136,6 @@ export function createOperators(context: AudioContext) {
           clipType: type,
         })
       ),
-    vca: (gate: ParamInput, params?: Partial<AdsrInputParams>) =>
-      oc.add(createVcaNode(context, { gate, ...params })),
-
-    // Attack-Decay (percussive) envelope
-    perc: (
-      trigger: ParamInput,
-      attack?: ParamInput,
-      decay?: ParamInput,
-      params?: Partial<AdInputParams>
-    ) =>
-      oc.add(
-        createGain(context, {
-          gain: createAdNode(context, { trigger, attack, decay, ...params }),
-        })
-      ),
-
-    // === FILTERS ===
-    // Low Pass Filter
-    lpf: (frequency?: ParamInput, Q?: ParamInput) =>
-      oc.add(createFilter(context, { type: "lowpass", frequency, Q })),
-    bpf: (frequency?: ParamInput, Q?: ParamInput) =>
-      oc.add(createFilter(context, { type: "bandpass", frequency, Q })),
 
     // Math
     add: (...inputs: ParamInput[]) => {
@@ -208,6 +163,68 @@ export function createOperators(context: AudioContext) {
   };
 }
 
+function createBiquadFilterOperators(
+  context: AudioContext,
+  oc: OperatorContext
+) {
+  const bq = (
+    type: BiquadFilterType,
+    frequency?: ParamInput,
+    options?: Partial<BiquadFilterInputs>
+  ) => createBiquadFilter(context, { type, frequency, ...options });
+
+  return Object.assign(bq, {
+    lp: (freq?: ParamInput, options?: Partial<BiquadFilterInputs>) =>
+      bq("lowpass", freq, options),
+  });
+}
+
+function createOscillatorOperators(context: AudioContext, oc: OperatorContext) {
+  const osc = (
+    type: OscillatorType,
+    frequency?: ParamInput,
+    options?: Partial<OscillatorInputs>
+  ) => oc.add(createOscillator(context, { type, frequency, ...options }));
+
+  return Object.assign(osc, {
+    sine: (frequency?: ParamInput, options?: Partial<OscillatorInputs>) =>
+      osc("sine", frequency, options),
+    tri: (frequency?: ParamInput, options?: Partial<OscillatorInputs>) =>
+      osc("triangle", frequency, options),
+    saw: (frequency?: ParamInput, options?: Partial<OscillatorInputs>) =>
+      osc("sawtooth", frequency, options),
+    square: (frequency?: ParamInput, options?: Partial<OscillatorInputs>) =>
+      osc("square", frequency, options),
+  });
+}
+
+function createNoiseOperators(context: AudioContext, oc: OperatorContext) {
+  const noise = (type: ParamInput) =>
+    oc.add(createNoiseNode(context, { type }));
+
+  return Object.assign(noise, {
+    white: () => noise(0),
+    pink: () => noise(1),
+  });
+}
+
+function createAmpOperators(context: AudioContext, oc: OperatorContext) {
+  const amp = (value?: ParamInput) =>
+    oc.add(createGain(context, { gain: value }));
+
+  return Object.assign(amp, {
+    // Attack-Decay (percussive) envelope
+    perc: (
+      trigger: ParamInput,
+      attack?: ParamInput,
+      decay?: ParamInput,
+      params?: Partial<AdInputParams>
+    ) => amp(createAdNode(context, { trigger, attack, decay, ...params })),
+    adsr: (gate: ParamInput, params?: Partial<AdsrInputParams>) =>
+      oc.add(createVcaNode(context, { gate, ...params })),
+  });
+}
+
 function createParamOperators(context: AudioContext, oc: OperatorContext) {
   const param = (value?: ParamInput, params?: Partial<ParamInputParams>) =>
     oc.add(createParamNode(context, { input: value, ...params }));
@@ -230,6 +247,42 @@ function createParamOperators(context: AudioContext, oc: OperatorContext) {
     }),
   });
 }
+
+function createWavetableOperators(context: AudioContext, oc: OperatorContext) {
+  const wt = (
+    loader: WavetableLoadOperator,
+    frequency?: ParamInput,
+    params?: Partial<WavetableInputParams>
+  ) =>
+    oc.add(
+      loader.register(
+        createWavetableOscillatorNode(context, { frequency, ...params })
+      )
+    );
+
+  return Object.assign(wt, {
+    table: (urlOrName: string) => new WavetableLoadOperator(urlOrName),
+  });
+}
+
+function createPolyblepOperators(context: AudioContext, oc: OperatorContext) {
+  const polyblep = (
+    type?: ParamInput,
+    frequency?: ParamInput,
+    params?: Partial<PolyblepOscillatorInputParams>
+  ) =>
+    oc.add(
+      createPolyblepOscillatorNode(context, { type, frequency, ...params })
+    );
+
+  return Object.assign(polyblep, {
+    tri: (frequency?: ParamInput) =>
+      polyblep(PolyblepWaveformType.TRIANGLE, frequency),
+    saw: (frequency?: ParamInput) =>
+      polyblep(PolyblepWaveformType.SAWTOOTH, frequency),
+  });
+}
+
 type ControlParams = Record<string, ParamWorkletNode>;
 
 type ParamWorkletNodeToInputs<T extends ControlParams> = {

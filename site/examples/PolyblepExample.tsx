@@ -1,15 +1,16 @@
 "use client";
 
 import { PolyblepWaveformType, synthlet } from "synthlet";
-import { ExamplePane, TriggerButton } from "./components/ExamplePane";
+import { ExamplePane, GateButton } from "./components/ExamplePane";
+import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
 const createSynth = synthlet((op) => {
-  const trigger = op.param();
+  const gate = op.param();
   const type = op.param(PolyblepWaveformType.SAWTOOTH);
-  const freq = op.param(440);
-  return op.synth(op.serial(op.oscp(type, freq), op.vca(trigger)), {
-    trigger,
+  const freq = op.param(200);
+  return op.synth(op.serial(op.oscp(type, freq)), {
+    gate,
     freq,
   });
 });
@@ -19,8 +20,24 @@ function WavetableExample() {
   if (!synth) return null;
 
   return (
-    <div className="flex ">
-      <TriggerButton trigger={synth.trigger} />
+    <div className="grid grid-cols-4 gap-4">
+      <Slider
+        label="Frequency"
+        inputClassName="col-span-2"
+        min={20}
+        max={3000}
+        initial={220}
+        units="Hz"
+        onChange={(value) => {
+          synth.freq.setValueAtTime(value, 0);
+        }}
+      />
+
+      <div></div>
+
+      <div className="flex col-span-3">
+        <GateButton gate={synth.gate} />
+      </div>
     </div>
   );
 }

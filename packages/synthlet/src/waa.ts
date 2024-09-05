@@ -1,6 +1,6 @@
 import { connectAll, disposable, ParamInput } from "./_worklet";
 
-type GainInputs = {
+export type GainInputs = {
   gain: ParamInput;
 };
 
@@ -19,7 +19,7 @@ export function createConstantNode(context: AudioContext, value: number) {
   return disposable(node);
 }
 
-type OscillatorInputs = {
+export type OscillatorInputs = {
   type: OscillatorType;
   frequency: ParamInput;
   detune: ParamInput;
@@ -35,7 +35,7 @@ export function createOscillator(
   return disposable(osc, conn);
 }
 
-type FilterInputs = {
+export type BiquadFilterInputs = {
   type: BiquadFilterType;
   frequency: ParamInput;
   detune: ParamInput;
@@ -43,9 +43,9 @@ type FilterInputs = {
   gain: ParamInput;
 };
 
-export function createFilter(
+export function createBiquadFilter(
   context: AudioContext,
-  inputs: Partial<FilterInputs> = {}
+  inputs: Partial<BiquadFilterInputs> = {}
 ) {
   const filter = new BiquadFilterNode(context, { type: inputs.type });
   const conn = connectAll(filter, ["frequency", "detune", "Q", "gain"], inputs);

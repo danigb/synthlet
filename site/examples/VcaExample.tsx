@@ -6,7 +6,7 @@ import { useSynth } from "./useSynth";
 
 const createSynth = synthlet((op) => {
   const trigger = op.param();
-  return op.synth(op.serial(op.white(), op.vca(trigger)), {
+  return op.synth(op.serial(op.noise.white(), op.amp.adsr(trigger)), {
     trigger,
   });
 });

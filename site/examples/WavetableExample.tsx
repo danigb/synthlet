@@ -9,9 +9,9 @@ import { useSynth } from "./useSynth";
 const createSynth = synthlet((op) => {
   const gate = op.param();
   const freq = op.param(440);
-  const table = op.table("ACCESS_V");
+  const table = op.wt.table("ACCESS_V");
   const osc = op.wt(table, freq, { morphFrequency: 1 });
-  const synth = op.synth(op.serial(osc, op.vca(gate)), {
+  const synth = op.synth(op.serial(osc, op.amp.adsr(gate)), {
     gate,
     freq,
   });

@@ -30,14 +30,19 @@ export function ExamplePane({
       {children}
     </div>
   ) : (
-    <button
-      className="border px-2 py-1 rounded bg-fd-secondary"
-      onClick={() => {
-        setOpen(true);
-      }}
-    >
-      Open example
-    </button>
+    <div className="flex items-center gap-4">
+      <button
+        className="border px-2 py-1 rounded bg-fd-secondary text-nowrap"
+        onClick={() => {
+          setOpen(true);
+        }}
+      >
+        Open example
+      </button>
+      ⚠️ Warning: some examples produce high noises.
+      <br />
+      🎧 Please lower the volume first.
+    </div>
   );
 }
 
