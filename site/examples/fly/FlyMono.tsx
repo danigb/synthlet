@@ -1,12 +1,12 @@
 "use client";
 
 import { createSynthAudioContext } from "@/app/audio-context";
-import { AdsrControls } from "@/components/AdsrControls";
-import { FrequencySelector } from "@/components/FrequencySelector";
-import { GateControls } from "@/components/GateControls";
-import { Selector } from "@/components/Selector";
-import { Slider } from "@/components/Slider";
 import { StateVariableFilterControls } from "@/components/StateVariableFilterControls";
+import { AdsrControls } from "@/examples/components/AdsrControls";
+import { FrequencySelector } from "@/examples/components/FrequencySelector";
+import { GateControls } from "@/examples/components/GateControls";
+import { Selector } from "@/examples/components/Selector";
+import { Slider } from "@/examples/components/Slider";
 import {
   createLfoNode,
   getLfoWaveformTypes,

@@ -1,4 +1,4 @@
-import { Adsr } from "./dsp";
+import { createAdsr } from "./dsp";
 
 describe("Adsr Generator", () => {
   const defaultParams = {
@@ -13,16 +13,17 @@ describe("Adsr Generator", () => {
 
   describe("ADSR", () => {
     it("process input with adsr adsr", () => {
-      const adsr = Adsr(20);
+      const adsr = createAdsr(20);
+
       const outputGateOn = new Float32Array(20);
-      adsr.agen(outputGateOn, {
+      adsr(undefined!, outputGateOn, false, {
         ...defaultParams,
         gate: [1],
       });
       expect(outputGateOn).toMatchSnapshot();
 
       const outputGateOff = new Float32Array(20);
-      adsr.agen(outputGateOff, {
+      adsr(undefined!, outputGateOff, false, {
         ...defaultParams,
         gate: [0],
       });

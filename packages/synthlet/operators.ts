@@ -105,6 +105,18 @@ export function createOperators(context: AudioContext) {
       db: (db?: number) => param(db, { type: ParamType.DB_TO_GAIN }),
       lin: (min: ParamInput, max: ParamInput, value?: ParamInput) =>
         param(value, { type: ParamType.LINEAR, min, max }),
+      adsr: (
+        attack?: ParamInput,
+        decay?: ParamInput,
+        sustain?: ParamInput,
+        release?: ParamInput
+      ) => ({
+        trigger: param(),
+        attack: param(attack),
+        decay: param(decay),
+        sustain: param(sustain),
+        release: param(release),
+      }),
     }),
     table: (urlOrName: string) => new WavetableLoadOperator(urlOrName),
 

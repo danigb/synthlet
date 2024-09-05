@@ -1,6 +1,6 @@
 "use client";
 
-import { Slider } from "@/components/Slider";
+import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
 import { ClaveDrum, KickDrum, SnareDrum } from "synthlet";
 import { CreateSynth, Synth, useSynth } from "./useSynth";

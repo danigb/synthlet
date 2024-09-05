@@ -22,7 +22,7 @@ export class AdsrWorkletProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     const output = outputs[0][0];
     const input = inputs[0][0];
-    this.p(this.m, input, output, params);
+    this.p(input, output, this.m, params);
     return this.r;
   }
 

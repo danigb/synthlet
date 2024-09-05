@@ -6,14 +6,9 @@ import { useSynth } from "./useSynth";
 
 const createSynth = synthlet((op) => {
   const trigger = op.param();
-  const freq = op.param(440);
-  const table = op.table("ACCESS_V");
-  const osc = op.wt(table, freq);
-  const synth = op.synth(op.serial(osc, op.vca(trigger)), {
+  return op.synth(op.serial(op.white(), op.vca(trigger)), {
     trigger,
-    freq,
   });
-  return Object.assign(synth, { osc });
 });
 
 function WavetableExample() {
@@ -28,7 +23,7 @@ function WavetableExample() {
 }
 
 export default () => (
-  <ExamplePane label="Wavetable">
+  <ExamplePane label="VCA">
     <WavetableExample />
   </ExamplePane>
 );

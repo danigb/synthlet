@@ -14,7 +14,7 @@ function createGateDetector() {
 }
 
 enum Stage {
-  Idle,
+  Zero,
   Attack,
   Decay,
   Sustain,
@@ -59,15 +59,15 @@ export function createAdsr(sampleRate: number) {
 
   // Internal state
   const detectGate = createGateDetector();
-  let stage: Stage = Stage.Idle;
+  let stage: Stage = Stage.Zero;
   let current = 0;
 
   _updateAdsr(0.01, 0.1, 0.5, 0.3);
 
   return function adsr(
-    modifier: boolean,
     input: Float32Array,
     output: Float32Array,
+    modifier: boolean,
     params: AdsrInputParams
   ) {
     _readParams(params);
@@ -77,6 +77,7 @@ export function createAdsr(sampleRate: number) {
           current = attack.b + current * attack.c;
           if (current >= 1.0 || $attack <= 0) {
             current = 1.0;
+            console.log("DECAY");
             stage = Stage.Decay;
           }
           break;
@@ -84,6 +85,7 @@ export function createAdsr(sampleRate: number) {
           current = decay.b + current * decay.c;
           if (current <= $sustain || $decay <= 0) {
             current = $sustain;
+            console.log("SUSTAIN");
             stage = Stage.Sustain;
           }
           break;
@@ -94,10 +96,12 @@ export function createAdsr(sampleRate: number) {
           current = release.b + current * release.c;
           if (current <= 0.0 || $release <= 0) {
             current = 0.0;
-            stage = Stage.Idle;
+            console.log("BASE");
+            stage = Stage.Zero;
           }
       }
-      output[i] = (modifier ? input[0] * current : current) * $gain + $offset;
+      const value = modifier ? input[i] * current : current;
+      output[i] = value;
     }
   };
 
@@ -125,7 +129,7 @@ export function createAdsr(sampleRate: number) {
     _sustain: number,
     _release: number
   ) {
-    if ($sustain !== _sustain) {
+    if ($sustain !== _sustain || $decay !== _decay) {
       $sustain = _sustain;
       $decay = _decay;
       _updateFilter(decay, $decay, $sustain, FADE_OUT_TCO);
@@ -133,10 +137,6 @@ export function createAdsr(sampleRate: number) {
     if ($attack !== _attack) {
       $attack = _attack;
       _updateFilter(attack, $attack, 1 + 2 * FADE_IN_TCO, FADE_IN_TCO);
-    }
-    if ($decay !== _decay) {
-      $decay = _decay;
-      _updateFilter(decay, $decay, $sustain, FADE_OUT_TCO);
     }
     if ($release !== _release) {
       $release = _release;

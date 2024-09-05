@@ -37,7 +37,9 @@ export function synthlet<T extends AudioNode>(fn: (op: Operators) => T) {
 
 export * from "./synths";
 
-export function registerSynthletOnce(context: AudioContext): Promise<void> {
+export function registerSynthletOnce(
+  context: AudioContext
+): Promise<AudioContext> {
   return Promise.all([
     registerAdWorkletOnce(context),
     registerAdsrWorkletOnce(context),
@@ -52,5 +54,5 @@ export function registerSynthletOnce(context: AudioContext): Promise<void> {
     registerPolyblepOscillatorWorkletOnce(context),
     registerStateVariableFilterWorkletOnce(context),
     registerWavetableOscillatorWorkletOnce(context),
-  ]).then(() => {});
+  ]).then(() => context);
 }

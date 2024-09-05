@@ -1,6 +1,6 @@
 "use client";
 
-import { Slider } from "@/components/Slider";
+import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
 import { synthlet } from "synthlet";
 import { useSynth } from "./useSynth";

@@ -1,8 +1,7 @@
 "use client";
 
 import { PolyblepWaveformType, synthlet } from "synthlet";
-import { ExamplePane } from "./components/ExamplePane";
-import { Trigger } from "./components/Trigger";
+import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { useSynth } from "./useSynth";
 
 const createSynth = synthlet((op) => {
@@ -21,7 +20,7 @@ function WavetableExample() {
 
   return (
     <div className="flex ">
-      <Trigger trigger={synth.trigger} />
+      <TriggerButton trigger={synth.trigger} />
     </div>
   );
 }

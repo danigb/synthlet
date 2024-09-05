@@ -1,6 +1,8 @@
 import { useEffect } from "react";
 import { Slider } from "./Slider";
 
+type Parameter = { value: number };
+
 export function AdsrControls({
   onAttackChanged,
   onDecayChanged,
@@ -22,7 +24,7 @@ export function AdsrControls({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   return (
-    <>
+    <div className="grid grid-cols-4">
       <Slider
         label="attack"
         inputClassName="col-span-2"
@@ -62,6 +64,6 @@ export function AdsrControls({
         onChange={onReleaseChanged}
         units="secs"
       />
-    </>
+    </div>
   );
 }
