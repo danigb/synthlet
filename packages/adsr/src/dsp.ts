@@ -49,8 +49,6 @@ export function createAdsr(sampleRate: number) {
   let $decay = 0;
   let $release = 0;
   let $sustain = 0;
-  let $offset = 0;
-  let $gain = 1;
 
   // One pole filters (with b and coefficient)
   const attack = { b: 0, c: 0 };
@@ -71,13 +69,15 @@ export function createAdsr(sampleRate: number) {
     params: AdsrInputParams
   ) {
     _readParams(params);
+    const offset = params.offset[0];
+    const gain = params.gain[0];
+
     for (let i = 0; i < output.length; i++) {
       switch (stage) {
         case Stage.Attack:
           current = attack.b + current * attack.c;
           if (current >= 1.0 || $attack <= 0) {
             current = 1.0;
-            console.log("DECAY");
             stage = Stage.Decay;
           }
           break;
@@ -85,7 +85,6 @@ export function createAdsr(sampleRate: number) {
           current = decay.b + current * decay.c;
           if (current <= $sustain || $decay <= 0) {
             current = $sustain;
-            console.log("SUSTAIN");
             stage = Stage.Sustain;
           }
           break;
@@ -96,18 +95,15 @@ export function createAdsr(sampleRate: number) {
           current = release.b + current * release.c;
           if (current <= 0.0 || $release <= 0) {
             current = 0.0;
-            console.log("BASE");
             stage = Stage.Zero;
           }
       }
       const value = modifier ? input[i] * current : current;
-      output[i] = value;
+      output[i] = value * gain + offset;
     }
   };
 
   function _readParams(params: AdsrInputParams) {
-    $offset = params.offset[0];
-    $gain = params.gain[0];
     _updateAdsr(
       params.attack[0],
       params.decay[0],

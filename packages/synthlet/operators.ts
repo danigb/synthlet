@@ -61,31 +61,36 @@ export class WavetableLoadOperator {
   }
 }
 
-export function createOperators(context: AudioContext) {
-  const set = new Set<DisposableAudioNode>();
+class OperatorContext {
+  set: Set<DisposableAudioNode>;
+  constructor() {
+    this.set = new Set<DisposableAudioNode>();
+  }
 
-  const add = <T extends DisposableAudioNode>(node: T): T => {
-    set.add(node);
+  add<T extends DisposableAudioNode>(node: T): T {
+    this.set.add(node);
     return node;
-  };
-  const disposer = (node: AudioNode) => {
+  }
+  disposer(node: AudioNode) {
     const _dispose = (node as any).dispose;
-    const disposables = Array.from(set).filter((d) => d !== node);
-    set.clear();
+    const disposables = Array.from(this.set).filter((d) => d !== node);
+    this.set.clear();
     return () => {
       _dispose?.();
       disposables.forEach((d) => d.dispose());
     };
-  };
+  }
+}
 
-  const param = (value?: ParamInput, params?: Partial<ParamInputParams>) =>
-    add(createParamNode(context, { input: value, ...params }));
-
+export function createOperators(context: AudioContext) {
+  const oc = new OperatorContext();
+  const param = createParamOperators(context, oc);
+  // Polyblep Oscillator
   const oscp = (
     type?: ParamInput,
     frequency?: ParamInput,
     params?: Partial<PolyblepOscillatorInputParams>
-  ) => add(createPolyblepOscillatorNode(context, { type, ...params }));
+  ) => oc.add(createPolyblepOscillatorNode(context, { type, ...params }));
 
   return {
     // Connect
@@ -101,23 +106,7 @@ export function createOperators(context: AudioContext) {
     },
 
     // Params
-    param: Object.assign(param, {
-      db: (db?: number) => param(db, { type: ParamType.DB_TO_GAIN }),
-      lin: (min: ParamInput, max: ParamInput, value?: ParamInput) =>
-        param(value, { type: ParamType.LINEAR, min, max }),
-      adsr: (
-        attack?: ParamInput,
-        decay?: ParamInput,
-        sustain?: ParamInput,
-        release?: ParamInput
-      ) => ({
-        trigger: param(),
-        attack: param(attack),
-        decay: param(decay),
-        sustain: param(sustain),
-        release: param(release),
-      }),
-    }),
+    param,
     table: (urlOrName: string) => new WavetableLoadOperator(urlOrName),
 
     // Oscillators
@@ -128,28 +117,28 @@ export function createOperators(context: AudioContext) {
         oscp(PolyblepWaveformType.SAWTOOTH, frequency),
     }),
     sine: (frequency?: ParamInput, detune?: ParamInput) =>
-      add(createOscillator(context, { type: "sine", frequency })),
+      oc.add(createOscillator(context, { type: "sine", frequency })),
     tri: (frequency?: ParamInput, detune?: ParamInput) =>
-      add(
+      oc.add(
         createPolyblepOscillatorNode(context, {
           type: PolyblepWaveformType.TRIANGLE,
           frequency,
         })
       ),
-    white: () => add(createNoiseNode(context)),
+    white: () => oc.add(createNoiseNode(context)),
     wt: (
       loader: WavetableLoadOperator,
       frequency?: ParamInput,
       params?: Partial<WavetableInputParams>
     ) =>
-      add(
+      oc.add(
         loader.register(
           createWavetableOscillatorNode(context, { frequency, ...params })
         )
       ),
 
     impulse: (trigger: ParamInput) =>
-      add(createImpulseNode(context, { trigger })),
+      oc.add(createImpulseNode(context, { trigger })),
 
     // Envelope generators
     ad: (
@@ -157,25 +146,21 @@ export function createOperators(context: AudioContext) {
       attack?: ParamInput,
       decay?: ParamInput,
       params?: Partial<AdInputParams>
-    ) => add(createAdNode(context, { trigger, attack, decay, ...params })),
+    ) => oc.add(createAdNode(context, { trigger, attack, decay, ...params })),
 
     // Amplifiers
     amp: (gain?: ParamInput) =>
-      add(createClipAmpNode(context, { postGain: gain })),
+      oc.add(createClipAmpNode(context, { postGain: gain })),
     softClip: (pre: number, post: number, type: number) =>
-      add(
+      oc.add(
         createClipAmpNode(context, {
           preGain: pre,
           postGain: post,
           clipType: type,
         })
       ),
-    vca: (
-      gate: ParamInput,
-      attack?: ParamInput,
-      release?: ParamInput,
-      params?: Partial<AdsrInputParams>
-    ) => add(createVcaNode(context, { gate, attack, release, ...params })),
+    vca: (gate: ParamInput, params?: Partial<AdsrInputParams>) =>
+      oc.add(createVcaNode(context, { gate, ...params })),
 
     // Attack-Decay (percussive) envelope
     perc: (
@@ -184,7 +169,7 @@ export function createOperators(context: AudioContext) {
       decay?: ParamInput,
       params?: Partial<AdInputParams>
     ) =>
-      add(
+      oc.add(
         createGain(context, {
           gain: createAdNode(context, { trigger, attack, decay, ...params }),
         })
@@ -193,21 +178,21 @@ export function createOperators(context: AudioContext) {
     // === FILTERS ===
     // Low Pass Filter
     lpf: (frequency?: ParamInput, Q?: ParamInput) =>
-      add(createFilter(context, { type: "lowpass", frequency, Q })),
+      oc.add(createFilter(context, { type: "lowpass", frequency, Q })),
     bpf: (frequency?: ParamInput, Q?: ParamInput) =>
-      add(createFilter(context, { type: "bandpass", frequency, Q })),
+      oc.add(createFilter(context, { type: "bandpass", frequency, Q })),
 
     // Math
     add: (...inputs: ParamInput[]) => {
       const g = createGain(context, { gain: 1 });
       inputs.forEach((input) => {
         if (typeof input === "number") {
-          add(createConstantNode(context, input)).connect(g);
+          oc.add(createConstantNode(context, input)).connect(g);
         } else if (input instanceof AudioNode) {
           input.connect(g);
         }
       });
-      return add(g);
+      return oc.add(g);
     },
 
     // Dispose
@@ -216,14 +201,35 @@ export function createOperators(context: AudioContext) {
       params?: P
     ): T & DisposableAudioNode & ParamWorkletNodeToInputs<P> {
       return Object.assign(node, {
-        dispose: disposer(node),
+        dispose: oc.disposer(node),
         ...convertParamsToInputs(params),
       });
     },
-    disposer,
   };
 }
 
+function createParamOperators(context: AudioContext, oc: OperatorContext) {
+  const param = (value?: ParamInput, params?: Partial<ParamInputParams>) =>
+    oc.add(createParamNode(context, { input: value, ...params }));
+
+  return Object.assign(param, {
+    db: (db?: number) => param(db, { type: ParamType.DB_TO_GAIN }),
+    lin: (min: ParamInput, max: ParamInput, value?: ParamInput) =>
+      param(value, { type: ParamType.LINEAR, min, max }),
+    adsr: (
+      attack?: ParamInput,
+      decay?: ParamInput,
+      sustain?: ParamInput,
+      release?: ParamInput
+    ) => ({
+      trigger: param(),
+      attack: param(attack),
+      decay: param(decay),
+      sustain: param(sustain),
+      release: param(release),
+    }),
+  });
+}
 type ControlParams = Record<string, ParamWorkletNode>;
 
 type ParamWorkletNodeToInputs<T extends ControlParams> = {

@@ -8,7 +8,6 @@ export class AdsrWorkletProcessor extends AudioWorkletProcessor {
   constructor(options: any) {
     super();
     this.m = options.processorOptions.mode === "modulator";
-    console.log("AdsrWorkletProcessor", options, this.m);
     this.p = createAdsr(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
