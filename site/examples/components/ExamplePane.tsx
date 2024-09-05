@@ -39,9 +39,6 @@ export function ExamplePane({
       >
         Open example
       </button>
-      ⚠️ Warning: some examples produce high noises.
-      <br />
-      🎧 Please lower the volume first.
     </div>
   );
 }

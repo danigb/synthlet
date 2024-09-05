@@ -10,10 +10,12 @@ const createSynth = synthlet((op) => {
   const gate = op.param();
   const freq = op.param(440);
   const table = op.wt.table("ACCESS_V");
+  const volume = op.param.db(-24);
   const osc = op.wt(table, freq, { morphFrequency: 1 });
-  const synth = op.synth(op.conn(osc, op.amp.adsr(gate)), {
+  const synth = op.synth(op.conn(osc, op.amp.adsr(gate), op.amp(volume)), {
     gate,
     freq,
+    volume,
   });
   return Object.assign(synth, { osc, table });
 });
@@ -63,10 +65,23 @@ function WavetableExample() {
             synth.osc.morphFrequency.value = value;
           }}
         />
-
-        <div></div>
-
+      </div>
+      <div className="flex mt-4">
         <GateButton gate={synth.gate} />
+      </div>
+      <div className="flex px-1 pt-2 mt-2 border-t border-fd-border gap-4">
+        <Slider
+          label="Volume"
+          inputClassName="flex-grow"
+          min={-36}
+          max={0}
+          initial={-24}
+          initialize
+          units="dB"
+          onChange={(value) => {
+            synth.volume.value = value;
+          }}
+        />
       </div>
     </>
   );

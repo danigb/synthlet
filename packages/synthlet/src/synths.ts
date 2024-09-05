@@ -1,4 +1,5 @@
 import { createOperators } from "../operators";
+import { ParamInput } from "./_worklet";
 
 export type DrumNode = AudioNode & {
   trigger: AudioParam;
@@ -53,13 +54,23 @@ export function SnareDrum(context: AudioContext): SnareDrumNode {
   return op.synth(out, { trigger, volume, tone, decay });
 }
 
-export function ClaveDrum(context: AudioContext): DrumNode {
+type ClaveDrumInputs = {
+  volume?: ParamInput;
+  trigger?: ParamInput;
+  decay?: ParamInput;
+  tone?: ParamInput;
+};
+
+export function ClaveDrum(
+  context: AudioContext,
+  params: ClaveDrumInputs = {}
+): DrumNode {
   const op = createOperators(context);
 
-  const volume = op.param.db();
-  const trigger = op.param();
-  const decay = op.param();
-  const tone = op.param.lin(1200, 1800, 0.6);
+  const volume = op.param.db(params.volume ?? 0);
+  const trigger = op.param(params.trigger);
+  const decay = op.param(params.decay);
+  const tone = op.param.lin(1200, 1800, params.tone);
 
   const out = op.conn(
     op.osc.tri(tone),

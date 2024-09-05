@@ -1,81 +1,64 @@
 "use client";
 
-import { createSynthAudioContext } from "@/app/audio-context";
-import { Slider } from "@/examples/components/Slider";
-import { Drum8WorkletNode } from "@synthlet/drum8";
-import { useEffect, useState } from "react";
-import { ClockWorkletNode, createClockNode, createDrum8Node } from "synthlet";
+import { useState } from "react";
+import {
+  ClaveDrum,
+  createClockNode,
+  createParamNode,
+  NoiseType,
+} from "synthlet";
+import { ExamplePane } from "./components/ExamplePane";
+import { Slider } from "./components/Slider";
+import { useSynth } from "./useSynth";
 
-export function ClockExample() {
-  const [synth, setSynth] = useState<ClockSynth | null>(null);
+const createSynth = (context: AudioContext) => {
+  const bpm = createParamNode(context, { input: 120 });
+  const clock = createClockNode(context, { bpm });
+  const clave = ClaveDrum(context, { trigger: clock });
+  return Object.assign(clave, { bpm: bpm.input });
+};
 
-  useEffect(() => {
-    console.log("connecting");
-    let bye = false;
-    let synth: ClockSynth;
-    createSynthAudioContext().then((context) => {
-      if (bye) return;
-      synth = new ClockSynth(context);
-      console.log("connected", synth);
-      setSynth(synth);
-    });
-    return () => {
-      bye = true;
-      console.log("disconnecting", synth);
-      synth?.disconnect();
-    };
-  }, []);
-
+function Example() {
+  const [currentNoise, setCurrentNoise] = useState<NoiseType>(NoiseType.WHITE);
+  const synth = useSynth(createSynth);
   if (!synth) return null;
 
   return (
-    <div>
-      <h2>Clock</h2>
-      <p>Test clock module</p>
-      <Slider
-        label="Tempo"
-        initial={120}
-        min={10}
-        max={240}
-        step={1}
-        onChange={(bpm) => {
-          synth.clock.bpm.setValueAtTime(bpm, 0);
-        }}
-      />
-      <Slider
-        label="Volume"
-        initial={0}
-        min={0}
-        max={1}
-        step={0.1}
-        onChange={(gain) => {
-          synth.out.gain.setValueAtTime(gain, 0);
-        }}
-        initialize
-      />
-    </div>
+    <>
+      <div className="grid grid-cols-4 gap-4">
+        <Slider
+          label="Tempo"
+          inputClassName="col-span-2"
+          min={1}
+          max={1000}
+          initial={100}
+          initialize
+          units="bpm"
+          onChange={(value) => {
+            synth.bpm.value = value;
+          }}
+        />
+      </div>
+      <div className="flex px-1 pt-2 mt-2 border-t border-fd-border gap-4">
+        <Slider
+          label="Volume"
+          inputClassName="flex-grow"
+          min={-36}
+          max={0}
+          initial={-24}
+          initialize
+          units="dB"
+          onChange={(value) => {
+            synth.volume.value = value;
+          }}
+        />
+      </div>
+    </>
   );
 }
 
-class ClockSynth {
-  clock: ClockWorkletNode;
-  kick: Drum8WorkletNode;
-  out: GainNode;
-
-  constructor(context: AudioContext) {
-    this.out = new GainNode(context);
-    this.clock = createClockNode(context);
-    this.kick = createDrum8Node(context, {
-      type: "kick",
-      gate: 0,
-    });
-    this.kick.connect(this.out).connect(context.destination);
-    this.clock.connect(this.kick.gate);
-  }
-
-  disconnect() {
-    this.clock.disconnect();
-    this.kick.disconnect();
-    this.out.disconnect();
-  }
-}
+export default () => (
+  <ExamplePane label="Noise">
+    <Example />
+  </ExamplePane>
+);

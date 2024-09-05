@@ -41,7 +41,7 @@ export class ClockWorkletProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [["bpm", 120, 30, 300]].map(
+    return [["bpm", 120, 0, 1000]].map(
       ([name, defaultValue, minValue, maxValue]) => ({
         name,
         defaultValue,

@@ -86,23 +86,24 @@ class OperatorContext {
   }
 }
 
-export function createOperators(context: AudioContext) {
+export function createOperators(ac: AudioContext) {
   const oc = new OperatorContext();
-  const param = createParamOperators(context, oc);
-  const wt = createWavetableOperators(context, oc);
-  const oscp = createPolyblepOperators(context, oc);
-  const osc = createOscillatorOperators(context, oc);
-  const amp = createAmpOperators(context, oc);
-  const bq = createBiquadFilterOperators(context, oc);
-  const noise = createNoiseOperators(context, oc);
-  const clip = createClipAmpOperators(context, oc);
-  const env = createEnvelopeGeneratorOperators(context, oc);
-  const conn = createConnectionOperators(context, oc);
+  const param = createParamOperators(ac, oc);
+  const wt = createWavetableOperators(ac, oc);
+  const pb = createPolyblepOperators(ac, oc);
+  const osc = createOscillatorOperators(ac, oc);
+  const amp = createAmpOperators(ac, oc);
+  const bq = createBiquadFilterOperators(ac, oc);
+  const noise = createNoiseOperators(ac, oc);
+  const clip = createClipAmpOperators(ac, oc);
+  const env = createEnvelopeGeneratorOperators(ac, oc);
+  const conn = createConnectionOperators(ac, oc);
 
   return {
+    audioContext: ac,
     param,
     wt,
-    oscp,
+    pb,
     osc,
     amp,
     bq,
@@ -112,14 +113,14 @@ export function createOperators(context: AudioContext) {
     conn,
 
     impulse: (trigger: ParamInput) =>
-      oc.add(createImpulseNode(context, { trigger })),
+      oc.add(createImpulseNode(ac, { trigger })),
 
     // Math
     add: (...inputs: ParamInput[]) => {
-      const g = createGain(context, { gain: 1 });
+      const g = createGain(ac, { gain: 1 });
       inputs.forEach((input) => {
         if (typeof input === "number") {
-          oc.add(createConstantNode(context, input)).connect(g);
+          oc.add(createConstantNode(ac, input)).connect(g);
         } else if (input instanceof AudioNode) {
           input.connect(g);
         }
@@ -291,7 +292,7 @@ function createParamOperators(context: AudioContext, oc: OperatorContext) {
     oc.add(createParamNode(context, { input: value, ...params }));
 
   return Object.assign(param, {
-    db: (db?: number) => param(db, { type: ParamType.DB_TO_GAIN }),
+    db: (db?: ParamInput) => param(db, { type: ParamType.DB_TO_GAIN }),
     lin: (min: ParamInput, max: ParamInput, value?: ParamInput) =>
       param(value, { type: ParamType.LINEAR, min, max }),
     adsr: (

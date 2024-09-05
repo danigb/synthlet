@@ -3,6 +3,8 @@ title: Clock
 description: A clock generator
 ---
 
+import ClockExample from "../../../examples/ClockExample";
+
 `@synthlet/clock`
 
 Generates a clock signal at a given tempo.
@@ -14,6 +16,8 @@ const audioContext = new AudioContext();
 await registerClockWorkletOnce(audioContext);
 const clock = createClockNode(audioContext, { bpm: 10 });
 ```
+
+<ClockExample />
 
 ## Example
 
