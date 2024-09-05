@@ -25,7 +25,7 @@ import {
   WavetableInputParams,
   WavetableOscillatorWorkletNode,
 } from "@synthlet/wavetable-oscillator";
-import { DisposableAudioNode, ParamInput } from "./src/_worklet";
+import { DisposableAudioNode, ParamInput } from "./_worklet";
 import {
   BiquadFilterInputs,
   createBiquadFilter,
@@ -33,11 +33,11 @@ import {
   createGain,
   createOscillator,
   OscillatorInputs,
-} from "./src/waa";
+} from "./waa";
 
 export type Operators = ReturnType<typeof createOperators>;
 
-export class WavetableLoadOperator {
+class WavetableLoadOperator {
   node?: WavetableOscillatorWorkletNode;
   promise?: Promise<Wavetable>;
 
@@ -129,16 +129,22 @@ export function createOperators(ac: AudioContext) {
     },
 
     // Dispose
-    synth<T extends AudioNode, P extends ControlParams>(
-      node: T,
+    synth<N extends AudioNode, P extends ControlParams>(
+      node: N,
       params?: P
-    ): T & DisposableAudioNode & ParamWorkletNodeToInputs<P> {
-      return Object.assign(node, {
-        dispose: oc.disposer(node),
-        ...convertParamsToInputs(params),
-      });
+    ): N & DisposableAudioNode & ParamWorkletNodeToInputs<P> {
+      const synth = assignParams(node, params);
+      (synth as any).dispose = oc.disposer(synth);
+      return synth as N & DisposableAudioNode & ParamWorkletNodeToInputs<P>;
     },
   };
+}
+
+export function assignParams<N extends AudioNode, P extends ControlParams>(
+  node: N,
+  params?: P
+) {
+  return Object.assign(node, convertParamsToInputs(params));
 }
 
 function createConnectionOperators(context: AudioContext, oc: OperatorContext) {

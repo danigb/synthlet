@@ -1,6 +1,12 @@
 "use client";
 
-import { ClaveDrum, createClockNode, createParamNode } from "synthlet";
+import {
+  assignParams,
+  ClaveDrum,
+  createClockNode,
+  createEuclidNode,
+  createParamNode,
+} from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
@@ -8,8 +14,14 @@ import { useSynth } from "./useSynth";
 const createSynth = (context: AudioContext) => {
   const bpm = createParamNode(context, { input: 120 });
   const clock = createClockNode(context, { bpm });
-  const clave = ClaveDrum(context, { trigger: clock });
-  return Object.assign(clave, { bpm: bpm.input });
+  const euclid = createEuclidNode(context, {
+    steps: 16,
+    beats: 7,
+    subdivison: 4,
+    clock,
+  });
+  const clave = ClaveDrum(context, { trigger: euclid });
+  return assignParams(clave, { bpm });
 };
 
 function Example() {
@@ -51,7 +63,7 @@ function Example() {
 }
 
 export default () => (
-  <ExamplePane label="Clock">
+  <ExamplePane label="Euclid">
     <Example />
   </ExamplePane>
 );

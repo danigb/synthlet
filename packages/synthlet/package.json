@@ -26,6 +26,7 @@
     "@synthlet/clip-amp": "^0.1.0",
     "@synthlet/clock": "^0.1.0",
     "@synthlet/drum8": "^0.1.0",
+    "@synthlet/euclid": "^0.1.0",
     "@synthlet/impulse": "^0.1.0",
     "@synthlet/lfo": "^0.1.0",
     "@synthlet/noise": "^0.1.0",

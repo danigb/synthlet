@@ -1,5 +1,5 @@
-import { createOperators } from "../operators";
 import { ParamInput } from "./_worklet";
+import { createOperators } from "./operators";
 
 export type DrumNode = AudioNode & {
   trigger: AudioParam;
