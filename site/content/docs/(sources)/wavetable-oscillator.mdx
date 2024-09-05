@@ -5,7 +5,8 @@ description: A morphing wavetable oscillator
 
 `@synthlet/wavetable-oscillator`
 
-This module implements a wavetable oscillator with morphing capabilities.
+This module implements a wavetable oscillator with morphing compatible
+with [WaveEdit Online](https://waveeditonline.com/) wavetable format.
 
 ```ts
 import {
@@ -39,9 +40,7 @@ osc.frequency.value = 880;
 
 ## Loading wavetables
 
-WavetableOscillator is compatible with [WaveEdit Online](https://waveeditonline.com/) format.
-
-This package provides a couple of helper functions:
+This package provides a couple of helper functions to list available wavetables and load them:
 
 ```ts
 import {

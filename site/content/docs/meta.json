@@ -3,6 +3,7 @@
   "pages": [
     "quick-start",
     "guide",
+    "dsl",
     "synths",
     "---Available Modules---",
     "(sources)",

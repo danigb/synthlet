@@ -3,11 +3,9 @@ title: Get started
 description: How to get started with Synthlet
 ---
 
-Synthlet is a collection of audio modules implemented as [AudioWorkletNodes](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorklet).
+Synthlet is a collection of audio modules implemented as [AudioWorkletNodes](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorklet) that you can use to create synthesizers and audio effects in the browser.
 
-The main goal of this project is to learn digital signal processing for my own, so don't expect a full-featured audio library. However, I'm trying to make it as useful as possible for my own projects.
-
-<Callout title="Synthlet is still experimental" type="warn">
+<Callout title="Synthlet is still wip" type="warn">
   Currently Synthlet is under development and not ready for production use. Use
   at your own risk.
 </Callout>
@@ -38,18 +36,23 @@ await registerSynthlet(audioContext);
 
 ## Example
 
-A simple archetipical monophonic synthesizer consist of an oscillator connected to a filter connected to an amplifier with an envelope. This is how to do it with Synthlet:
+A simple archetipical monophonic synthesizer consist of an oscillator connected to a filter connected to an amplifier with an envelope:
 
 ```js
 const osc = createPolyblepOscillatorNode(audioContext, {
   frequency: 440,
 });
 const filter = createStateVariableFilterNode(audioContext, {
-  type: "lowpass",
+  type: SvfType.Lowpass,
   frequency: 5000,
   resonance: 2,
 });
-const vca = createVcaNode(audioContext, {});
+const vca = createVcaNode(audioContext, {
+  attack: 0.01,
+  decay: 0.1,
+  sustain: 0.7,
+  release: 0.3,
+});
 
 osc.connect(filter).connect(vca).connect(audioContext.destination);
 
@@ -66,29 +69,25 @@ At this point you should able to hear some sound. If you don't hear anything, ch
 
 Read more about how to use the modules in the [guide](/docs/guide).
 
-## Installing individual modules
+## Operators
 
-If you want to optimize for bundle size, you can use the individual module packages and register each module individually.
-
-Install:
-
-```package-install
-@synthlet/polyblep-oscillator
-```
-
-And register:
+The `synthlet` package wraps the modules in a set of operators to create complex synths by combining simple modules in a functional way. This is the exact same example as above in a Synthlet way:
 
 ```js
-import { registerPolyblepOscillator } from "@synthlet/polyblep-oscillator";
-import { registerPolyblepOscillator } from "synthlet";
+import { synthlet } from "synthlet";
 
-const audioContext = new audioContext();
-await registerPolyblepOscillator(audioContext);
+// Register all modules and create the operators
+const s = await synthlet(new AudioContext());
+
+// Use the operators to create audio graph
+const gate = s.param(audioContext);
+const out = s.connect(
+  s.saw(440),
+  s.svflp(5000, 2),
+  s.vca(gate, 0.01, 0.1, 0.7, 0.3)
+);
+
+gate.value = 1;
 ```
 
-## What is Next?
-
-<Cards>
-  <Card title="Learn more about Next.js" href="https://nextjs.org/docs" />
-  <Card title="Learn more about Fumadocs" href="https://fumadocs.vercel.app" />
-</Cards>
+Read more about how to use the operators in the [operators guide](/docs/dsl).

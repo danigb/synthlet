@@ -1,11 +1,11 @@
 ---
-title: Guide
+title: Modules
 description: How to use Synthlet modules
 ---
 
 This guide will show you how to use the Synthlet modules.
 
-## Create modules
+## Create
 
 To create a module, you need to call the `create<Module>Node` function that will return an instance of an [AudioWorkletNode](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode)
 
@@ -36,14 +36,26 @@ osc.connect(audioContext.destination);
 adsr.connect(osc.frequency);
 ```
 
-## Controlling Parameters
+## Parameters
 
 Each module has a set of parameters exposed as [AudioParam](https://developer.mozilla.org/en-US/docs/Web/API/AudioParam) that you can control using the `value` property the same way as you would with any other Web Audio API node:
 
 ```js
 osc.frequency.value = 880;
-adsr.attack.value = 0.5;
+adsr.attack.value = 10;
+adsr.attack.setValueAtTime(0.1, audioContext.currentTime + 5);
 ```
+
+## Connect parameters on constructor
+
+Unlike WebAudioAPI, Synthlet create functions accepts other modules as parameters. This is useful to connect modules on creation:
+
+```js
+const lfo = createLfoNode(audioContext, { type: LfoType.ExpRampUp });
+const amp = createAmpNode(audioContext, { gain: lfo });
+```
+
+The lfo is now connected and modulating the gain of the amp node.
 
 ## Start and stop
 
@@ -62,12 +74,56 @@ adsr.gate.value = 0; // equivalent to stop()
 
 The advantage is that you can use a module to start/stop other modules. Evertying can be connected.
 
-## Disconnect
+## Connect and disconnect
 
-To disconnect a module from the audio graph, you can use the `disconnect` method in the same way as you would with any other Web Audio API node:
+Synthlet modules isses the same [connect](https://developer.mozilla.org/en-US/docs/Web/API/AudioNode/connect) and [disconnect](https://developer.mozilla.org/en-US/docs/Web/API/AudioNode/disconnect) methods as any other AudioNode:
 
 ```js
+adsr.connect(osc.frequency);
 adsr.disconnect();
+adsr.connect(amplitude.gain);
 ```
 
-Once disconnected, the module will stop processing audio and can't be connected again.
+<Callout title="Disconnect is not enough" type="warn">
+  Audio worklets still running even if you disconnect them from the audio graph.
+  If you want to fully stop them you have to `dispose`.
+</Callout>
+
+## Dispose
+
+Dispose is a handy function that funlly disconnect and stop the module:
+
+```js
+osc.dispose();
+```
+
+It not only stop disconnect and stops the module but also disconnects all dependencies:
+
+```js
+const trigger = createTriggerNode(audioContext, {});
+const adsr = createAdsrNode(audioContext, { trigger });
+const osc = createPolyblepOscillatorNode(audioContext, { frequency: adsr });
+
+...
+osc.dispose(); // Disconnects also trigger and adsr
+```
+
+## Installing individual modules
+
+If you want to optimize for bundle size, you can use the individual module packages and register each module individually.
+
+Install:
+
+```package-install
+@synthlet/polyblep-oscillator
+```
+
+And register:
+
+```js
+import { registerPolyblepOscillator } from "@synthlet/polyblep-oscillator";
+import { registerPolyblepOscillator } from "synthlet";
+
+const audioContext = new audioContext();
+await registerPolyblepOscillator(audioContext);
+```
