@@ -86,7 +86,7 @@ type Params = {
   offset: number[];
 };
 
-export function createLfo(sampleRate: number, initialWaveform = LfoType.Sine) {
+export function createLfo(sampleRate: number, audioRate: boolean) {
   const dt = 1 / sampleRate;
 
   // Init gen functions
@@ -105,26 +105,26 @@ export function createLfo(sampleRate: number, initialWaveform = LfoType.Sine) {
   ];
 
   // Params
-  let $waveform = initialWaveform;
+  let $waveform = 0;
   let $frequency = 10;
   let $gain = 1;
   let $offset = 0;
 
   // State
-  let gen: Gen = generators[initialWaveform] ?? sine;
+  let gen: Gen = generators[0] ?? none;
   let phase = 0;
 
   function read(params: Params) {
     if (params.waveform[0] !== $waveform) {
       $waveform = params.waveform[0];
-      gen = generators[Math.floor($waveform)] ?? sine;
+      gen = generators[Math.floor($waveform)] ?? none;
     }
     $frequency = params.frequency[0];
     $offset = params.offset[0];
     $gain = params.gain[0];
   }
 
-  function kgen(output: Float32Array, params: Params) {
+  function generateControlRate(output: Float32Array, params: Params) {
     read(params);
     let nextPhase = phase + output.length * dt * $frequency;
     if (nextPhase >= 1) {
@@ -135,7 +135,7 @@ export function createLfo(sampleRate: number, initialWaveform = LfoType.Sine) {
     phase = nextPhase;
   }
 
-  function agen(output: Float32Array, params: Params) {
+  function generateAudioRate(output: Float32Array, params: Params) {
     read(params);
     for (let i = 0; i < output.length; i++) {
       let nextPhase = phase + dt * $frequency;
@@ -147,5 +147,5 @@ export function createLfo(sampleRate: number, initialWaveform = LfoType.Sine) {
     }
   }
 
-  return { kgen, agen };
+  return audioRate ? generateAudioRate : generateControlRate;
 }

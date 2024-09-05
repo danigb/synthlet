@@ -1,20 +1,18 @@
 "use client";
 
-import { synthlet } from "synthlet";
+import { PolyblepWaveformType, synthlet } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Trigger } from "./components/Trigger";
 import { useSynth } from "./useSynth";
 
 const createSynth = synthlet((op) => {
   const trigger = op.param();
+  const type = op.param(PolyblepWaveformType.SAWTOOTH);
   const freq = op.param(440);
-  const table = op.table("ACCESS_V");
-  const osc = op.wt(table, freq);
-  const synth = op.synth(op.serial(osc, op.vca(trigger)), {
+  return op.synth(op.serial(op.oscp(type, freq), op.vca(trigger)), {
     trigger,
     freq,
   });
-  return Object.assign(synth, { osc });
 });
 
 function WavetableExample() {
@@ -29,7 +27,7 @@ function WavetableExample() {
 }
 
 export default () => (
-  <ExamplePane label="Wavetable">
+  <ExamplePane label="Polyblep oscillator">
     <WavetableExample />
   </ExamplePane>
 );

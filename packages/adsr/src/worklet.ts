@@ -1,13 +1,14 @@
-import { Adsr, createAdsr } from "./adsr";
+import { createAdsr } from "./dsp";
 
 export class AdsrWorkletProcessor extends AudioWorkletProcessor {
-  p: ReturnType<typeof Adsr>; // processor
+  p: ReturnType<typeof createAdsr>; // processor
   r: boolean = true; // running;
   m: boolean;
 
   constructor(options: any) {
     super();
     this.m = options.processorOptions.mode === "modulator";
+    console.log("AdsrWorkletProcessor", options, this.m);
     this.p = createAdsr(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -21,7 +22,7 @@ export class AdsrWorkletProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     const output = outputs[0][0];
     const input = inputs[0][0];
-    this.p.adsr(this.m, input, output, params);
+    this.p(this.m, input, output, params);
     return this.r;
   }
 

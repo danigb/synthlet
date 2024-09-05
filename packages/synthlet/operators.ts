@@ -11,6 +11,7 @@ import {
 } from "@synthlet/param";
 import {
   createPolyblepOscillatorNode,
+  PolyblepOscillatorInputParams,
   PolyblepWaveformType,
 } from "@synthlet/polyblep-oscillator";
 import {
@@ -48,9 +49,15 @@ export class WavetableLoadOperator {
     this.urlOrName = urlOrName;
     if (!this.node) throw new Error("Node not registered");
     this.promise = loadWavetable(urlOrName);
-    this.promise.then((wavetable) => {
-      this.node?.setWavetable(wavetable);
-    });
+    console.log("Loading wavetable", urlOrName);
+    this.promise
+      .then((wavetable) => {
+        console.log("READY", urlOrName);
+        this.node?.setWavetable(wavetable);
+      })
+      .catch((e) => {
+        console.warn("Failed to load wavetable", urlOrName, e);
+      });
   }
 }
 
@@ -74,6 +81,12 @@ export function createOperators(context: AudioContext) {
   const param = (value?: ParamInput, params?: Partial<ParamInputParams>) =>
     add(createParamNode(context, { input: value, ...params }));
 
+  const oscp = (
+    type?: ParamInput,
+    frequency?: ParamInput,
+    params?: Partial<PolyblepOscillatorInputParams>
+  ) => add(createPolyblepOscillatorNode(context, { type, ...params }));
+
   return {
     // Connect
     serial: (...nodes: AudioNode[]) =>
@@ -96,6 +109,12 @@ export function createOperators(context: AudioContext) {
     table: (urlOrName: string) => new WavetableLoadOperator(urlOrName),
 
     // Oscillators
+    oscp: Object.assign(oscp, {
+      tri: (frequency?: ParamInput) =>
+        oscp(PolyblepWaveformType.TRIANGLE, frequency),
+      saw: (frequency?: ParamInput) =>
+        oscp(PolyblepWaveformType.SAWTOOTH, frequency),
+    }),
     sine: (frequency?: ParamInput, detune?: ParamInput) =>
       add(createOscillator(context, { type: "sine", frequency })),
     tri: (frequency?: ParamInput, detune?: ParamInput) =>

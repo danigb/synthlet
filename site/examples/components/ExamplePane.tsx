@@ -10,13 +10,16 @@ export function ExamplePane({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+
   return open ? (
     <div className="bg-fd-card text-fd-foreground p-2 border rounded">
       <div className="flex">
         <div className="text-xl mb-4 flex-grow">{label} example</div>
         <button
           className="border px-2 py-1 rounded bg-fd-secondary"
-          onClick={() => setOpen(false)}
+          onClick={() => {
+            setOpen(false);
+          }}
         >
           Close
         </button>
@@ -26,7 +29,9 @@ export function ExamplePane({
   ) : (
     <button
       className="border px-2 py-1 rounded bg-fd-secondary"
-      onClick={() => setOpen(true)}
+      onClick={() => {
+        setOpen(true);
+      }}
     >
       Open example
     </button>

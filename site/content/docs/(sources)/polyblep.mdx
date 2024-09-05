@@ -3,11 +3,11 @@ title: PolyBLEP Oscillator
 description: An oscillator module implemened using PolyBLEP algorithm
 ---
 
+import PolyblepExample from "../../../examples/PolyblepExample";
+
 This module implements a synth oscillator. It's very similar to the native OscillatorNode found in Web Audio API. The difference is the implementation and, therefore, the sound.
 
 The oscillator is implemented using the PolyBLEP algorithm. This algorithm is used to generate band-limited waveforms.
-
-## Example
 
 ```ts
 import { createPolyblepOscillatorNode } from "synthlet";
@@ -17,6 +17,10 @@ const osc = createPolyblepOscillatorNode(audioContext, {
   frequency: 440,
 });
 ```
+
+## Example
+
+<PolyblepExample />
 
 ## Parameters
 

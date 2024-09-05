@@ -17,11 +17,11 @@ export class LfoWorkletProcessor extends AudioWorkletProcessor {
   }
 
   r: boolean; // running
-  u: ReturnType<typeof createLfo>;
+  g: ReturnType<typeof createLfo>;
 
   constructor(options: any) {
     super();
-    this.u = createLfo(sampleRate, 0);
+    this.g = createLfo(sampleRate, false);
     this.r = true;
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -37,7 +37,7 @@ export class LfoWorkletProcessor extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    this.u.kgen(outputs[0][0], parameters);
+    this.g(outputs[0][0], parameters);
     return this.r;
   }
 }

@@ -1,4 +1,4 @@
-import { Adsr } from "./adsr";
+import { Adsr } from "./dsp";
 
 describe("Adsr Generator", () => {
   const defaultParams = {
