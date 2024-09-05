@@ -15,17 +15,15 @@ export function KickDrum(context: AudioContext): KickDrumNode {
   const trigger = op.param();
   const decay = op.param(0.8);
   const volume = op.param.db();
-  const tone = op.param.lin(30, 100, 0.2);
+  const tone = op.param.lin(20, 100, 0.2);
 
-  const out = op.serial(
-    op.mix(
-      [
-        op.osc.sine(op.env.ad(trigger, 0.1, decay, { offset: tone, gain: 50 })),
-        op.impulse(trigger),
-      ],
-      op.amp.perc(trigger, 0.01, decay)
-    ),
-    op.clip.soft(4, 0.5)
+  const out = op.conn(
+    [
+      op.osc.sine(op.env.ad(trigger, 0.1, decay, { offset: tone, gain: 50 })),
+      op.impulse(trigger),
+    ],
+    op.amp.perc(trigger, 0.01, decay),
+    op.clip.soft(5, 0.6)
   );
 
   return op.synth(out, { trigger, volume, tone, decay });
@@ -41,10 +39,10 @@ export function SnareDrum(context: AudioContext): SnareDrumNode {
   const decay = op.param();
   const tone = op.param();
 
-  const out = op.mix(
+  const out = op.conn(
     [
-      op.serial(op.noise.white(), op.amp.perc(trigger, 0.01, decay)),
-      op.mix(
+      op.conn(op.noise.white(), op.amp.perc(trigger, 0.01, decay)),
+      op.conn(
         [op.osc.sine(100), op.osc.sine(200)],
         op.amp.perc(trigger, 0.01, decay)
       ),
@@ -63,7 +61,7 @@ export function ClaveDrum(context: AudioContext): DrumNode {
   const decay = op.param();
   const tone = op.param.lin(1200, 1800, 0.6);
 
-  const out = op.serial(
+  const out = op.conn(
     op.osc.tri(tone),
     op.amp.perc(trigger, 0.01, 0.05),
     op.bq.lp(tone),

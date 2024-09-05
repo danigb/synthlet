@@ -11,7 +11,7 @@ const createSynth = synthlet((op) => {
   const freq = op.param(440);
   const table = op.wt.table("ACCESS_V");
   const osc = op.wt(table, freq, { morphFrequency: 1 });
-  const synth = op.synth(op.serial(osc, op.amp.adsr(gate)), {
+  const synth = op.synth(op.conn(osc, op.amp.adsr(gate)), {
     gate,
     freq,
   });

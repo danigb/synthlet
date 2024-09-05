@@ -27,8 +27,10 @@ function AttackDecayUI({ onClose }: { onClose: () => void }) {
       const release = op.param();
       const attack = op.param();
       return op.synth(
-        op.serial(
-          op.sine(op.ad(trigger, attack, release, { offset: 440, gain: 2000 })),
+        op.conn(
+          op.osc.sine(
+            op.env.ad(trigger, attack, release, { offset: 440, gain: 2000 })
+          ),
           op.amp(0.2)
         ),
         { trigger, release, attack }

@@ -9,7 +9,7 @@ import { useSynth } from "./useSynth";
 const createSynth = synthlet((op) => {
   const volume = op.param.db(-100);
   const noiseType = op.param(NoiseType.WHITE);
-  return op.synth(op.serial(op.noise(noiseType), op.gain(volume)), {
+  return op.synth(op.conn(op.noise(noiseType), op.amp(volume)), {
     volume,
     noiseType,
   });

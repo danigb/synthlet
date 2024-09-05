@@ -111,18 +111,6 @@ export function createOperators(context: AudioContext) {
     env,
     conn,
 
-    // Connect
-    serial: (...nodes: AudioNode[]) =>
-      nodes.reduce((prev, current) => {
-        prev.connect(current);
-        return current;
-      }),
-
-    mix<N extends AudioNode>(nodes: AudioNode[], destination: N): N {
-      nodes.forEach((node) => node.connect(destination));
-      return destination;
-    },
-
     impulse: (trigger: ParamInput) =>
       oc.add(createImpulseNode(context, { trigger })),
 
@@ -184,13 +172,10 @@ function createConnectionOperators(context: AudioContext, oc: OperatorContext) {
     if (dest && nodes && nodes.length) {
       dest.connect(nodes[0]);
     }
-    if (nodes) return chain(nodes);
-    else if (dest) return dest;
-    else return src;
+    return nodes && nodes.length ? chain(nodes) : dest ? dest : src;
   }
   return Object.assign(conn, {
     chain,
-    serial: (...nodes: AudioNode[]) => chain(nodes),
     mixInto,
   });
 }

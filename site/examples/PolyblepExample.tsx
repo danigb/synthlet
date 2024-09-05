@@ -9,7 +9,7 @@ const createSynth = synthlet((op) => {
   const gate = op.param();
   const type = op.param(PolyblepWaveformType.SAWTOOTH);
   const freq = op.param(200);
-  return op.synth(op.serial(op.oscp(type, freq)), {
+  return op.synth(op.conn(op.oscp(type, freq)), {
     gate,
     freq,
   });
