@@ -249,7 +249,7 @@ function createOscillatorOperators(context: AudioContext, oc: OperatorContext) {
   ) => oc.add(createOscillator(context, { type, frequency, ...options }));
 
   return Object.assign(osc, {
-    sine: (frequency?: ParamInput, options?: Partial<OscillatorInputs>) =>
+    sin: (frequency?: ParamInput, options?: Partial<OscillatorInputs>) =>
       osc("sine", frequency, options),
     tri: (frequency?: ParamInput, options?: Partial<OscillatorInputs>) =>
       osc("triangle", frequency, options),

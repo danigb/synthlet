@@ -20,7 +20,7 @@ export function KickDrum(context: AudioContext): KickDrumNode {
 
   const out = op.conn(
     [
-      op.osc.sine(op.env.ad(trigger, 0.1, decay, { offset: tone, gain: 50 })),
+      op.osc.sin(op.env.ad(trigger, 0.1, decay, { offset: tone, gain: 50 })),
       op.impulse(trigger),
     ],
     op.amp.perc(trigger, 0.01, decay),
@@ -44,7 +44,7 @@ export function SnareDrum(context: AudioContext): SnareDrumNode {
     [
       op.conn(op.noise.white(), op.amp.perc(trigger, 0.01, decay)),
       op.conn(
-        [op.osc.sine(100), op.osc.sine(200)],
+        [op.osc.sin(100), op.osc.sin(200)],
         op.amp.perc(trigger, 0.01, decay)
       ),
     ],
