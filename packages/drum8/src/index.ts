@@ -30,7 +30,7 @@ export type Drum8WorkletNode = AudioWorkletNode & {
   setGate: (gate: boolean, time?: number) => void;
 };
 
-export const registerDrum8WorkletOnce = createRegistrar("DRUM8", PROCESSOR);
+export const registerDrum8WorkletOnce = createRegistrar(PROCESSOR);
 
 export const createDrum8Node = createWorkletConstructor<
   Drum8WorkletNode,

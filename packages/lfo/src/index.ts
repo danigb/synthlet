@@ -22,7 +22,7 @@ export type LfoWorklet = AudioWorkletNode & {
   dispose(): void;
 };
 
-export const registerLfoWorkletOnce = createRegistrar("LFO", PROCESSOR);
+export const registerLfoWorkletOnce = createRegistrar(PROCESSOR);
 export const createLfoNode = createWorkletConstructor<
   LfoWorklet,
   LfoInputParams

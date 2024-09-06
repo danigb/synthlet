@@ -5,7 +5,7 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export const registerAdWorkletOnce = createRegistrar("AD_ENV", PROCESSOR);
+export const registerAdWorkletOnce = createRegistrar(PROCESSOR);
 
 export type AdWorkletNode = AudioWorkletNode & {
   trigger: AudioParam;

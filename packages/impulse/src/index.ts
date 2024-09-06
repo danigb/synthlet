@@ -5,7 +5,7 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export const registerImpulseWorkletOnce = createRegistrar("IMPULSE", PROCESSOR);
+export const registerImpulseWorkletOnce = createRegistrar(PROCESSOR);
 
 export type ImpulseInputParams = {
   trigger: ParamInput;

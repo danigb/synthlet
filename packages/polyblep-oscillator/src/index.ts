@@ -21,10 +21,7 @@ export type PolyblepOscillatorWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-export const registerPolyblepOscillatorWorkletOnce = createRegistrar(
-  "POLYBLEP",
-  PROCESSOR
-);
+export const registerPolyblepOscillatorWorkletOnce = createRegistrar(PROCESSOR);
 
 export const createPolyblepOscillatorNode = createWorkletConstructor<
   PolyblepOscillatorWorkletNode,

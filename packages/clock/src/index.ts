@@ -26,7 +26,7 @@ export const createClockNode = createWorkletConstructor<
   }),
 });
 
-export const registerClockWorkletOnce = createRegistrar("CLOCK", PROCESSOR);
+export const registerClockWorkletOnce = createRegistrar(PROCESSOR);
 
 const op = (params?: ClockInputParams): Connector<ClockWorkletNode> => {
   let node: ClockWorkletNode;

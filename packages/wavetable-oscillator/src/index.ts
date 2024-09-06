@@ -22,10 +22,8 @@ export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-export const registerWavetableOscillatorWorkletOnce = createRegistrar(
-  "WT_OSC",
-  PROCESSOR
-);
+export const registerWavetableOscillatorWorkletOnce =
+  createRegistrar(PROCESSOR);
 
 export const createWavetableOscillatorNode = createWorkletConstructor<
   WavetableOscillatorWorkletNode,

@@ -39,7 +39,7 @@ const PARAM_NAMES = [
   "gain",
 ] as const;
 
-export const registerAdsrWorkletOnce = createRegistrar("ADSR", PROCESSOR);
+export const registerAdsrWorkletOnce = createRegistrar(PROCESSOR);
 
 export const createVcaNode = createWorkletConstructor<
   AdsrWorkletNode,
