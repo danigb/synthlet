@@ -47,10 +47,9 @@ const op = (params?: ParamInputParams): Connector<ParamWorkletNode> => {
     return node;
   };
 };
-
-const val = (value: number, params?: ParamInputParams) =>
+const val = (value: ParamInput, params?: ParamInputParams) =>
   op({ input: value, ...params });
-const db = (value: number, params?: ParamInputParams) =>
+const db = (value: ParamInput, params?: ParamInputParams) =>
   op({ type: ParamType.DB_TO_GAIN, input: value, ...params });
 
-export const Param = Object.assign(val, { val, db });
+export const Param = Object.assign(op, { val, db });

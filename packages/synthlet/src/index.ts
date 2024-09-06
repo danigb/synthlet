@@ -29,8 +29,10 @@ export * from "@synthlet/polyblep-oscillator";
 export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/wavetable-oscillator";
 export { ParamInput } from "./_worklet";
+export * from "./connectors";
 export { assignParams, createOperators } from "./operators";
 export * from "./synths";
+export * from "./waa";
 
 // experimental API
 export function synthlet<T extends AudioNode>(fn: (op: Operators) => T) {

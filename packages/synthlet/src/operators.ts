@@ -25,7 +25,7 @@ import {
   WavetableInputParams,
   WavetableOscillatorWorkletNode,
 } from "@synthlet/wavetable-oscillator";
-import { DisposableAudioNode, ParamInput } from "./_worklet";
+import { Disposable, ParamInput } from "./_worklet";
 import {
   BiquadFilterInputs,
   createBiquadFilter,
@@ -66,12 +66,12 @@ class WavetableLoadOperator {
 }
 
 class OperatorContext {
-  set: Set<DisposableAudioNode>;
+  set: Set<Disposable<AudioNode>>;
   constructor() {
-    this.set = new Set<DisposableAudioNode>();
+    this.set = new Set<Disposable<AudioNode>>();
   }
 
-  add<T extends DisposableAudioNode>(node: T): T {
+  add<T extends Disposable<AudioNode>>(node: T): T {
     this.set.add(node);
     return node;
   }
@@ -132,10 +132,10 @@ export function createOperators(ac: AudioContext) {
     synth<N extends AudioNode, P extends ControlParams>(
       node: N,
       params?: P
-    ): N & DisposableAudioNode & ParamWorkletNodeToInputs<P> {
+    ): Disposable<N> & ParamWorkletNodeToInputs<P> {
       const synth = assignParams(ac, node, params);
       (synth as any).dispose = oc.disposer(synth);
-      return synth as N & DisposableAudioNode & ParamWorkletNodeToInputs<P>;
+      return synth as Disposable<N> & ParamWorkletNodeToInputs<P>;
     },
   };
 }

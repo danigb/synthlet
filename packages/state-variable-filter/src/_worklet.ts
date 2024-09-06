@@ -15,8 +15,7 @@ type CreateWorkletOptions<N, P> = {
   postCreate?: (node: N) => void;
 };
 
-type Disposable = { dispose: () => void };
-export type DisposableAudioNode = AudioNode & { dispose: () => void };
+export type Disposable<N extends AudioNode> = N & { dispose: () => void };
 
 export function createWorkletConstructor<
   N extends AudioWorkletNode,
@@ -25,7 +24,7 @@ export function createWorkletConstructor<
   return (
     audioContext: AudioContext,
     params: Partial<P> = {}
-  ): N & Disposable => {
+  ): Disposable<N> => {
     const node = new AudioWorkletNode(
       audioContext,
       options.processorName,
@@ -71,10 +70,10 @@ export function connectParams(
   return connected;
 }
 
-export function disposable<T extends AudioNode>(
-  node: T,
+export function disposable<N extends AudioNode>(
+  node: N,
   dependencies?: ConnectedUnit[]
-): T & DisposableAudioNode {
+): Disposable<N> {
   let disposed = false;
   return Object.assign(node, {
     dispose() {

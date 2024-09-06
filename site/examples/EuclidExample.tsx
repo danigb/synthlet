@@ -1,20 +1,22 @@
 "use client";
 
 import {
-  assignParams,
   ClaveDrum,
   Clock,
+  Conn,
   Euclid,
+  Gain,
   KickDrum,
   Param,
   ParamInput,
+  WithParams,
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-const RhythmBox = (params: { clock?: ParamInput } = {}) => {
-  const bpm = Param(60);
+const RhythmBox = (params: { bpm?: ParamInput } = {}) => {
+  const bpm = Param.val(params.bpm ?? 60);
   const clock = Clock({ bpm });
   const volume = Param.db(-12);
   const clave = ClaveDrum({
@@ -36,18 +38,16 @@ const RhythmBox = (params: { clock?: ParamInput } = {}) => {
     }),
     volume,
   });
-  return (context: AudioContext) => {
-    console.log("context", context);
-    const out = context.createGain();
-    clave(context).connect(out);
-    kick(context).connect(out);
-    const synth = Object.assign(out, {
-      dispose() {
-        // TODO
-      },
-    });
-    return assignParams(context, synth, { bpm, volume });
-  };
+
+  const synth = Conn([clave, kick], Gain());
+  return WithParams(synth, { bpm, volume });
+
+  // const synth = Conn([clave, kick], Gain());
+
+  // return (context: AudioContext) => {
+  //   const out = synth(context);
+  //   return assignParams(context, out, { bpm, volume });
+  // };
 };
 
 function Example() {
