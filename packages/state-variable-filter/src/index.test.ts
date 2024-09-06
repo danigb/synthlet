@@ -1,14 +1,12 @@
-import { registerStateVariableFilterWorkletOnce } from "./index";
-
 describe("PolyblepOscillator", () => {
   it("registers only once", () => {
     const context = new AudioContextMock();
     // @ts-ignore
     global.AudioNode = class AudioNode {};
 
-    registerStateVariableFilterWorkletOnce(context.asAudioContext());
+    registerStateVariableFilterWorklet(context.asAudioContext());
     expect(context.audioWorklet?.addModule).toHaveBeenCalledTimes(1);
-    registerStateVariableFilterWorkletOnce(context.asAudioContext());
+    registerStateVariableFilterWorklet(context.asAudioContext());
     expect(context.audioWorklet?.addModule).toHaveBeenCalledTimes(1);
   });
 });

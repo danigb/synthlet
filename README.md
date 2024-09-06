@@ -6,14 +6,14 @@ Collection of synth modules implemented as AudioWorklets.
 
 ```ts
 import {
-  registerSynthletOnce,
+  registerSynthlet,
   createVca,
   createStateVariableFilter
   createPolyblepOscillator,
 } from "synthlet";
 
 const audioContext = new AudioContext();
-await registerSynthletOnce(audioContext);
+await registerSynthlet(audioContext);
 
 // Simplest synth: Oscillator -> Filter -> Amplifier
 const osc = createPolyblepOscillator(audioContext, { type: "saw", frequency: 440 });

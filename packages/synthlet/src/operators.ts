@@ -1,5 +1,5 @@
-import { AdInputParams, createAdNode } from "@synthlet/ad";
-import { AdsrInputParams, createAdsrNode, createVcaNode } from "@synthlet/adsr";
+import { AdParamInputs, createAdNode } from "@synthlet/ad";
+import { AdsrParamInputs, createAdsrNode, createVcaNode } from "@synthlet/adsr";
 import {
   ClipAmpInputParams,
   ClipType,
@@ -192,7 +192,7 @@ function createEnvelopeGeneratorOperators(
   context: AudioContext,
   oc: OperatorContext
 ) {
-  const env = (trigger: ParamInput, params?: Partial<AdInputParams>) =>
+  const env = (trigger: ParamInput, params?: Partial<AdParamInputs>) =>
     oc.add(createAdsrNode(context, { trigger, ...params }));
 
   return Object.assign(env, {
@@ -201,7 +201,7 @@ function createEnvelopeGeneratorOperators(
       trigger: ParamInput,
       attack?: ParamInput,
       decay?: ParamInput,
-      params?: Partial<AdInputParams>
+      params?: Partial<AdParamInputs>
     ) => oc.add(createAdNode(context, { trigger, attack, decay, ...params })),
     adsr: (
       trigger: ParamInput,
@@ -209,7 +209,7 @@ function createEnvelopeGeneratorOperators(
       decay?: ParamInput,
       sustain?: ParamInput,
       release?: ParamInput,
-      params?: Partial<AdsrInputParams>
+      params?: Partial<AdsrParamInputs>
     ) => env(trigger, { attack, decay, sustain, release, ...params }),
   });
 }
@@ -287,9 +287,9 @@ function createAmpOperators(context: AudioContext, oc: OperatorContext) {
       trigger: ParamInput,
       attack?: ParamInput,
       decay?: ParamInput,
-      params?: Partial<AdInputParams>
+      params?: Partial<AdParamInputs>
     ) => amp(createAdNode(context, { trigger, attack, decay, ...params })),
-    adsr: (gate: ParamInput, params?: Partial<AdsrInputParams>) =>
+    adsr: (gate: ParamInput, params?: Partial<AdsrParamInputs>) =>
       oc.add(createVcaNode(context, { gate, ...params })),
   });
 }

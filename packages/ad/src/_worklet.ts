@@ -23,16 +23,16 @@ export function createWorkletConstructor<
 >(options: CreateWorkletOptions<N, P>) {
   return (
     audioContext: AudioContext,
-    params: Partial<P> = {}
+    inputs: Partial<P> = {}
   ): Disposable<N> => {
     const node = new AudioWorkletNode(
       audioContext,
       options.processorName,
-      options.workletOptions(params)
+      options.workletOptions(inputs)
     ) as N;
 
     (node as any).__PROCESSOR_NAME__ = options.processorName;
-    const connected = connectParams(node, options.paramNames, params);
+    const connected = connectParams(node, options.paramNames, inputs);
     options.postCreate?.(node);
     return disposable(node, connected);
   };
@@ -100,11 +100,10 @@ export function disposable<N extends AudioNode>(
   });
 }
 
-export function createRegistrar(processor: string) {
-  let promise: Promise<void>;
-
+export function createRegistrar(processorName: string, processor: string) {
   return function (context: AudioContext): Promise<void> {
-    if (promise) return promise;
+    const key = "__REGISTER_" + processorName + "_PROMISE__";
+    if (key in context) return (context as any)[key];
 
     if (!context.audioWorklet || !context.audioWorklet.addModule) {
       throw Error("AudioWorklet not supported");
@@ -112,7 +111,8 @@ export function createRegistrar(processor: string) {
 
     const blob = new Blob([processor], { type: "application/javascript" });
     const url = URL.createObjectURL(blob);
-    promise = context.audioWorklet.addModule(url);
+    const promise = context.audioWorklet.addModule(url);
+    (context as any)[key] = promise;
     return promise;
   };
 }

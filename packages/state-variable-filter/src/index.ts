@@ -20,8 +20,10 @@ export type StateVariableFilterWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-export const registerStateVariableFilterWorkletOnce =
-  createRegistrar(PROCESSOR);
+export const registerStateVariableFilterWorklet = createRegistrar(
+  "SVF",
+  PROCESSOR
+);
 
 export const createStateVariableFilterNode = createWorkletConstructor<
   StateVariableFilterWorkletNode,

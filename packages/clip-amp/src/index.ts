@@ -7,7 +7,7 @@ import { PROCESSOR } from "./processor";
 
 export { ClipType } from "./dsp";
 
-export const registerClipAmpWorkletOnce = createRegistrar(PROCESSOR);
+export const registerClipAmpWorklet = createRegistrar("CLIP_AMP", PROCESSOR);
 
 export type ClipAmpInputParams = {
   type: ParamInput;

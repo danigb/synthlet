@@ -24,7 +24,7 @@ export function getNoiseTypes(): { name: string; value: number }[] {
   ];
 }
 
-export const registerNoiseWorkletOnce = createRegistrar(PROCESSOR);
+export const registerNoiseWorklet = createRegistrar("NOISE", PROCESSOR);
 export const createNoiseNode = createWorkletConstructor<
   NoiseWorkletNode,
   NoiseInputParams

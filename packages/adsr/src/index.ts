@@ -5,14 +5,14 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export type AdsrInputParams = {
-  gate: ParamInput;
-  attack: ParamInput;
-  decay: ParamInput;
-  sustain: ParamInput;
-  release: ParamInput;
-  offset: ParamInput;
-  gain: ParamInput;
+export type AdsrParamInputs = {
+  gate?: ParamInput;
+  attack?: ParamInput;
+  decay?: ParamInput;
+  sustain?: ParamInput;
+  release?: ParamInput;
+  offset?: ParamInput;
+  gain?: ParamInput;
 };
 
 /**
@@ -39,11 +39,11 @@ const PARAM_NAMES = [
   "gain",
 ] as const;
 
-export const registerAdsrWorkletOnce = createRegistrar(PROCESSOR);
+export const registerAdsrWorklet = createRegistrar("ADSR", PROCESSOR);
 
 export const createVcaNode = createWorkletConstructor<
   AdsrWorkletNode,
-  AdsrInputParams
+  AdsrParamInputs
 >({
   processorName: "AdsrWorkletProcessor",
   paramNames: PARAM_NAMES,
@@ -59,7 +59,7 @@ export const createVcaNode = createWorkletConstructor<
 });
 export const createAdsrNode = createWorkletConstructor<
   AdsrWorkletNode,
-  AdsrInputParams
+  AdsrParamInputs
 >({
   processorName: "AdsrWorkletProcessor",
   paramNames: PARAM_NAMES,

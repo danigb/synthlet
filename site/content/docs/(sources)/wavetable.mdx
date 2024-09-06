@@ -13,13 +13,13 @@ with [WaveEdit Online](https://waveeditonline.com/) wavetable format.
 ```ts
 import {
   createWavetableOscillatorNode,
-  registerWavetableOscillatorWorkletOnce,
+  registerWavetableOscillatorWorklet,
   loadWavetable,
 } from "@synthlet/wavetable-oscillator";
 
 // Register the worklet
 const audioContext = new AudioContext();
-await registerWavetableOscillatorWorkletOnce(audioContext);
+await registerWavetableOscillatorWorklet(audioContext);
 
 // Create the oscillator and connect it to the destination
 const osc = createWavetableOscillatorNode(audioContext, {

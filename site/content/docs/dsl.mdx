@@ -6,9 +6,9 @@ description: Using operators to create synths
 `synthlet` package exposes the audio modules with a set of operators that allow to create complex synths and comining them in a functional way.
 
 ```js
-import { createOperators, registerSynthletOnce } from "synthlet";
+import { createOperators, registerSynthlet } from "synthlet";
 
-const context = await registerSynthletOnce(new AudioContext());
+const context = await registerSynthlet(new AudioContext());
 
 const { osc, bq, param, amp } = createOperators(context);
 

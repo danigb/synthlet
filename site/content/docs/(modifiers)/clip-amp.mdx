@@ -5,14 +5,10 @@ package: clip-amp
 ---
 
 ```ts
-import {
-  createClipAmpNode,
-  registerClipAmpWorkletOnce,
-  ClipType,
-} from "synthlet"; // or "@synthlet/clip-amp";
+import { createClipAmpNode, registerClipAmpWorklet, ClipType } from "synthlet"; // or "@synthlet/clip-amp";
 
 const audioContext = new AudioContext();
-registerClipAmpWorkletOnce(audioContext);
+registerClipAmpWorklet(audioContext);
 
 const amp = createClipAmpNode(audioContext, {
   clipType: ClipType.TANH,

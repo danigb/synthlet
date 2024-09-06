@@ -9,7 +9,7 @@ import { PROCESSOR } from "./processor";
 
 export { ParamType } from "./dsp";
 
-export const registerParamWorkletOnce = createRegistrar(PROCESSOR);
+export const registerParamWorklet = createRegistrar("PARAM", PROCESSOR);
 
 export type ParamInputParams = {
   type?: ParamInput;

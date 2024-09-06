@@ -34,33 +34,58 @@ await registerSynthlet(audioContext);
   for the result before creating any modules.
 </Callout>
 
-## Example
-
-A simple archetipical monophonic synthesizer consist of an oscillator connected to a filter connected to an amplifier with an envelope:
+By convenience, `registerSynthlet` returns the `AudioContext` so you can write it more concise:
 
 ```js
-const osc = createPolyblepOscillatorNode(audioContext, {
+const audioContext = await registerSynthlet(new AudioContext());
+```
+
+## Create the first synth
+
+You can create a synth by creating nodes and connect them.
+
+A simple archetipical monophonic synthesizer consist of an oscillator connected to a filter connected to an amplifier with an envelope.
+
+Here's the full gist:
+
+```js
+import {
+  registerSynthlet
+  createPolyblepOscillatorNode,
+  createStateVariableFilterNode,
+  createVcaNode,
+} from "synthlet";
+
+const ac = await registerSynthlet(new AudioContext());
+
+
+const osc = createPolyblepOscillatorNode(ac, {
   frequency: 440,
 });
-const filter = createStateVariableFilterNode(audioContext, {
+const filter = createStateVariableFilterNode(ac, {
   type: SvfType.Lowpass,
   frequency: 5000,
   resonance: 2,
 });
-const vca = createVcaNode(audioContext, {
+const vca = createVcaNode(ac, {
   attack: 0.01,
   decay: 0.1,
   sustain: 0.7,
   release: 0.3,
 });
 
-osc.connect(filter).connect(vca).connect(audioContext.destination);
+osc.connect(filter).connect(vca).connect(ac.destination);
 
 // Trigger the envelope
 vca.gate.value = 1;
 ```
 
 At this point you should able to hear some sound. If you don't hear anything, check the browser console for any errors.
+
+<Callout title="No new required" type="warn">
+  Unlike the standard WebAudio API, Synthlet modules are functions, not classes.
+  So no `new` is required to create a module.
+</Callout>
 
 <Callout title="No start required" type="warn">
   Unlike the standard WebAudio API, Synthlet modules start automatically. No

@@ -10,10 +10,10 @@ import ClockExample from "../../../examples/ClockExample";
 Generates a clock signal at a given tempo.
 
 ```ts
-import { registerClockWorkletOnce, createClockNode } from "synthlet";
+import { registerClockWorklet, createClockNode } from "synthlet";
 
 const audioContext = new AudioContext();
-await registerClockWorkletOnce(audioContext);
+await registerClockWorklet(audioContext);
 const clock = createClockNode(audioContext, { bpm: 10 });
 ```
 
@@ -24,10 +24,10 @@ const clock = createClockNode(audioContext, { bpm: 10 });
 Trigger a kick with a clock:
 
 ```ts
-import { registerSynthletOnce, KickDrum } from "synthlet";
+import { registerSynthlet, KickDrum } from "synthlet";
 
 const audioContext = new AudioContext();
-await registerSynthletOnce(audioContext);
+await registerSynthlet(audioContext);
 const clock = createClockNode(audioContext, { bpm: 120 });
 const kick = createKickDrum(audioContext, { trigger: clock });
 kick.connect(audioContext.destination);

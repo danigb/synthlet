@@ -3,10 +3,10 @@
 > [LFO](https://en.wikipedia.org/wiki/Low-frequency_oscillation) generator module for [synthlet](https://github.com/danigb/synthlet)
 
 ```ts
-import { registerLfoWorkletOnce, createLfo } from "synthlet"; // or "@synthlet/lfo";
+import { registerLfoWorklet, createLfo } from "synthlet"; // or "@synthlet/lfo";
 
 const audioContext = new AudioContext();
-await registerLfoWorkletOnce(audioContext);
+await registerLfoWorklet(audioContext);
 
 // Create a destination node
 const osc = new OscillatorNode(audioContext, { frequency: 440 });
