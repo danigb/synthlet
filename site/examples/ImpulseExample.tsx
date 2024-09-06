@@ -1,16 +1,16 @@
 "use client";
 
-import { synthlet } from "synthlet";
+import { Impulse, WithParams } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { useSynth } from "./useSynth";
 
+const ImpulseSynth = WithParams(
+  (p) => ({ trigger: p() }),
+  (p) => Impulse.trigger(p.trigger)
+);
+
 export function ImpulseExample() {
-  const synth = useSynth(
-    synthlet((op) => {
-      const trigger = op.param();
-      return op.synth(op.impulse(trigger), { trigger });
-    })
-  );
+  const synth = useSynth(ImpulseSynth);
 
   if (!synth) return null;
 

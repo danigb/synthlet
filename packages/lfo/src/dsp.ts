@@ -10,7 +10,7 @@ export enum LfoType {
   ExpTriangle = 8,
   RandSampleHold = 9,
   Impulse = 1,
-  // Remember to update worklet PARAMS waveform.max value when adding new waveform
+  // Remember to update worklet PARAMS type.max value when adding new type
   // Remember to update index LfoTypes
 }
 
@@ -80,7 +80,7 @@ const expTriangle: Gen = (phase) => bipolar(concave(Math.abs(bipolar(phase))));
 const randSampleHold: Gen = createSampleAndHold();
 
 type Params = {
-  waveform: number[];
+  type: number[];
   frequency: number[];
   gain: number[];
   offset: number[];
@@ -105,7 +105,7 @@ export function createLfo(sampleRate: number, audioRate: boolean) {
   ];
 
   // Params
-  let $waveform = 0;
+  let $type = 0;
   let $frequency = 10;
   let $gain = 1;
   let $offset = 0;
@@ -115,9 +115,9 @@ export function createLfo(sampleRate: number, audioRate: boolean) {
   let phase = 0;
 
   function read(params: Params) {
-    if (params.waveform[0] !== $waveform) {
-      $waveform = params.waveform[0];
-      gen = generators[Math.floor($waveform)] ?? none;
+    if (params.type[0] !== $type) {
+      $type = params.type[0];
+      gen = generators[Math.floor($type)] ?? none;
     }
     $frequency = params.frequency[0];
     $offset = params.offset[0];

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AssignParams,
   ClaveDrum,
   Clock,
   Conn,
@@ -9,7 +10,6 @@ import {
   KickDrum,
   Param,
   ParamInput,
-  WithParams,
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
@@ -40,14 +40,7 @@ const RhythmBox = (params: { bpm?: ParamInput } = {}) => {
   });
 
   const synth = Conn([clave, kick], Gain());
-  return WithParams(synth, { bpm, volume });
-
-  // const synth = Conn([clave, kick], Gain());
-
-  // return (context: AudioContext) => {
-  //   const out = synth(context);
-  //   return assignParams(context, out, { bpm, volume });
-  // };
+  return AssignParams(synth, { bpm, volume });
 };
 
 function Example() {

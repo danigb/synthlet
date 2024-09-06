@@ -16,18 +16,15 @@ export type AdWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-export type AdParamInputs = {
-  trigger: ParamInput;
-  attack: ParamInput;
-  decay: ParamInput;
-  offset: ParamInput;
-  gain: ParamInput;
+export type AdInputs = {
+  trigger?: ParamInput;
+  attack?: ParamInput;
+  decay?: ParamInput;
+  offset?: ParamInput;
+  gain?: ParamInput;
 };
 
-export const createAdNode = createWorkletConstructor<
-  AdWorkletNode,
-  AdParamInputs
->({
+export const createAdNode = createWorkletConstructor<AdWorkletNode, AdInputs>({
   processorName: "AdProcessor",
   paramNames: ["trigger", "attack", "decay", "offset", "gain"],
   workletOptions: () => ({
@@ -37,5 +34,5 @@ export const createAdNode = createWorkletConstructor<
 });
 
 // Operator
-export const Ad = (inputs: AdParamInputs) => (context: AudioContext) =>
+export const Ad = (inputs: AdInputs) => (context: AudioContext) =>
   createAdNode(context, inputs);

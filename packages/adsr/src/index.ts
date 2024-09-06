@@ -1,11 +1,12 @@
 import {
   createRegistrar,
   createWorkletConstructor,
+  operator,
   ParamInput,
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export type AdsrParamInputs = {
+export type AdsrInputs = {
   gate?: ParamInput;
   attack?: ParamInput;
   decay?: ParamInput;
@@ -41,35 +42,22 @@ const PARAM_NAMES = [
 
 export const registerAdsrWorklet = createRegistrar("ADSR", PROCESSOR);
 
-export const createVcaNode = createWorkletConstructor<
-  AdsrWorkletNode,
-  AdsrParamInputs
->({
-  processorName: "AdsrWorkletProcessor",
-  paramNames: PARAM_NAMES,
-  workletOptions() {
-    return {
-      numberOfInputs: 1,
-      numberOfOutputs: 1,
-      processorOptions: {
-        mode: "modulator",
-      },
-    };
-  },
-});
 export const createAdsrNode = createWorkletConstructor<
   AdsrWorkletNode,
-  AdsrParamInputs
+  AdsrInputs
 >({
-  processorName: "AdsrWorkletProcessor",
+  processorName: "AdsrProcessor",
   paramNames: PARAM_NAMES,
   workletOptions() {
     return {
       numberOfInputs: 0,
       numberOfOutputs: 1,
-      processorOptions: {
-        mode: "generator",
-      },
     };
   },
+});
+
+const op = operator(createAdsrNode);
+
+export const Adsr = Object.assign(op, {
+  trigger: (gate: ParamInput, inputs?: AdsrInputs) => op({ gate, ...inputs }),
 });

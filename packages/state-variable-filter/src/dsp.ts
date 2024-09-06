@@ -17,7 +17,7 @@ export enum StateVariableFilterType {
 }
 
 export type Inputs = {
-  filterType: number[];
+  type: number[];
   frequency: number[];
   resonance: number[];
 };
@@ -48,7 +48,7 @@ export function SVFilter(sampleRate: number) {
   let low = 0;
 
   function update(inputs: Inputs) {
-    $type = inputs.filterType[0];
+    $type = inputs.type[0];
     if (
       inputs.frequency[0] !== $frequency ||
       inputs.resonance[0] !== $resonance

@@ -8,7 +8,7 @@ import { PROCESSOR } from "./processor";
 
 export const registerEuclidWorklet = createRegistrar("EUCLID", PROCESSOR);
 
-export type EuclidInputParams = {
+export type EuclidInputs = {
   clock?: ParamInput;
   steps?: ParamInput;
   beats?: ParamInput;
@@ -27,7 +27,7 @@ export type EuclidWorkletNode = AudioWorkletNode & {
 
 export const createEuclidNode = createWorkletConstructor<
   EuclidWorkletNode,
-  EuclidInputParams
+  EuclidInputs
 >({
   processorName: "EuclidProcessor",
   paramNames: ["clock", "steps", "beats", "subdivision", "rotation"],
@@ -37,9 +37,7 @@ export const createEuclidNode = createWorkletConstructor<
   }),
 });
 
-export const Euclid = (
-  params?: EuclidInputParams
-): Connector<EuclidWorkletNode> => {
+export const Euclid = (params?: EuclidInputs): Connector<EuclidWorkletNode> => {
   let node: EuclidWorkletNode;
   return (context: AudioContext) => {
     node ??= createEuclidNode(context, params);

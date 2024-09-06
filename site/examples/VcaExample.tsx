@@ -1,23 +1,21 @@
 "use client";
 
-import { synthlet } from "synthlet";
-import { ExamplePane, TriggerButton } from "./components/ExamplePane";
+import { WithParams } from "synthlet";
+import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { useSynth } from "./useSynth";
 
-const createSynth = synthlet((op) => {
-  const trigger = op.param();
-  return op.synth(op.conn(op.noise.white(), op.amp.adsr(trigger)), {
-    trigger,
-  });
-});
+const VcaSynth = WithParams(
+  (p) => ({ gate: p() }),
+  (p, op) => op.Conn.serial(op.Noise.white(), op.Amp.adsr(p.gate, 0.5))
+);
 
 function WavetableExample() {
-  const synth = useSynth(createSynth);
+  const synth = useSynth(VcaSynth);
   if (!synth) return null;
 
   return (
     <div className="flex ">
-      <TriggerButton trigger={synth.trigger} />
+      <GateButton gate={synth.gate} />
     </div>
   );
 }

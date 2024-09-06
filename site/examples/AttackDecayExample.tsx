@@ -2,8 +2,24 @@
 
 import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
-import { synthlet } from "synthlet";
+import { Operators as Op, WithParams } from "synthlet";
 import { useSynth } from "./useSynth";
+
+const AttackDecaySynth = () =>
+  WithParams(
+    {
+      trigger: Op.Param(),
+      release: Op.Param(),
+      attack: Op.Param(),
+    },
+    (p) =>
+      Op.Conn.serial(
+        Op.Osc.sin(
+          Op.Env.ad(p.trigger, p.attack, p.release, { offset: 440, gain: 2000 })
+        ),
+        Op.Amp.vol(0.2)
+      )
+  );
 
 export function AttackDecayExample() {
   const [open, setOpen] = useState(false);
@@ -21,22 +37,7 @@ export function AttackDecayExample() {
 }
 
 function AttackDecayUI({ onClose }: { onClose: () => void }) {
-  const synth = useSynth(
-    synthlet((op) => {
-      const trigger = op.param();
-      const release = op.param();
-      const attack = op.param();
-      return op.synth(
-        op.conn(
-          op.osc.sine(
-            op.env.ad(trigger, attack, release, { offset: 440, gain: 2000 })
-          ),
-          op.amp(0.2)
-        ),
-        { trigger, release, attack }
-      );
-    })
-  );
+  const synth = useSynth(AttackDecaySynth());
 
   if (!synth) return null;
 

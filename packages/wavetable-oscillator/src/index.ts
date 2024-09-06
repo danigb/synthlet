@@ -8,16 +8,18 @@ import { Wavetable, WavetableLoader } from "./wavetable-loader";
 
 export { Wavetable } from "./wavetable-loader";
 
-export type WavetableInputParams = {
-  baseFrequency: ParamInput;
-  frequency: ParamInput;
-  morphFrequency: ParamInput;
+export type WavetableInputs = {
+  baseFrequency?: ParamInput;
+  frequency?: ParamInput;
+  morphFrequency?: ParamInput;
 };
 
 export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
   baseFrequency: AudioParam;
   frequency: AudioParam;
   morphFrequency: AudioParam;
+  loadWavetable(urlOrName: string): Promise<void>;
+  fetchWavetableNames(): Promise<string[]>;
   setWavetable(wavetable: { data: Float32Array; length: number }): void;
   dispose(): void;
 };
@@ -29,7 +31,7 @@ export const registerWavetableOscillatorWorklet = createRegistrar(
 
 export const createWavetableOscillatorNode = createWorkletConstructor<
   WavetableOscillatorWorkletNode,
-  WavetableInputParams
+  WavetableInputs
 >({
   processorName: "WavetableOscillatorWorkletProcessor",
   paramNames: ["baseFrequency", "frequency", "morphFrequency"] as const,
@@ -45,6 +47,11 @@ export const createWavetableOscillatorNode = createWorkletConstructor<
         length: wavetable.length,
       });
     };
+    node.fetchWavetableNames = fetchWavetableNames;
+    node.loadWavetable = (urlOrName) =>
+      loadWavetable(urlOrName).then((wavetable) => {
+        node.setWavetable(wavetable);
+      });
   },
 });
 
@@ -61,3 +68,13 @@ export function loadWavetable(
 export function fetchWavetableNames(): Promise<string[]> {
   return WavetableLoader.fetchAvailableNames();
 }
+
+const op = (inputs: WavetableInputs) => {
+  let node: WavetableOscillatorWorkletNode;
+  return (context: AudioContext) => {
+    node ??= createWavetableOscillatorNode(context, inputs);
+    return node;
+  };
+};
+
+export const WavetableOscillator = Object.assign(op, {});

@@ -1,24 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchWavetableNames, synthlet } from "synthlet";
+import {
+  Amp,
+  AssignParams,
+  Conn,
+  fetchWavetableNames,
+  Param,
+  WavetableOscillator,
+} from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-const createSynth = synthlet((op) => {
-  const gate = op.param();
-  const freq = op.param(440);
-  const table = op.wt.table("ACCESS_V");
-  const volume = op.param.db(-24);
-  const osc = op.wt(table, freq, { morphFrequency: 1 });
-  const synth = op.synth(op.conn(osc, op.amp.adsr(gate), op.amp(volume)), {
-    gate,
-    freq,
-    volume,
-  });
-  return Object.assign(synth, { osc, table });
-});
+const WavetableSynth = () => (context: AudioContext) => {
+  const gate = Param();
+  const freq = Param(440);
+  const volume = Param.db(-24);
+  const osc = WavetableOscillator({});
+  osc(context).loadWavetable("ACCESS_V");
+  const synth = AssignParams(
+    Conn.serial(osc, Amp.adsr(gate), Amp.vol(volume)),
+    { freq, volume, gate }
+  );
+  return Object.assign(synth(context), { osc: osc(context) });
+};
 
 function WavetableExample() {
   const [currentWavetableName, setCurrentWavetableName] =
@@ -31,7 +37,7 @@ function WavetableExample() {
       setAvailableNames(names);
     });
   }, []);
-  const synth = useSynth(createSynth);
+  const synth = useSynth(WavetableSynth());
 
   if (!synth) return null;
 
@@ -44,7 +50,7 @@ function WavetableExample() {
           value={currentWavetableName}
           onChange={(event) => {
             setCurrentWavetableName(event.target.value);
-            synth.table.load(event.target.value);
+            synth.osc.loadWavetable(event.target.value);
           }}
         >
           {availableNames.map((name) => (

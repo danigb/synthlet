@@ -13,7 +13,7 @@ export type NoiseWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-export type NoiseInputParams = {
+export type NoiseInputs = {
   type: ParamInput;
 };
 
@@ -27,7 +27,7 @@ export function getNoiseTypes(): { name: string; value: number }[] {
 export const registerNoiseWorklet = createRegistrar("NOISE", PROCESSOR);
 export const createNoiseNode = createWorkletConstructor<
   NoiseWorkletNode,
-  NoiseInputParams
+  NoiseInputs
 >({
   processorName: "NoiseWorkletProcessor",
   paramNames: ["type"],
@@ -35,4 +35,17 @@ export const createNoiseNode = createWorkletConstructor<
     numberOfInputs: 0,
     numberOfOutputs: 1,
   }),
+});
+
+const op = (params: NoiseInputs) => {
+  let node: NoiseWorkletNode;
+  return (context: AudioContext) => {
+    node ??= createNoiseNode(context, params);
+    return node;
+  };
+};
+
+export const Noise = Object.assign(op, {
+  white: () => op({ type: NoiseType.WHITE }),
+  pink: () => op({ type: NoiseType.PINK_TRAMMEL }),
 });

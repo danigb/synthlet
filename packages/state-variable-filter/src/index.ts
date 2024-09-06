@@ -1,6 +1,7 @@
 import {
   createRegistrar,
   createWorkletConstructor,
+  operator,
   ParamInput,
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
@@ -8,9 +9,9 @@ import { PROCESSOR } from "./processor";
 export { StateVariableFilterType } from "./dsp";
 
 export type StateVariableFilterParams = {
-  type: ParamInput;
-  frequency: ParamInput;
-  resonance: ParamInput;
+  type?: ParamInput;
+  frequency?: ParamInput;
+  resonance?: ParamInput;
 };
 
 export type StateVariableFilterWorkletNode = AudioWorkletNode & {
@@ -35,3 +36,7 @@ export const createStateVariableFilterNode = createWorkletConstructor<
     return { numberOfInputs: 1, numberOfOutputs: 1 };
   },
 });
+
+const op = operator(createStateVariableFilterNode);
+
+export const StateVariableFilter = Object.assign(op, {});

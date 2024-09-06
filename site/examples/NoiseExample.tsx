@@ -1,28 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { NoiseType, synthlet } from "synthlet";
+import { Amp, AssignParams, Conn, Noise, NoiseType, Param } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-const createSynth = synthlet((op) => {
-  const volume = op.param.db(-100);
-  const noiseType = op.param(NoiseType.WHITE);
-  return op.synth(op.conn(op.noise(noiseType), op.amp(volume)), {
-    volume,
-    noiseType,
-  });
-});
+function createSynth() {
+  const volume = Param.db(-100);
+  const noiseType = Param.val(NoiseType.WHITE);
+  return AssignParams(
+    Conn.serial(Noise({ type: noiseType }), Amp({ gain: volume })),
+    { volume, noiseType }
+  );
+}
 
 function Example() {
   const [currentNoise, setCurrentNoise] = useState<NoiseType>(NoiseType.WHITE);
-  const synth = useSynth(createSynth);
+  const synth = useSynth(createSynth());
   if (!synth) return null;
 
   return (
     <div className="grid grid-cols-4 gap-4">
-      <p>Noise type:</p>
+      <div>Noise type:</div>
       <select
         value={currentNoise}
         onChange={(e) => {
@@ -34,6 +34,7 @@ function Example() {
         <option value={NoiseType.WHITE}>White</option>
         <option value={NoiseType.PINK_TRAMMEL}>Pink</option>
       </select>
+      <div className="col-span-2"></div>
       <Slider
         label="Volume"
         inputClassName="col-span-2"

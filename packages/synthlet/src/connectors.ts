@@ -1,5 +1,15 @@
 import { ParamWorkletNode } from "@synthlet/param";
 import { Connector, Disposable } from "./_worklet";
+import { createGain, GainInputs } from "./waa";
+
+// TODO: move to a shared place. Here because circular dependencies
+export const Gain = (inputs?: GainInputs) => {
+  let node: GainNode;
+  return (context: AudioContext) => {
+    node ??= createGain(context, inputs);
+    return node;
+  };
+};
 
 // Ensure that the dispose method of the destination node also disposes of the dependant nodes
 function withDependencies<N extends AudioNode>(
@@ -8,7 +18,10 @@ function withDependencies<N extends AudioNode>(
 ): Disposable<N> {
   const out = src as Disposable<N>;
   let _dispose = out.dispose;
+  let disposed = false;
   out.dispose = () => {
+    if (disposed) return;
+    disposed = true;
     _dispose();
     deps.forEach((dep) => {
       if ("dispose" in dep) dep.dispose();
@@ -16,8 +29,6 @@ function withDependencies<N extends AudioNode>(
   };
   return out;
 }
-
-const Gain = (): Connector<GainNode> => (context) => context.createGain();
 
 // Connect two audio nodes and add a dependency between them
 const pair =
@@ -61,9 +72,6 @@ const mixInto =
     return withDependencies(destN, nodes);
   };
 
-const par = (parallel: Connector<AudioNode>[]): Connector<AudioNode> =>
-  mixInto(parallel, Gain());
-
 // Connect multiple audio nodes in parallel into a chain
 const connectMixChain = (
   src: Connector<AudioNode> | Connector<AudioNode>[],
@@ -84,19 +92,20 @@ export const Conn = Object.assign(connectMixChain, {
   pair,
   chain,
   mixInto,
-  par,
+  serial: (...serial: Connector<AudioNode>[]) => chain(serial),
+  mix: (...parallel: Connector<AudioNode>[]) => mixInto(parallel, Gain()),
 });
 
-type ParamConnectors = Record<string, Connector<ParamWorkletNode>>;
+export type ParamConnectors = Record<string, Connector<ParamWorkletNode>>;
 type ParamConnectorsToInputs<P extends ParamConnectors> = {
   [K in keyof P]: AudioParam;
 };
 
-export function WithParams<P extends ParamConnectors>(
-  node: Connector<Disposable<AudioNode>>,
+export function AssignParams<N extends AudioNode, P extends ParamConnectors>(
+  node: Connector<Disposable<N>>,
   params: P
-): Connector<Disposable<AudioNode>> {
-  return (context) => {
+) {
+  return (context: AudioContext) => {
     const inputs = {} as ParamConnectorsToInputs<P>;
     const n = node(context);
     for (const key in params) {

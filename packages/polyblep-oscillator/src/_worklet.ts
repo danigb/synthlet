@@ -52,6 +52,7 @@ export function connectParams(
       node[paramName] = node.parameters.get(paramName);
     }
     const param = node[paramName];
+    if (!param) throw Error("Invalid param name: " + paramName);
     const input = inputs[paramName];
     if (typeof input === "number") {
       param.value = input;
@@ -114,5 +115,16 @@ export function createRegistrar(processorName: string, processor: string) {
     const promise = context.audioWorklet.addModule(url);
     (context as any)[key] = promise;
     return promise;
+  };
+}
+
+export function operator<P, N extends AudioNode>(
+  createNode: (context: AudioContext, inputs?: P) => Disposable<N>
+) {
+  return (inputs?: P): Connector<Disposable<N>> => {
+    let node: Disposable<N>;
+    return (context) => {
+      return (node ??= createNode(context, inputs));
+    };
   };
 }
