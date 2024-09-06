@@ -27,7 +27,6 @@ export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/wavetable-oscillator";
 export { ParamInput } from "./_worklet";
 
-export { createOperators } from "./operators";
 export { getSynthlet } from "./synthlet";
 export * from "./synths";
 export * from "./waa";

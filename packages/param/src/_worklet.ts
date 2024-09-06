@@ -117,14 +117,3 @@ export function createRegistrar(processorName: string, processor: string) {
     return promise;
   };
 }
-
-export function operator<P, N extends AudioNode>(
-  createNode: (context: AudioContext, inputs?: P) => Disposable<N>
-) {
-  return (inputs?: P): Connector<Disposable<N>> => {
-    let node: Disposable<N>;
-    return (context) => {
-      return (node ??= createNode(context, inputs));
-    };
-  };
-}

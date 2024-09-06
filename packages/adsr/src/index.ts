@@ -1,7 +1,6 @@
 import {
   createRegistrar,
   createWorkletConstructor,
-  operator,
   ParamInput,
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
@@ -70,15 +69,4 @@ export const createAmpAdsrNode = createWorkletConstructor<
       processorOptions: { mode: "modulator" },
     };
   },
-});
-
-const adsr = operator(createAdsrNode);
-const amp = operator(createAdsrNode);
-
-export const AdsrEnv = Object.assign(adsr, {
-  trigger: (gate: ParamInput, inputs?: AdsrInputs) => adsr({ gate, ...inputs }),
-});
-
-export const AdsrAmp = Object.assign(adsr, {
-  trigger: (gate: ParamInput, inputs?: AdsrInputs) => amp({ gate, ...inputs }),
 });

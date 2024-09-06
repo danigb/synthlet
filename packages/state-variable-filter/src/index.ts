@@ -1,7 +1,6 @@
 import {
   createRegistrar,
   createWorkletConstructor,
-  operator,
   ParamInput,
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
@@ -36,7 +35,3 @@ export const createStateVariableFilterNode = createWorkletConstructor<
     return { numberOfInputs: 1, numberOfOutputs: 1 };
   },
 });
-
-const op = operator(createStateVariableFilterNode);
-
-export const StateVariableFilter = Object.assign(op, {});
