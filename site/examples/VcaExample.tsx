@@ -1,13 +1,17 @@
 "use client";
 
-import { WithParams } from "synthlet";
+import { getSynthlet } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { useSynth } from "./useSynth";
 
-const VcaSynth = WithParams(
-  (p) => ({ gate: p() }),
-  (p, op) => op.Conn.serial(op.Noise.white(), op.Amp.adsr(p.gate, 0.5))
-);
+const VcaSynth = (context: AudioContext) => {
+  const s = getSynthlet(context);
+  const gate = s.param();
+
+  return s.withParams(s.conn.serial(s.noise.white(), s.amp.adsr(gate)), {
+    gate,
+  });
+};
 
 function WavetableExample() {
   const synth = useSynth(VcaSynth);

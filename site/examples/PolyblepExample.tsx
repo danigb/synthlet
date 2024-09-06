@@ -1,30 +1,25 @@
 "use client";
 
-import { AssignParams, Operators, PolyblepWaveformType } from "synthlet";
+import { getSynthlet, PolyblepWaveformType } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function PolyblepSynth() {
-  const { Param, Conn, Amp, Polyb } = Operators;
-  const gate = Param();
-  const type = Param.val(PolyblepWaveformType.SAWTOOTH);
-  const frequency = Param.val(200);
-  const volume = Param.db(-100);
+function PolyblepSynth(context: AudioContext) {
+  const s = getSynthlet(context);
+  const gate = s.param();
+  const type = s.param(PolyblepWaveformType.SAWTOOTH);
+  const frequency = s.param(200);
+  const volume = s.param.db(-100);
 
-  return AssignParams(
-    Conn.serial(Polyb({ type, frequency }), Amp({ gain: volume })),
-    {
-      gate,
-      type,
-      frequency,
-      volume,
-    }
+  return s.withParams(
+    s.conn.serial(s.polyblep({ type, frequency }), s.amp(volume)),
+    { gate, type, frequency, volume }
   );
 }
 
 function WavetableExample() {
-  const synth = useSynth(PolyblepSynth());
+  const synth = useSynth(PolyblepSynth);
   if (!synth) return null;
 
   return (

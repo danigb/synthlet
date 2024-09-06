@@ -1,20 +1,5 @@
-import { Adsr } from "@synthlet/adsr";
-import { Lfo, LfoType } from "@synthlet/lfo";
-import { Noise } from "@synthlet/noise";
-import { Param } from "@synthlet/param";
-import { PolyblepOscillator } from "@synthlet/polyblep-oscillator/src";
-import { StateVariableFilter } from "@synthlet/state-variable-filter";
-import { Connector, ParamInput } from "./_worklet";
-import { Conn } from "./connectors";
-import { Operators, WithParams } from "./operators";
-
-const MonoSynth = (context: AudioContext) => {
-  const gate = Param();
-  const osc = PolyblepOscillator();
-  const lfoOsc = Lfo({ type: LfoType.Sine });
-  const filterEnv = Adsr();
-  const filter = StateVariableFilter();
-};
+import { ParamInput } from "./_worklet";
+import { getSynthlet } from "./synthlet";
 
 export type DrumInputs = {
   volume?: ParamInput;
@@ -32,56 +17,73 @@ export type DrumNode = AudioNode & {
 };
 export type KickDrumNode = DrumNode & {};
 
-export const KickDrum = (inputs: DrumInputs = {}): Connector<DrumNode> =>
-  WithParams(
-    (p) => ({
-      trigger: p.in(inputs.trigger),
-      decay: p.in(inputs.decay ?? 0.8),
-      volume: p.in(inputs.volume ?? 0),
-      tone: p.lin(20, 100, inputs.tone ?? 0.2),
-    }),
-    (p, op) =>
-      op.Conn.serial(
-        op.Conn.mix(
-          op.Osc.sin(
-            op.Env.ad(p.trigger, 0.1, p.decay, { offset: p.tone, gain: 50 })
-          ),
-          op.Impulse.trigger(p.trigger)
-        ),
-        op.Amp.perc(p.trigger, 0.01, p.decay),
-        op.ClipAmp.soft(5, 0.6)
-      )
+export const KickDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode => {
+  const s = getSynthlet(context);
+  const p = {
+    trigger: s.param(inputs.trigger),
+    decay: s.param(inputs.decay ?? 0.8),
+    volume: s.param(inputs.volume ?? 0),
+    tone: s.param.lin(20, 100, inputs.tone ?? 0.2),
+  };
+
+  const synth = s.conn.serial(
+    s.conn.mix(
+      s.osc.sin(
+        s.env.ad(p.trigger, {
+          attack: 0.1,
+          decay: p.decay,
+          offset: p.tone,
+          gain: 50,
+        })
+      ),
+      s.impulse.trigger(p.trigger)
+    ),
+    s.amp.perc(p.trigger, 0.01, p.decay),
+    s.clip.soft(5, 0.6)
   );
-
-export const SnareDrum = (inputs: DrumInputs = {}): Connector<DrumNode> => {
-  const { Param, Conn, Osc, Amp, AssignParams } = Operators;
-  const trigger = Param.in(inputs.trigger);
-  const decay = Param.in(inputs.decay ?? 0.8);
-  const volume = Param.db(inputs.volume ?? 0);
-  const tone = Param.lin(20, 100, inputs.tone ?? 0.2);
-
-  const snap = Conn.mixInto(
-    [Osc.sin(100), Osc.sin(200)],
-    Amp.perc(trigger, 0.01, decay)
-  );
-
-  const splash = Conn.serial(Noise.white(), Amp.perc(trigger, 0.01, decay));
-  const synth = Conn.mixInto([snap, splash], Amp());
-  return AssignParams(synth, { trigger, volume, tone, decay });
+  return s.withParams(synth, p);
 };
 
-export const ClaveDrum = (inputs: DrumInputs = {}): Connector<DrumNode> => {
-  const { Param, Osc, Amp, AssignParams, Bqf } = Operators;
-  const trigger = Param.in(inputs.trigger);
-  const decay = Param.in(inputs.decay ?? 0.8);
-  const volume = Param.db(inputs.volume ?? 0);
-  const tone = Param.lin(1200, 1800, inputs.tone ?? 0.1);
+export const SnareDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode => {
+  const { param, conn, osc, amp, noise, withParams } = getSynthlet(context);
+  const trigger = param(inputs.trigger);
+  const decay = param(inputs.decay ?? 0.8);
+  const volume = param.db(inputs.volume ?? 0);
+  const tone = param.lin(20, 100, inputs.tone ?? 0.2);
 
-  const synth = Conn.serial(
-    Osc.tri(tone),
-    Amp.perc(trigger, 0.01, decay),
-    Bqf.lp(tone),
-    Amp.vol(volume)
+  const snap = conn.mixInto(
+    [osc.sin(100), osc.sin(200)],
+    amp.perc(trigger, 0.01, decay)
   );
-  return AssignParams(synth, { trigger, volume, tone, decay });
+
+  const splash = conn.serial(noise.white(), amp.perc(trigger, 0.01, decay));
+  const synth = conn.mixInto([snap, splash], amp());
+  return withParams(synth, { trigger, volume, tone, decay });
+};
+
+export const ClaveDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode => {
+  const { param, osc, amp, synth, conn, bqf } = getSynthlet(context);
+  const trigger = param(inputs.trigger);
+  const decay = param(inputs.decay ?? 0.8);
+  const volume = param.db(inputs.volume ?? 0);
+  const tone = param.lin(1200, 1800, inputs.tone ?? 0.1);
+
+  return synth({
+    out: conn.serial(
+      osc.tri(tone),
+      amp.perc(trigger, 0.01, decay),
+      bqf.lp(tone),
+      amp(volume)
+    ),
+    inputs: { trigger, volume, tone, decay },
+  });
 };

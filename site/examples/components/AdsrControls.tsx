@@ -1,67 +1,61 @@
-import { useEffect } from "react";
 import { Slider } from "./Slider";
 
 type Parameter = { value: number };
+type AdsrModule = {
+  attack: Parameter;
+  decay: Parameter;
+  sustain: Parameter;
+  release: Parameter;
+};
 
-export function AdsrControls({
-  onAttackChanged,
-  onDecayChanged,
-  onSustainChanged,
-  onReleaseChanged,
-  adsr,
-}: {
-  onAttackChanged: (value: number) => void;
-  onDecayChanged: (value: number) => void;
-  onSustainChanged: (value: number) => void;
-  onReleaseChanged: (value: number) => void;
-  adsr: [number, number, number, number];
-}) {
-  useEffect(() => {
-    onAttackChanged(adsr[0]);
-    onDecayChanged(adsr[1]);
-    onSustainChanged(adsr[2]);
-    onReleaseChanged(adsr[3]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+export function AdsrControls({ adsr }: { adsr: AdsrModule }) {
   return (
     <div className="grid grid-cols-4">
       <Slider
-        label="attack"
+        label="Attack"
         inputClassName="col-span-2"
         min={0.1}
         max={10}
         step={0.1}
-        initial={adsr[0]}
-        onChange={onAttackChanged}
+        initial={adsr.attack.value}
+        onChange={(value) => {
+          adsr.attack.value = value;
+        }}
         units="secs"
       />
       <Slider
-        label="decay"
+        label="Decay"
         inputClassName="col-span-2"
         min={0.1}
         max={10}
         step={0.1}
-        initial={adsr[1]}
-        onChange={onDecayChanged}
+        initial={adsr.decay.value}
+        onChange={(value) => {
+          adsr.decay.value = value;
+        }}
         units="secs"
       />
       <Slider
-        label="sustain"
+        label="Sustain"
         inputClassName="col-span-2"
         min={0.1}
         max={1}
         step={0.01}
-        initial={adsr[2]}
-        onChange={onSustainChanged}
+        initial={adsr.sustain.value}
+        onChange={(value) => {
+          adsr.sustain.value = value;
+        }}
       />
       <Slider
-        label="release"
+        label="Release"
         inputClassName="col-span-2"
         min={0.1}
         max={100}
         step={0.2}
-        initial={adsr[3]}
-        onChange={onReleaseChanged}
+        initial={adsr.release.value}
+        onChange={(value) => {
+          adsr.release.value = value;
+        }}
         units="secs"
       />
     </div>

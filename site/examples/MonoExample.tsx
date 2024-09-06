@@ -1,78 +1,49 @@
 "use client";
 
-import React from "react";
-import {
-  Adsr,
-  Amp,
-  AssignParams,
-  Conn,
-  Lfo,
-  LfoType,
-  Param,
-  PolyblepOscillator,
-  StateVariableFilter,
-} from "synthlet";
+import { getSynthlet, LfoType } from "synthlet";
+import { AdsrControls } from "./components/AdsrControls";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { useSynth } from "./useSynth";
 
-function FlyMonoSynth() {
-  const gate = Param();
-  const frequency = Param(400);
-  const vibrato = Param(1);
-  const lfo = Lfo({
+function FlyMonoSynth(context: AudioContext) {
+  const s = getSynthlet(context);
+  // Params
+  const gate = s.param();
+  const frequency = s.param(400);
+  const vibrato = s.param(1);
+  const lfo = s.lfo({
     type: LfoType.Sine,
     offset: frequency,
     gain: vibrato,
     frequency: 1,
   });
-  const osc = PolyblepOscillator({ frequency: lfo });
-  const filterEnv = Adsr({ gate, gain: 3000, offset: 2000 });
-  const filter = StateVariableFilter({ frequency: filterEnv });
-  const amp = Amp.adsr(gate);
+  // Modules
+  const osc = s.polyblep({ frequency: lfo });
+  const filterEnv = s.env.adsr(gate, { gain: 3000, offset: 2000 });
+  const filter = s.svf({ frequency: filterEnv });
+  const amp = s.amp.adsr(gate);
 
-  const out = Conn.serial(osc, filter, amp);
-
-  const synth = AssignParams(out, { gate, frequency, vibrato });
-
-  return (context: AudioContext) => {
-    const node = synth(context);
-    // const modules = invokeAllFunctions(context, {
-    //   lfo,
-    //   osc,
-    //   filter,
-    //   filterEnv,
-    // });
-    return Object.assign(node, {});
-  };
-}
-
-function invokeAllFunctions<
-  T extends Record<string, (context: AudioContext) => any>
->(
-  context: AudioContext,
-  obj: T
-): {
-  [K in keyof T]: ReturnType<T[K]>;
-} {
-  const result = {} as { [K in keyof T]: ReturnType<T[K]> };
-
-  for (const key in obj) {
-    if (Object.prototype.hasOwnProperty.call(obj, key)) {
-      result[key] = obj[key](context); // Call each function and store the result
-    }
-  }
-
-  return result;
+  return s.synth({
+    out: s.conn.serial(osc, filter, amp),
+    inputs: { gate, frequency, vibrato },
+    modules: { osc, filterEnv, filter, amp },
+  });
 }
 
 function Example() {
-  const synth = useSynth(FlyMonoSynth());
+  const synth = useSynth(FlyMonoSynth);
 
   if (!synth) return null;
 
   return (
     <div>
-      <GateButton gate={synth.gate} />
+      <div>Filter</div>
+      <AdsrControls adsr={synth.filterEnv} />
+      <div>Amplifier</div>
+      <AdsrControls adsr={synth.amp} />
+      <div className="flex mt-2">
+        <GateButton gate={synth.gate} />
+      </div>
     </div>
   );
 }

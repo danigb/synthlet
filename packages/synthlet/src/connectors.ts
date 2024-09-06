@@ -4,7 +4,7 @@ import { createGain, GainInputs } from "./waa";
 
 // TODO: move to a shared place. Here because circular dependencies
 export const Gain = (inputs?: GainInputs) => {
-  let node: GainNode;
+  let node: Disposable<GainNode>;
   return (context: AudioContext) => {
     node ??= createGain(context, inputs);
     return node;

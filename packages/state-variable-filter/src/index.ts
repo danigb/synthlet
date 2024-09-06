@@ -8,7 +8,7 @@ import { PROCESSOR } from "./processor";
 
 export { StateVariableFilterType } from "./dsp";
 
-export type StateVariableFilterParams = {
+export type StateVariableFilterInputs = {
   type?: ParamInput;
   frequency?: ParamInput;
   resonance?: ParamInput;
@@ -28,7 +28,7 @@ export const registerStateVariableFilterWorklet = createRegistrar(
 
 export const createStateVariableFilterNode = createWorkletConstructor<
   StateVariableFilterWorkletNode,
-  StateVariableFilterParams
+  StateVariableFilterInputs
 >({
   processorName: "StateVariableFilterWorkletProcessor",
   paramNames: ["type", "frequency", "resonance"],

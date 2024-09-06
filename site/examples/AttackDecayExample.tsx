@@ -2,24 +2,23 @@
 
 import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
-import { Operators as Op, WithParams } from "synthlet";
+import { getSynthlet } from "synthlet";
 import { useSynth } from "./useSynth";
 
-const AttackDecaySynth = () =>
-  WithParams(
-    {
-      trigger: Op.Param(),
-      release: Op.Param(),
-      attack: Op.Param(),
-    },
-    (p) =>
-      Op.Conn.serial(
-        Op.Osc.sin(
-          Op.Env.ad(p.trigger, p.attack, p.release, { offset: 440, gain: 2000 })
-        ),
-        Op.Amp.vol(0.2)
-      )
-  );
+const AttackDecaySynth = (context: AudioContext) => {
+  const s = getSynthlet(context);
+  const trigger = s.param();
+  const decay = s.param();
+  const attack = s.param();
+
+  return s.synth({
+    out: s.conn.serial(
+      s.osc.sin(s.env.ad(trigger, { attack, decay, offset: 440, gain: 2000 })),
+      s.amp(0.2)
+    ),
+    inputs: { trigger, attack, decay },
+  });
+};
 
 export function AttackDecayExample() {
   const [open, setOpen] = useState(false);
@@ -37,7 +36,7 @@ export function AttackDecayExample() {
 }
 
 function AttackDecayUI({ onClose }: { onClose: () => void }) {
-  const synth = useSynth(AttackDecaySynth());
+  const synth = useSynth(AttackDecaySynth);
 
   if (!synth) return null;
 
@@ -60,14 +59,14 @@ function AttackDecayUI({ onClose }: { onClose: () => void }) {
       </div>
       <div className="flex ">
         <Slider
-          label="Release"
+          label="Decay"
           labelClassName="w-20 text-right mr-2"
           min={0}
           max={1}
           step={0.001}
           initial={0.2}
           onChange={(value) => {
-            synth.release.value = value;
+            synth.decay.value = value;
           }}
           initialize
         />

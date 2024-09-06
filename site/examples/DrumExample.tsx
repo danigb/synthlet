@@ -37,7 +37,7 @@ export function DrumExample<T extends DrumSynth>({
     <DrumExampleUI
       instrumentName={instrumentName}
       onClose={() => setOpen(false)}
-      createSynth={getSynth(instrumentName)()}
+      createSynth={getSynth(instrumentName)}
     />
   ) : (
     <button

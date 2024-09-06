@@ -1,23 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { Amp, AssignParams, Conn, Noise, NoiseType, Param } from "synthlet";
+import { getSynthlet, NoiseType } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function createSynth() {
-  const volume = Param.db(-100);
-  const noiseType = Param.val(NoiseType.WHITE);
-  return AssignParams(
-    Conn.serial(Noise({ type: noiseType }), Amp({ gain: volume })),
+function NoiseSynth(context: AudioContext) {
+  const s = getSynthlet(context);
+  const volume = s.param.db(-100);
+  const noiseType = s.param(NoiseType.WHITE);
+  return s.withParams(
+    s.conn.serial(s.noise({ type: noiseType }), s.amp(volume)),
     { volume, noiseType }
   );
 }
 
 function Example() {
   const [currentNoise, setCurrentNoise] = useState<NoiseType>(NoiseType.WHITE);
-  const synth = useSynth(createSynth());
+  const synth = useSynth(NoiseSynth);
   if (!synth) return null;
 
   return (

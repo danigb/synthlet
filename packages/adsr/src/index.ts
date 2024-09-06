@@ -52,12 +52,33 @@ export const createAdsrNode = createWorkletConstructor<
     return {
       numberOfInputs: 0,
       numberOfOutputs: 1,
+      processorOptions: { mode: "generator" },
     };
   },
 });
 
-const op = operator(createAdsrNode);
+export const createAmpAdsrNode = createWorkletConstructor<
+  AdsrWorkletNode,
+  AdsrInputs
+>({
+  processorName: "AdsrProcessor",
+  paramNames: PARAM_NAMES,
+  workletOptions() {
+    return {
+      numberOfInputs: 1,
+      numberOfOutputs: 1,
+      processorOptions: { mode: "modulator" },
+    };
+  },
+});
 
-export const Adsr = Object.assign(op, {
-  trigger: (gate: ParamInput, inputs?: AdsrInputs) => op({ gate, ...inputs }),
+const adsr = operator(createAdsrNode);
+const amp = operator(createAdsrNode);
+
+export const AdsrEnv = Object.assign(adsr, {
+  trigger: (gate: ParamInput, inputs?: AdsrInputs) => adsr({ gate, ...inputs }),
+});
+
+export const AdsrAmp = Object.assign(adsr, {
+  trigger: (gate: ParamInput, inputs?: AdsrInputs) => amp({ gate, ...inputs }),
 });

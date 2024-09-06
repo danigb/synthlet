@@ -1,46 +1,51 @@
 import { AdInputs, createAdNode } from "@synthlet/ad";
 import { AdsrInputs, createAdsrNode, createAmpAdsrNode } from "@synthlet/adsr";
-import { createWavetableOscillatorNode } from "@synthlet/wavetable-oscillator";
-
-import { ParamInput } from "./_worklet";
-import {
-  BiquadFilterInputs,
-  createBiquadFilter,
-  createGain,
-  createOscillator,
-  OscillatorInputs,
-} from "./waa";
-
 import { createChorusTNode } from "@synthlet/chorus-t";
+import { ClipType, createClipAmpNode } from "@synthlet/clip-amp";
 import { createClockNode } from "@synthlet/clock";
 import { createEuclidNode } from "@synthlet/euclid";
 import { createImpulseNode } from "@synthlet/impulse";
 import { createLfoNode } from "@synthlet/lfo";
-import { createNoiseNode } from "@synthlet/noise";
-import { createParamNode, ParamInputs, ParamType } from "@synthlet/param";
+import { createNoiseNode, NoiseType } from "@synthlet/noise";
+import {
+  createParamNode,
+  ParamInputs,
+  ParamType,
+  ParamWorkletNode,
+} from "@synthlet/param";
 import { createPolyblepOscillatorNode } from "@synthlet/polyblep-oscillator";
 import {
   createStateVariableFilterNode,
   StateVariableFilterInputs,
   StateVariableFilterType,
 } from "@synthlet/state-variable-filter";
-import { Connector, Disposable } from "./_worklet";
+import { createWavetableOscillatorNode } from "@synthlet/wavetable-oscillator";
+import { Disposable, ParamInput } from "./_worklet";
+import {
+  BiquadFilterInputs,
+  createBiquadFilter,
+  createGain,
+  createOscillator,
+  GainInputs,
+  OscillatorInputs,
+} from "./waa";
 
-export function operator<P, N extends AudioNode>(
-  createNode: (context: AudioContext, inputs?: P) => Disposable<N>
-) {
-  return (inputs?: P): Connector<Disposable<N>> => {
-    let node: Disposable<N>;
-    return (context) => {
-      return (node ??= createNode(context, inputs));
-    };
-  };
+type Synthlet = ReturnType<typeof createSynthlet>;
+
+export function getSynthlet(context: AudioContext): Synthlet {
+  if (!(context as any).__synthlet) {
+    (context as any).__synthlet = createSynthlet(context);
+  }
+  return (context as any).__synthlet;
 }
 
-export type SynthletOperators = ReturnType<typeof createOperators>;
+function createSynthlet(context: AudioContext) {
+  const operator = <I, N>(
+    createNode: (context: AudioContext, inputs?: I) => N
+  ) => {
+    return (inputs?: I) => createNode(context, inputs);
+  };
 
-export function createOperators() {
-  // Web Audio
   const gainOp = operator(createGain);
   const osc = operator(createOscillator);
   const bqf = operator(createBiquadFilter);
@@ -59,12 +64,12 @@ export function createOperators() {
   const svf = operator(createStateVariableFilterNode);
   const param = operator(createParamNode);
   const wt = operator(createWavetableOscillatorNode);
+  const clip = operator(createClipAmpNode);
 
-  // Operators
-  return {
+  const ops = {
     param: Object.assign(
-      (params?: ParamInputs | number) =>
-        param(typeof params === "number" ? { input: params } : params),
+      (value?: ParamInput, params?: ParamInputs) =>
+        param({ input: value, ...params }),
       {
         db: (db: ParamInput, params?: ParamInputs) =>
           param({ input: db, ...params }),
@@ -79,18 +84,31 @@ export function createOperators() {
     ),
     conn: createConn(gainOp),
 
-    amp: Object.assign((gain: ParamInput) => gainOp({ gain }), {
+    amp: Object.assign((gain?: ParamInput) => gainOp({ gain }), {
       adsr: (gate: ParamInput, params?: AdsrInputs) =>
         adsrAmp({ gate, ...params }),
-      perc: (trigger: ParamInput, params?: AdInputs) =>
-        gainOp({ gain: ad({ trigger, ...params }) }),
+      perc: (
+        trigger: ParamInput,
+        attack?: ParamInput,
+        decay?: ParamInput,
+        params?: AdInputs
+      ) => gainOp({ gain: ad({ trigger, attack, decay, ...params }) }),
     }),
     clock: Object.assign(clock, {}),
+    clip: Object.assign(clip, {
+      soft: (preGain?: ParamInput, postGain?: ParamInput) =>
+        clip({ type: ClipType.TANH, preGain, postGain }),
+    }),
     chorusT: Object.assign(chorusT, {}),
     euclid: Object.assign(euclid, {}),
-    impulse: Object.assign(impulse, {}),
+    impulse: Object.assign(impulse, {
+      trigger: (trigger: ParamInput) => impulse({ trigger }),
+    }),
     lfo: Object.assign(lfo, {}),
-    noise: Object.assign(noise, {}),
+    noise: Object.assign(noise, {
+      white: () => noise({ type: NoiseType.WHITE }),
+      pink: () => noise({ type: NoiseType.PINK_TRAMMEL }),
+    }),
     polyblep: Object.assign(polyblep, {}),
     svf: Object.assign(svf, {
       lp: (
@@ -148,78 +166,124 @@ export function createOperators() {
     }),
 
     wt: Object.assign(wt, {}),
+
+    withParams: <N extends AudioNode, P extends ControlParams>(
+      node: Disposable<N>,
+      params: P
+    ) => Object.assign(node, paramToInputs(params)),
+
+    synth: <N extends AudioNode, P extends ControlParams, M>(synth: {
+      out: Disposable<N>;
+      inputs?: P;
+      modules?: M;
+    }) => Object.assign(synth.out, paramToInputs(synth.inputs), synth.modules),
+    op:
+      <I>(fn: (context: AudioContext, inputs?: I) => AudioNode) =>
+      (inputs?: I) =>
+        fn(context, inputs),
   };
+  return extensible(context, ops);
 }
 
-function createConn(gain: () => Connector<Disposable<GainNode>>) {
-  // Connect two audio nodes and add a dependency between them
-  const pair =
-    <S extends AudioNode, D extends AudioNode>(
-      src: Connector<S>,
-      dest: Connector<D>
-    ): Connector<Disposable<D>> =>
-    (context) => {
-      const srcN = src(context);
-      const destN = dest(context);
-      srcN.connect(destN);
-      return withDependencies(destN, [srcN]);
-    };
+type TransformOperators<
+  T extends Record<
+    string,
+    (context: AudioContext, params: any) => Disposable<AudioNode>
+  >
+> = {
+  [K in keyof T]: T[K] extends (
+    context: AudioContext,
+    params: infer P
+  ) => Disposable<AudioNode>
+    ? (params: P) => Disposable<AudioNode>
+    : never;
+};
 
-  // Connect multiple audio nodes in series and return the last one
-  // The last one will dispose of all the others
-  const chain =
-    (chain: Connector<AudioNode>[]): Connector<Disposable<AudioNode>> =>
-    (context) => {
-      const nodes = chain.map((node) => node(context));
-      return withDependencies(
-        nodes.reduce((prev, next) => {
-          prev.connect(next);
-          return next;
-        }),
-        nodes
-      );
-    };
+// Typescript wizardry to create a type-safe API for creating synthlet operators
+function extensible<O extends Object>(context: AudioContext, ops: O) {
+  return Object.assign(ops, {
+    use: <
+      T extends Record<
+        string,
+        (context: AudioContext, params: any) => Disposable<AudioNode>
+      >
+    >(
+      operators: T
+    ): O & TransformOperators<T> => {
+      const result = {} as TransformOperators<T>;
 
-  // Connect multiple audio nodes in parallel into a destination and return the destination
-  // The destination will dispose of all the others
-  const mixInto =
-    <D extends AudioNode>(
-      chain: Connector<AudioNode>[],
-      dest: Connector<D>
-    ): Connector<Disposable<D>> =>
-    (context) => {
-      const nodes = chain.map((node) => node(context));
-      const destN = dest(context);
-      nodes.forEach((node) => node.connect(destN));
-      return withDependencies(destN, nodes);
-    };
+      for (const key in operators) {
+        result[key] = ((params: Parameters<T[typeof key]>[1]) =>
+          operators[key](context, params)) as TransformOperators<T>[typeof key];
+      }
 
-  // Connect multiple audio nodes in parallel into a chain
-  const connectMixChain = (
-    src: Connector<AudioNode> | Connector<AudioNode>[],
-    dest?: Connector<AudioNode>,
-    ...tail: Connector<AudioNode>[]
-  ): Connector<Disposable<AudioNode>> => {
+      return Object.assign(ops, result);
+    },
+  });
+}
+
+function createConn(gain: (inputs?: GainInputs) => Disposable<GainNode>) {
+  const pair = <N extends AudioNode>(
+    s: AudioNode,
+    d: Disposable<N>
+  ): Disposable<N> => s.connect(d) as Disposable<N>;
+
+  const chain = (nodes: Disposable<AudioNode>[]) =>
+    withDependencies(
+      nodes.reduce((prev, next) => {
+        prev.connect(next);
+        return next;
+      }),
+      nodes
+    );
+
+  const mixInto = (
+    src: Disposable<AudioNode>[],
+    dest: Disposable<AudioNode>
+  ) => {
+    src.forEach((node) => node.connect(dest));
+    return withDependencies(dest, src);
+  };
+
+  const serial = (...nodes: Disposable<AudioNode>[]) => chain(nodes);
+  const mix = (...nodes: Disposable<AudioNode>[]) => mixInto(nodes, gain());
+
+  const conn = (
+    src: Disposable<AudioNode> | Disposable<AudioNode>[],
+    dest?: Disposable<AudioNode>,
+    ...tail: Disposable<AudioNode>[]
+  ) => {
     if (!dest) {
       if (Array.isArray(src)) {
         throw Error("Connect in parallel requires a destination");
       }
-      return src as Connector<Disposable<AudioNode>>;
+      return src;
     }
     const head = Array.isArray(src) ? mixInto(src, dest) : pair(src, dest);
     return tail.length > 0 ? chain([head, ...tail]) : head;
   };
-
-  return Object.assign(connectMixChain, {
-    pair,
-    chain,
-    mixInto,
-    serial: (...serial: Connector<AudioNode>[]) => chain(serial),
-    mix: (...parallel: Connector<AudioNode>[]) => mixInto(parallel, gain()),
-  });
+  return Object.assign(conn, { pair, chain, mixInto, serial, mix });
 }
 
-// Ensure that the dispose method of the destination node also disposes of the dependant nodes
+type ControlParams = Record<string, ParamWorkletNode>;
+
+type ParamWorkletNodeToInputs<T extends ControlParams> = {
+  [K in keyof T]: T[K]["input"];
+};
+
+function paramToInputs<P extends ControlParams>(
+  params?: P
+): ParamWorkletNodeToInputs<P> {
+  const inputs = {} as ParamWorkletNodeToInputs<P>;
+
+  if (params) {
+    for (const key in params) {
+      inputs[key] = params[key].input;
+    }
+  }
+  return inputs;
+}
+
 function withDependencies<N extends AudioNode>(
   src: N | Disposable<N>,
   deps: (AudioNode | Disposable<N>)[]

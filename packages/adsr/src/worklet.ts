@@ -1,12 +1,14 @@
 import { createAdsr } from "./dsp";
 
 export class AdsrProcessor extends AudioWorkletProcessor {
-  g: ReturnType<typeof createAdsr>; // generator
+  p: ReturnType<typeof createAdsr>; // processor
   r: boolean = true; // running;
+  m: boolean;
 
   constructor(options: any) {
     super();
-    this.g = createAdsr(sampleRate);
+    this.m = options.processorOptions.mode === "modulator";
+    this.p = createAdsr(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -18,7 +20,8 @@ export class AdsrProcessor extends AudioWorkletProcessor {
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     const output = outputs[0][0];
-    this.g(output, params);
+    const input = inputs[0][0];
+    this.p(input, output, this.m, params);
     return this.r;
   }
 

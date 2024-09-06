@@ -21,7 +21,7 @@ enum Stage {
   Release,
 }
 
-export type AdsrInputs = {
+export type AdsrParamInputs = {
   gate: number[];
   attack: number[];
   decay: number[];
@@ -62,7 +62,12 @@ export function createAdsr(sampleRate: number) {
 
   _updateAdsr(0.01, 0.1, 0.5, 0.3);
 
-  return function adsr(output: Float32Array, params: AdsrInputs) {
+  return function adsr(
+    input: Float32Array,
+    output: Float32Array,
+    modifier: boolean,
+    params: AdsrParamInputs
+  ) {
     _readParams(params);
     const offset = params.offset[0];
     const gain = params.gain[0];
@@ -93,11 +98,12 @@ export function createAdsr(sampleRate: number) {
             stage = Stage.Zero;
           }
       }
-      output[i] = current * gain + offset;
+      const value = modifier ? input[i] * current : current;
+      output[i] = value * gain + offset;
     }
   };
 
-  function _readParams(params: AdsrInputs) {
+  function _readParams(params: AdsrParamInputs) {
     _updateAdsr(
       params.attack[0],
       params.decay[0],
