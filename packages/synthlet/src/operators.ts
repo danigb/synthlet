@@ -17,7 +17,7 @@ import { createEuclidNode } from "@synthlet/euclid";
 import { createImpulseNode } from "@synthlet/impulse";
 import { createLfoNode } from "@synthlet/lfo";
 import { createNoiseNode } from "@synthlet/noise";
-import { createParamNode, ParamInputs, ParamType } from "@synthlet/param";
+import { createParamNode, ParamInputs, ParamScaleType } from "@synthlet/param";
 import { createPolyblepOscillatorNode } from "@synthlet/polyblep-oscillator";
 import {
   createStateVariableFilterNode,
@@ -74,7 +74,13 @@ export function createOperators() {
           value: ParamInput,
           params?: ParamInputs
         ) =>
-          param({ type: ParamType.LINEAR, input: value, min, max, ...params }),
+          param({
+            type: ParamScaleType.LINEAR,
+            input: value,
+            min,
+            max,
+            ...params,
+          }),
       }
     ),
     conn: createConn(gainOp),

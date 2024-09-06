@@ -1,4 +1,4 @@
-export enum ParamType {
+export enum ParamScaleType {
   BYPASS = 0,
   DB_TO_GAIN = 1,
   GAIN_TO_DB = 2,
@@ -7,15 +7,15 @@ export enum ParamType {
 
 export type ConvertFn = (input: number, min: number, max: number) => number;
 
-export function getConverter(type: ParamType): ConvertFn {
-  switch (type) {
-    case ParamType.BYPASS:
+export function getConverter(scale: ParamScaleType): ConvertFn {
+  switch (scale) {
+    case ParamScaleType.BYPASS:
       return bypass;
-    case ParamType.DB_TO_GAIN:
+    case ParamScaleType.DB_TO_GAIN:
       return dbToGain;
-    case ParamType.GAIN_TO_DB:
+    case ParamScaleType.GAIN_TO_DB:
       return gainToDb;
-    case ParamType.LINEAR:
+    case ParamScaleType.LINEAR:
       return linear;
     default:
       return bypass;

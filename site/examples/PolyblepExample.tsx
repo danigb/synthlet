@@ -12,10 +12,14 @@ function PolyblepSynth(context: AudioContext) {
   const frequency = s.param(200);
   const volume = s.param.db(-100);
 
-  return s.withParams(
-    s.conn.serial(s.polyblep({ type, frequency }), s.amp(volume)),
-    { gate, type, frequency, volume }
-  );
+  return s.synth({
+    out: s.conn.serial(
+      s.polyblep({ type, frequency }),
+      s.amp.adsr(gate),
+      s.amp(volume)
+    ),
+    inputs: { gate, type, frequency, volume },
+  });
 }
 
 function WavetableExample() {

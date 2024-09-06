@@ -2,14 +2,14 @@ import { ConvertFn, getConverter } from "./dsp";
 
 export class ParamProcessor extends AudioWorkletProcessor {
   r: boolean; // running
-  t: number; // type
+  s: number; //scale
   c: ConvertFn;
 
   constructor() {
     super();
     this.r = true;
-    this.t = 0;
-    this.c = getConverter(this.t);
+    this.s = 0;
+    this.c = getConverter(this.s);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -24,9 +24,9 @@ export class ParamProcessor extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    if (this.t !== parameters.type[0]) {
-      this.t = parameters.type[0];
-      this.c = getConverter(this.t);
+    if (this.s !== parameters.scale[0]) {
+      this.s = parameters.scale[0];
+      this.c = getConverter(this.s);
     }
 
     const input = inputs[0][0];
@@ -40,7 +40,7 @@ export class ParamProcessor extends AudioWorkletProcessor {
 
   static get parameterDescriptors() {
     return [
-      ["type", 0, 0, 10],
+      ["scale", 0, 0, 10],
       ["input", 0, -20000, 20000],
       ["offset", 0, -20000, 20000],
       ["min", 0, -20000, 20000],

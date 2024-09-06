@@ -10,7 +10,7 @@ import { createNoiseNode, NoiseType } from "@synthlet/noise";
 import {
   createParamNode,
   ParamInputs,
-  ParamType,
+  ParamScaleType,
   ParamWorkletNode,
 } from "@synthlet/param";
 import { createPolyblepOscillatorNode } from "@synthlet/polyblep-oscillator";
@@ -72,14 +72,20 @@ function createSynthlet(context: AudioContext) {
         param({ input: value, ...params }),
       {
         db: (db: ParamInput, params?: ParamInputs) =>
-          param({ input: db, ...params }),
+          param({ scale: ParamScaleType.DB_TO_GAIN, input: db, ...params }),
         lin: (
           min: ParamInput,
           max: ParamInput,
           value: ParamInput,
           params?: ParamInputs
         ) =>
-          param({ type: ParamType.LINEAR, input: value, min, max, ...params }),
+          param({
+            scale: ParamScaleType.LINEAR,
+            input: value,
+            min,
+            max,
+            ...params,
+          }),
       }
     ),
     conn: createConn(gainOp),
