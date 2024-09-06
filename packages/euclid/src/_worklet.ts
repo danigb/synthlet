@@ -13,22 +13,19 @@ type CreateWorkletOptions<N, P> = {
   paramNames: readonly string[];
   workletOptions: (params: Partial<P>) => AudioWorkletNodeOptions;
   postCreate?: (node: N) => void;
-  validateParams?: (params: Partial<P>) => void;
 };
 
+type Disposable = { dispose: () => void };
 export type DisposableAudioNode = AudioNode & { dispose: () => void };
-
-// TODO: replace in createWorkletConstructor
-type DisposableAudioWorkletNode = AudioWorkletNode & {
-  dispose: () => void;
-};
 
 export function createWorkletConstructor<
   N extends AudioWorkletNode,
   P extends Record<string, ParamInput>
 >(options: CreateWorkletOptions<N, P>) {
-  return (audioContext: AudioContext, params: Partial<P> = {}): N => {
-    options.validateParams?.(params);
+  return (
+    audioContext: AudioContext,
+    params: Partial<P> = {}
+  ): N & Disposable => {
     const node = new AudioWorkletNode(
       audioContext,
       options.processorName,

@@ -29,7 +29,7 @@ import { registerSynthletOnce, KickDrum } from "synthlet";
 const audioContext = new AudioContext();
 await registerSynthletOnce(audioContext);
 const clock = createClockNode(audioContext, { bpm: 120 });
-const kick = KickDrum(audioContext, { trigger: clock });
+const kick = createKickDrum(audioContext, { trigger: clock });
 kick.connect(audioContext.destination);
 ```
 

@@ -1,6 +1,13 @@
 import { ParamInput } from "./_worklet";
 import { createOperators } from "./operators";
 
+export type DrumInputs = {
+  volume?: ParamInput;
+  trigger?: ParamInput;
+  decay?: ParamInput;
+  tone?: ParamInput;
+};
+
 export type DrumNode = AudioNode & {
   trigger: AudioParam;
   volume: AudioParam;
@@ -10,13 +17,19 @@ export type DrumNode = AudioNode & {
 };
 export type KickDrumNode = DrumNode & {};
 
-export function KickDrum(context: AudioContext): KickDrumNode {
+export const KickDrum = (inputs?: DrumInputs) => (context: AudioContext) =>
+  createKickDrum(context, inputs);
+
+export function createKickDrum(
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): KickDrumNode {
   const op = createOperators(context);
 
-  const trigger = op.param();
-  const decay = op.param(0.8);
-  const volume = op.param.db();
-  const tone = op.param.lin(20, 100, 0.2);
+  const trigger = op.param(inputs.trigger);
+  const decay = op.param(inputs.decay ?? 0.8);
+  const volume = op.param.db(inputs.volume);
+  const tone = op.param.lin(20, 100, inputs.tone ?? 0.2);
 
   const out = op.conn(
     [
@@ -30,15 +43,19 @@ export function KickDrum(context: AudioContext): KickDrumNode {
   return op.synth(out, { trigger, volume, tone, decay });
 }
 
-export type SnareDrumNode = DrumNode & {};
+export const SnareDrum = (inputs?: DrumInputs) => (context: AudioContext) =>
+  createSnareDrum(context, inputs);
 
-export function SnareDrum(context: AudioContext): SnareDrumNode {
+export function createSnareDrum(
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode {
   const op = createOperators(context);
 
-  const trigger = op.param();
-  const volume = op.param.db();
-  const decay = op.param();
-  const tone = op.param();
+  const trigger = op.param(inputs.trigger);
+  const volume = op.param.db(inputs.volume);
+  const decay = op.param(inputs.decay ?? 0.2);
+  const tone = op.param(inputs.tone ?? 2000);
 
   const out = op.conn(
     [
@@ -54,23 +71,19 @@ export function SnareDrum(context: AudioContext): SnareDrumNode {
   return op.synth(out, { trigger, volume, tone, decay });
 }
 
-type ClaveDrumInputs = {
-  volume?: ParamInput;
-  trigger?: ParamInput;
-  decay?: ParamInput;
-  tone?: ParamInput;
-};
+export const ClaveDrum = (inputs?: DrumInputs) => (context: AudioContext) =>
+  createClaveDrum(context, inputs);
 
-export function ClaveDrum(
+export function createClaveDrum(
   context: AudioContext,
-  params: ClaveDrumInputs = {}
+  inputs: DrumInputs = {}
 ): DrumNode {
   const op = createOperators(context);
 
-  const volume = op.param.db(params.volume ?? 0);
-  const trigger = op.param(params.trigger);
-  const decay = op.param(params.decay);
-  const tone = op.param.lin(1200, 1800, params.tone);
+  const volume = op.param.db(inputs.volume ?? 0);
+  const trigger = op.param(inputs.trigger);
+  const decay = op.param(inputs.decay);
+  const tone = op.param.lin(1200, 1800, inputs.tone);
 
   const out = op.conn(
     op.osc.tri(tone),

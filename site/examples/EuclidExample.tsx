@@ -5,6 +5,7 @@ import {
   ClaveDrum,
   Clock,
   Euclid,
+  KickDrum,
   Param,
   ParamInput,
 } from "synthlet";
@@ -12,26 +13,45 @@ import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-const RythmBox = (
-  context: AudioContext,
-  params: { clock?: ParamInput } = {}
-) => {
+const RhythmBox = (params: { clock?: ParamInput } = {}) => {
   const bpm = Param(60);
   const clock = Clock({ bpm });
-  const euclid = Euclid({
-    steps: 16,
-    beats: 7,
-    subdivison: 4,
-    clock,
+  const volume = Param.db(-12);
+  const clave = ClaveDrum({
+    trigger: Euclid({
+      clock,
+      steps: 16,
+      beats: 7,
+      subdivison: 4,
+      rotation: 3,
+    }),
+    volume,
   });
-  const clave = ClaveDrum(context, { trigger: euclid });
-  return assignParams(context, clave, { bpm });
+  const kick = KickDrum({
+    trigger: Euclid({
+      clock,
+      steps: 16,
+      beats: 5,
+      subdivison: 4,
+    }),
+    volume,
+  });
+  return (context: AudioContext) => {
+    console.log("context", context);
+    const out = context.createGain();
+    clave(context).connect(out);
+    kick(context).connect(out);
+    const synth = Object.assign(out, {
+      dispose() {
+        // TODO
+      },
+    });
+    return assignParams(context, synth, { bpm, volume });
+  };
 };
 
 function Example() {
-  const synth = useSynth((context) => {
-    return RythmBox(context);
-  });
+  const synth = useSynth(RhythmBox());
   if (!synth) return null;
 
   return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { ClaveDrum, createClockNode, createParamNode } from "synthlet";
+import { createClockNode, createParamNode } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
@@ -8,7 +8,7 @@ import { useSynth } from "./useSynth";
 const createSynth = (context: AudioContext) => {
   const bpm = createParamNode(context, { input: 120 });
   const clock = createClockNode(context, { bpm });
-  const clave = ClaveDrum(context, { trigger: clock });
+  const clave = createClaveDrum(context, { trigger: clock });
   return Object.assign(clave, { bpm: bpm.input });
 };
 

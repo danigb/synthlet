@@ -6,7 +6,7 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export const registerEuclidWorkletOnce = createRegistrar("IMPULSE", PROCESSOR);
+export const registerEuclidWorkletOnce = createRegistrar("EUCLID", PROCESSOR);
 
 export type EuclidInputParams = {
   clock?: ParamInput;

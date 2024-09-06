@@ -16,7 +16,7 @@ const audioContext = await registerSynthletOnce(new AudioContext());
 
 const clock = createClockNode(audioContext, { bpm: 60 });
 const euclid = createEuclidNode(audioContext, { steps: 16, beats: 4, clock });
-const clave = ClaveDrum(audioContext, { trigger: euclid });
+const clave = createClaveDrum(audioContext, { trigger: euclid });
 ```
 
 <EuclidExample />

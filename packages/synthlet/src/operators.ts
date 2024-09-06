@@ -140,7 +140,7 @@ export function createOperators(ac: AudioContext) {
   };
 }
 
-export function assignParams<N extends AudioNode, P extends ControlParams>(
+export function assignParams<N extends Object, P extends ControlParams>(
   context: AudioContext,
   node: N,
   params?: P
