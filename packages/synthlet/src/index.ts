@@ -34,7 +34,9 @@ export * from "./synths/drums";
 export * from "./synths/mono";
 export * from "./waa";
 
-export function registerSynthlet(context: AudioContext): Promise<AudioContext> {
+export function registerAllWorklets(
+  context: AudioContext
+): Promise<AudioContext> {
   return Promise.all([
     registerAdWorklet(context),
     registerAdsrWorklet(context),

@@ -1,10 +1,10 @@
-import { registerSynthlet } from "synthlet";
+import { registerAllWorklets } from "synthlet";
 
 let promise: Promise<AudioContext>;
 
 export function createSynthAudioContext(): Promise<AudioContext> {
   if (!promise) {
-    promise = registerSynthlet(new AudioContext());
+    promise = registerAllWorklets(new AudioContext());
   }
   return promise;
 }

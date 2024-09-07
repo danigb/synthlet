@@ -11,14 +11,14 @@ Generates an euclidean rhythm when connected to a clock:
 
 ```ts
 import {
-  registerSynthlet,
+  registerAllWorklets,
   ClockNode,
   EuclidNode,
   ClaveDrumNode,
 } from "synthlet";
 
 const ac = new AudioContext();
-await registerSynthlet(ac);
+await registerAllWorklets(ac);
 
 const clock = ClockNode(ac, { bpm: 60 });
 const euclid = EuclidNode(ac, { steps: 16, beats: 4, clock });

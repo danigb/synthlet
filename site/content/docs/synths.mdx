@@ -14,9 +14,9 @@ Some synthesizers are provided for convenience. They are implemented by connecti
 A monophonic synthesizer with a single PolyBLEP oscillator and an ADSR envelope on the filter and amplifier.
 
 ```ts
-import { registerSynthlet, MonoSynth } from "synthlet";
+import { registerAllWorklets, MonoSynth } from "synthlet";
 
-const ac = registerSynthlet(new AudioContext());
+const ac = registerAllWorklets(new AudioContext());
 const synth = MonoSynth(ac);
 
 synth.gate.value = 1;
@@ -44,9 +44,9 @@ synth.filterEnv.attack.value = 0.1;
 Several drum synthesizers are available, all with the same constructor: `Drum(audioContext, inputs)`:
 
 ```ts
-import { registerSynthlet, KickDrum } from "synthlet";
+import { registerAllWorklets, KickDrum } from "synthlet";
 
-const ac = registerSynthlet(new AudioContext());
+const ac = registerAllWorklets(new AudioContext());
 const kick = KickDrum(ac, { tone: 0.2, decay: 0.7 });
 kick.trigger.value = 1;
 kick.tone.value = 0.5;

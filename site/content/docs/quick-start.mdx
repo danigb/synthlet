@@ -20,24 +20,24 @@ synthlet
 
 ## Register worklet processors
 
-Before you can create any module, you need to register the worklet processors. You can do this by calling the `registerSynthlet` to register all modules at once:
+Before you can create any module, you need to register the worklet processors. You can do this by calling the `registerAllWorklets` to register all modules at once:
 
 ```js
-import { registerSynthlet } from "synthlet";
+import { registerAllWorklets } from "synthlet";
 
 const audioContext = new AudioContext();
-await registerSynthlet(audioContext);
+await registerAllWorklets(audioContext);
 ```
 
 <Callout title="Register is async" type="warn">
-  `registerSynthlet` (and all register functions) are async, so ensure you await
-  for the result before creating any modules.
+  `registerAllWorklets` (and all register functions) are async, so ensure you
+  await for the result before creating any modules.
 </Callout>
 
-By convenience, `registerSynthlet` returns the `AudioContext` so you can write it more concise:
+By convenience, `registerAllWorklets` returns the `AudioContext` so you can write it more concise:
 
 ```js
-const audioContext = await registerSynthlet(new AudioContext());
+const audioContext = await registerAllWorklets(new AudioContext());
 ```
 
 ## Create the first synth
@@ -50,13 +50,13 @@ Here's the full gist:
 
 ```js
 import {
-  registerSynthlet
+  registerAllWorklets
   PolyblepOscillator,
   StateVariableFilter,
   AdsrAmp,
 } from "synthlet";
 
-const ac = await registerSynthlet(new AudioContext());
+const ac = await registerAllWorklets(new AudioContext());
 
 const osc = PolyblepOscillator(ac, {frequency: 440 });
 const filter = StateVariableFilter(ac, {
@@ -99,17 +99,23 @@ The `synthlet` package wraps the modules in a set of operators to create complex
 import { synthlet } from "synthlet";
 
 // Register all modules and create the operators
-const s = await synthlet(new AudioContext());
+const audioContext = await registerAllWorklets(new AudioContext());
+const s = getSynthlet(audioContext);
 
-// Use the operators to create audio graph
-const gate = s.param(audioContext);
+// Create the parameters you want to control
+const gate = s.param();
+const filterFreq = s.param(1500);
+// Create and connect the modules
 const out = s.conn(
   s.polyblep.saw(440),
-  s.svf.lp(5000, 2),
+  s.svf.lp(filterFreq),
   s.amp.adsr(gate, 0.01, 0.1, 0.7, 0.3)
 );
 
+// Start the gate
 gate.value = 1;
+// Change the filter frequency
+filterFreq.value = 5000;
 ```
 
 Read more about how to use the operators in the [operators guide](/docs/dsl).
