@@ -4,16 +4,13 @@ export type GainInputs = {
   gain?: ParamInput;
 };
 
-export function createGain(
-  context: AudioContext,
-  options: Partial<GainInputs> = {}
-) {
+export function Gain(context: AudioContext, options: Partial<GainInputs> = {}) {
   const node = new GainNode(context);
   const conns = connectParams(node, ["gain"], options);
   return disposable(node, conns);
 }
 
-export function createConstantNode(context: AudioContext, value: number) {
+export function ConstantSource(context: AudioContext, value: number) {
   const node = new ConstantSourceNode(context, { offset: value });
   node.start();
   return disposable(node);
@@ -25,7 +22,7 @@ export type OscillatorInputs = {
   detune?: ParamInput;
 };
 
-export function createOscillator(
+export function Oscillator(
   context: AudioContext,
   inputs: OscillatorInputs = {}
 ): Disposable<OscillatorNode> {
@@ -43,7 +40,7 @@ export type BiquadFilterInputs = {
   gain?: ParamInput;
 };
 
-export function createBiquadFilter(
+export function BiquadFilter(
   context: AudioContext,
   inputs: Partial<BiquadFilterInputs> = {}
 ) {

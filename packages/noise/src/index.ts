@@ -19,8 +19,8 @@ export type NoiseInputs = {
 
 export function getNoiseTypes(): { name: string; value: number }[] {
   return [
-    { name: "White", value: NoiseType.WHITE },
-    { name: "Pink Trammel", value: NoiseType.PINK_TRAMMEL },
+    { name: "White", value: NoiseType.White },
+    { name: "Pink Trammel", value: NoiseType.Pink },
   ];
 }
 

@@ -1,21 +1,20 @@
 export type NoiseAlgorithm = (output: Float32Array) => void;
 
 export enum NoiseType {
-  WHITE = 0,
-  PINK_TRAMMEL = 10,
-  PINK_COOPER = 11,
+  White = 0,
+  Pink = 1,
 }
 
 export function getNoiseAlgorithm(
   sampleRate: number,
-  type: NoiseType
+  type: number
 ): NoiseAlgorithm {
   switch (type) {
-    case NoiseType.WHITE:
+    case NoiseType.White:
       return whiteRnd;
-    case NoiseType.PINK_TRAMMEL:
+    case NoiseType.Pink:
       return createPinkLarryTrammel();
-    case NoiseType.PINK_COOPER:
+    case 2:
       return createPinkCooper(sampleRate);
     default:
       console.warn("Unknown noise type: " + type);

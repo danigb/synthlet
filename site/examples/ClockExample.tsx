@@ -24,12 +24,8 @@ function Example() {
           inputClassName="col-span-2"
           min={1}
           max={1000}
-          initial={100}
-          initialize
           units="bpm"
-          onChange={(value) => {
-            synth.bpm.value = value;
-          }}
+          param={synth.bpm}
         />
       </div>
       <div className="flex px-1 pt-2 mt-2 border-t border-fd-border gap-4">
@@ -38,12 +34,8 @@ function Example() {
           inputClassName="flex-grow"
           min={-36}
           max={0}
-          initial={-24}
-          initialize
           units="dB"
-          onChange={(value) => {
-            synth.volume.value = value;
-          }}
+          param={synth.volume}
         />
       </div>
     </>

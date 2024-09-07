@@ -4,10 +4,10 @@ import { WavetableOscillator } from "@synthlet/wavetable-oscillator";
 
 import { ParamInput } from "./_worklet";
 import {
+  BiquadFilter,
   BiquadFilterInputs,
-  createBiquadFilter,
-  createGain,
-  createOscillator,
+  Gain,
+  Oscillator,
   OscillatorInputs,
 } from "./waa";
 
@@ -41,9 +41,9 @@ export type SynthletOperators = ReturnType<typeof createOperators>;
 
 export function createOperators() {
   // Web Audio
-  const gainOp = operator(createGain);
-  const osc = operator(createOscillator);
-  const bqf = operator(createBiquadFilter);
+  const gainOp = operator(Gain);
+  const osc = operator(Oscillator);
+  const bqf = operator(BiquadFilter);
 
   // Synthlet
   const ad = operator(AdEnv);
@@ -75,7 +75,7 @@ export function createOperators() {
           params?: ParamInputs
         ) =>
           param({
-            type: ParamScaleType.LINEAR,
+            type: ParamScaleType.Linear,
             input: value,
             min,
             max,

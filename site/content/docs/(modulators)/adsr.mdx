@@ -10,9 +10,9 @@ Is based on the code by [Will Pirkle](https://www.willpirkle.com/) from his [Syn
 # Example
 
 ```ts
-import { createADSRNode } from "synthlet";
+import { AdsrEnv } from "synthlet";
 
-const adsr = createADSRNode(audioContext, {
+const adsr = AdsrEnv(audioContext, {
   attack: 0.1,
   decay: 0.1,
   sustain: 0.5,

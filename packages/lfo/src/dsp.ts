@@ -9,9 +9,7 @@ export enum LfoType {
   ExpRampDown = 7,
   ExpTriangle = 8,
   RandSampleHold = 9,
-  Impulse = 1,
-  // Remember to update worklet PARAMS type.max value when adding new type
-  // Remember to update index LfoTypes
+  Impulse = 10,
 }
 
 /**
@@ -105,13 +103,13 @@ export function createLfo(sampleRate: number, audioRate: boolean) {
   ];
 
   // Params
-  let $type = 0;
+  let $type = 1;
   let $frequency = 10;
   let $gain = 1;
   let $offset = 0;
 
   // State
-  let gen: Gen = generators[0] ?? none;
+  let gen: Gen = generators[1] ?? none;
   let phase = 0;
 
   function read(params: Params) {

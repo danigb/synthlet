@@ -22,11 +22,11 @@ import {
 import { WavetableOscillator } from "@synthlet/wavetable-oscillator";
 import { Disposable, ParamInput } from "./_worklet";
 import {
+  BiquadFilter,
   BiquadFilterInputs,
-  createBiquadFilter,
-  createGain,
-  createOscillator,
+  Gain,
   GainInputs,
+  Oscillator,
   OscillatorInputs,
 } from "./waa";
 
@@ -46,9 +46,9 @@ function createSynthlet(context: AudioContext) {
     return (inputs?: I) => createNode(context, inputs);
   };
 
-  const gainOp = operator(createGain);
-  const osc = operator(createOscillator);
-  const bqf = operator(createBiquadFilter);
+  const gainOp = operator(Gain);
+  const osc = operator(Oscillator);
+  const bqf = operator(BiquadFilter);
 
   // Synthlet
   const ad = operator(AdEnv);
@@ -72,7 +72,7 @@ function createSynthlet(context: AudioContext) {
         param({ input: value, ...params }),
       {
         db: (db: ParamInput, params?: ParamInputs) =>
-          param({ scale: ParamScaleType.DB_TO_GAIN, input: db, ...params }),
+          param({ scale: ParamScaleType.DbToGain, input: db, ...params }),
         lin: (
           min: ParamInput,
           max: ParamInput,
@@ -80,7 +80,7 @@ function createSynthlet(context: AudioContext) {
           params?: ParamInputs
         ) =>
           param({
-            scale: ParamScaleType.LINEAR,
+            scale: ParamScaleType.Linear,
             input: value,
             min,
             max,
@@ -103,7 +103,7 @@ function createSynthlet(context: AudioContext) {
     clock: Object.assign(clock, {}),
     clip: Object.assign(clip, {
       soft: (preGain?: ParamInput, postGain?: ParamInput) =>
-        clip({ type: ClipType.TANH, preGain, postGain }),
+        clip({ type: ClipType.Tanh, preGain, postGain }),
     }),
     chorusT: Object.assign(chorusT, {}),
     euclid: Object.assign(euclid, {}),
@@ -112,8 +112,8 @@ function createSynthlet(context: AudioContext) {
     }),
     lfo: Object.assign(lfo, {}),
     noise: Object.assign(noise, {
-      white: () => noise({ type: NoiseType.WHITE }),
-      pink: () => noise({ type: NoiseType.PINK_TRAMMEL }),
+      white: () => noise({ type: NoiseType.White }),
+      pink: () => noise({ type: NoiseType.Pink }),
     }),
     polyblep: Object.assign(polyblep, {}),
     svf: Object.assign(svf, {

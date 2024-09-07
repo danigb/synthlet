@@ -9,7 +9,7 @@ import { useSynth } from "./useSynth";
 function NoiseSynth(context: AudioContext) {
   const s = getSynthlet(context);
   const volume = s.param.db(-100);
-  const noiseType = s.param(NoiseType.WHITE);
+  const noiseType = s.param(NoiseType.White);
   return s.withParams(
     s.conn.serial(s.noise({ type: noiseType }), s.amp(volume)),
     { volume, noiseType }
@@ -17,7 +17,7 @@ function NoiseSynth(context: AudioContext) {
 }
 
 function Example() {
-  const [currentNoise, setCurrentNoise] = useState<NoiseType>(NoiseType.WHITE);
+  const [currentNoise, setCurrentNoise] = useState<NoiseType>(NoiseType.White);
   const synth = useSynth(NoiseSynth);
   if (!synth) return null;
 
@@ -32,8 +32,8 @@ function Example() {
           synth.noiseType.value = type;
         }}
       >
-        <option value={NoiseType.WHITE}>White</option>
-        <option value={NoiseType.PINK_TRAMMEL}>Pink</option>
+        <option value={NoiseType.White}>White</option>
+        <option value={NoiseType.Pink}>Pink</option>
       </select>
       <div className="col-span-2"></div>
       <Slider

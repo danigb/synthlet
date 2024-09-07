@@ -1,13 +1,13 @@
 export enum ClipType {
-  BYPASS = 0,
-  TANH = 1,
+  Bypass = 0,
+  Tanh = 1,
 }
 
 export function getClipFn(type: ClipType): (x: number) => number {
   switch (type) {
-    case ClipType.TANH:
+    case ClipType.Tanh:
       return tanh;
-    case ClipType.BYPASS:
+    case ClipType.Bypass:
     default:
       return bypass;
   }

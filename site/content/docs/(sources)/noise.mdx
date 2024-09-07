@@ -16,12 +16,12 @@ const audioContext = new AudioContext();
 await registerNoiseWorklet(audioContext);
 
 const noise = Noise(audioContext, {
-  type: NoiseType.WHITE,
+  type: NoiseType.White,
 });
 noise.connect(audioContext.destination);
 
 // Change the algorithm
-noise.type.value = NoiseType.PINK_TRAMMEL;
+noise.type.value = NoiseType.Pink;
 ```
 
 <NoiseExample />
@@ -29,8 +29,8 @@ noise.type.value = NoiseType.PINK_TRAMMEL;
 ## Parameters
 
 - `type`: The type of noise to generate. Can be one of:
-  - 0 `NoiseType.WHITE`: White noise that uses `Math.rand` for random numbers.
-  - 10: `NoiseType.PINK_TRAMMEL`: Pink noise based on this [Larry Trammel algorithm](https://www.ridgerat-tech.us/pink/newpink.htm)
+  - 0 `NoiseType.White`: White noise that uses `Math.rand` for random numbers.
+  - 10: `NoiseType.Pink`: Pink noise based on this [Larry Trammel algorithm](https://www.ridgerat-tech.us/pink/newpink.htm)
 
 Since type is an audio param, any arbitrary value can be used, but only the above values are valid. If you suply an invalid value, a warning will be printed and the noise will default to white random.
 

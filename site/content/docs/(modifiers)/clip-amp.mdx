@@ -11,7 +11,7 @@ const audioContext = new AudioContext();
 registerClipAmpWorklet(audioContext);
 
 const amp = ClipAmp(audioContext, {
-  clipType: ClipType.TANH,
+  clipType: ClipType.Tanh,
   preGain: 3,
   postGain: 0.3,
 });
@@ -19,6 +19,6 @@ const amp = ClipAmp(audioContext, {
 
 ## Parameters
 
-- `clipType`: Clip type, currently only `ClipType.TANH`, or `ClipType.BYPASS`
+- `clipType`: Clip type, currently only `ClipType.Tanh`, or `ClipType.Bypass`
 - `preGain`: Gain before clipping.
 - `postGain`: Gain after clipping.
