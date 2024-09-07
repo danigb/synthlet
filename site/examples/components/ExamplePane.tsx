@@ -70,9 +70,15 @@ export function ModulePane({
   );
 }
 
-export function TriggerButton({ trigger }: { trigger: { value: number } }) {
+export function TriggerButton({
+  trigger,
+  className,
+}: {
+  className?: string;
+  trigger: { value: number };
+}) {
   return (
-    <div className="flex mb-4">
+    <div className={"flex mb-4 " + (className ?? "")}>
       <button
         className="border px-2 py-1 rounded bg-fd-primary text-fd-primary-foreground"
         onMouseDown={() => {

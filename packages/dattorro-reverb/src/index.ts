@@ -11,11 +11,27 @@ export const registerDattorroReverbWorklet = createRegistrar(
 );
 
 export type DattorroReverbInputs = {
-  trigger: ParamInput;
+  filter?: ParamInput;
+  inputDiffusion1?: ParamInput;
+  inputDiffusion2?: ParamInput;
+  decayDiffusion1?: ParamInput;
+  decayDiffusion2?: ParamInput;
+  decay?: ParamInput;
+  damping?: ParamInput;
+  // dryWet?: ParamInput;
+  // level?: ParamInput;
 };
 
 export type DattorroReverbWorkletNode = AudioWorkletNode & {
-  trigger: AudioParam;
+  filter: AudioParam;
+  inputDiffusion1: AudioParam;
+  inputDiffusion2: AudioParam;
+  decayDiffusion1: AudioParam;
+  decayDiffusion2: AudioParam;
+  decay: AudioParam;
+  damping: AudioParam;
+  // dryWet: AudioParam;
+  // level: AudioParam;
   dispose(): void;
 };
 
@@ -24,9 +40,20 @@ export const DattorroReverb = createWorkletConstructor<
   DattorroReverbInputs
 >({
   processorName: "DattorroReverbProcessor",
-  paramNames: ["trigger"],
+  paramNames: [
+    "filter",
+    "inputDiffusion1",
+    "inputDiffusion2",
+    "decayDiffusion1",
+    "decayDiffusion2",
+    "decay",
+    "damping",
+    // "dryWet",
+    // "level",
+  ],
   workletOptions: () => ({
-    numberOfInputs: 0,
+    numberOfInputs: 1,
     numberOfOutputs: 1,
+    outputChannelCount: [2],
   }),
 });

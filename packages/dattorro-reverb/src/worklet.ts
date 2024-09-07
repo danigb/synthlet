@@ -33,7 +33,15 @@ export class DattorroReverbProcessor extends AudioWorkletProcessor {
       p.dryWet[0],
       p.level[0]
     );
-    this.c(inputs[0], outputs[0], outputs[0][0].length);
+
+    const in1 = inputs[0];
+    const out1 = outputs[0];
+
+    if (in1.length === 0 || out1.length === 0) {
+      return this.r;
+    }
+
+    this.c(in1, out1, out1[0].length);
     return this.r;
   }
 
@@ -44,7 +52,7 @@ export class DattorroReverbProcessor extends AudioWorkletProcessor {
       ["inputDiffusion2", 0.625, 0, 1],
       ["decayDiffusion1", 0.7, 0, 0.999999],
       ["decayDiffusion2", 0.5, 0, 0.999999],
-      ["decay", 0.7, 0, 1],
+      ["decay", 0.5, 0, 1],
       ["damping", 0.25, 0, 1],
       ["dryWet", 1, -1, 1], // -1 dry, 0 equal, 1 wet
       ["level", 0.0, 0, 1], // decibels
