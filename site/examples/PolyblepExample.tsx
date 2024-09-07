@@ -12,17 +12,17 @@ function PolyblepSynth(context: AudioContext) {
   const frequency = s.param(200);
   const volume = s.param.db(-100);
 
-  return s.synth({
-    out: s.conn.serial(
+  return s.withParams(
+    s.conn.serial(
       s.polyblep({ type, frequency }),
       s.amp.adsr(gate),
       s.amp(volume)
     ),
-    inputs: { gate, type, frequency, volume },
-  });
+    { gate, type, frequency, volume }
+  );
 }
 
-function WavetableExample() {
+function Example() {
   const synth = useSynth(PolyblepSynth);
   if (!synth) return null;
 
@@ -58,6 +58,6 @@ function WavetableExample() {
 
 export default () => (
   <ExamplePane label="Polyblep oscillator">
-    <WavetableExample />
+    <Example />
   </ExamplePane>
 );

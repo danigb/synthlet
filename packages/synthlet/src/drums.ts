@@ -68,27 +68,28 @@ export const ClaveDrum = (
   inputs: DrumInputs = {}
 ): DrumNode => {
   const s = getSynthlet(context);
-  const { trigger, decay, volume, tone } = toParams(s, inputs);
+  const params = toParams(s, inputs);
 
-  const freq = s.param.lin(1200, 1800, tone);
+  const freq = s.param.lin(2400, 2500, params.tone);
+  const filterFreq = s.param.lin(1000, 3000, params.tone);
 
-  return s.synth({
-    out: s.conn.serial(
-      s.osc.tri(tone),
-      s.amp.perc(trigger, 0.01, decay),
-      s.bqf.lp(tone),
-      s.amp(volume)
+  return s.withParams(
+    s.conn.serial(
+      s.osc.tri(freq),
+      s.amp.perc(params.trigger, 0.01, params.decay),
+      s.bqf.bandpass(filterFreq),
+      s.amp(params.volume)
     ),
-    params: { trigger, volume, tone, decay },
-  });
+    params
+  );
 };
 
 export const HiHatDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
   const s = getSynthlet(context);
-  const { trigger, decay, volume, tone } = toParams(s, inputs);
+  const params = toParams(s, inputs);
 
-  const loFreq = s.param.lin(8000, 12000, tone);
-  const hiFreq = s.param(-2000, { offset: loFreq });
+  const loFreq = s.param.lin(8000, 12000, params.tone);
+  const hiFreq = s.param.add(-2000, loFreq);
 
   const freqs = [263, 400, 421, 474, 587, 845];
   const oscs = s.conn(
@@ -96,16 +97,16 @@ export const HiHatDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
     s.amp(0.3)
   );
 
-  return s.synth({
-    out: s.conn(
+  return s.withParams(
+    s.conn(
       oscs,
-      s.bqf.bandpass(tone),
+      s.bqf.bandpass(loFreq),
       s.bqf.hi(hiFreq),
-      s.amp.perc(trigger, 0.01, decay),
-      s.amp(volume)
+      s.amp.perc(params.trigger, 0.01, params.decay),
+      s.gain(params.volume)
     ),
-    params: { trigger, volume, tone, decay },
-  });
+    params
+  );
 };
 
 export const CowBellDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
@@ -135,17 +136,28 @@ export const CymbalDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
   const { trigger, decay, volume, tone } = toParams(s, inputs);
 
   // Derived
-  const hiFreq = s.param.lin(700, 900, tone);
   const lowFreq = s.param.lin(440, 540, tone);
-  const shortDecay = s.param.mul(0.1, decay);
+  const midFreq = s.param.lin(600, 1700, tone);
+  const hiFreq = s.param.lin(2000, 5000, tone);
+  const lowDecay = s.param.mul(0.5, decay);
+  const midDecay = s.param.mul(0.2, decay);
+  const hiDecay = s.param.mul(5, decay);
+
+  const freqs = [263, 400, 421, 474, 587, 845];
+  const oscs = s.conn(
+    freqs.map((f) => s.osc.square(f)),
+    s.amp(0.3)
+  );
 
   const synth = s.conn(
     [
-      s.conn.serial(s.osc.square(hiFreq), s.amp.perc(trigger, 0.001, decay)),
-      s.conn.serial(
-        s.osc.square(lowFreq),
-        s.amp.perc(trigger, 0.001, shortDecay)
+      s.conn(oscs, s.bqf.lp(lowFreq), s.amp.perc(trigger, 0.001, lowDecay)),
+      s.conn(
+        oscs,
+        s.bqf.bandpass(midFreq),
+        s.amp.perc(trigger, 0.001, midDecay)
       ),
+      s.conn(oscs, s.bqf.hi(hiFreq), s.amp.perc(trigger, 0.001, hiDecay)),
     ],
     s.amp(volume)
   );
@@ -176,10 +188,16 @@ export const HandclapDrum = (
   const freq = s.param.lin(500, 1500, params.tone);
 
   const synth = s.conn(
-    s.noise.white(),
-    s.bqf.bandpass(freq),
-    s.amp.perc(params.trigger, 0.02, params.decay),
-    s.gain(s.lfo.rampUp(0.1)),
+    [
+      s.conn(
+        s.noise.white(),
+        s.bqf.bandpass(freq),
+        s.amp.perc(params.trigger, 0.02, params.decay),
+        s.gain(s.lfo.rampUp(100))
+      ),
+      s.impulse.trigger(params.trigger),
+    ],
+    s.clip.soft(2, 0.5),
     s.gain(params.volume)
   );
   return s.withParams(synth, params);
@@ -189,7 +207,7 @@ export const TomDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
   const s = getSynthlet(context);
   const params = toParams(s, inputs);
 
-  const freq = s.param.lin(200, 400, params.tone);
+  const freq = s.param.lin(125, 240, params.tone);
 
   const synth = s.conn(
     [
@@ -206,7 +224,7 @@ export const CongaDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
   const s = getSynthlet(context);
   const params = toParams(s, inputs);
 
-  const freq = s.param.lin(200, 400, params.tone);
+  const freq = s.param.lin(220, 455, params.tone);
 
   const synth = s.conn(
     [
