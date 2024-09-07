@@ -19,7 +19,7 @@ function Example() {
           inputClassName="col-span-2"
           min={20}
           max={3000}
-          param={synth.frequency}
+          param={synth.osc.frequency}
         />
         <Slider
           label="Vibrato depth"

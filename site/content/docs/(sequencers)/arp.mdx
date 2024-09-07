@@ -1,0 +1,54 @@
+---
+title: Arpeggiator
+description: An arpeggiator module
+---
+
+import ArpExample from "../../../examples/ArpExample";
+
+Generates a note sequence from a given scale.
+
+<Callout title="Not arpeggiator" type="warn">
+  This module is WIP. Currently it only generates a random note from a given
+  scale.
+</Callout>
+
+```ts
+import { registerAllWorklets, ArpType, ArpScale } from "synthlet";
+
+const audioContext = await registerAllWorklets(new AudioContext());
+const clock = Clock(audioContext, { bpm: 120 });
+const arp = Arp(audioContext, {
+  trigger: clock,
+  type: ArpType.Random,
+  scale: ArpScale.Major,
+  octaves: 2,
+});
+
+const mono = MonoSynth(audioContext, {
+  trigger: clock,
+  frequency: arp,
+});
+```
+
+<ArpExample />
+
+## Parameters
+
+- `trigger`: The clock signal to advance the arpeggiator. It will output the next note.
+- `type`: The arpeggiator type. Default is `ArpType.Random`.
+- `baseNote`: The base midi note of the arpeggiator. Default is `60`.
+- `scale`: The scale type. Default is `ArpScale.Major`.
+- `octaves`: The number of octaves to span. Default is 2.
+
+## Scales
+
+You can use `ArpScale` to specify the scale of the arpeggiator. Or just have fun with random numbers!
+
+- `ArpScale.Major`
+- `ArpScale.Minor`
+- `ArpScale.PentatonicMinor`
+- `ArpScale.Blues`
+- `ArpScale.WholeTone`
+- `ArpScale.Chromatic`
+- `ArpScale.Melodic`
+- `ArpScale.Harmonic`
