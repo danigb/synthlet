@@ -13,16 +13,41 @@ Some synthesizers are provided for convenience. They are implemented by connecti
 
 A monophonic synthesizer with a single PolyBLEP oscillator and an ADSR envelope on the filter and amplifier.
 
+```ts
+import { registerSynthlet, MonoSynth } from "synthlet";
+
+const ac = registerSynthlet(new AudioContext());
+const synth = MonoSynth(ac);
+
+synth.gate.value = 1;
+
+// It exposes several sub-modules
+synth.vibrato.frequency.value = 0.5;
+synth.filterEnv.attack.value = 0.1;
+```
+
 <MonoExample />
+
+### Parameters
+
+- `gate`: 0 or 1, triggers the envelope
+- `frequency`: in Hz
+- `volume`: in decibels. Default is 0.
+
+### Modules
+
+- `vibrato`: LFO for pitch modulation
+- `filterEnv`: ADSR envelope the filter
 
 ## Drums
 
 Several drum synthesizers are available, all with the same constructor: `Drum(audioContext, inputs)`:
 
 ```ts
-import { KickDrum } from "synthlet";
+import { registerSynthlet, KickDrum } from "synthlet";
 
-const kick = KickDrum(audioContext, { tone: 0.2, decay: 0.7 });
+const ac = registerSynthlet(new AudioContext());
+const kick = KickDrum(ac, { tone: 0.2, decay: 0.7 });
 kick.trigger.value = 1;
 kick.tone.value = 0.5;
 ```

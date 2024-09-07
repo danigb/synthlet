@@ -1,5 +1,5 @@
-import { ParamInput } from "./_worklet";
-import { getSynthlet, Synthlet } from "./synthlet";
+import { ParamInput } from "../_worklet";
+import { getSynthlet, Synthlet } from "../synthlet";
 
 export type DrumInputs = {
   volume?: ParamInput;

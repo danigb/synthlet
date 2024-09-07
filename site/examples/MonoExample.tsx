@@ -1,38 +1,13 @@
 "use client";
 
-import { getSynthlet, LfoType } from "synthlet";
+import { MonoSynth } from "synthlet";
 import { AdsrControls } from "./components/AdsrControls";
 import { ExamplePane, GateButton, ModulePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function MonoSynth(context: AudioContext) {
-  const s = getSynthlet(context);
-  // Params
-  const gate = s.param();
-  const frequency = s.param(440);
-  const oscLfo = s.lfo({
-    type: LfoType.Sine,
-    offset: frequency,
-    gain: 5,
-    frequency: 10,
-  });
-  const volume = s.param.db(-24);
-  // Modules
-  const osc = s.polyblep({ frequency: oscLfo });
-  const filterEnv = s.env.adsr(gate, { gain: 3000, offset: 2000 });
-  const filter = s.svf({ frequency: filterEnv });
-  const amp = s.amp.adsr(gate);
-
-  return s.synth({
-    out: s.conn.serial(osc, filter, amp, s.amp(volume)),
-    params: { gate, frequency, volume },
-    modules: { osc, oscLfo, filterEnv, filter, amp },
-  });
-}
-
 function Example() {
-  const synth = useSynth(MonoSynth);
+  const synth = useSynth((ac) => MonoSynth(ac));
 
   if (!synth) return null;
 
