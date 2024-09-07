@@ -7,28 +7,32 @@ Collection of synth modules implemented as AudioWorklets.
 ```ts
 import {
   registerSynthlet,
-  createVca,
-  createStateVariableFilter
-  createNoise,
+  AdsrAmp,
+  StateVariableFilter,
+  StateVariableFilterType,
+  PolyblepOscillator
 } from "synthlet";
 
-const audioContext = new AudioContext();
-await registerSynthlet(audioContext);
+const ac = new AudioContext();
+await registerSynthlet(ac);
 
 // Simplest synth: Oscillator -> Filter -> Amplifier
-const osc = createNoise(audioContext, { type: "saw", frequency: 440 });
-const filter = createStateVariableFilter(audioContext, { type: "lowpass", frequency: 4000 });
-const vca = createVca(audioContext, { attack: 0.1, release: 0.5 });
-osc.connect(filter).connect(vca).connect(audioContext.destination);
+const osc = PolyblepOscillator(ac, { frequency: 440 });
+const filter = StateVariableFilter(ac, {
+  type: StateVariableFilterType.LowPass
+  frequency: 4000,
+});
+const amp = AdsrAmp(ac, { attack: 0.1, release: 0.5 });
+osc.connect(filter).connect(amp).connect(ac.destination);
 
 // Change parameters
 osc.frequency.value = 1200;
 
 // Start sound
-vca.gateOn();
+amp.gate.value = 1;
 
 // Stop sound
-vca.gateOff();
+vca.gate.value = 0;
 ```
 
 ## Install
@@ -47,27 +51,21 @@ npm i @synthlet/adsr
 
 ## Documentation
 
-#### Oscillators
+Documentation and examples are [here](https://danigb.github.io/synthlet/docs/quick-start)
 
-- [Noise](/packages/polyblep-oscilllator)
-- [WavetableOscillator](/packages/wavetable-oscilllator)
-- [Noise](/packages/noise)
+### Why?
 
-#### Envelopes
+Mostly, because I want to learn dsp.
 
-- [ADSR](/packages/adsr)
+### Is it a good idea to write dsp in Typescript?
 
-#### Modulators
+Probably not, but I've seen [a talk at WAC 2022](https://zenodo.org/records/6767468) about it that made me think it is possible (thanks to JS engine optimizations).
 
-- [LFO](/packages/lfo)
+### Should I use it?
 
-#### Effects
+Just for fun and curiosity. If you want to make music, [Tone.js](https://github.com/Tonejs/Tone.js) is probably the way to go.
 
-- [StateVariableFilter](/packages/state-variable-filter)
-
-#### Synth modules
-
-- [Drum8](/packages/drum8)
+If you want to deploy dsp modules to web in production, currently [Faust](https://faustdoc.grame.fr/) and [Cmajor](https://github.com/cmajor-lang/cmajor) or [Elementary Audio](https://github.com/elemaudio/elementary) are better alternatives.
 
 ## References
 
