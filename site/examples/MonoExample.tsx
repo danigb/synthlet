@@ -25,14 +25,14 @@ function Example() {
           label="Vibrato depth"
           inputClassName="col-span-2"
           max={20}
-          param={synth.oscLfo.gain}
+          param={synth.vibrato.gain}
         />
         <Slider
           label="Vibrato freq"
           inputClassName="col-span-2"
           min={0}
           max={100}
-          param={synth.oscLfo.frequency}
+          param={synth.vibrato.frequency}
         />
       </ModulePane>
       <ModulePane label="Filter" paneClassName="grid grid-cols-4 gap-2">
