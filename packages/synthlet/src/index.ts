@@ -3,6 +3,7 @@ import { registerAdsrWorklet } from "@synthlet/adsr";
 import { registerChorusTWorklet } from "@synthlet/chorus-t";
 import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
+import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
 import { registerEuclidWorklet } from "@synthlet/euclid";
 import { registerImpulseWorklet } from "@synthlet/impulse";
 import { registerLfoWorklet } from "@synthlet/lfo";
@@ -17,6 +18,7 @@ export * from "@synthlet/adsr";
 export * from "@synthlet/chorus-t";
 export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
+export * from "@synthlet/dattorro-reverb";
 export * from "@synthlet/euclid";
 export * from "@synthlet/impulse";
 export * from "@synthlet/lfo";
@@ -32,13 +34,16 @@ export * from "./synths/drums";
 export * from "./synths/mono";
 export * from "./waa";
 
-export function registerSynthlet(context: AudioContext): Promise<AudioContext> {
+export function registerAllWorklets(
+  context: AudioContext
+): Promise<AudioContext> {
   return Promise.all([
     registerAdWorklet(context),
     registerAdsrWorklet(context),
     registerChorusTWorklet(context),
     registerClipAmpWorklet(context),
     registerClockWorklet(context),
+    registerDattorroReverbWorklet(context),
     registerEuclidWorklet(context),
     registerImpulseWorklet(context),
     registerPolyblepOscillatorWorklet(context),

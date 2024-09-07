@@ -1,5 +1,12 @@
 # synthlet
 
+## 0.3.0
+
+- Function `registerSynthlet` renamed to `registerAllWorklets`
+
+- Initial release of:
+  - @synthlet/dattorro-reverb@0.1.0
+
 ## 0.2.0
 
 - Initial release of the following modules:
@@ -20,4 +27,9 @@
 
 ## 0.1.0
 
-Initial implementation
+Initial implementation of:
+
+- ADSR
+- White Noise
+- State Variable Filter
+- Wavetable Oscillator

@@ -1,0 +1,27 @@
+---
+title: Dattorro Reverb
+description: A Dattorro reverb effect from Faust
+---
+
+import DattorroExample from "../../../examples/DattorroExample";
+
+This is a port of the Dattorro reverb from Faust to the Web Audio API. All credits to Jakob Zerbian.
+
+```ts
+import { ClaveDrum, DattorroReverb, registerWorklets } from "synthlet";
+
+const audioContext = await registerWorklets(new AudioContext());
+const reverb = DattorroReverb(audioContext, {
+  mix: 0.5,
+  time: 0.5,
+  decay: 0.5,
+  lowpass: 20000,
+  highpass: 20,
+});
+
+const clave = ClaveDrum(audioContext);
+clave.connect(reverb).connect(audioContext.destination);
+clave.trigger = 1;
+```
+
+<DattorroExample />

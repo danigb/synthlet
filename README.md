@@ -6,7 +6,7 @@ Collection of synth modules implemented as AudioWorklets.
 
 ```ts
 import {
-  registerSynthlet,
+  registerAllWorklets,
   AdsrAmp,
   StateVariableFilter,
   StateVariableFilterType,
@@ -14,7 +14,7 @@ import {
 } from "synthlet";
 
 const ac = new AudioContext();
-await registerSynthlet(ac);
+await registerAllWorklets(ac);
 
 // Simplest synth: Oscillator -> Filter -> Amplifier
 const osc = PolyblepOscillator(ac, { frequency: 440 });
