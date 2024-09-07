@@ -1,11 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 export function Slider({
   label,
   min = 0,
   max = 1,
-  initial = 0,
-  onChange,
   step,
   transform = (x) => x,
   inputClassName,
@@ -17,9 +15,7 @@ export function Slider({
   label: string;
   min?: number;
   max?: number;
-  initial?: number;
-  param?: { value: number };
-  onChange?: (value: number) => void;
+  param: { value: number };
   transform?: (value: number) => number;
   step?: number;
   labelClassName?: string;
@@ -27,7 +23,11 @@ export function Slider({
   valueClassName?: string;
   units?: string;
 }) {
-  const [value, setValue] = useState(param ? param.value : initial);
+  const [value, setValue] = useState(param.value);
+
+  useEffect(() => {
+    setValue(param.value);
+  }, [param]);
 
   return (
     <>
@@ -42,8 +42,7 @@ export function Slider({
         onChange={(e) => {
           const value = e.target.valueAsNumber;
           setValue(value);
-          if (param) param.value = transform(value);
-          else onChange?.(transform(value));
+          param.value = transform(value);
         }}
       />
       <div className={valueClassName}>

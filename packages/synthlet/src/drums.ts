@@ -47,20 +47,20 @@ export const SnareDrum = (
   context: AudioContext,
   inputs: DrumInputs = {}
 ): DrumNode => {
-  const { param, conn, osc, amp, noise, withParams } = getSynthlet(context);
-  const trigger = param(inputs.trigger);
-  const decay = param(inputs.decay ?? 0.8);
-  const volume = param.db(inputs.volume ?? 0);
-  const tone = param.lin(20, 100, inputs.tone ?? 0.2);
+  const s = getSynthlet(context);
+  const params = toParams(s, inputs);
 
-  const snap = conn.mixInto(
-    [osc.sin(100), osc.sin(200)],
-    amp.perc(trigger, 0.01, decay)
+  const snap = s.conn.mixInto(
+    [s.osc.sin(100), s.osc.sin(200)],
+    s.amp.perc(params.trigger, 0.01, params.decay)
   );
 
-  const splash = conn.serial(noise.white(), amp.perc(trigger, 0.01, decay));
-  const synth = conn.mixInto([snap, splash], amp());
-  return withParams(synth, { trigger, volume, tone, decay });
+  const splash = s.conn.serial(
+    s.noise.white(),
+    s.amp.perc(params.trigger, 0.01, params.decay)
+  );
+  const synth = s.conn.mixInto([snap, splash], s.gain(params.volume));
+  return s.withParams(synth, params);
 };
 
 export const ClaveDrum = (
@@ -204,17 +204,13 @@ export const TomDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
 
 export const CongaDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
   const s = getSynthlet(context);
-  //const params = toParams(s, inputs);
-  const params = {
-    trigger: s.param(),
-  };
+  const params = toParams(s, inputs);
 
-  // const freq = s.param.lin(200, 400, params.tone);
-  const freq = 300;
+  const freq = s.param.lin(200, 400, params.tone);
 
   const synth = s.conn(
     [
-      s.conn(s.osc.sin(freq), s.amp.perc(params.trigger)),
+      s.conn(s.osc.sin(freq), s.amp.perc(params.trigger, 0.001, params.decay)),
       s.conn(s.impulse.trigger(params.trigger), s.gain(0.3)),
     ],
     s.amp(1)

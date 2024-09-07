@@ -33,13 +33,7 @@ const RhythmBox = (context: AudioContext) => {
     volume,
   });
 
-  return s.synth({
-    out: s.conn([clave, kick], s.gain()),
-    inputs: { bpm, volume },
-  });
-
-  // const synth = s.conn([clave, kick], s.gain());
-  // return AssignParams(synth, { bpm, volume });
+  return s.withParams(s.conn([clave, kick], s.gain()), { bpm, volume });
 };
 
 function Example() {
@@ -54,7 +48,6 @@ function Example() {
           inputClassName="col-span-2"
           min={1}
           max={1000}
-          initial={100}
           param={synth.bpm}
           units="bpm"
         />
@@ -65,7 +58,6 @@ function Example() {
           inputClassName="flex-grow"
           min={-36}
           max={0}
-          initial={-24}
           param={synth.volume}
           units="dB"
         />

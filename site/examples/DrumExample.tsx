@@ -15,7 +15,7 @@ import {
   TomDrum,
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
-import { CreateSynth, Synth, useSynth } from "./useSynth";
+import { Synth, useSynth } from "./useSynth";
 
 type DrumSynth = Synth & {
   trigger: AudioParam;
@@ -38,15 +38,11 @@ const INSTRUMENTS: Record<string, typeof KickDrum> = {
   CongaDrum,
 } as const;
 
-function getSynth(instrumentName: string) {
-  const instrument = INSTRUMENTS[instrumentName];
-  if (instrument) return instrument;
-  else throw Error(`Unknown instrument: ${instrumentName}`);
-}
+type Named<T> = T & { name: string };
 
 class PolyDrumSynth {
   context: AudioContext;
-  synths: Map<string, DrumSynth>;
+  synths: Map<string, Named<DrumSynth>>;
   output: GainNode;
   connect: typeof GainNode.prototype.connect;
 
@@ -61,14 +57,14 @@ class PolyDrumSynth {
     return Object.keys(INSTRUMENTS);
   }
 
-  getSynth(name: string): DrumSynth {
+  getSynth(name: string): Named<DrumSynth> {
     if (!this.synths.has(name)) {
       console.log("CREATE SYNTH", name);
       const synth = INSTRUMENTS[name];
       if (!synth) throw Error(`Unknown instrument: ${name}`);
       const node = synth(this.context);
       node.connect(this.output);
-      this.synths.set(name, node);
+      this.synths.set(name, Object.assign(node, { name }));
     }
     return this.synths.get(name)!;
   }
@@ -82,19 +78,58 @@ class PolyDrumSynth {
 
 export function Example({}: {}) {
   const synth = useSynth((context) => new PolyDrumSynth(context));
+  const [drum, setDrum] = useState<Named<DrumSynth> | null>(null);
+
   if (!synth) return null;
   return (
     <>
+      {drum && (
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="col-span-4 font-bold border-b">
+            {drum.name.slice(0, -4)}
+          </div>
+          <Slider
+            label="Tone"
+            inputClassName="col-span-2"
+            min={0}
+            max={1}
+            step={0.01}
+            param={drum.tone}
+          />
+
+          <Slider
+            label="Decay"
+            inputClassName="col-span-2"
+            min={0}
+            max={1}
+            step={0.01}
+            param={drum.decay}
+          />
+          <Slider
+            label="Volume"
+            inputClassName="col-span-2"
+            min={-60}
+            max={0}
+            step={1}
+            units="dB"
+            param={drum.volume}
+          />
+        </div>
+      )}
       <div className="flex flex-wrap gap-2">
         {synth.getNames().map((name) => (
           <button
             key={name}
             className="border px-2 py-1 rounded bg-fd-secondary"
             onMouseDown={() => {
-              synth.getSynth(name).trigger.value = 1;
+              const drum = synth.getSynth(name);
+              drum.trigger.value = 1;
+              setDrum(drum);
             }}
             onMouseUp={() => {
-              synth.getSynth(name).trigger.value = 0;
+              const drum = synth.getSynth(name);
+              drum.trigger.value = 0;
+              setDrum(drum);
             }}
           >
             {name.slice(0, -4)}
@@ -102,66 +137,6 @@ export function Example({}: {}) {
         ))}
       </div>
     </>
-  );
-}
-
-function DrumExampleUI<T extends DrumSynth>({
-  instrumentName,
-  onClose,
-  createSynth,
-}: {
-  instrumentName: string;
-  onClose: () => void;
-  createSynth: CreateSynth<DrumSynth>;
-}) {
-  const [selectedNoiseType, setSelectedNoiseType] = useState(0);
-  const [volume, setVolume] = useState(-60);
-  const synth = useSynth(createSynth);
-  if (!synth) return null;
-
-  return (
-    <div className="bg-fd-card text-fd-foreground p-2 border rounded">
-      <div className="text-xl mb-4">{instrumentName} example</div>
-
-      <div className="flex items-center gap-2">
-        <Slider
-          label="Tone"
-          labelClassName="w-20 text-right mr-2"
-          onChange={(value) => {
-            synth.tone.value = value;
-          }}
-        />
-      </div>
-      <div className="flex gap-2">
-        <Slider
-          label="Decay"
-          labelClassName="w-20 text-right mr-2"
-          initial={0.4}
-          param={synth.decay}
-          units="s"
-        />
-      </div>
-      <div className="flex items-center gap-2 my-4">
-        <button
-          className="border px-2 py-1 rounded bg-fd-primary text-fd-primary-foreground"
-          onMouseDown={() => {
-            synth.trigger.value = 1;
-          }}
-          onMouseUp={() => {
-            synth.trigger.value = 0;
-          }}
-        >
-          Trigger
-        </button>
-      </div>
-
-      <button
-        className="border px-2 py-1 rounded bg-fd-secondary"
-        onClick={onClose}
-      >
-        Close
-      </button>
-    </div>
   );
 }
 

@@ -6,7 +6,7 @@ import { ExamplePane, GateButton, ModulePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function FlyMonoSynth(context: AudioContext) {
+function MonoSynth(context: AudioContext) {
   const s = getSynthlet(context);
   // Params
   const gate = s.param();
@@ -26,13 +26,13 @@ function FlyMonoSynth(context: AudioContext) {
 
   return s.synth({
     out: s.conn.serial(osc, filter, amp, s.amp(volume)),
-    inputs: { gate, frequency, volume },
+    params: { gate, frequency, volume },
     modules: { osc, oscLfo, filterEnv, filter, amp },
   });
 }
 
 function Example() {
-  const synth = useSynth(FlyMonoSynth);
+  const synth = useSynth(MonoSynth);
 
   if (!synth) return null;
 

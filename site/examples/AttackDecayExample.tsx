@@ -16,7 +16,7 @@ const AttackDecaySynth = (context: AudioContext) => {
       s.osc.sin(s.env.ad(trigger, { attack, decay, offset: 440, gain: 2000 })),
       s.amp(0.2)
     ),
-    inputs: { trigger, attack, decay },
+    params: { trigger, attack, decay },
   });
 };
 

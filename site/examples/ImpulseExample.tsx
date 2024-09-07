@@ -9,7 +9,7 @@ const ImpulseSynth = (context: AudioContext) => {
   const trigger = s.param();
   return s.synth({
     out: s.impulse.trigger(trigger),
-    inputs: { trigger },
+    params: { trigger },
   });
 };
 

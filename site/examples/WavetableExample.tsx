@@ -59,11 +59,8 @@ function WavetableExample() {
           inputClassName="col-span-2"
           min={0}
           max={10}
-          initial={1}
           step={0.1}
-          onChange={(value) => {
-            synth.osc.morphFrequency.value = value;
-          }}
+          param={synth.osc.morphFrequency}
         />
       </div>
       <div className="flex mt-4">

@@ -1,11 +1,12 @@
 import { Slider } from "./Slider";
+type Param = { value: number };
 
 export function StateVariableFilterControls({
-  onFrequencyChanged,
-  onResonanceChanged,
+  frequency,
+  resonance,
 }: {
-  onFrequencyChanged: (value: number) => void;
-  onResonanceChanged: (value: number) => void;
+  frequency: Param;
+  resonance: Param;
 }) {
   return (
     <>
@@ -15,8 +16,7 @@ export function StateVariableFilterControls({
         min={0}
         max={20000}
         step={1}
-        initial={16000}
-        onChange={onFrequencyChanged}
+        param={frequency}
         units="Hz"
       />
       <Slider
@@ -25,8 +25,7 @@ export function StateVariableFilterControls({
         min={0.01}
         max={40}
         step={0.01}
-        initial={0.5}
-        onChange={onResonanceChanged}
+        param={resonance}
       />
     </>
   );
