@@ -22,7 +22,7 @@ export class ArpProcessor extends AudioWorkletProcessor {
       params.trigger[0],
       params.type[0],
       params.baseNote[0],
-      params.chord[0],
+      params.scale[0],
       params.octaves[0]
     );
     const output = outputs[0][0];
@@ -35,7 +35,7 @@ export class ArpProcessor extends AudioWorkletProcessor {
       ["trigger", 0, 0, 1],
       ["type", 0, 0, 1],
       ["baseNote", 60, 0, 200],
-      ["chord", 1, 1, 2047],
+      ["scale", 1, 1, 2047],
       ["octaves", 1, 1, 10],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,

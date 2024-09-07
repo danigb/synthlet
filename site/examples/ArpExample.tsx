@@ -3,7 +3,7 @@
 import { useState } from "react";
 import {
   Arp,
-  ArpChord,
+  ArpScale,
   ArpType,
   Clock,
   DattorroReverb,
@@ -26,7 +26,7 @@ function ArpSynth(context: AudioContext) {
   const arp = Arp(context, {
     trigger: euclid,
     type: ArpType.Random,
-    chord: ArpChord.Major,
+    scale: ArpScale.Major,
     octaves: 2,
   });
 
