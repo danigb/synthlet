@@ -10,11 +10,11 @@ import { ImpulseExample } from "../../../examples/ImpulseExample";
 This module generates an impulse when a gate is opened. Useful to generate a click sound.
 
 ```ts
-import { registerImpulseWorklet, createImpulseNode } from "synthlet";
+import { registerImpulseWorklet, Impulse } from "synthlet";
 
 const audioContext = new AudioContext();
 await registerImpulseWorklet(audioContext);
-const impulse = createImpulseNode(audioContext);
+const impulse = Impulse(audioContext);
 
 impulse.gate.value = 1;
 ```

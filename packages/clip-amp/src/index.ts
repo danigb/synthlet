@@ -1,13 +1,10 @@
 import {
-  Connector,
   createRegistrar,
   createWorkletConstructor,
-  Disposable,
   ParamInput,
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-import { ClipType } from "./dsp";
 export { ClipType } from "./dsp";
 
 export const registerClipAmpWorklet = createRegistrar("CLIP_AMP", PROCESSOR);
@@ -25,7 +22,7 @@ export type ClipAmpWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-export const createClipAmpNode = createWorkletConstructor<
+export const ClipAmp = createWorkletConstructor<
   ClipAmpWorkletNode,
   ClipAmpInputs
 >({
@@ -35,19 +32,4 @@ export const createClipAmpNode = createWorkletConstructor<
     numberOfInputs: 1,
     numberOfOutputs: 1,
   }),
-});
-
-const op = (
-  params: ClipAmpInputs
-): Connector<Disposable<ClipAmpWorkletNode>> => {
-  let node: ClipAmpWorkletNode;
-  return (context: AudioContext) => {
-    node ??= createClipAmpNode(context, params);
-    return node;
-  };
-};
-
-export const ClipAmp = Object.assign(op, {
-  soft: (preGain: ParamInput, postGain: ParamInput) =>
-    op({ type: ClipType.TANH, preGain, postGain }),
 });

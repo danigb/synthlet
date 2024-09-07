@@ -25,7 +25,7 @@ Before you can create any module, you need to register the worklet processors. Y
 ```js
 import { registerSynthlet } from "synthlet";
 
-const audioContext = new audioContext();
+const audioContext = new AudioContext();
 await registerSynthlet(audioContext);
 ```
 
@@ -51,23 +51,20 @@ Here's the full gist:
 ```js
 import {
   registerSynthlet
-  createPolyblepOscillatorNode,
-  createStateVariableFilterNode,
-  createVcaNode,
+  PolyblepOscillator,
+  StateVariableFilter,
+  AdsrAmp,
 } from "synthlet";
 
 const ac = await registerSynthlet(new AudioContext());
 
-
-const osc = createPolyblepOscillatorNode(ac, {
-  frequency: 440,
-});
-const filter = createStateVariableFilterNode(ac, {
+const osc = PolyblepOscillator(ac, {frequency: 440 });
+const filter = StateVariableFilter(ac, {
   type: SvfType.Lowpass,
   frequency: 5000,
   resonance: 2,
 });
-const vca = createVcaNode(ac, {
+const vca = AdsrAmp(ac, {
   attack: 0.01,
   decay: 0.1,
   sustain: 0.7,
@@ -106,10 +103,10 @@ const s = await synthlet(new AudioContext());
 
 // Use the operators to create audio graph
 const gate = s.param(audioContext);
-const out = s.connect(
-  s.saw(440),
-  s.svflp(5000, 2),
-  s.vca(gate, 0.01, 0.1, 0.7, 0.3)
+const out = s.conn(
+  s.polyblep.saw(440),
+  s.svf.lp(5000, 2),
+  s.amp.adsr(gate, 0.01, 0.1, 0.7, 0.3)
 );
 
 gate.value = 1;

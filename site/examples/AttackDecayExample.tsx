@@ -50,11 +50,7 @@ function AttackDecayUI({ onClose }: { onClose: () => void }) {
           min={0}
           max={1}
           step={0.001}
-          initial={0.1}
-          onChange={(value) => {
-            synth.attack.value = value;
-          }}
-          initialize
+          param={synth.attack}
         />
       </div>
       <div className="flex ">
@@ -64,11 +60,7 @@ function AttackDecayUI({ onClose }: { onClose: () => void }) {
           min={0}
           max={1}
           step={0.001}
-          initial={0.2}
-          onChange={(value) => {
-            synth.decay.value = value;
-          }}
-          initialize
+          param={synth.decay}
         />
       </div>
       <div className="flex mb-4">

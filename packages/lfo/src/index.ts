@@ -23,7 +23,7 @@ export type LfoWorklet = AudioWorkletNode & {
 };
 
 export const registerLfoWorklet = createRegistrar("LFO", PROCESSOR);
-export const createLfoNode = createWorkletConstructor<LfoWorklet, LfoInputs>({
+export const Lfo = createWorkletConstructor<LfoWorklet, LfoInputs>({
   processorName: "LfoProcessor",
   paramNames: ["type", "frequency", "gain", "offset"] as const,
   workletOptions: () => ({
@@ -31,12 +31,3 @@ export const createLfoNode = createWorkletConstructor<LfoWorklet, LfoInputs>({
     numberOfOutputs: 1,
   }),
 });
-
-const op = (inputs?: LfoInputs) => {
-  let node: LfoWorklet;
-  return (context: AudioContext) => {
-    return (node ??= createLfoNode(context, inputs));
-  };
-};
-
-export const Lfo = Object.assign(op, {});

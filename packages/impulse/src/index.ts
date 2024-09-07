@@ -1,5 +1,4 @@
 import {
-  Connector,
   createRegistrar,
   createWorkletConstructor,
   ParamInput,
@@ -17,7 +16,7 @@ export type ImpulseWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-export const createImpulseNode = createWorkletConstructor<
+export const Impulse = createWorkletConstructor<
   ImpulseWorkletNode,
   ImpulseInputs
 >({
@@ -27,16 +26,4 @@ export const createImpulseNode = createWorkletConstructor<
     numberOfInputs: 0,
     numberOfOutputs: 1,
   }),
-});
-
-const op = (params?: ImpulseInputs): Connector<ImpulseWorkletNode> => {
-  let node: ImpulseWorkletNode;
-  return (context: AudioContext) => {
-    node ??= createImpulseNode(context, params);
-    return node;
-  };
-};
-
-export const Impulse = Object.assign(op, {
-  trigger: (trigger: ParamInput) => op({ trigger }),
 });

@@ -75,12 +75,8 @@ function WavetableExample() {
           inputClassName="flex-grow"
           min={-36}
           max={0}
-          initial={-24}
-          initialize
           units="dB"
-          onChange={(value) => {
-            synth.volume.value = value;
-          }}
+          param={synth.volume}
         />
       </div>
     </>

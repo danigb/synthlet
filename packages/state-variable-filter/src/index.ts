@@ -25,7 +25,7 @@ export const registerStateVariableFilterWorklet = createRegistrar(
   PROCESSOR
 );
 
-export const createStateVariableFilterNode = createWorkletConstructor<
+export const StateVariableFilter = createWorkletConstructor<
   StateVariableFilterWorkletNode,
   StateVariableFilterInputs
 >({

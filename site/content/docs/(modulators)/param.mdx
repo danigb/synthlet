@@ -8,11 +8,11 @@ description: Control parameters with unit conversion
 This module is used to control audio parameters from UI. It provides a way to convert values from different units, and aggregate multiple sources.
 
 ```ts
-import { registerParamWorklet, createParamNode } from "synthlet";
+import { registerParamWorklet, Param } from "synthlet";
 
 const audioContext = new AudioContext();
 await registerParamWorklet(audioContext);
-const param = createParamNode(audioContext, { input: 10 });
+const param = Param(audioContext, { input: 10 });
 ```
 
 ## Parameters

@@ -19,9 +19,9 @@ export class AdsrProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
+    const input = this.m ? inputs[0][0] : undefined;
     const output = outputs[0][0];
-    const input = inputs[0][0];
-    this.p(input, output, this.m, params);
+    this.p(input!, output, this.m, params);
     return this.r;
   }
 

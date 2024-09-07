@@ -12,7 +12,7 @@ with [WaveEdit Online](https://waveeditonline.com/) wavetable format.
 
 ```ts
 import {
-  createWavetableOscillatorNode,
+  WavetableOscillator,
   registerWavetableOscillatorWorklet,
   loadWavetable,
 } from "@synthlet/wavetable-oscillator";
@@ -22,7 +22,7 @@ const audioContext = new AudioContext();
 await registerWavetableOscillatorWorklet(audioContext);
 
 // Create the oscillator and connect it to the destination
-const osc = createWavetableOscillatorNode(audioContext, {
+const osc = WavetableOscillator(audioContext, {
   morphFrequency: 0.1,
 });
 osc.connect(audioContext.destination);

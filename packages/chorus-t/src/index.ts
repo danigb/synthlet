@@ -23,7 +23,7 @@ export type ChorusTWorkletNode = AudioWorkletNode & {
 
 export const registerChorusTWorklet = createRegistrar("CHORUS", PROCESSOR);
 
-export const createChorusTNode = createWorkletConstructor<
+export const ChorusT = createWorkletConstructor<
   ChorusTWorkletNode,
   ChorusTInputs
 >({

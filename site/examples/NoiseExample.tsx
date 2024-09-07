@@ -42,11 +42,8 @@ function Example() {
         min={-100}
         max={0}
         initial={-100}
-        initialize
+        param={synth.volume}
         units="dB"
-        onChange={(value) => {
-          synth.volume.value = value;
-        }}
       />
     </div>
   );

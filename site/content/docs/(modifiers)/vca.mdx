@@ -1,5 +1,5 @@
 ---
-title: VCA
+title: ADSR Amplifier
 description: A Voltage Controlled Amplifier module
 ---
 
@@ -12,12 +12,12 @@ A Voltage Controlled Amplifier (VCA) module: an ADSR envelope contected to a gai
 Use it to add an envelope to the synth voices.
 
 ```ts
-import { createVcaNode, createADSRNode } from "synthlet";
+import { AdsrAmp, OscillatorNode } from "synthlet";
 
 const osc = new OscillatorNode(audioContext, {
   frequency: 440,
 });
-const vca = createVcaNode(audioContext, {
+const vca = AdsrAmp(audioContext, {
   gain: 0.5,
   attack: 0.1,
   decay: 0.1,

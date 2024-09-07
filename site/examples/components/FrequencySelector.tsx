@@ -2,20 +2,18 @@ import { useState } from "react";
 
 export function FrequencySelector({
   label,
-  initial,
-  onChange,
+  param,
 }: {
   label: string;
-  initial: number;
-  onChange: (value: number) => void;
+  param: { value: number };
 }) {
   const NOTES = "C C# D D# E F F# G G# A A# B".split(" ");
 
-  const [freq, setFreq] = useState(initial);
+  const [freq, setFreq] = useState(param.value);
 
   const updateFreq = (freq: number) => {
     setFreq(freq);
-    onChange(freq);
+    param.value = freq;
   };
 
   return (
@@ -38,7 +36,7 @@ export function FrequencySelector({
         {NOTES.map((note, i) => (
           <button
             key={note}
-            className="border border-white px-1 rounded opacity-70 hover:opacity-80"
+            className="border border-white px-1 rounded opacity-70 hover:opacity-80 py-0"
             onClick={() => {
               updateFreq(440 * Math.pow(2, i / 12));
             }}

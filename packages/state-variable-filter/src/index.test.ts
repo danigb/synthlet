@@ -1,4 +1,4 @@
-describe("PolyblepOscillator", () => {
+describe("Noise", () => {
   it("registers only once", () => {
     const context = new AudioContextMock();
     // @ts-ignore

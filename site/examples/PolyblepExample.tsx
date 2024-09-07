@@ -1,6 +1,6 @@
 "use client";
 
-import { getSynthlet, PolyblepWaveformType } from "synthlet";
+import { getSynthlet, PolyblepOscillatorType } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
@@ -8,7 +8,7 @@ import { useSynth } from "./useSynth";
 function PolyblepSynth(context: AudioContext) {
   const s = getSynthlet(context);
   const gate = s.param();
-  const type = s.param(PolyblepWaveformType.SAWTOOTH);
+  const type = s.param(PolyblepOscillatorType.SAWTOOTH);
   const frequency = s.param(200);
   const volume = s.param.db(-100);
 
@@ -34,11 +34,8 @@ function WavetableExample() {
           inputClassName="col-span-2"
           min={20}
           max={3000}
-          initial={220}
           units="Hz"
-          onChange={(value) => {
-            synth.frequency.setValueAtTime(value, 0);
-          }}
+          param={synth.frequency}
         />
 
         <div className="flex col-span-4">
@@ -51,12 +48,8 @@ function WavetableExample() {
           inputClassName="flex-grow"
           min={-36}
           max={0}
-          initial={-24}
-          initialize
+          param={synth.volume}
           units="dB"
-          onChange={(value) => {
-            synth.volume.value = value;
-          }}
         />
       </div>
     </>

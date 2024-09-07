@@ -10,12 +10,12 @@ This is a one-stage envelope generator useful to create percusive sounds.
 Unlike ADSR, this envelope can finish before the gate is released.
 
 ```ts
-import { createAdNode, registerAdWorklet } from "synthlet";
+import { AdEnv, registerAdWorklet } from "synthlet";
 
 const audioContext = new AudioContext();
 await registerAdWorklet(audioContext);
 
-const ad = createAdNode(audioContext, {
+const ad = AdEnv(audioContext, {
   attack: 0.1,
   decay: 0.1,
   gain: 1,

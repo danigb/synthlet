@@ -81,11 +81,8 @@ function DrumExampleUI<T extends DrumSynth>({
           label="Decay"
           labelClassName="w-20 text-right mr-2"
           initial={0.4}
-          initialize
+          param={synth.decay}
           units="s"
-          onChange={(value) => {
-            synth.decay.value = value;
-          }}
         />
       </div>
       <div className="flex items-center gap-2 my-4">

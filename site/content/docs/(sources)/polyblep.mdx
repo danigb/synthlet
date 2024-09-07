@@ -10,10 +10,10 @@ This module implements a synth oscillator. It's very similar to the native Oscil
 The oscillator is implemented using the PolyBLEP algorithm. This algorithm is used to generate band-limited waveforms.
 
 ```ts
-import { createPolyblepOscillatorNode } from "synthlet";
+import { PolyblepOscillator } from "synthlet";
 
-const osc = createPolyblepOscillatorNode(audioContext, {
-  type: "sawtooth",
+const osc = PolyblepOscillator(audioContext, {
+  type: PolyblepOscillatorType.SAWTOOTH;
   frequency: 440,
 });
 ```
@@ -22,6 +22,8 @@ const osc = createPolyblepOscillatorNode(audioContext, {
 
 ## Parameters
 
-- `type`: A string representing the waveform `sine`, `sawtooth`, `square`, `triangle`. Default is `sawtooth`.
-- `waveform`: A number representing the waveform
+- `type`: A number representing the waveform type. Default is 0 (saw). The available types are:
+  - `PolyblepOscillatorType.SAWTOOTH` 0
+  - `PolyblepOscillatorType.SQUARE` 1
+  - `PolyblepOscillatorType.TRIANGLE` 2
 - `frequency`: The frequency of the oscillator in Hz. Default is 440.

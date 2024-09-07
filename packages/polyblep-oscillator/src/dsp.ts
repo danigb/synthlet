@@ -1,10 +1,10 @@
-export enum PolyblepWaveformType {
+export enum PolyblepOscillatorType {
   SAWTOOTH = 0,
   SQUARE = 1,
   TRIANGLE = 2,
 }
 
-export function createPolyblepOscillator(sampleRate: number) {
+export function createNoise(sampleRate: number) {
   const ivsr = 1 / sampleRate;
 
   let type = 0;

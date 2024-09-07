@@ -10,7 +10,7 @@ type AdsrModule = {
 
 export function AdsrControls({ adsr }: { adsr: AdsrModule }) {
   return (
-    <div className="grid grid-cols-4">
+    <>
       <Slider
         label="Attack"
         inputClassName="col-span-2"
@@ -58,6 +58,6 @@ export function AdsrControls({ adsr }: { adsr: AdsrModule }) {
         }}
         units="secs"
       />
-    </div>
+    </>
   );
 }

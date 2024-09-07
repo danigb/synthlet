@@ -9,14 +9,14 @@ import {
   registerSynthlet,
   createVca,
   createStateVariableFilter
-  createPolyblepOscillator,
+  createNoise,
 } from "synthlet";
 
 const audioContext = new AudioContext();
 await registerSynthlet(audioContext);
 
 // Simplest synth: Oscillator -> Filter -> Amplifier
-const osc = createPolyblepOscillator(audioContext, { type: "saw", frequency: 440 });
+const osc = createNoise(audioContext, { type: "saw", frequency: 440 });
 const filter = createStateVariableFilter(audioContext, { type: "lowpass", frequency: 4000 });
 const vca = createVca(audioContext, { attack: 0.1, release: 0.5 });
 osc.connect(filter).connect(vca).connect(audioContext.destination);
@@ -49,7 +49,7 @@ npm i @synthlet/adsr
 
 #### Oscillators
 
-- [PolyblepOscillator](/packages/polyblep-oscilllator)
+- [Noise](/packages/polyblep-oscilllator)
 - [WavetableOscillator](/packages/wavetable-oscilllator)
 - [Noise](/packages/noise)
 

@@ -1,13 +1,13 @@
-import { createPolyblepOscillator } from "./dsp";
+import { createNoise } from "./dsp";
 
 export class PolyBLEProcessor extends AudioWorkletProcessor {
   r: boolean; // running
-  g: ReturnType<typeof createPolyblepOscillator>;
+  g: ReturnType<typeof createNoise>;
 
   constructor() {
     super();
     this.r = true;
-    this.g = createPolyblepOscillator(sampleRate);
+    this.g = createNoise(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":

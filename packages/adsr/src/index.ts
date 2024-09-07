@@ -41,10 +41,7 @@ const PARAM_NAMES = [
 
 export const registerAdsrWorklet = createRegistrar("ADSR", PROCESSOR);
 
-export const createAdsrNode = createWorkletConstructor<
-  AdsrWorkletNode,
-  AdsrInputs
->({
+export const AdsrEnv = createWorkletConstructor<AdsrWorkletNode, AdsrInputs>({
   processorName: "AdsrProcessor",
   paramNames: PARAM_NAMES,
   workletOptions() {
@@ -56,10 +53,7 @@ export const createAdsrNode = createWorkletConstructor<
   },
 });
 
-export const createAmpAdsrNode = createWorkletConstructor<
-  AdsrWorkletNode,
-  AdsrInputs
->({
+export const AdsrAmp = createWorkletConstructor<AdsrWorkletNode, AdsrInputs>({
   processorName: "AdsrProcessor",
   paramNames: PARAM_NAMES,
   workletOptions() {

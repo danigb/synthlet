@@ -43,6 +43,33 @@ export function ExamplePane({
   );
 }
 
+export function ModulePane({
+  label,
+  children,
+  paneClassName,
+}: {
+  label: string;
+  children: React.ReactNode;
+  paneClassName?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <div className="bold mt-4 border-b mb-1">
+        <button
+          onClick={() => {
+            setOpen(!open);
+          }}
+        >
+          {label}
+          <span className="text-xs ml-2">{open ? "▼" : "▶"}</span>
+        </button>
+      </div>
+      {open && <div className={paneClassName}>{children}</div>}
+    </>
+  );
+}
+
 export function TriggerButton({ trigger }: { trigger: { value: number } }) {
   return (
     <div className="flex mb-4">

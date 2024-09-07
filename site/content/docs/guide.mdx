@@ -7,16 +7,16 @@ This guide will show you how to use the Synthlet modules.
 
 ## Create
 
-To create a module, you need to call the `create<Module>Node` function that will return an instance of an [AudioWorkletNode](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode)
+To create a module, you need to call the `Module` function that will return an instance of an [AudioWorkletNode](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorkletNode).
 
 The create function will take two arguments, the `audioContext` and an object with optional configuration and initial values of each parameter:
 
 ```js
-const osc = createPolyblepOscillatorNode(audioContext, {
+const osc = PolyblepOscillator(audioContext, {
   frequency: 440,
 });
 
-const lfo = createLfoNode(audioContext, {
+const env = AdsrEnv(audioContext, {
   attack: 0.1,
   decay: 0.1,
   sustain: 0.5,
@@ -51,7 +51,7 @@ adsr.attack.setValueAtTime(0.1, audioContext.currentTime + 5);
 Unlike WebAudioAPI, Synthlet create functions accepts other modules as parameters. This is useful to connect modules on creation:
 
 ```js
-const lfo = createLfoNode(audioContext, { type: LfoType.ExpRampUp });
+const lfo = Lfo(audioContext, { type: LfoType.ExpRampUp });
 const amp = createAmpNode(audioContext, { gain: lfo });
 ```
 
@@ -91,22 +91,24 @@ adsr.connect(amplitude.gain);
 
 ## Dispose
 
-Dispose is a handy function that funlly disconnect and stop the module:
+Dispose is a handy function that funlly disconnects and stop the module:
 
 ```js
 osc.dispose();
 ```
 
-It not only stop disconnect and stops the module but also disconnects all dependencies:
+It also disconnects all dependencies:
 
 ```js
 const trigger = createTriggerNode(audioContext, {});
-const adsr = createAdsrNode(audioContext, { trigger });
-const osc = createPolyblepOscillatorNode(audioContext, { frequency: adsr });
+const adsr = AdsrEnv(audioContext, { trigger });
+const osc = PolyblepOscillator(audioContext, { frequency: adsr });
 
 ...
 osc.dispose(); // Disconnects also trigger and adsr
 ```
+
+Unlike the `connect` in standard WebAudio API, `dispose` can be called more than once (but only the first call will have effect) and once called, the module is not usable anymore.
 
 ## Installing individual modules
 
@@ -118,12 +120,15 @@ Install:
 @synthlet/polyblep-oscillator
 ```
 
-And register:
+And use:
 
 ```js
-import { registerPolyblepOscillator } from "@synthlet/polyblep-oscillator";
-import { registerPolyblepOscillator } from "synthlet";
+import {
+  registerPolyblepOscillator,
+  PolyblepOscillator,
+} from "@synthlet/polyblep-oscillator";
 
 const audioContext = new audioContext();
 await registerPolyblepOscillator(audioContext);
+const node = PolyblepOscillator(audioContext, { frequency: 440 });
 ```

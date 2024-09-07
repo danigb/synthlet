@@ -1,6 +1,6 @@
-import { AdInputs, createAdNode } from "@synthlet/ad";
-import { AdsrInputs, createAdsrNode, createAmpAdsrNode } from "@synthlet/adsr";
-import { createWavetableOscillatorNode } from "@synthlet/wavetable-oscillator";
+import { AdEnv, AdInputs } from "@synthlet/ad";
+import { AdsrAmp, AdsrEnv, AdsrInputs } from "@synthlet/adsr";
+import { WavetableOscillator } from "@synthlet/wavetable-oscillator";
 
 import { ParamInput } from "./_worklet";
 import {
@@ -11,16 +11,16 @@ import {
   OscillatorInputs,
 } from "./waa";
 
-import { createChorusTNode } from "@synthlet/chorus-t";
-import { createClockNode } from "@synthlet/clock";
-import { createEuclidNode } from "@synthlet/euclid";
-import { createImpulseNode } from "@synthlet/impulse";
-import { createLfoNode } from "@synthlet/lfo";
-import { createNoiseNode } from "@synthlet/noise";
-import { createParamNode, ParamInputs, ParamScaleType } from "@synthlet/param";
-import { createPolyblepOscillatorNode } from "@synthlet/polyblep-oscillator";
+import { ChorusT } from "@synthlet/chorus-t";
+import { Clock } from "@synthlet/clock";
+import { Euclid } from "@synthlet/euclid";
+import { Impulse } from "@synthlet/impulse";
+import { Lfo } from "@synthlet/lfo";
+import { Noise } from "@synthlet/noise";
+import { Param, ParamInputs, ParamScaleType } from "@synthlet/param";
+import { PolyblepOscillator } from "@synthlet/polyblep-oscillator";
 import {
-  createStateVariableFilterNode,
+  StateVariableFilter,
   StateVariableFilterInputs,
   StateVariableFilterType,
 } from "@synthlet/state-variable-filter";
@@ -46,19 +46,19 @@ export function createOperators() {
   const bqf = operator(createBiquadFilter);
 
   // Synthlet
-  const ad = operator(createAdNode);
-  const adsrAmp = operator(createAmpAdsrNode);
-  const adsrEnv = operator(createAdsrNode);
-  const chorusT = operator(createChorusTNode);
-  const clock = operator(createClockNode);
-  const euclid = operator(createEuclidNode);
-  const impulse = operator(createImpulseNode);
-  const lfo = operator(createLfoNode);
-  const noise = operator(createNoiseNode);
-  const polyblep = operator(createPolyblepOscillatorNode);
-  const svf = operator(createStateVariableFilterNode);
-  const param = operator(createParamNode);
-  const wt = operator(createWavetableOscillatorNode);
+  const ad = operator(AdEnv);
+  const adsrAmp = operator(AdsrAmp);
+  const adsrEnv = operator(AdsrEnv);
+  const chorusT = operator(ChorusT);
+  const clock = operator(Clock);
+  const euclid = operator(Euclid);
+  const impulse = operator(Impulse);
+  const lfo = operator(Lfo);
+  const noise = operator(Noise);
+  const polyblep = operator(PolyblepOscillator);
+  const svf = operator(StateVariableFilter);
+  const param = operator(Param);
+  const wt = operator(WavetableOscillator);
 
   // Operators
   return {

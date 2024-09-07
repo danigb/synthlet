@@ -40,10 +40,11 @@ export function registerSynthlet(context: AudioContext): Promise<AudioContext> {
     registerClockWorklet(context),
     registerEuclidWorklet(context),
     registerImpulseWorklet(context),
+    registerPolyblepOscillatorWorklet(context),
     registerLfoWorklet(context),
     registerNoiseWorklet(context),
     registerParamWorklet(context),
-    registerPolyblepOscillatorWorklet(context),
+    registerNoiseWorklet(context),
     registerStateVariableFilterWorklet(context),
     registerWavetableOscillatorWorklet(context),
   ]).then(() => context);

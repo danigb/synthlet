@@ -10,12 +10,12 @@ import NoiseExample from "../../../examples/NoiseExample";
 A Noise generator. Currently white and pink noise are supported.
 
 ```ts
-import { registerNoiseWorklet, createNoiseNode, NoiseType } from "synthlet";
+import { registerNoiseWorklet, Noise, NoiseType } from "synthlet";
 
 const audioContext = new AudioContext();
 await registerNoiseWorklet(audioContext);
 
-const noise = createNoiseNode(audioContext, {
+const noise = Noise(audioContext, {
   type: NoiseType.WHITE,
 });
 noise.connect(audioContext.destination);

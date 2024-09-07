@@ -29,7 +29,7 @@ export const registerWavetableOscillatorWorklet = createRegistrar(
   PROCESSOR
 );
 
-export const createWavetableOscillatorNode = createWorkletConstructor<
+export const WavetableOscillator = createWorkletConstructor<
   WavetableOscillatorWorkletNode,
   WavetableInputs
 >({
@@ -68,13 +68,3 @@ export function loadWavetable(
 export function fetchWavetableNames(): Promise<string[]> {
   return WavetableLoader.fetchAvailableNames();
 }
-
-const op = (inputs: WavetableInputs) => {
-  let node: WavetableOscillatorWorkletNode;
-  return (context: AudioContext) => {
-    node ??= createWavetableOscillatorNode(context, inputs);
-    return node;
-  };
-};
-
-export const WavetableOscillator = Object.assign(op, {});
