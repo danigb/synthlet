@@ -63,7 +63,7 @@ export function createOperators() {
   // Operators
   return {
     param: Object.assign(
-      (params?: ParamInputs | number) =>
+      (params?: ParamInputs | number | undefined) =>
         param(typeof params === "number" ? { input: params } : params),
       {
         db: (db: ParamInput, params?: ParamInputs) =>
@@ -75,7 +75,7 @@ export function createOperators() {
           params?: ParamInputs
         ) =>
           param({
-            type: ParamScaleType.Linear,
+            scale: ParamScaleType.Linear,
             input: value,
             min,
             max,

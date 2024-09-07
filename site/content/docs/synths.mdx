@@ -3,15 +3,13 @@ title: Synths
 description: Available built-in synthesizers
 ---
 
-import { DrumExample } from "../../examples/DrumExample";
+import DrumExample from "../../examples/DrumExample";
 import MonoExample from "../../examples/MonoExample";
 import NoiseExample from "../../examples/NoiseExample";
 
 Some synthesizers are provided for convenience. They are implemented by connecting different modules together.
 
-## Melody
-
-### Mono synthesizer
+## Mono synthesizer
 
 A monophonic synthesizer with a single PolyBLEP oscillator and an ADSR envelope on the filter and amplifier.
 
@@ -19,38 +17,38 @@ A monophonic synthesizer with a single PolyBLEP oscillator and an ADSR envelope 
 
 ## Drums
 
-### KickDrum
+Several drum synthesizers are available, all with the same constructor: `Drum(audioContext, inputs)`:
 
 ```ts
 import { KickDrum } from "synthlet";
 
-const kick = createKickDrum(audioContext);
+const kick = KickDrum(audioContext, { tone: 0.2, decay: 0.7 });
 kick.trigger.value = 1;
 kick.tone.value = 0.5;
 ```
 
-<DrumExample instrumentName="KickDrum" />
+<DrumExample />
 
-### Snare
+### Parameters
 
-```ts
-import { SnareDrum } from "synthlet";
+All drum modules share the same parameters:
 
-const snare = createSnareDrum(audioContext);
-snare.trigger.value = 1;
-snare.tone.value = 0.5;
-```
+- `trigger`: 0 or 1, triggers the drum sound
+- `tone`: 0 to 1, changes the timbre of the drum (scale depends on the drum)
+- `decay`: 0 to 1, changes the length of the drum sound (sale depends on the drum)
+- `volume`: in decibels. Default is 0.
 
-<DrumExample instrumentName="SnareDrum" />
+### Available drums
 
-### Clave
+The following drums are available:
 
-```ts
-import { ClaveDrum } from "synthlet";
-
-const clave = createClaveDrum(audioContext);
-clave.trigger.value = 1;
-clave.tone.value = 0.5;
-```
-
-<DrumExample instrumentName="ClaveDrum" />
+- `KickDrum`
+- `SnareDrum`
+- `ClaveDrum`
+- `HiHatDrum`
+- `CowBellDrum`
+- `CymbalDrum`
+- `MaracasDrum`
+- `HandclapDrum`
+- `TomDrum`
+- `CongaDrum`

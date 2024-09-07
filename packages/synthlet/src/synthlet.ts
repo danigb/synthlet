@@ -5,7 +5,7 @@ import { ClipAmp, ClipType } from "@synthlet/clip-amp";
 import { Clock } from "@synthlet/clock";
 import { Euclid } from "@synthlet/euclid";
 import { Impulse } from "@synthlet/impulse";
-import { Lfo } from "@synthlet/lfo";
+import { Lfo, LfoInputs, LfoType } from "@synthlet/lfo";
 import { Noise, NoiseType } from "@synthlet/noise";
 import {
   Param,
@@ -20,7 +20,7 @@ import {
   StateVariableFilterType,
 } from "@synthlet/state-variable-filter";
 import { WavetableOscillator } from "@synthlet/wavetable-oscillator";
-import { Disposable, ParamInput } from "./_worklet";
+import { disposable, Disposable, ParamInput } from "./_worklet";
 import {
   BiquadFilter,
   BiquadFilterInputs,
@@ -30,7 +30,7 @@ import {
   OscillatorInputs,
 } from "./waa";
 
-type Synthlet = ReturnType<typeof createSynthlet>;
+export type Synthlet = ReturnType<typeof createSynthlet>;
 
 export function getSynthlet(context: AudioContext): Synthlet {
   if (!(context as any).__synthlet) {
@@ -86,6 +86,20 @@ function createSynthlet(context: AudioContext) {
             max,
             ...params,
           }),
+        add: (value: ParamInput, input: ParamInput, params?: ParamInputs) =>
+          param({
+            scale: ParamScaleType.Bypass,
+            input: input,
+            offset: value,
+            ...params,
+          }),
+        mul: (value: ParamInput, input: ParamInput, params?: ParamInputs) =>
+          param({
+            scale: ParamScaleType.Bypass,
+            input: input,
+            gain: value,
+            ...params,
+          }),
       }
     ),
     conn: createConn(gainOp),
@@ -110,7 +124,29 @@ function createSynthlet(context: AudioContext) {
     impulse: Object.assign(impulse, {
       trigger: (trigger: ParamInput) => impulse({ trigger }),
     }),
-    lfo: Object.assign(lfo, {}),
+    lfo: Object.assign(lfo, {
+      sin: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.Sine, frequency, ...params }),
+      tri: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.Triangle, frequency, ...params }),
+      rampUp: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.RampUp, frequency, ...params }),
+      rampDown: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.RampDown, frequency, ...params }),
+      square: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.Square, frequency, ...params }),
+      expRampUp: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.ExpRampUp, frequency, ...params }),
+      expRampDown: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.ExpRampDown, frequency, ...params }),
+      expTriangle: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.ExpTriangle, frequency, ...params }),
+      sh: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.RandSampleHold, frequency, ...params }),
+      impulse: (frequency: ParamInput, params?: Partial<LfoInputs>) =>
+        lfo({ type: LfoType.Impulse, frequency, ...params }),
+    }),
+
     noise: Object.assign(noise, {
       white: () => noise({ type: NoiseType.White }),
       pink: () => noise({ type: NoiseType.Pink }),
@@ -143,15 +179,17 @@ function createSynthlet(context: AudioContext) {
     bqf: Object.assign(bqf, {
       lp: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
         bqf({ type: "lowpass", frequency, ...params }),
-      hp: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
+      hi: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
         bqf({ type: "highpass", frequency, ...params }),
-      bp: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
+      bandpass: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
         bqf({ type: "bandpass", frequency, ...params }),
-      allp: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
+      allpass: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
         bqf({ type: "allpass", frequency, ...params }),
-      hs: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
-        bqf({ type: "highshelf", frequency, ...params }),
-      ls: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
+      highshelf: (
+        frequency: ParamInput,
+        params?: Partial<BiquadFilterInputs>
+      ) => bqf({ type: "highshelf", frequency, ...params }),
+      lowshelf: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
         bqf({ type: "lowshelf", frequency, ...params }),
       peak: (frequency: ParamInput, params?: Partial<BiquadFilterInputs>) =>
         bqf({ type: "peaking", frequency, ...params }),
@@ -159,13 +197,13 @@ function createSynthlet(context: AudioContext) {
         bqf({ type: "notch", frequency, ...params }),
     }),
 
-    gain: Object.assign(gainOp, {}),
+    gain: (gain?: ParamInput) => gainOp({ gain }),
     osc: Object.assign(osc, {
       sin: (frequency: ParamInput, params?: OscillatorInputs) =>
         osc({ type: "sine", frequency, ...params }),
       saw: (frequency: ParamInput, params?: OscillatorInputs) =>
         osc({ type: "sawtooth", frequency, ...params }),
-      sqr: (frequency: ParamInput, params?: OscillatorInputs) =>
+      square: (frequency: ParamInput, params?: OscillatorInputs) =>
         osc({ type: "square", frequency, ...params }),
       tri: (frequency: ParamInput, params?: OscillatorInputs) =>
         osc({ type: "triangle", frequency, ...params }),
@@ -173,22 +211,29 @@ function createSynthlet(context: AudioContext) {
 
     wt: Object.assign(wt, {}),
 
-    withParams: <N extends AudioNode, P extends ControlParams>(
-      node: Disposable<N>,
-      params: P
-    ) => Object.assign(node, paramToInputs(params)),
+    withParams,
 
     synth: <N extends AudioNode, P extends ControlParams, M>(synth: {
       out: Disposable<N>;
-      inputs?: P;
+      params: P;
       modules?: M;
-    }) => Object.assign(synth.out, paramToInputs(synth.inputs), synth.modules),
+    }) => Object.assign(withParams(synth.out, synth.params), synth.modules),
     op:
-      <I>(fn: (context: AudioContext, inputs?: I) => AudioNode) =>
-      (inputs?: I) =>
-        fn(context, inputs),
+      <I>(fn: (context: AudioContext, params?: I) => AudioNode) =>
+      (params?: I) =>
+        fn(context, params),
   };
   return extensible(context, ops);
+}
+
+function withParams<N extends AudioNode, P extends ControlParams>(
+  node: Disposable<N>,
+  params: P
+) {
+  return Object.assign(
+    disposable(node, Object.values(params)),
+    paramToInputs(params)
+  );
 }
 
 type TransformOperators<

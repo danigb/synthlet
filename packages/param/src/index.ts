@@ -15,6 +15,8 @@ export type ParamInputs = {
   offset?: ParamInput;
   min?: ParamInput;
   max?: ParamInput;
+  gain?: ParamInput;
+  mod?: ParamInput;
 };
 
 export type ParamWorkletNode = AudioWorkletNode & {
@@ -23,14 +25,16 @@ export type ParamWorkletNode = AudioWorkletNode & {
   offset: AudioParam;
   min: AudioParam;
   max: AudioParam;
+  gain: AudioParam;
+  mod: AudioParam;
   dispose(): void;
 };
 
 export const Param = createWorkletConstructor<ParamWorkletNode, ParamInputs>({
   processorName: "ParamProcessor",
-  paramNames: ["scale", "input", "offset", "min", "max"],
+  paramNames: ["scale", "input", "offset", "min", "max", "gain", "mod"],
   workletOptions: () => ({
-    numberOfInputs: 1,
+    numberOfInputs: 0,
     numberOfOutputs: 1,
   }),
 });

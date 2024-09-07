@@ -27,8 +27,8 @@ export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/wavetable-oscillator";
 export { ParamInput } from "./_worklet";
 
-export { getSynthlet } from "./synthlet";
-export * from "./synths";
+export * from "./drums";
+export { getSynthlet, Synthlet } from "./synthlet";
 export * from "./waa";
 
 export function registerSynthlet(context: AudioContext): Promise<AudioContext> {
