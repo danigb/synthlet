@@ -1,6 +1,6 @@
 {
   "name": "synthlet",
-  "version": "0.2.1",
+  "version": "0.4.0",
   "description": "Modular synthesis in the browser",
   "keywords": [
     "modular",
@@ -22,7 +22,7 @@
   "dependencies": {
     "@synthlet/ad": "^0.1.0",
     "@synthlet/adsr": "^0.1.0",
-    "@synthlet/arp": "^0.0.0",
+    "@synthlet/arp": "^0.1.0",
     "@synthlet/chorus-t": "^0.1.0",
     "@synthlet/clip-amp": "^0.1.0",
     "@synthlet/clock": "^0.1.0",
