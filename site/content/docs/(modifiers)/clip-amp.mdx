@@ -5,17 +5,13 @@ package: clip-amp
 ---
 
 ```ts
-import {
-  createClipAmpNode,
-  registerClipAmpWorkletOnce,
-  ClipType,
-} from "synthlet"; // or "@synthlet/clip-amp";
+import { ClipAmp, registerClipAmpWorklet, ClipType } from "synthlet"; // or "@synthlet/clip-amp";
 
 const audioContext = new AudioContext();
-registerClipAmpWorkletOnce(audioContext);
+registerClipAmpWorklet(audioContext);
 
-const amp = createClipAmpNode(audioContext, {
-  clipType: ClipType.TANH,
+const amp = ClipAmp(audioContext, {
+  clipType: ClipType.Tanh,
   preGain: 3,
   postGain: 0.3,
 });
@@ -23,6 +19,6 @@ const amp = createClipAmpNode(audioContext, {
 
 ## Parameters
 
-- `clipType`: Clip type, currently only `ClipType.TANH`, or `ClipType.BYPASS`
+- `clipType`: Clip type, currently only `ClipType.Tanh`, or `ClipType.Bypass`
 - `preGain`: Gain before clipping.
 - `postGain`: Gain after clipping.

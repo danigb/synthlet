@@ -1,4 +1,4 @@
-import { SVFilter } from "./filter";
+import { SVFilter } from "./dsp";
 
 describe("SVFilter", () => {
   it("filters the signal", () => {
@@ -11,14 +11,14 @@ describe("SVFilter", () => {
     }
     expect(input).toMatchSnapshot();
     filter.update({
-      filterType: [1],
+      type: [1],
       frequency: [10],
       resonance: [0.5],
     });
     filter.fill(input, output);
     expect(output).toMatchSnapshot();
     filter.update({
-      filterType: [1],
+      type: [1],
       frequency: [5],
       resonance: [0.5],
     });

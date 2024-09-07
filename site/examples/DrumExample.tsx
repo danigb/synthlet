@@ -1,6 +1,6 @@
 "use client";
 
-import { Slider } from "@/components/Slider";
+import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
 import { ClaveDrum, KickDrum, SnareDrum } from "synthlet";
 import { CreateSynth, Synth, useSynth } from "./useSynth";
@@ -81,11 +81,8 @@ function DrumExampleUI<T extends DrumSynth>({
           label="Decay"
           labelClassName="w-20 text-right mr-2"
           initial={0.4}
-          initialize
+          param={synth.decay}
           units="s"
-          onChange={(value) => {
-            synth.decay.value = value;
-          }}
         />
       </div>
       <div className="flex items-center gap-2 my-4">

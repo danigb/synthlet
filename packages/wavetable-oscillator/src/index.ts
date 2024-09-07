@@ -1,28 +1,37 @@
-import { createRegistrar, createWorkletConstructor } from "./_worklet";
+import {
+  createRegistrar,
+  createWorkletConstructor,
+  ParamInput,
+} from "./_worklet";
 import { PROCESSOR } from "./processor";
 import { Wavetable, WavetableLoader } from "./wavetable-loader";
 
-export type WavetableParams = {
-  baseFrequency: number;
-  frequency: number;
-  morphFrequency: number;
+export { Wavetable } from "./wavetable-loader";
+
+export type WavetableInputs = {
+  baseFrequency?: ParamInput;
+  frequency?: ParamInput;
+  morphFrequency?: ParamInput;
 };
 
 export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
   baseFrequency: AudioParam;
   frequency: AudioParam;
   morphFrequency: AudioParam;
-  setWavetable: (wavetable: { data: Float32Array; length: number }) => void;
+  loadWavetable(urlOrName: string): Promise<void>;
+  fetchWavetableNames(): Promise<string[]>;
+  setWavetable(wavetable: { data: Float32Array; length: number }): void;
+  dispose(): void;
 };
 
-export const registerWavetableOscillatorWorkletOnce = createRegistrar(
-  "WT_OSC",
+export const registerWavetableOscillatorWorklet = createRegistrar(
+  "WT",
   PROCESSOR
 );
 
-export const createWavetableOscillatorNode = createWorkletConstructor<
+export const WavetableOscillator = createWorkletConstructor<
   WavetableOscillatorWorkletNode,
-  WavetableParams
+  WavetableInputs
 >({
   processorName: "WavetableOscillatorWorkletProcessor",
   paramNames: ["baseFrequency", "frequency", "morphFrequency"] as const,
@@ -38,6 +47,11 @@ export const createWavetableOscillatorNode = createWorkletConstructor<
         length: wavetable.length,
       });
     };
+    node.fetchWavetableNames = fetchWavetableNames;
+    node.loadWavetable = (urlOrName) =>
+      loadWavetable(urlOrName).then((wavetable) => {
+        node.setWavetable(wavetable);
+      });
   },
 });
 

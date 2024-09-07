@@ -5,11 +5,11 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export { PolyblepWaveformType } from "./dsp";
+export { PolyblepOscillatorType } from "./dsp";
 
-export type PolyblepOscillatorInputParams = {
-  type: ParamInput;
-  frequency: ParamInput;
+export type PolyblepOscillatorInputs = {
+  type?: ParamInput;
+  frequency?: ParamInput;
 };
 
 /**
@@ -21,14 +21,14 @@ export type PolyblepOscillatorWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-export const registerPolyblepOscillatorWorkletOnce = createRegistrar(
-  "POLYBLEP",
+export const registerPolyblepOscillatorWorklet = createRegistrar(
+  "POLY_BLEP",
   PROCESSOR
 );
 
-export const createPolyblepOscillatorNode = createWorkletConstructor<
+export const PolyblepOscillator = createWorkletConstructor<
   PolyblepOscillatorWorkletNode,
-  PolyblepOscillatorInputParams
+  PolyblepOscillatorInputs
 >({
   processorName: "PolyBLEProcessor",
   paramNames: ["type", "frequency"],

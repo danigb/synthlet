@@ -5,7 +5,7 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export const registerAdWorkletOnce = createRegistrar("AD_ENV", PROCESSOR);
+export const registerAdWorklet = createRegistrar("AD", PROCESSOR);
 
 export type AdWorkletNode = AudioWorkletNode & {
   trigger: AudioParam;
@@ -16,18 +16,15 @@ export type AdWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-export type AdInputParams = {
-  trigger: ParamInput;
-  attack: ParamInput;
-  decay: ParamInput;
-  offset: ParamInput;
-  gain: ParamInput;
+export type AdInputs = {
+  trigger?: ParamInput;
+  attack?: ParamInput;
+  decay?: ParamInput;
+  offset?: ParamInput;
+  gain?: ParamInput;
 };
 
-export const createAdNode = createWorkletConstructor<
-  AdWorkletNode,
-  AdInputParams
->({
+export const AdEnv = createWorkletConstructor<AdWorkletNode, AdInputs>({
   processorName: "AdProcessor",
   paramNames: ["trigger", "attack", "decay", "offset", "gain"],
   workletOptions: () => ({

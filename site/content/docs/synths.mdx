@@ -4,19 +4,27 @@ description: Available built-in synthesizers
 ---
 
 import { DrumExample } from "../../examples/DrumExample";
+import MonoExample from "../../examples/MonoExample";
+import NoiseExample from "../../examples/NoiseExample";
 
 Some synthesizers are provided for convenience. They are implemented by connecting different modules together.
 
-## Mono
+## Melody
 
-### Drums
+### Mono synthesizer
+
+A monophonic synthesizer with a single PolyBLEP oscillator and an ADSR envelope on the filter and amplifier.
+
+<MonoExample />
+
+## Drums
 
 ### KickDrum
 
 ```ts
 import { KickDrum } from "synthlet";
 
-const kick = KickDrum(audioContext);
+const kick = createKickDrum(audioContext);
 kick.trigger.value = 1;
 kick.tone.value = 0.5;
 ```
@@ -28,7 +36,7 @@ kick.tone.value = 0.5;
 ```ts
 import { SnareDrum } from "synthlet";
 
-const snare = SnareDrum(audioContext);
+const snare = createSnareDrum(audioContext);
 snare.trigger.value = 1;
 snare.tone.value = 0.5;
 ```
@@ -40,7 +48,7 @@ snare.tone.value = 0.5;
 ```ts
 import { ClaveDrum } from "synthlet";
 
-const clave = ClaveDrum(audioContext);
+const clave = createClaveDrum(audioContext);
 clave.trigger.value = 1;
 clave.tone.value = 0.5;
 ```

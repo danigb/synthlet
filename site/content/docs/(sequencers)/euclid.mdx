@@ -1,0 +1,43 @@
+---
+title: Euclid
+description: An euclidean rhythm generator
+---
+
+import EuclidExample from "../../../examples/EuclidExample";
+
+`@synthlet/euclid`
+
+Generates an euclidean rhythm when connected to a clock:
+
+```ts
+import {
+  registerSynthlet,
+  ClockNode,
+  EuclidNode,
+  ClaveDrumNode,
+} from "synthlet";
+
+const ac = new AudioContext();
+await registerSynthlet(ac);
+
+const clock = ClockNode(ac, { bpm: 60 });
+const euclid = EuclidNode(ac, { steps: 16, beats: 4, clock });
+const clave = ClaveDrumNode(ac, { trigger: euclid });
+clave.connect(ac.destination);
+clock.bpm.value = 150;
+```
+
+<EuclidExample />
+
+## Parameters
+
+#### Pattern
+
+- `steps`: the number of steps in the sequence
+- `beats`: the number of beats in the sequence
+- `rotation`: the rotation of the sequence
+
+#### Clock
+
+- `clock`: a clock the drives the rhythm
+- `subdivision`: the subdivision of the clock

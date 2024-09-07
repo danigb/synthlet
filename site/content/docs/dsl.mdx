@@ -1,0 +1,116 @@
+---
+title: Operators
+description: Using operators to create synths
+---
+
+`synthlet` package exposes the audio modules with a set of operators that allow to create complex synths and comining them in a functional way.
+
+```js
+import { createOperators, registerSynthlet } from "synthlet";
+
+const context = await registerSynthlet(new AudioContext());
+
+const { osc, bq, param, amp } = createOperators(context);
+
+// connects two oscillators to a low pass filter and then to an amp module
+const out = conn(
+  [osc.sin(440), osc.sin(330)],
+  bq.lpf(1000),
+  amp(param.db(-12))
+);
+
+out.connect(audioContext.destination);
+```
+
+<Callout title="This API is still very experimental" type="warn">
+  Still figuring out an ergonomic way to use the operators.
+</Callout>
+
+## Connecting and creating groups
+
+### `conn(...nodes[])`
+
+Connect modules in serial. If the first is module is an array, connect them all to the next.
+
+### `synth(node, params)`
+
+Attach parameters and `dispose` method to a node:
+
+```js
+const gate = param();
+const synth = synth(conn(osc.sin(440), amp.adsr(gate)), { gate });
+
+// start synth
+synth.gate.value = 0;
+// dispose all nodes
+synth.gate.dispose();
+```
+
+## Oscillators
+
+### `osc(type, frequency?, options?)`
+
+Exposes the Web Audio [OscillatorNode](https://developer.mozilla.org/en-US/docs/Web/API/OscillatorNode) as operators:
+
+Variations:
+
+- `osc.sin(frequency, options?)`
+- `osc.tri(frequency, options?)`
+- `osc.saw(frequency, options?)`
+- `osc.square(frequency, options?)`
+
+### `pb(options?)`
+
+PolyBLEP oscillator.
+
+### `wt(options?)`
+
+Wavetable oscillator
+
+### `noise(options?)`
+
+Noise generator:
+
+```ts
+conn(noise({ type: "white" }), bq.lpf(1000));
+```
+
+## Filters
+
+### `bq(type, frequency?, options?)`
+
+Web Audio API [BiquadFilterNode](https://developer.mozilla.org/en-US/docs/Web/API/BiquadFilterNode) operator.
+
+### `svf(type, frequency?, options?)`
+
+State Variable Filter operator.
+
+## Amplifiers
+
+### `amp(options?)`
+
+Single gain amplifier with optional envelope. Variations:
+
+- `amp.adsr(gate, options?)`
+- `amp.ad(trigger, options?)`
+
+### `clip(options?)`
+
+Two gain stage amplifier with clipping. Variations:
+
+- `clip.soft(options?)`
+
+## Modulators
+
+### `lfo(type, frequency?, options?)`
+
+Low Frequency Oscillator operator.
+
+### `env(options?)`
+
+Envelope generator operators.
+
+Varations:
+
+- `env.adsr(gate, options?)`
+- `env.ad(trigger, options?)`

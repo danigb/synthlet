@@ -1,15 +1,13 @@
-export enum PolyblepWaveformType {
-  SINE = 0,
-  SAWTOOTH = 1,
-  SQUARE = 2,
-  TRIANGLE = 3,
+export enum PolyblepOscillatorType {
+  SAWTOOTH = 0,
+  SQUARE = 1,
+  TRIANGLE = 2,
 }
 
-export function createPolyblepOscillator(sampleRate: number) {
+export function createNoise(sampleRate: number) {
   const ivsr = 1 / sampleRate;
 
-  let type = PolyblepWaveformType.SINE;
-  let gen = sine;
+  let type = 0;
   let freq = 440;
   let phase = 0;
   let inc = freq * ivsr;
@@ -22,7 +20,8 @@ export function createPolyblepOscillator(sampleRate: number) {
   let x = 0;
   let y = 0;
 
-  const GENS = [sine, saw, square, triangle];
+  const GENS = [saw, square, triangle];
+  let gen = GENS[0];
 
   return function generate(
     output: Float32Array,
@@ -31,7 +30,7 @@ export function createPolyblepOscillator(sampleRate: number) {
   ) {
     if (type !== waveformType) {
       type = waveformType;
-      gen = GENS[type] ?? sine;
+      gen = GENS[type] ?? GENS[0];
     }
     if (freq !== frequency) {
       freq = frequency;
@@ -40,13 +39,6 @@ export function createPolyblepOscillator(sampleRate: number) {
     gen(output);
   };
 
-  function sine(output: Float32Array) {
-    for (let i = 0; i < output.length; i++) {
-      output[i] = Math.sin(phase);
-      phase += inc;
-      if (phase > 1) phase -= 1;
-    }
-  }
   function saw(output: Float32Array) {
     for (let i = 0; i < output.length; i++) {
       // polyblep sawtooth

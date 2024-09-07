@@ -1,9 +1,24 @@
 "use client";
 
-import { Slider } from "@/components/Slider";
+import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
-import { synthlet } from "synthlet";
+import { getSynthlet } from "synthlet";
 import { useSynth } from "./useSynth";
+
+const AttackDecaySynth = (context: AudioContext) => {
+  const s = getSynthlet(context);
+  const trigger = s.param();
+  const decay = s.param();
+  const attack = s.param();
+
+  return s.synth({
+    out: s.conn.serial(
+      s.osc.sin(s.env.ad(trigger, { attack, decay, offset: 440, gain: 2000 })),
+      s.amp(0.2)
+    ),
+    inputs: { trigger, attack, decay },
+  });
+};
 
 export function AttackDecayExample() {
   const [open, setOpen] = useState(false);
@@ -21,20 +36,7 @@ export function AttackDecayExample() {
 }
 
 function AttackDecayUI({ onClose }: { onClose: () => void }) {
-  const synth = useSynth(
-    synthlet((op) => {
-      const trigger = op.param();
-      const release = op.param();
-      const attack = op.param();
-      return op.synth(
-        op.serial(
-          op.sine(op.ad(trigger, attack, release, { offset: 440, gain: 2000 })),
-          op.amp(0.2)
-        ),
-        { trigger, release, attack }
-      );
-    })
-  );
+  const synth = useSynth(AttackDecaySynth);
 
   if (!synth) return null;
 
@@ -48,25 +50,17 @@ function AttackDecayUI({ onClose }: { onClose: () => void }) {
           min={0}
           max={1}
           step={0.001}
-          initial={0.1}
-          onChange={(value) => {
-            synth.attack.value = value;
-          }}
-          initialize
+          param={synth.attack}
         />
       </div>
       <div className="flex ">
         <Slider
-          label="Release"
+          label="Decay"
           labelClassName="w-20 text-right mr-2"
           min={0}
           max={1}
           step={0.001}
-          initial={0.2}
-          onChange={(value) => {
-            synth.release.value = value;
-          }}
-          initialize
+          param={synth.decay}
         />
       </div>
       <div className="flex mb-4">

@@ -1,38 +1,38 @@
 ---
-title: VCA
+title: ADSR Amplifier
 description: A Voltage Controlled Amplifier module
 ---
 
-This is a Voltage Controlled Amplifier (VCA) module. It is used to control the amplitude of an audio signal.
-
-In essence is an ADSR envelope contected to a gain control.
+import VcaExample from "../../../examples/VcaExample";
 
 [![npm version](https://img.shields.io/npm/v/%40synthlet%2Fadsr)](https://www.npmjs.com/package/@synthlet/adsr)
 
-## Example
+A Voltage Controlled Amplifier (VCA) module: an ADSR envelope contected to a gain control.
+
+Use it to add an envelope to the synth voices.
 
 ```ts
-import { createVcaNode, createADSRNode } from "synthlet";
+import { AdsrAmp, OscillatorNode } from "synthlet";
 
 const osc = new OscillatorNode(audioContext, {
   frequency: 440,
 });
-const vca = createVcaNode(audioContext, {
+const vca = AdsrAmp(audioContext, {
   gain: 0.5,
   attack: 0.1,
   decay: 0.1,
   sustain: 0.5,
   release: 0.1,
 });
-
+// Connect the oscillator to the VCA and to the output
 osc.connect(vca).connect(audioContext.destination);
-
 // Start the envelope (start attack phase)
-vca.gate.setValueAtTime(1, audioContext.currentTime);
-
+vca.gate.value = 1;
 // Stop the envelope (start release phase)
-vca.gate.setValueAtTime(0, audioContext.currentTime + 1);
+vca.gate.value = 0;
 ```
+
+<VcaExample />
 
 ## Parameters
 
@@ -44,3 +44,8 @@ Same as [adsr](/docs/modifiers/adsr):
 - `release`: The release time in seconds. Default is 0.1.
 - `offset`: The start offset. Default is 0.
 - `gain`: The gain. Default is 1. It is the maximum amplitude after the attach and affects the sustain level. For example, a gain of 100 and sustain of 0.5 will make the sustain level to be 50.
+
+<Callout title="Offset is silence" type="warn">
+  The ADSR will output `offset` value when the gate is closed. If you want to
+  silence the output, set the `offset` to 0.
+</Callout>

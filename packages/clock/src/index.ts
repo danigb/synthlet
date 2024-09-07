@@ -5,7 +5,7 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export type ClockInputParams = {
+export type ClockInputs = {
   bpm: ParamInput;
 };
 
@@ -13,10 +13,7 @@ export type ClockWorkletNode = AudioWorkletNode & {
   bpm: AudioParam;
 };
 
-export const createClockNode = createWorkletConstructor<
-  ClockWorkletNode,
-  ClockInputParams
->({
+export const Clock = createWorkletConstructor<ClockWorkletNode, ClockInputs>({
   processorName: "ClockWorkletProcessor",
   paramNames: ["bpm"],
   workletOptions: () => ({
@@ -25,4 +22,4 @@ export const createClockNode = createWorkletConstructor<
   }),
 });
 
-export const registerClockWorkletOnce = createRegistrar("CLOCK", PROCESSOR);
+export const registerClockWorklet = createRegistrar("CLOCK", PROCESSOR);

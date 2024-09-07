@@ -1,0 +1,38 @@
+---
+title: Clock
+description: A clock generator
+---
+
+import ClockExample from "../../../examples/ClockExample";
+
+`@synthlet/clock`
+
+Generates a clock signal at a given tempo.
+
+```ts
+import { registerClockWorklet, Clock } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerClockWorklet(audioContext);
+const clock = Clock(audioContext, { bpm: 10 });
+```
+
+<ClockExample />
+
+## Example
+
+Trigger a kick with a clock:
+
+```ts
+import { registerSynthlet, KickDrum } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerSynthlet(audioContext);
+const clock = Clock(audioContext, { bpm: 120 });
+const kick = createKickDrum(audioContext, { trigger: clock });
+kick.connect(audioContext.destination);
+```
+
+## Parameters
+
+- `bpm`: beats per minute

@@ -1,19 +1,17 @@
 ---
-title: SVFilter
-description: A State Variable Filter module
+title: State Variable Filter
+description: A resonant filter
 ---
 
 A filter implemented with a state variable filter algorithm.
 
-## Example
-
 ```ts
-import { createSVFilterNode, SVFilterType } from "synthlet";
+import { StateVariableFilter, StateVariableFilterType } from "synthlet";
 
 const audioContext = new AudioContext();
 const osc = new OscillatorNode(audioContext);
-const filter = createSVFilterNode(audioContext, {
-  type: SVFilterType.LOWPASS,
+const filter = StateVariableFilter(audioContext, {
+  type: StateVariableFilterType.LowPass
   frequency: 440,
   Q: 1,
 });

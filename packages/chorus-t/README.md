@@ -5,11 +5,11 @@
 Part of [synthlet](https://github.com/danigb/synthlet) modular synthesis.
 
 ```ts
-import { registerChorusWorkletOnce, createChorus } from "synthlet"; // or "@synthlet/chorus-t";
+import { registerChorusWorklet, createChorus } from "synthlet"; // or "@synthlet/chorus-t";
 
 const audioContext = new AudioContext();
 
-await registerChorusWorkletOnce(audioContext);
+await registerChorusWorklet(audioContext);
 
 const osc = new Oscillator(audioContext, { frequency: 440 });
 osc.start();

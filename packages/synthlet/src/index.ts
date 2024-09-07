@@ -1,24 +1,23 @@
-import { registerAdWorkletOnce } from "@synthlet/ad";
-import { registerAdsrWorkletOnce } from "@synthlet/adsr";
-import { registerChorusTWorkletOnce } from "@synthlet/chorus-t";
-import { registerClipAmpWorkletOnce } from "@synthlet/clip-amp";
-import { registerClockWorkletOnce } from "@synthlet/clock";
-import { registerDrum8WorkletOnce } from "@synthlet/drum8";
-import { registerImpulseWorkletOnce } from "@synthlet/impulse";
-import { registerLfoWorkletOnce } from "@synthlet/lfo";
-import { registerNoiseWorkletOnce } from "@synthlet/noise";
-import { registerParamWorkletOnce } from "@synthlet/param";
-import { registerPolyblepOscillatorWorkletOnce } from "@synthlet/polyblep-oscillator";
-import { registerStateVariableFilterWorkletOnce } from "@synthlet/state-variable-filter";
-import { registerWavetableOscillatorWorkletOnce } from "@synthlet/wavetable-oscillator";
-import { createOperators, Operators } from "../operators";
+import { registerAdWorklet } from "@synthlet/ad";
+import { registerAdsrWorklet } from "@synthlet/adsr";
+import { registerChorusTWorklet } from "@synthlet/chorus-t";
+import { registerClipAmpWorklet } from "@synthlet/clip-amp";
+import { registerClockWorklet } from "@synthlet/clock";
+import { registerEuclidWorklet } from "@synthlet/euclid";
+import { registerImpulseWorklet } from "@synthlet/impulse";
+import { registerLfoWorklet } from "@synthlet/lfo";
+import { registerNoiseWorklet } from "@synthlet/noise";
+import { registerParamWorklet } from "@synthlet/param";
+import { registerPolyblepOscillatorWorklet } from "@synthlet/polyblep-oscillator";
+import { registerStateVariableFilterWorklet } from "@synthlet/state-variable-filter";
+import { registerWavetableOscillatorWorklet } from "@synthlet/wavetable-oscillator";
 
 export * from "@synthlet/ad";
 export * from "@synthlet/adsr";
 export * from "@synthlet/chorus-t";
 export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
-export * from "@synthlet/drum8";
+export * from "@synthlet/euclid";
 export * from "@synthlet/impulse";
 export * from "@synthlet/lfo";
 export * from "@synthlet/noise";
@@ -26,31 +25,27 @@ export * from "@synthlet/param";
 export * from "@synthlet/polyblep-oscillator";
 export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/wavetable-oscillator";
+export { ParamInput } from "./_worklet";
 
-// experimental API
-export function synthlet<T extends AudioNode>(fn: (op: Operators) => T) {
-  return (context: AudioContext) => {
-    const op = createOperators(context);
-    return fn(op);
-  };
-}
-
+export { getSynthlet } from "./synthlet";
 export * from "./synths";
+export * from "./waa";
 
-export function registerSynthletOnce(context: AudioContext): Promise<void> {
+export function registerSynthlet(context: AudioContext): Promise<AudioContext> {
   return Promise.all([
-    registerAdWorkletOnce(context),
-    registerAdsrWorkletOnce(context),
-    registerChorusTWorkletOnce(context),
-    registerClipAmpWorkletOnce(context),
-    registerClockWorkletOnce(context),
-    registerDrum8WorkletOnce(context),
-    registerImpulseWorkletOnce(context),
-    registerLfoWorkletOnce(context),
-    registerNoiseWorkletOnce(context),
-    registerParamWorkletOnce(context),
-    registerPolyblepOscillatorWorkletOnce(context),
-    registerStateVariableFilterWorkletOnce(context),
-    registerWavetableOscillatorWorkletOnce(context),
-  ]).then(() => {});
+    registerAdWorklet(context),
+    registerAdsrWorklet(context),
+    registerChorusTWorklet(context),
+    registerClipAmpWorklet(context),
+    registerClockWorklet(context),
+    registerEuclidWorklet(context),
+    registerImpulseWorklet(context),
+    registerPolyblepOscillatorWorklet(context),
+    registerLfoWorklet(context),
+    registerNoiseWorklet(context),
+    registerParamWorklet(context),
+    registerNoiseWorklet(context),
+    registerStateVariableFilterWorklet(context),
+    registerWavetableOscillatorWorklet(context),
+  ]).then(() => context);
 }

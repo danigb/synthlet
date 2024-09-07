@@ -8,16 +8,16 @@ description: Control parameters with unit conversion
 This module is used to control audio parameters from UI. It provides a way to convert values from different units, and aggregate multiple sources.
 
 ```ts
-import { registerParamWorkletOnce, createParamNode } from "synthlet";
+import { registerParamWorklet, Param } from "synthlet";
 
 const audioContext = new AudioContext();
-await registerParamWorkletOnce(audioContext);
-const param = createParamNode(audioContext, { input: 10 });
+await registerParamWorklet(audioContext);
+const param = Param(audioContext, { input: 10 });
 ```
 
 ## Parameters
 
-- `type`: conversion type
+- `scale`: scale conversion
 - `input`: the input value
 - `min`: the minimum value
 - `max`: the maximum value
@@ -25,9 +25,9 @@ const param = createParamNode(audioContext, { input: 10 });
 
 The acceptes values for `type` are:
 
-- 0 `ParamType.BYPASS`
-- 1 `ParamType.DB_TO_GAIN`
-- 2 `ParamType.GAIN_TO_DB`
-- 3 `ParamType.LINEAR`: From [0,1] to [min,max]
+- 0 `ParamScaleType.Bypass`
+- 1 `ParamScaleType.DbToGain`
+- 2 `ParamScaleType.GainToDb`
+- 3 `ParamScaleType.Linear`: From [0,1] to [min,max]
 
 Other different values will be ignored and bypass will be used.

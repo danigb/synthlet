@@ -5,13 +5,11 @@ description: A chorus effect based on the TAL-Noisemaker one
 
 A Chorus effect based on the TAL-Noisemaker that in turn models a Roland Juno-60 chorus.
 
-## Example
-
 ```ts
-import { createChorusTNode } from "synthlet";
+import { ChorusT } from "synthlet";
 
 const osc = new OscillatorNode(audioContext);
-const chorus = createChorusTNode(audioContext, {
+const chorus = ChorusT(audioContext, {
   rate: 0.5,
   depth: 0.5,
   feedback: 0.5,

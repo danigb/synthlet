@@ -2,3 +2,35 @@
 title: LFO
 description: A Low Frequency Oscillator module
 ---
+
+```ts
+import { Lfo } from "synthlet";
+
+const lfo = Lfo(audioContext, {
+  frequency: 0.5,
+  type: LfoType.Sine,
+  amplitude: 0.5,
+  offset: 0.5,
+});
+```
+
+## Params
+
+- `frequency`: the frequency of the oscillator in Hz. Default is 1Hz. Range: [0.01-100]
+- `type`: the type of the oscillator. You can use `LfoType` enum. Default is `LfoType.Sine`.
+- `gain`: the amplitude of the oscillator. Default is 1. Range: [0-1]
+- `offset`: the offset of the oscillator. Default is 0. Range: [-1,1]
+
+Available waveform types (through `LfoType` enum) are:
+
+- `0`: Zero
+- `1`: Sine
+- `2`: Triangle
+- `3`: RampUp
+- `4`: RampDown
+- `5`: Square
+- `6`: ExpRampUp
+- `7`: ExpRampDown
+- `8`: ExpTriangle
+- `9`: RandSampleHold
+- `10`: Impulse

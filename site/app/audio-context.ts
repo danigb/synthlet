@@ -1,7 +1,10 @@
-import { registerSynthletOnce } from "synthlet";
+import { registerSynthlet } from "synthlet";
 
-export async function createSynthAudioContext(): Promise<AudioContext> {
-  const audioContext = new AudioContext();
-  await registerSynthletOnce(audioContext);
-  return audioContext;
+let promise: Promise<AudioContext>;
+
+export function createSynthAudioContext(): Promise<AudioContext> {
+  if (!promise) {
+    promise = registerSynthlet(new AudioContext());
+  }
+  return promise;
 }

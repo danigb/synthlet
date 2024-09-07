@@ -3,7 +3,7 @@ import { getClipFn } from "./dsp";
 export class ClipAmpProcessor extends AudioWorkletProcessor {
   r: boolean; // running
   g: boolean; // gate
-  t: number; // clipType
+  t: number; // type
   fn: (x: number) => number;
 
   constructor() {
@@ -26,8 +26,8 @@ export class ClipAmpProcessor extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    if (this.t !== parameters.clipType[0]) {
-      this.t = parameters.clipType[0];
+    if (this.t !== parameters.type[0]) {
+      this.t = parameters.type[0];
       this.fn = getClipFn(this.t);
     }
     const pre = parameters.preGain[0];
@@ -46,7 +46,7 @@ export class ClipAmpProcessor extends AudioWorkletProcessor {
 
   static get parameterDescriptors() {
     return [
-      ["clipType", 0, 0, 10],
+      ["type", 0, 0, 10],
       ["preGain", 1, 0, 10],
       ["postGain", 1, 0, 10],
     ].map(([name, defaultValue, minValue, maxValue]) => ({

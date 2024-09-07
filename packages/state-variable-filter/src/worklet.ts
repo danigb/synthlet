@@ -1,30 +1,6 @@
-import { SVFilter } from "./filter";
+import { SVFilter } from "./dsp";
 
 export class Processor extends AudioWorkletProcessor {
-  static parameterDescriptors = [
-    {
-      name: "filterType",
-      defaultValue: 1,
-      minValue: 0,
-      maxValue: 3,
-      automationRate: "k-rate",
-    },
-    {
-      name: "frequency",
-      defaultValue: 1000,
-      minValue: 20,
-      maxValue: 20000,
-      automationRate: "k-rate",
-    },
-    {
-      name: "resonance",
-      defaultValue: 0.5,
-      minValue: 0,
-      maxValue: 40,
-      automationRate: "k-rate",
-    },
-  ];
-
   f: ReturnType<typeof SVFilter>;
   r: boolean; // running
 
@@ -53,6 +29,20 @@ export class Processor extends AudioWorkletProcessor {
       this.f.fill(input, output);
     }
     return this.r;
+  }
+
+  static get parameterDescriptors() {
+    return [
+      ["type", 1, 0, 3],
+      ["frequency", 1000, 20, 20000],
+      ["resonance", 1, 0, 40],
+    ].map(([name, defaultValue, minValue, maxValue]) => ({
+      name,
+      defaultValue,
+      minValue,
+      maxValue,
+      automationRate: "k-rate",
+    }));
   }
 }
 

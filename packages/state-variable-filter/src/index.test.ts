@@ -1,40 +1,15 @@
-import {
-  createStateVariableFilterNode,
-  registerStateVariableFilterWorkletOnce,
-} from "./index";
+import { registerStateVariableFilterWorklet } from "./index";
 
-describe("PolyblepOscillator", () => {
+describe("Noise", () => {
   it("registers only once", () => {
     const context = new AudioContextMock();
     // @ts-ignore
     global.AudioNode = class AudioNode {};
 
-    registerStateVariableFilterWorkletOnce(context.asAudioContext());
+    registerStateVariableFilterWorklet(context.asAudioContext());
     expect(context.audioWorklet?.addModule).toHaveBeenCalledTimes(1);
-    registerStateVariableFilterWorkletOnce(context.asAudioContext());
+    registerStateVariableFilterWorklet(context.asAudioContext());
     expect(context.audioWorklet?.addModule).toHaveBeenCalledTimes(1);
-  });
-
-  it("creates the worklet node with default parameters", () => {
-    // @ts-ignore
-    global.AudioWorkletNode = AudioWorkletNodeMock;
-    const node = createStateVariableFilterNode(
-      new AudioContextMock().asAudioContext()
-    );
-    expect(node.frequency.value).toBe(4000);
-    expect(node.filterType.value).toBe(1);
-    expect(node.type).toEqual("lowpass");
-  });
-
-  it("changes the waveform using type property", () => {
-    // @ts-ignore
-    global.AudioWorkletNode = AudioWorkletNodeMock;
-    const node = createStateVariableFilterNode(
-      new AudioContextMock().asAudioContext()
-    );
-    expect(node.filterType.value).toBe(1);
-    node.type = "highpass";
-    expect(node.filterType.value).toBe(3);
   });
 });
 

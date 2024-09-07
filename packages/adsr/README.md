@@ -3,11 +3,11 @@
 > ADSR (Attack Decay Sustain Release) envelope generator module for [synthlet](https://github.com/danigb/synthlet)
 
 ```ts
-import { registerAdsrWorkletOnce, createVca } from "@synthlet/adsr";
+import { registerAdsrWorklet, createVca } from "@synthlet/adsr";
 
 const audioContext = new AudioContext();
 
-await registerAdsrWorkletOnce(audioContext);
+await registerAdsrWorklet(audioContext);
 
 // Create a VCA (Voltage Controlled Amplifier)
 const vca = createVca({ attack: 0.1, decay: 0.1, sustain: 0.7, release: 0.3 });
@@ -37,9 +37,9 @@ npm i @synthlet/adsr
 You need to register the audio worklet before usage:
 
 ```ts
-import { registerAdsrWorkletOnce } from "@synthlet/adsr";
+import { registerAdsrWorklet } from "@synthlet/adsr";
 const context = new AudioContext();
-await registerAdsrWorkletOnce(context);
+await registerAdsrWorklet(context);
 ```
 
 ### Create

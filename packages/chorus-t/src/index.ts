@@ -5,7 +5,7 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export type ChorusTInputParams = {
+export type ChorusTInputs = {
   enable1: ParamInput;
   enable2: ParamInput;
   lfoRate1: ParamInput;
@@ -21,14 +21,11 @@ export type ChorusTWorkletNode = AudioWorkletNode & {
   setBypass(value: boolean): void;
 };
 
-export const registerChorusTWorkletOnce = createRegistrar(
-  "CHORUS_T",
-  PROCESSOR
-);
+export const registerChorusTWorklet = createRegistrar("CHORUS", PROCESSOR);
 
-export const createChorusTNode = createWorkletConstructor<
+export const ChorusT = createWorkletConstructor<
   ChorusTWorkletNode,
-  ChorusTInputParams
+  ChorusTInputs
 >({
   processorName: "ChorusTWorkletProcessor",
   paramNames: ["bypass", "enable1", "enable2", "lfoRate1", "lfoRate2"],

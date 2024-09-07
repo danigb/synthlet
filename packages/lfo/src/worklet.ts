@@ -1,28 +1,12 @@
-import { Lfo, LfoWaveform } from "./lfo";
+import { createLfo } from "./dsp";
 
 export class LfoWorkletProcessor extends AudioWorkletProcessor {
-  static get parameterDescriptors() {
-    return [
-      ["waveform", 1, 0, LfoWaveform.RandSampleHold],
-      ["frequency", 10, 0, 200],
-      ["gain", 1, 0, 10000],
-      ["offset", 0, -1000, 1000],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
-  }
-
   r: boolean; // running
-  u: ReturnType<typeof Lfo>;
+  g: ReturnType<typeof createLfo>;
 
   constructor(options: any) {
     super();
-    const waveform = options?.processorOptions?.waveform ?? LfoWaveform.Sine;
-    this.u = Lfo(sampleRate, waveform);
+    this.g = createLfo(sampleRate, false);
     this.r = true;
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -38,8 +22,23 @@ export class LfoWorkletProcessor extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any
   ) {
-    this.u.kgen(outputs[0][0], parameters);
+    this.g(outputs[0][0], parameters);
     return this.r;
+  }
+
+  static get parameterDescriptors() {
+    return [
+      ["type", 1, 0, 100],
+      ["frequency", 10, 0, 200],
+      ["gain", 1, 0, 10000],
+      ["offset", 0, -1000, 1000],
+    ].map(([name, defaultValue, minValue, maxValue]) => ({
+      name,
+      defaultValue,
+      minValue,
+      maxValue,
+      automationRate: "k-rate",
+    }));
   }
 }
 

@@ -1,14 +1,14 @@
-import { Adsr } from "./adsr";
+import { createAdsr } from "./dsp";
 
-export class AdsrWorkletProcessor extends AudioWorkletProcessor {
-  p: ReturnType<typeof Adsr>; // processor
-  g: boolean; // is generator
+export class AdsrProcessor extends AudioWorkletProcessor {
+  p: ReturnType<typeof createAdsr>; // processor
   r: boolean = true; // running;
+  m: boolean;
 
   constructor(options: any) {
     super();
-    this.g = options?.processorOptions?.mode !== "modulator";
-    this.p = Adsr(sampleRate);
+    this.m = options.processorOptions.mode === "modulator";
+    this.p = createAdsr(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -19,13 +19,9 @@ export class AdsrWorkletProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
+    const input = this.m ? inputs[0][0] : undefined;
     const output = outputs[0][0];
-    if (this.g) {
-      this.p.agen(output, params);
-    } else {
-      const input = inputs[0][0];
-      this.p.amod(input, output, params);
-    }
+    this.p(input!, output, this.m, params);
     return this.r;
   }
 
@@ -48,4 +44,4 @@ export class AdsrWorkletProcessor extends AudioWorkletProcessor {
   }
 }
 
-registerProcessor("AdsrWorkletProcessor", AdsrWorkletProcessor);
+registerProcessor("AdsrProcessor", AdsrProcessor);
