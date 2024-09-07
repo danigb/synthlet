@@ -1,7 +1,7 @@
 {
   "name": "synthlet",
   "version": "0.2.0",
-  "description": "AudioWorklet synth modules",
+  "description": "Modular synthesis in the browser",
   "keywords": [
     "modular",
     "synthesizer",
@@ -25,7 +25,7 @@
     "@synthlet/chorus-t": "^0.1.0",
     "@synthlet/clip-amp": "^0.1.0",
     "@synthlet/clock": "^0.1.0",
-    "@synthlet/drum8": "^0.1.0",
+    "@synthlet/drum8": "^0.0.0",
     "@synthlet/euclid": "^0.1.0",
     "@synthlet/impulse": "^0.1.0",
     "@synthlet/lfo": "^0.1.0",

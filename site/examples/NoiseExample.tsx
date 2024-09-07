@@ -41,7 +41,6 @@ function Example() {
         inputClassName="col-span-2"
         min={-100}
         max={0}
-        initial={-100}
         param={synth.volume}
         units="dB"
       />

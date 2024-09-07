@@ -17,10 +17,7 @@ export function AdsrControls({ adsr }: { adsr: AdsrModule }) {
         min={0.1}
         max={10}
         step={0.1}
-        initial={adsr.attack.value}
-        onChange={(value) => {
-          adsr.attack.value = value;
-        }}
+        param={adsr.attack}
         units="secs"
       />
       <Slider
@@ -29,10 +26,7 @@ export function AdsrControls({ adsr }: { adsr: AdsrModule }) {
         min={0.1}
         max={10}
         step={0.1}
-        initial={adsr.decay.value}
-        onChange={(value) => {
-          adsr.decay.value = value;
-        }}
+        param={adsr.decay}
         units="secs"
       />
       <Slider
@@ -41,10 +35,7 @@ export function AdsrControls({ adsr }: { adsr: AdsrModule }) {
         min={0.1}
         max={1}
         step={0.01}
-        initial={adsr.sustain.value}
-        onChange={(value) => {
-          adsr.sustain.value = value;
-        }}
+        param={adsr.sustain}
       />
       <Slider
         label="Release"
@@ -52,10 +43,7 @@ export function AdsrControls({ adsr }: { adsr: AdsrModule }) {
         min={0.1}
         max={100}
         step={0.2}
-        initial={adsr.release.value}
-        onChange={(value) => {
-          adsr.release.value = value;
-        }}
+        param={adsr.release}
         units="secs"
       />
     </>

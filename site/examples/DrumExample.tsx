@@ -2,8 +2,20 @@
 
 import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
-import { ClaveDrum, KickDrum, SnareDrum } from "synthlet";
-import { CreateSynth, Synth, useSynth } from "./useSynth";
+import {
+  ClaveDrum,
+  CongaDrum,
+  CowBellDrum,
+  CymbalDrum,
+  HandclapDrum,
+  HiHatDrum,
+  KickDrum,
+  MaracasDrum,
+  SnareDrum,
+  TomDrum,
+} from "synthlet";
+import { ExamplePane } from "./components/ExamplePane";
+import { Synth, useSynth } from "./useSynth";
 
 type DrumSynth = Synth & {
   trigger: AudioParam;
@@ -13,98 +25,123 @@ type DrumSynth = Synth & {
   dispose(): void;
 };
 
-function getSynth(instrumentName: string) {
-  switch (instrumentName) {
-    case "KickDrum":
-      return KickDrum;
-    case "ClaveDrum":
-      return ClaveDrum;
-    case "SnareDrum":
-      return SnareDrum;
-    default:
-      throw Error(`Unknown instrument: ${instrumentName}`);
+const INSTRUMENTS: Record<string, typeof KickDrum> = {
+  KickDrum,
+  SnareDrum,
+  ClaveDrum,
+  HiHatDrum,
+  CowBellDrum,
+  CymbalDrum,
+  MaracasDrum,
+  HandclapDrum,
+  TomDrum,
+  CongaDrum,
+} as const;
+
+type Named<T> = T & { name: string };
+
+class PolyDrumSynth {
+  context: AudioContext;
+  synths: Map<string, Named<DrumSynth>>;
+  output: GainNode;
+  connect: typeof GainNode.prototype.connect;
+
+  constructor(context: AudioContext) {
+    this.context = context;
+    this.output = context.createGain();
+    this.synths = new Map();
+    this.connect = this.output.connect.bind(this.output);
+  }
+
+  getNames() {
+    return Object.keys(INSTRUMENTS);
+  }
+
+  getSynth(name: string): Named<DrumSynth> {
+    if (!this.synths.has(name)) {
+      console.log("CREATE SYNTH", name);
+      const synth = INSTRUMENTS[name];
+      if (!synth) throw Error(`Unknown instrument: ${name}`);
+      const node = synth(this.context);
+      node.connect(this.output);
+      this.synths.set(name, Object.assign(node, { name }));
+    }
+    return this.synths.get(name)!;
+  }
+
+  dispose() {
+    for (const synth of this.synths.values()) {
+      synth.dispose();
+    }
   }
 }
 
-export function DrumExample<T extends DrumSynth>({
-  instrumentName,
-}: {
-  instrumentName: string;
-}) {
-  const [open, setOpen] = useState(false);
+export function Example({}: {}) {
+  const synth = useSynth((context) => new PolyDrumSynth(context));
+  const [drum, setDrum] = useState<Named<DrumSynth> | null>(null);
 
-  return open ? (
-    <DrumExampleUI
-      instrumentName={instrumentName}
-      onClose={() => setOpen(false)}
-      createSynth={getSynth(instrumentName)}
-    />
-  ) : (
-    <button
-      className="border px-2 py-1 rounded bg-fd-secondary"
-      onClick={() => setOpen(true)}
-    >
-      Open example
-    </button>
-  );
-}
-
-function DrumExampleUI<T extends DrumSynth>({
-  instrumentName,
-  onClose,
-  createSynth,
-}: {
-  instrumentName: string;
-  onClose: () => void;
-  createSynth: CreateSynth<DrumSynth>;
-}) {
-  const [selectedNoiseType, setSelectedNoiseType] = useState(0);
-  const [volume, setVolume] = useState(-60);
-  const synth = useSynth(createSynth);
   if (!synth) return null;
-
   return (
-    <div className="bg-fd-card text-fd-foreground p-2 border rounded">
-      <div className="text-xl mb-4">{instrumentName} example</div>
+    <>
+      {drum && (
+        <div className="grid grid-cols-4 gap-2 mb-4">
+          <div className="col-span-4 font-bold border-b">
+            {drum.name.slice(0, -4)}
+          </div>
+          <Slider
+            label="Tone"
+            inputClassName="col-span-2"
+            min={0}
+            max={1}
+            step={0.01}
+            param={drum.tone}
+          />
 
-      <div className="flex items-center gap-2">
-        <Slider
-          label="Tone"
-          labelClassName="w-20 text-right mr-2"
-          onChange={(value) => {
-            synth.tone.value = value;
-          }}
-        />
+          <Slider
+            label="Decay"
+            inputClassName="col-span-2"
+            min={0}
+            max={1}
+            step={0.01}
+            param={drum.decay}
+          />
+          <Slider
+            label="Volume"
+            inputClassName="col-span-2"
+            min={-60}
+            max={0}
+            step={1}
+            units="dB"
+            param={drum.volume}
+          />
+        </div>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {synth.getNames().map((name) => (
+          <button
+            key={name}
+            className="border px-2 py-1 rounded bg-fd-secondary"
+            onMouseDown={() => {
+              const drum = synth.getSynth(name);
+              drum.trigger.value = 1;
+              setDrum(drum);
+            }}
+            onMouseUp={() => {
+              const drum = synth.getSynth(name);
+              drum.trigger.value = 0;
+              setDrum(drum);
+            }}
+          >
+            {name.slice(0, -4)}
+          </button>
+        ))}
       </div>
-      <div className="flex gap-2">
-        <Slider
-          label="Decay"
-          labelClassName="w-20 text-right mr-2"
-          initial={0.4}
-          param={synth.decay}
-          units="s"
-        />
-      </div>
-      <div className="flex items-center gap-2 my-4">
-        <button
-          className="border px-2 py-1 rounded bg-fd-primary text-fd-primary-foreground"
-          onMouseDown={() => {
-            synth.trigger.value = 1;
-          }}
-          onMouseUp={() => {
-            synth.trigger.value = 0;
-          }}
-        >
-          Trigger
-        </button>
-      </div>
-
-      <button
-        className="border px-2 py-1 rounded bg-fd-secondary"
-        onClick={onClose}
-      >
-        Close
-      </button>
-    </div>
+    </>
   );
 }
+
+export default () => (
+  <ExamplePane label="Drums">
+    <Example />
+  </ExamplePane>
+);

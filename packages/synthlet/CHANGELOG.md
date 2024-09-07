@@ -2,13 +2,21 @@
 
 ## 0.2.0
 
-Packages:
+- Initial release of the following modules:
 
-- PolyBLEP Oscillator
-- ADSR
-- White Noise
-- State Variable Filter
-- Wavetable Oscillator
+  - @synthlet/param@0.1.0
+  - @synthlet/ad@0.1.0
+  - @synthlet/adsr@0.1.0
+  - @synthlet/chorus-t@0.1.0
+  - @synthlet/clip-amp@0.1.0
+  - @synthlet/clock@0.1.0
+  - @synthlet/euclid@0.1.0
+  - @synthlet/impulse@0.1.0
+  - @synthlet/lfo@0.1.0
+  - @synthlet/noise@0.1.0
+  - @synthlet/polyblep-oscillator@0.1.0
+  - @synthlet/state-variable-filter@0.1.0
+  - @synthlet/wavetable-oscillator@0.1.0
 
 ## 0.1.0
 
