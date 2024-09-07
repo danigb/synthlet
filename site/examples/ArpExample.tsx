@@ -37,7 +37,6 @@ function ArpSynth(context: AudioContext) {
 
   const reverb = DattorroReverb(context, {
     decay: 0.9,
-    dryWet: 0.5,
   });
   synth1.connect(reverb);
 

@@ -1,5 +1,9 @@
 # synthlet
 
+## 0.4.0
+
+- New @synthlet/arp package
+
 ## 0.3.0
 
 - Function `registerSynthlet` renamed to `registerAllWorklets`
