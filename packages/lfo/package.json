@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/lfo",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A LFO (low frequency oscillator) generator audio worklet",
   "keywords": [
     "lfo",

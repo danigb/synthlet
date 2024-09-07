@@ -1,0 +1,5 @@
+# @synthlet/impulse
+
+## 0.1.0
+
+- Initial release

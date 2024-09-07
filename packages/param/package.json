@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/param",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Param generator audio worklet",
   "keywords": [
     "param",

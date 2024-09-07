@@ -1,6 +1,6 @@
 {
   "name": "synthlet",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Modular synthesis in the browser",
   "keywords": [
     "modular",
@@ -20,20 +20,20 @@
     "access": "public"
   },
   "dependencies": {
-    "@synthlet/ad": "^0.0.0",
-    "@synthlet/adsr": "^0.0.0",
-    "@synthlet/chorus-t": "^0.0.0",
-    "@synthlet/clip-amp": "^0.0.0",
-    "@synthlet/clock": "^0.0.0",
+    "@synthlet/ad": "^0.1.0",
+    "@synthlet/adsr": "^0.1.0",
+    "@synthlet/chorus-t": "^0.1.0",
+    "@synthlet/clip-amp": "^0.1.0",
+    "@synthlet/clock": "^0.1.0",
     "@synthlet/drum8": "^0.0.0",
-    "@synthlet/euclid": "^0.0.0",
-    "@synthlet/impulse": "^0.0.0",
-    "@synthlet/lfo": "^0.0.0",
-    "@synthlet/noise": "^0.0.0",
-    "@synthlet/param": "^0.0.0",
-    "@synthlet/polyblep-oscillator": "^0.0.0",
-    "@synthlet/state-variable-filter": "^0.0.0",
-    "@synthlet/wavetable-oscillator": "^0.0.0"
+    "@synthlet/euclid": "^0.1.0",
+    "@synthlet/impulse": "^0.1.0",
+    "@synthlet/lfo": "^0.1.0",
+    "@synthlet/noise": "^0.1.0",
+    "@synthlet/param": "^0.1.0",
+    "@synthlet/polyblep-oscillator": "^0.1.0",
+    "@synthlet/state-variable-filter": "^0.1.0",
+    "@synthlet/wavetable-oscillator": "^0.1.0"
   },
   "scripts": {
     "build": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
