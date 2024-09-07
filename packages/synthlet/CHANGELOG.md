@@ -1,5 +1,9 @@
 # synthlet
 
+## 0.3.0
+
+- @synthlet/dattorro-reverb@0.1.0
+
 ## 0.2.0
 
 - Initial release of the following modules:

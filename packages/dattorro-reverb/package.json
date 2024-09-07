@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/dattorro-reverb",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Dattorro reverb as an audio worklet",
   "keywords": [
     "reverb",
