@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/chorus-t",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "A chorus (based on Tagu Audio Line) audio effect in a worklet",
   "keywords": [
     "chorus",

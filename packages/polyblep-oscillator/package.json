@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/polyblep-oscillator",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "PolyBLEP Oscillator module for synthlet",
   "keywords": [
     "modular",
