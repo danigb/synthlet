@@ -43,7 +43,9 @@ export function createArpeggiator() {
       active = false;
     }
 
-    return current;
+    const freq = 440 * Math.pow(2, (current - 69) / 12);
+
+    return freq;
   };
 
   function getNextNote(type: number) {

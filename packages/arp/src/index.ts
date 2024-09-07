@@ -5,6 +5,8 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
+export { ArpChord, ArpType } from "./dsp";
+
 export const registerArpWorklet = createRegistrar("ARP", PROCESSOR);
 
 export type ArpInputs = {
