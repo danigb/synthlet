@@ -3,12 +3,12 @@ describe("AdsrWorkletNode", () => {
 
   beforeAll(async () => {
     createWorkletTestContext(4410);
-    Worklet = (await import("./worklet")).AdsrWorkletProcessor;
+    Worklet = (await import("./worklet")).AdsrProcessor;
   });
 
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
-      "AdsrWorkletProcessor",
+      "AdsrProcessor",
       Worklet
     );
   });

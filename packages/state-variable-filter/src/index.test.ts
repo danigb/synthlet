@@ -1,3 +1,5 @@
+import { registerStateVariableFilterWorklet } from "./index";
+
 describe("Noise", () => {
   it("registers only once", () => {
     const context = new AudioContextMock();
