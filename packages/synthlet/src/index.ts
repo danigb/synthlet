@@ -1,6 +1,7 @@
 import { registerAdWorklet } from "@synthlet/ad";
 import { registerAdsrWorklet } from "@synthlet/adsr";
 import { registerArpWorklet } from "@synthlet/arp";
+import { registerChorusWorklet } from "@synthlet/chorus";
 import { registerChorusTWorklet } from "@synthlet/chorus-t";
 import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
@@ -17,6 +18,7 @@ import { registerWavetableOscillatorWorklet } from "@synthlet/wavetable-oscillat
 export * from "@synthlet/ad";
 export * from "@synthlet/adsr";
 export * from "@synthlet/arp";
+export * from "@synthlet/chorus";
 export * from "@synthlet/chorus-t";
 export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
@@ -43,6 +45,7 @@ export function registerAllWorklets(
     registerAdWorklet(context),
     registerAdsrWorklet(context),
     registerArpWorklet(context),
+    registerChorusWorklet(context),
     registerChorusTWorklet(context),
     registerClipAmpWorklet(context),
     registerClockWorklet(context),

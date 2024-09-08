@@ -1,5 +1,6 @@
 # @synthlet/chorus-t
 
-## 0.1.0
+## 0.1.x
 
-Initial release
+- Initial release
+- Fix registration name

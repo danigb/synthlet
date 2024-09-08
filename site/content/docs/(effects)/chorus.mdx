@@ -1,0 +1,34 @@
+---
+title: Chorus
+description: A chorus effect implemented in Faust
+---
+
+import ChorusExample from "../../../examples/ChorusExample";
+
+This is a mono-to-stereo chorus effect implemented in Faust and ported to the web.
+
+```ts
+import { Chorus } from "synthlet";
+
+const osc = new OscillatorNode(audioContext);
+const chorus = Chorus(audioContext, {
+  rate: 0.5,
+  depth: 0.5,
+  feedback: 0.5,
+});
+
+osc.connect(chorus).connect(audioContext.destination);
+```
+
+<ChorusExample />
+
+## Parameters
+
+- `delay`: The delay time [0, 1]
+- `rate`: The modulation rate [0, 1]
+- `depth`: The modulation depth [0, 1]
+- `deviation`: The modulation deviation [0, 1]
+
+## References
+
+- [Faust original code](https://github.com/grame-cncm/faust/blob/master-dev/examples/SAM/chorus/chorus.dsp)
