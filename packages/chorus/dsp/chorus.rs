@@ -103,22 +103,21 @@ fn rint_f32(val: f32) -> f32 {
 #[cfg_attr(feature = "default-boxed", derive(default_boxed::DefaultBoxed))]
 #[repr(C)]
 pub struct Chorus {
-    iVec0: [i32; 2],
-    fVslider0: F32,
     fSampleRate: i32,
     fConst0: F32,
     fConst1: F32,
     fConst2: F32,
-    fVslider1: F32,
+    fVslider0: F32,
+    iVec0: [i32; 2],
     fRec0: [F32; 2],
     IOTA0: i32,
     fVec1: [F32; 8192],
-    fVslider2: F32,
+    fVslider1: F32,
     fRec1: [F32; 2],
-    fVslider3: F32,
+    fVslider2: F32,
     fRec2: [F32; 2],
     fConst3: F32,
-    fVslider4: F32,
+    fVslider3: F32,
     fRec5: [F32; 2],
     fRec4: [F32; 2],
     fConst4: F32,
@@ -140,22 +139,21 @@ impl FaustDsp for Chorus {
 
     fn new() -> Chorus {
         Chorus {
-            iVec0: [0; 2],
-            fVslider0: 0.0,
             fSampleRate: 0,
             fConst0: 0.0,
             fConst1: 0.0,
             fConst2: 0.0,
-            fVslider1: 0.0,
+            fVslider0: 0.0,
+            iVec0: [0; 2],
             fRec0: [0.0; 2],
             IOTA0: 0,
             fVec1: [0.0; 8192],
-            fVslider2: 0.0,
+            fVslider1: 0.0,
             fRec1: [0.0; 2],
-            fVslider3: 0.0,
+            fVslider2: 0.0,
             fRec2: [0.0; 2],
             fConst3: 0.0,
-            fVslider4: 0.0,
+            fVslider3: 0.0,
             fRec5: [0.0; 2],
             fRec4: [0.0; 2],
             fConst4: 0.0,
@@ -173,7 +171,6 @@ impl FaustDsp for Chorus {
         }
     }
     fn metadata(&self, m: &mut dyn Meta) {
-        m.declare("basics.lib/bypass1to2:author", r"Julius Smith");
         m.declare("basics.lib/name", r"Faust Basic Element Library");
         m.declare(
             "basics.lib/tabulateNd",
@@ -222,11 +219,10 @@ impl FaustDsp for Chorus {
         sig1.fillChorusSIG1(65536, unsafe { &mut ftbl1ChorusSIG1 });
     }
     fn instance_reset_params(&mut self) {
-        self.fVslider0 = 0.0;
+        self.fVslider0 = 0.5;
         self.fVslider1 = 0.5;
         self.fVslider2 = 0.5;
         self.fVslider3 = 0.5;
-        self.fVslider4 = 0.5;
     }
     fn instance_clear(&mut self) {
         for l0 in 0..2 {
@@ -302,45 +298,39 @@ impl FaustDsp for Chorus {
         ui_interface.declare(Some(ParamIndex(0)), "0", "");
         ui_interface.declare(Some(ParamIndex(0)), "midi", "ctrl 4");
         ui_interface.declare(Some(ParamIndex(0)), "style", "knob");
-        ui_interface.add_vertical_slider("Delay", ParamIndex(0), 0.5, 0.0, 1.0, 1.0);
-        ui_interface.declare(Some(ParamIndex(1)), "0", "");
-        ui_interface.declare(Some(ParamIndex(1)), "midi", "ctrl 105");
+        ui_interface.add_vertical_slider("Delay", ParamIndex(0), 0.5, 0.0, 1.0, 0.001);
+        ui_interface.declare(Some(ParamIndex(1)), "1", "");
+        ui_interface.declare(Some(ParamIndex(1)), "midi", "ctrl 2");
         ui_interface.declare(Some(ParamIndex(1)), "style", "knob");
-        ui_interface.add_vertical_slider("Enable", ParamIndex(1), 0.0, 0.0, 1.0, 1.0);
-        ui_interface.declare(Some(ParamIndex(2)), "1", "");
-        ui_interface.declare(Some(ParamIndex(2)), "midi", "ctrl 2");
+        ui_interface.declare(Some(ParamIndex(1)), "unit", "Hz");
+        ui_interface.add_vertical_slider("Rate", ParamIndex(1), 0.5, 0.01, 7.0, 0.0001);
+        ui_interface.declare(Some(ParamIndex(2)), "4", "");
+        ui_interface.declare(Some(ParamIndex(2)), "midi", "ctrl 3");
         ui_interface.declare(Some(ParamIndex(2)), "style", "knob");
-        ui_interface.declare(Some(ParamIndex(2)), "unit", "Hz");
-        ui_interface.add_vertical_slider("Rate", ParamIndex(2), 0.5, 0.01, 7.0, 0.0001);
-        ui_interface.declare(Some(ParamIndex(3)), "4", "");
-        ui_interface.declare(Some(ParamIndex(3)), "midi", "ctrl 3");
+        ui_interface.add_vertical_slider("Depth", ParamIndex(2), 0.5, 0.0, 1.0, 0.001);
+        ui_interface.declare(Some(ParamIndex(3)), "6", "");
+        ui_interface.declare(Some(ParamIndex(3)), "midi", "ctrl 58");
         ui_interface.declare(Some(ParamIndex(3)), "style", "knob");
-        ui_interface.add_vertical_slider("Depth", ParamIndex(3), 0.5, 0.0, 1.0, 0.001);
-        ui_interface.declare(Some(ParamIndex(4)), "6", "");
-        ui_interface.declare(Some(ParamIndex(4)), "midi", "ctrl 58");
-        ui_interface.declare(Some(ParamIndex(4)), "style", "knob");
-        ui_interface.add_vertical_slider("Deviation", ParamIndex(4), 0.5, 0.0, 1.0, 0.001);
+        ui_interface.add_vertical_slider("Deviation", ParamIndex(3), 0.5, 0.0, 1.0, 0.001);
         ui_interface.close_box();
     }
 
     fn get_param(&self, param: ParamIndex) -> Option<Self::T> {
         match param.0 {
-            1 => Some(self.fVslider0),
-            3 => Some(self.fVslider1),
-            0 => Some(self.fVslider2),
-            4 => Some(self.fVslider3),
-            2 => Some(self.fVslider4),
+            2 => Some(self.fVslider0),
+            0 => Some(self.fVslider1),
+            3 => Some(self.fVslider2),
+            1 => Some(self.fVslider3),
             _ => None,
         }
     }
 
     fn set_param(&mut self, param: ParamIndex, value: Self::T) {
         match param.0 {
-            1 => self.fVslider0 = value,
-            3 => self.fVslider1 = value,
-            0 => self.fVslider2 = value,
-            4 => self.fVslider3 = value,
-            2 => self.fVslider4 = value,
+            2 => self.fVslider0 = value,
+            0 => self.fVslider1 = value,
+            3 => self.fVslider2 = value,
+            1 => self.fVslider3 = value,
             _ => {}
         }
     }
@@ -359,30 +349,28 @@ impl FaustDsp for Chorus {
         } else {
             panic!("wrong number of outputs");
         };
-        let mut iSlow0: i32 = i32::wrapping_sub(1, (self.fVslider0) as i32);
-        let mut fSlow1: F32 = self.fConst2 * self.fVslider1;
-        let mut fSlow2: F32 = 4.096 * self.fVslider2;
-        let mut fSlow3: F32 = 6.25e-05 * self.fVslider3;
-        let mut fSlow4: F32 = self.fConst2 * self.fVslider4;
+        let mut fSlow0: F32 = self.fConst2 * self.fVslider0;
+        let mut fSlow1: F32 = 4.096 * self.fVslider1;
+        let mut fSlow2: F32 = 6.25e-05 * self.fVslider2;
+        let mut fSlow3: F32 = self.fConst2 * self.fVslider3;
         let zipped_iterators = inputs0.zip(outputs0).zip(outputs1);
         for ((input0, output0), output1) in zipped_iterators {
-            self.iVec0[0] = 1;
-            self.fRec0[0] = fSlow1 + self.fConst1 * self.fRec0[1];
             let mut fTemp0: F32 = *input0;
-            let mut fTemp1: F32 = if iSlow0 != 0 { 0.0 } else { fTemp0 };
-            let mut fTemp2: F32 = self.fRec0[0] * fTemp1;
-            self.fVec1[(self.IOTA0 & 8191) as usize] = fTemp2;
-            self.fRec1[0] = fSlow2 + 0.999 * self.fRec1[1];
-            self.fRec2[0] = fSlow3 * self.fRec1[0] + 0.999 * self.fRec2[1];
-            let mut iTemp3: i32 = i32::wrapping_sub(1, self.iVec0[1]);
-            self.fRec5[0] = fSlow4 + self.fConst1 * self.fRec5[1];
-            let mut fTemp4: F32 = if iTemp3 != 0 {
+            self.iVec0[0] = 1;
+            self.fRec0[0] = fSlow0 + self.fConst1 * self.fRec0[1];
+            let mut fTemp1: F32 = fTemp0 * self.fRec0[0];
+            self.fVec1[(self.IOTA0 & 8191) as usize] = fTemp1;
+            self.fRec1[0] = fSlow1 + 0.999 * self.fRec1[1];
+            self.fRec2[0] = fSlow2 * self.fRec1[0] + 0.999 * self.fRec2[1];
+            let mut iTemp2: i32 = i32::wrapping_sub(1, self.iVec0[1]);
+            self.fRec5[0] = fSlow3 + self.fConst1 * self.fRec5[1];
+            let mut fTemp3: F32 = if iTemp2 != 0 {
                 0.0
             } else {
                 self.fRec4[1] + self.fConst3 * self.fRec5[0]
             };
-            self.fRec4[0] = fTemp4 - F32::floor(fTemp4);
-            let mut fTemp5: F32 = F32::min(
+            self.fRec4[0] = fTemp3 - F32::floor(fTemp3);
+            let mut fTemp4: F32 = F32::min(
                 4096.0,
                 0.375 * self.fRec1[0]
                     + self.fRec2[0]
@@ -393,15 +381,15 @@ impl FaustDsp for Chorus {
                             )) as usize]
                         },
             );
-            let mut iTemp6: i32 = (fTemp5) as i32;
-            let mut fTemp7: F32 = F32::floor(fTemp5);
-            let mut fTemp8: F32 = if iTemp3 != 0 {
+            let mut iTemp5: i32 = (fTemp4) as i32;
+            let mut fTemp6: F32 = F32::floor(fTemp4);
+            let mut fTemp7: F32 = if iTemp2 != 0 {
                 0.0
             } else {
                 self.fRec7[1] + self.fConst4 * self.fRec5[0]
             };
-            self.fRec7[0] = fTemp8 - F32::floor(fTemp8);
-            let mut fTemp9: F32 = F32::min(
+            self.fRec7[0] = fTemp7 - F32::floor(fTemp7);
+            let mut fTemp8: F32 = F32::min(
                 4096.0,
                 0.125 * self.fRec1[0]
                     + self.fRec2[0]
@@ -412,16 +400,16 @@ impl FaustDsp for Chorus {
                             )) as usize]
                         },
             );
-            let mut fTemp10: F32 = F32::floor(fTemp9);
-            let mut iTemp11: i32 = (fTemp9) as i32;
-            let mut fTemp12: F32 = fTemp1 * (1.0 - self.fRec0[0]);
-            let mut fTemp13: F32 = if iTemp3 != 0 {
+            let mut fTemp9: F32 = F32::floor(fTemp8);
+            let mut iTemp10: i32 = (fTemp8) as i32;
+            let mut fTemp11: F32 = fTemp0 * (1.0 - self.fRec0[0]);
+            let mut fTemp12: F32 = if iTemp2 != 0 {
                 0.0
             } else {
                 self.fRec8[1] + self.fConst5 * self.fRec5[0]
             };
-            self.fRec8[0] = fTemp13 - F32::floor(fTemp13);
-            let mut fTemp14: F32 = F32::min(
+            self.fRec8[0] = fTemp12 - F32::floor(fTemp12);
+            let mut fTemp13: F32 = F32::min(
                 4096.0,
                 0.875 * self.fRec1[0]
                     - self.fRec2[0]
@@ -432,180 +420,172 @@ impl FaustDsp for Chorus {
                             )) as usize]
                         },
             );
-            let mut iTemp15: i32 = (fTemp14) as i32;
-            let mut fTemp16: F32 = F32::floor(fTemp14);
-            *output0 = if iSlow0 != 0 {
-                fTemp0
-            } else {
-                0.70710677
-                    * (self.fVec1[((i32::wrapping_sub(
-                        self.IOTA0,
-                        std::cmp::min(4097, std::cmp::max(0, iTemp6)),
-                    )) & 8191) as usize]
-                        * (fTemp7 + (1.0 - fTemp5))
-                        + (fTemp5 - fTemp7)
-                            * self.fVec1[((i32::wrapping_sub(
-                                self.IOTA0,
-                                std::cmp::min(4097, std::cmp::max(0, i32::wrapping_add(iTemp6, 1))),
-                            )) & 8191) as usize])
-                    + (fTemp9 - fTemp10)
+            let mut iTemp14: i32 = (fTemp13) as i32;
+            let mut fTemp15: F32 = F32::floor(fTemp13);
+
+            *output0 = 0.70710677
+                * (self.fVec1[((i32::wrapping_sub(
+                    self.IOTA0,
+                    std::cmp::min(4097, std::cmp::max(0, iTemp5)),
+                )) & 8191) as usize]
+                    * (fTemp6 + (1.0 - fTemp4))
+                    + (fTemp4 - fTemp6)
                         * self.fVec1[((i32::wrapping_sub(
                             self.IOTA0,
-                            std::cmp::min(4097, std::cmp::max(0, i32::wrapping_add(iTemp11, 1))),
-                        )) & 8191) as usize]
-                    + fTemp12
-                    + self.fVec1[((i32::wrapping_sub(
+                            std::cmp::min(4097, std::cmp::max(0, i32::wrapping_add(iTemp5, 1))),
+                        )) & 8191) as usize])
+                + (fTemp8 - fTemp9)
+                    * self.fVec1[((i32::wrapping_sub(
                         self.IOTA0,
-                        std::cmp::min(4097, std::cmp::max(0, iTemp11)),
+                        std::cmp::min(4097, std::cmp::max(0, i32::wrapping_add(iTemp10, 1))),
                     )) & 8191) as usize]
-                        * (fTemp10 + (1.0 - fTemp9))
-                    - 0.70710677
-                        * (self.fVec1[((i32::wrapping_sub(
-                            self.IOTA0,
-                            std::cmp::min(4097, std::cmp::max(0, iTemp15)),
-                        )) & 8191) as usize]
-                            * (fTemp16 + (1.0 - fTemp14))
-                            + (fTemp14 - fTemp16)
-                                * self.fVec1[((i32::wrapping_sub(
-                                    self.IOTA0,
-                                    std::cmp::min(
-                                        4097,
-                                        std::cmp::max(0, i32::wrapping_add(iTemp15, 1)),
-                                    ),
-                                )) & 8191) as usize])
-            };
-            let mut fTemp17: F32 = if iTemp3 != 0 {
+                + fTemp11
+                + self.fVec1[((i32::wrapping_sub(
+                    self.IOTA0,
+                    std::cmp::min(4097, std::cmp::max(0, iTemp10)),
+                )) & 8191) as usize]
+                    * (fTemp9 + (1.0 - fTemp8))
+                - 0.70710677
+                    * (self.fVec1[((i32::wrapping_sub(
+                        self.IOTA0,
+                        std::cmp::min(4097, std::cmp::max(0, iTemp14)),
+                    )) & 8191) as usize]
+                        * (fTemp15 + (1.0 - fTemp13))
+                        + (fTemp13 - fTemp15)
+                            * self.fVec1[((i32::wrapping_sub(
+                                self.IOTA0,
+                                std::cmp::min(
+                                    4097,
+                                    std::cmp::max(0, i32::wrapping_add(iTemp14, 1)),
+                                ),
+                            )) & 8191) as usize]);
+
+            let mut fTemp16: F32 = if iTemp2 != 0 {
                 0.0
             } else {
                 self.fRec9[1] + self.fConst6 * self.fRec5[0]
             };
-            self.fRec9[0] = fTemp17 - F32::floor(fTemp17);
-            let mut iTemp18: i32 =
+            self.fRec9[0] = fTemp16 - F32::floor(fTemp16);
+            let mut iTemp17: i32 =
                 std::cmp::max(0, std::cmp::min((65536.0 * self.fRec9[0]) as i32, 65535));
-            let mut fTemp19: F32 = F32::min(
+            let mut fTemp18: F32 = F32::min(
                 4096.0,
                 0.25 * self.fRec1[0]
                     + self.fRec2[0]
-                        * (0.70710677 * unsafe { ftbl1ChorusSIG1[iTemp18 as usize] }
-                            + 0.70710677 * unsafe { ftbl0ChorusSIG0[iTemp18 as usize] }),
+                        * (0.70710677 * unsafe { ftbl1ChorusSIG1[iTemp17 as usize] }
+                            + 0.70710677 * unsafe { ftbl0ChorusSIG0[iTemp17 as usize] }),
             );
-            let mut iTemp20: i32 = (fTemp19) as i32;
-            let mut fTemp21: F32 = F32::floor(fTemp19);
-            let mut fTemp22: F32 = if iTemp3 != 0 {
+            let mut iTemp19: i32 = (fTemp18) as i32;
+            let mut fTemp20: F32 = F32::floor(fTemp18);
+            let mut fTemp21: F32 = if iTemp2 != 0 {
                 0.0
             } else {
                 self.fRec10[1] + self.fConst7 * self.fRec5[0]
             };
-            self.fRec10[0] = fTemp22 - F32::floor(fTemp22);
-            let mut iTemp23: i32 =
+            self.fRec10[0] = fTemp21 - F32::floor(fTemp21);
+            let mut iTemp22: i32 =
                 std::cmp::max(0, std::cmp::min((65536.0 * self.fRec10[0]) as i32, 65535));
-            let mut fTemp24: F32 = F32::min(
+            let mut fTemp23: F32 = F32::min(
                 4096.0,
                 0.5 * self.fRec1[0]
                     + self.fRec2[0]
-                        * (0.70710677 * unsafe { ftbl0ChorusSIG0[iTemp23 as usize] }
-                            - 0.70710677 * unsafe { ftbl1ChorusSIG1[iTemp23 as usize] }),
+                        * (0.70710677 * unsafe { ftbl0ChorusSIG0[iTemp22 as usize] }
+                            - 0.70710677 * unsafe { ftbl1ChorusSIG1[iTemp22 as usize] }),
             );
-            let mut iTemp25: i32 = (fTemp24) as i32;
-            let mut fTemp26: F32 = F32::floor(fTemp24);
-            let mut fTemp27: F32 = if iTemp3 != 0 {
+            let mut iTemp24: i32 = (fTemp23) as i32;
+            let mut fTemp25: F32 = F32::floor(fTemp23);
+            let mut fTemp26: F32 = if iTemp2 != 0 {
                 0.0
             } else {
                 self.fRec11[1] + self.fConst8 * self.fRec5[0]
             };
-            self.fRec11[0] = fTemp27 - F32::floor(fTemp27);
-            let mut iTemp28: i32 =
+            self.fRec11[0] = fTemp26 - F32::floor(fTemp26);
+            let mut iTemp27: i32 =
                 std::cmp::max(0, std::cmp::min((65536.0 * self.fRec11[0]) as i32, 65535));
-            let mut fTemp29: F32 = F32::min(
+            let mut fTemp28: F32 = F32::min(
                 4096.0,
                 0.75 * self.fRec1[0]
                     - self.fRec2[0]
-                        * (0.70710677 * unsafe { ftbl1ChorusSIG1[iTemp28 as usize] }
-                            + 0.70710677 * unsafe { ftbl0ChorusSIG0[iTemp28 as usize] }),
+                        * (0.70710677 * unsafe { ftbl1ChorusSIG1[iTemp27 as usize] }
+                            + 0.70710677 * unsafe { ftbl0ChorusSIG0[iTemp27 as usize] }),
             );
-            let mut iTemp30: i32 = (fTemp29) as i32;
-            let mut fTemp31: F32 = F32::floor(fTemp29);
-            let mut fTemp32: F32 = if iTemp3 != 0 {
+            let mut iTemp29: i32 = (fTemp28) as i32;
+            let mut fTemp30: F32 = F32::floor(fTemp28);
+            let mut fTemp31: F32 = if iTemp2 != 0 {
                 0.0
             } else {
                 self.fRec12[1] + self.fConst9 * self.fRec5[0]
             };
-            self.fRec12[0] = fTemp32 - F32::floor(fTemp32);
-            let mut iTemp33: i32 =
+            self.fRec12[0] = fTemp31 - F32::floor(fTemp31);
+            let mut iTemp32: i32 =
                 std::cmp::max(0, std::cmp::min((65536.0 * self.fRec12[0]) as i32, 65535));
-            let mut fTemp34: F32 = F32::min(
+            let mut fTemp33: F32 = F32::min(
                 4096.0,
                 self.fRec1[0]
                     + self.fRec2[0]
-                        * (0.70710677 * unsafe { ftbl1ChorusSIG1[iTemp33 as usize] }
-                            - 0.70710677 * unsafe { ftbl0ChorusSIG0[iTemp33 as usize] }),
+                        * (0.70710677 * unsafe { ftbl1ChorusSIG1[iTemp32 as usize] }
+                            - 0.70710677 * unsafe { ftbl0ChorusSIG0[iTemp32 as usize] }),
             );
-            let mut iTemp35: i32 = (fTemp34) as i32;
-            let mut fTemp36: F32 = F32::floor(fTemp34);
-            *output1 = if iSlow0 != 0 {
-                fTemp0
-            } else {
-                fTemp12
-                    - (0.38268343
+            let mut iTemp34: i32 = (fTemp33) as i32;
+            let mut fTemp35: F32 = F32::floor(fTemp33);
+
+            *output1 = fTemp11
+                - (0.38268343
+                    * (self.fVec1[((i32::wrapping_sub(
+                        self.IOTA0,
+                        std::cmp::min(4097, std::cmp::max(0, iTemp19)),
+                    )) & 8191) as usize]
+                        * (fTemp20 + (1.0 - fTemp18))
+                        + (fTemp18 - fTemp20)
+                            * self.fVec1[((i32::wrapping_sub(
+                                self.IOTA0,
+                                std::cmp::min(
+                                    4097,
+                                    std::cmp::max(0, i32::wrapping_add(iTemp19, 1)),
+                                ),
+                            )) & 8191) as usize])
+                    + 0.9238795
                         * (self.fVec1[((i32::wrapping_sub(
                             self.IOTA0,
-                            std::cmp::min(4097, std::cmp::max(0, iTemp20)),
+                            std::cmp::min(4097, std::cmp::max(0, iTemp24)),
                         )) & 8191) as usize]
-                            * (fTemp21 + (1.0 - fTemp19))
-                            + (fTemp19 - fTemp21)
+                            * (fTemp25 + (1.0 - fTemp23))
+                            + (fTemp23 - fTemp25)
                                 * self.fVec1[((i32::wrapping_sub(
                                     self.IOTA0,
                                     std::cmp::min(
                                         4097,
-                                        std::cmp::max(0, i32::wrapping_add(iTemp20, 1)),
+                                        std::cmp::max(0, i32::wrapping_add(iTemp24, 1)),
                                     ),
                                 )) & 8191) as usize])
-                        + 0.9238795
-                            * (self.fVec1[((i32::wrapping_sub(
-                                self.IOTA0,
-                                std::cmp::min(4097, std::cmp::max(0, iTemp25)),
-                            )) & 8191) as usize]
-                                * (fTemp26 + (1.0 - fTemp24))
-                                + (fTemp24 - fTemp26)
-                                    * self.fVec1[((i32::wrapping_sub(
-                                        self.IOTA0,
-                                        std::cmp::min(
-                                            4097,
-                                            std::cmp::max(0, i32::wrapping_add(iTemp25, 1)),
-                                        ),
-                                    )) & 8191)
-                                        as usize])
-                        + 0.9238795
-                            * (self.fVec1[((i32::wrapping_sub(
-                                self.IOTA0,
-                                std::cmp::min(4097, std::cmp::max(0, iTemp30)),
-                            )) & 8191) as usize]
-                                * (fTemp31 + (1.0 - fTemp29))
-                                + (fTemp29 - fTemp31)
-                                    * self.fVec1[((i32::wrapping_sub(
-                                        self.IOTA0,
-                                        std::cmp::min(
-                                            4097,
-                                            std::cmp::max(0, i32::wrapping_add(iTemp30, 1)),
-                                        ),
-                                    )) & 8191)
-                                        as usize])
-                        + 0.38268343
-                            * (self.fVec1[((i32::wrapping_sub(
-                                self.IOTA0,
-                                std::cmp::min(4097, std::cmp::max(0, iTemp35)),
-                            )) & 8191) as usize]
-                                * (fTemp36 + (1.0 - fTemp34))
-                                + (fTemp34 - fTemp36)
-                                    * self.fVec1[((i32::wrapping_sub(
-                                        self.IOTA0,
-                                        std::cmp::min(
-                                            4097,
-                                            std::cmp::max(0, i32::wrapping_add(iTemp35, 1)),
-                                        ),
-                                    )) & 8191)
-                                        as usize]))
-            };
+                    + 0.9238795
+                        * (self.fVec1[((i32::wrapping_sub(
+                            self.IOTA0,
+                            std::cmp::min(4097, std::cmp::max(0, iTemp29)),
+                        )) & 8191) as usize]
+                            * (fTemp30 + (1.0 - fTemp28))
+                            + (fTemp28 - fTemp30)
+                                * self.fVec1[((i32::wrapping_sub(
+                                    self.IOTA0,
+                                    std::cmp::min(
+                                        4097,
+                                        std::cmp::max(0, i32::wrapping_add(iTemp29, 1)),
+                                    ),
+                                )) & 8191) as usize])
+                    + 0.38268343
+                        * (self.fVec1[((i32::wrapping_sub(
+                            self.IOTA0,
+                            std::cmp::min(4097, std::cmp::max(0, iTemp34)),
+                        )) & 8191) as usize]
+                            * (fTemp35 + (1.0 - fTemp33))
+                            + (fTemp33 - fTemp35)
+                                * self.fVec1[((i32::wrapping_sub(
+                                    self.IOTA0,
+                                    std::cmp::min(
+                                        4097,
+                                        std::cmp::max(0, i32::wrapping_add(iTemp34, 1)),
+                                    ),
+                                )) & 8191) as usize]));
             self.iVec0[1] = self.iVec0[0];
             self.fRec0[1] = self.fRec0[0];
             self.IOTA0 = i32::wrapping_add(self.IOTA0, 1);
