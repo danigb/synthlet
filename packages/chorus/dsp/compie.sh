@@ -1,0 +1,1 @@
+faust -lang rust -cn Chorus chorus.dsp -o chorus.rs
