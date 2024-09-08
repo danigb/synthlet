@@ -1,7 +1,7 @@
 {
   "name": "@synthlet/chorus",
-  "version": "0.0.0",
-  "description": "Chorus generator audio worklet",
+  "version": "0.1.0",
+  "description": "Chorus audio effect in as an audio worklet",
   "keywords": [
     "chorus",
     "modular",
