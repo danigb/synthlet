@@ -8,18 +8,24 @@ import { PROCESSOR } from "./processor";
 export const registerChorusWorklet = createRegistrar("CHORUS", PROCESSOR);
 
 export type ChorusInputs = {
-  trigger: ParamInput;
+  delay: ParamInput;
+  rate: ParamInput;
+  depth: ParamInput;
+  deviation: ParamInput;
 };
 
 export type ChorusWorkletNode = AudioWorkletNode & {
-  trigger: AudioParam;
+  delay: AudioParam;
+  rate: AudioParam;
+  depth: AudioParam;
+  deviation: AudioParam;
   dispose(): void;
 };
 
 export const Chorus = createWorkletConstructor<ChorusWorkletNode, ChorusInputs>(
   {
     processorName: "ChorusProcessor",
-    paramNames: ["trigger"],
+    paramNames: ["delay", "rate", "depth", "deviation"],
     workletOptions: () => ({
       numberOfInputs: 1,
       numberOfOutputs: 1,

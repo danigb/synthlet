@@ -5,6 +5,8 @@ description: A chorus effect implemented in Faust
 
 import ChorusExample from "../../../examples/ChorusExample";
 
+This is a mono-to-stereo chorus effect implemented in Faust and ported to the web.
+
 ```ts
 import { Chorus } from "synthlet";
 
@@ -16,10 +18,17 @@ const chorus = Chorus(audioContext, {
 });
 
 osc.connect(chorus).connect(audioContext.destination);
-
-chorus.lfoRate1.value = 0.2;
 ```
 
 <ChorusExample />
 
 ## Parameters
+
+- `delay`: The delay time [0, 1]
+- `rate`: The modulation rate [0, 1]
+- `depth`: The modulation depth [0, 1]
+- `deviation`: The modulation deviation [0, 1]
+
+## References
+
+- [Faust original code](https://github.com/grame-cncm/faust/blob/master-dev/examples/SAM/chorus/chorus.dsp)

@@ -2,12 +2,14 @@ import { createChorus } from "./dsp";
 
 export class ChorusProcessor extends AudioWorkletProcessor {
   r: boolean; // running
+  u: ReturnType<typeof createChorus>["update"];
   g: ReturnType<typeof createChorus>["compute"];
 
   constructor() {
     super();
     this.r = true;
-    const { compute } = createChorus(sampleRate);
+    const { compute, update } = createChorus(sampleRate);
+    this.u = update;
     this.g = compute;
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -18,12 +20,15 @@ export class ChorusProcessor extends AudioWorkletProcessor {
     };
   }
 
-  process(
-    inputs: Float32Array[][],
-    outputs: Float32Array[][],
-    parameters: any
-  ) {
+  process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     if (inputs[0].length === 0) return this.r;
+
+    this.u(
+      params.delay[0],
+      params.rate[0],
+      params.depth[0],
+      params.deviation[0]
+    );
     const input = inputs[0][0];
     const outputL = outputs[0][0];
     const outputR = outputs[0][1];
@@ -32,15 +37,18 @@ export class ChorusProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [["trigger", 0, 0, 1]].map(
-      ([name, defaultValue, minValue, maxValue]) => ({
-        name,
-        defaultValue,
-        minValue,
-        maxValue,
-        automationRate: "k-rate",
-      })
-    );
+    return [
+      ["delay", 0.5, 0, 1],
+      ["rate", 0.5, 0, 1],
+      ["depth", 0.5, 0, 1],
+      ["deviation", 0.5, 0, 1],
+    ].map(([name, defaultValue, minValue, maxValue]) => ({
+      name,
+      defaultValue,
+      minValue,
+      maxValue,
+      automationRate: "k-rate",
+    }));
   }
 }
 

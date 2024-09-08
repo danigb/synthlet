@@ -3,6 +3,7 @@
 import { AdsrAmp, Oscillator, Param } from "synthlet";
 import { Chorus } from "../../packages/chorus/src";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
+import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
 function ChorusSynth(context: AudioContext) {
@@ -22,6 +23,28 @@ function Example() {
 
   return (
     <>
+      <div className="grid grid-cols-4 gap-2">
+        <Slider
+          label="Delay"
+          inputClassName="col-span-2"
+          param={synth.chorus.delay}
+        />
+        <Slider
+          label="Rate"
+          inputClassName="col-span-2"
+          param={synth.chorus.rate}
+        />
+        <Slider
+          label="Depth"
+          inputClassName="col-span-2"
+          param={synth.chorus.depth}
+        />
+        <Slider
+          label="Deviation"
+          inputClassName="col-span-2"
+          param={synth.chorus.deviation}
+        />
+      </div>
       <GateButton gate={synth.gate.input} />
     </>
   );
