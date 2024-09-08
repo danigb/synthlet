@@ -4,7 +4,7 @@ export function createChorus(sampleRate: number) {
 
   let $iVec0 = new Int32Array(2);
   let $fVslider0 = 0.0;
-  let $fSampleRate = 0;
+  const $fSampleRate = sampleRate;
   let $fConst0 = 0.0;
   let $fConst1 = 0.0;
   let $fConst2 = 0.0;
@@ -33,26 +33,41 @@ export function createChorus(sampleRate: number) {
   let $fConst9 = 0.0;
   let $fRec12 = new Float32Array(2);
 
-  function init(): void {
-    $fSampleRate = sampleRate;
-    $fConst0 = Math.min(1.92e5, Math.max(1.0, $fSampleRate));
-    $fConst1 = Math.exp(-(44.12234 / $fConst0));
-    $fConst2 = 1.0 - $fConst1;
-    $fConst3 = 0.33333334 / $fConst0;
-    $fConst4 = 1.0 / $fConst0;
-    $fConst5 = 0.14285715 / $fConst0;
-    $fConst6 = 0.5 / $fConst0;
-    $fConst7 = 0.25 / $fConst0;
-    $fConst8 = 0.16666667 / $fConst0;
-    $fConst9 = 0.125 / $fConst0;
-    fillTable(ftbl0ChorusSIG0, sig0Fn);
-    fillTable(ftbl1ChorusSIG1, sig1Fn);
+  $fConst0 = Math.min(1.92e5, Math.max(1.0, $fSampleRate));
+  $fConst1 = Math.exp(-(44.12234 / $fConst0));
+  $fConst2 = 1.0 - $fConst1;
+  $fConst3 = 0.33333334 / $fConst0;
+  $fConst4 = 1.0 / $fConst0;
+  $fConst5 = 0.14285715 / $fConst0;
+  $fConst6 = 0.5 / $fConst0;
+  $fConst7 = 0.25 / $fConst0;
+  $fConst8 = 0.16666667 / $fConst0;
+  $fConst9 = 0.125 / $fConst0;
+  $fVslider0 = 0.5;
+  $fVslider1 = 1.0;
+  $fVslider2 = 0.5;
+  $fVslider3 = 0.5;
+  $fVslider4 = 0.5;
+  fillTable(ftbl0ChorusSIG0, sig0Fn);
+  fillTable(ftbl1ChorusSIG1, sig1Fn);
+
+  function update(
+    delay: number,
+    rate: number,
+    depth: number,
+    deviation: number
+  ): void {
+    $fVslider0 = delay;
+    $fVslider1 = 1; // enable
+    $fVslider2 = rate;
+    $fVslider3 = depth;
+    $fVslider4 = deviation;
   }
 
   function compute(
-    inputs0: Float32Array,
-    outputs0: Float32Array,
-    outputs1: Float32Array
+    inputMono: Float32Array,
+    outLeft: Float32Array,
+    outRight: Float32Array
   ): void {
     let iSlow0: number = 1 - Math.floor($fVslider0);
     let fSlow1: number = $fConst2 * $fVslider1;
@@ -60,10 +75,8 @@ export function createChorus(sampleRate: number) {
     let fSlow3: number = 6.25e-5 * $fVslider3;
     let fSlow4: number = $fConst2 * $fVslider4;
 
-    for (let i = 0; i < inputs0.length; i++) {
-      let input0 = inputs0[i];
-      let output0 = outputs0[i];
-      let output1 = outputs1[i];
+    for (let i = 0; i < inputMono.length; i++) {
+      let input0 = inputMono[i];
 
       $iVec0[0] = 1;
       $fRec0[0] = fSlow1 + $fConst1 * $fRec0[1];
@@ -123,7 +136,7 @@ export function createChorus(sampleRate: number) {
       let iTemp15: number = Math.floor(fTemp14);
       let fTemp16: number = Math.floor(fTemp14);
 
-      output0 =
+      outLeft[i] =
         iSlow0 !== 0
           ? fTemp0
           : 0.70710677 *
@@ -224,7 +237,7 @@ export function createChorus(sampleRate: number) {
       let iTemp35: number = Math.floor(fTemp34);
       let fTemp36: number = Math.floor(fTemp34);
 
-      output1 =
+      outRight[i] =
         iSlow0 !== 0
           ? fTemp0
           : fTemp12 -
@@ -279,9 +292,7 @@ export function createChorus(sampleRate: number) {
     }
   }
 
-  init();
-
-  return { compute };
+  return { update, compute };
 }
 
 const sig0Fn = (x: number) => Math.cos(9.58738e-5 * x);

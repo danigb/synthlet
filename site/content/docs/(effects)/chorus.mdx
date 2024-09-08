@@ -1,0 +1,25 @@
+---
+title: Chorus
+description: A chorus effect implemented in Faust
+---
+
+import ChorusExample from "../../../examples/ChorusExample";
+
+```ts
+import { Chorus } from "synthlet";
+
+const osc = new OscillatorNode(audioContext);
+const chorus = Chorus(audioContext, {
+  rate: 0.5,
+  depth: 0.5,
+  feedback: 0.5,
+});
+
+osc.connect(chorus).connect(audioContext.destination);
+
+chorus.lfoRate1.value = 0.2;
+```
+
+<ChorusExample />
+
+## Parameters

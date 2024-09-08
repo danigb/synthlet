@@ -23,6 +23,7 @@
     "@synthlet/ad": "^0.1.0",
     "@synthlet/adsr": "^0.1.0",
     "@synthlet/arp": "^0.1.0",
+    "@synthlet/chorus": "^0.0.0",
     "@synthlet/chorus-t": "^0.1.0",
     "@synthlet/clip-amp": "^0.1.0",
     "@synthlet/clock": "^0.1.0",

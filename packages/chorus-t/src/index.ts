@@ -21,7 +21,7 @@ export type ChorusTWorkletNode = AudioWorkletNode & {
   setBypass(value: boolean): void;
 };
 
-export const registerChorusTWorklet = createRegistrar("CHORUS", PROCESSOR);
+export const registerChorusTWorklet = createRegistrar("CHORUS-T", PROCESSOR);
 
 export const ChorusT = createWorkletConstructor<
   ChorusTWorkletNode,

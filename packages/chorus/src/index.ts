@@ -22,7 +22,7 @@ export const Chorus = createWorkletConstructor<ChorusWorkletNode, ChorusInputs>(
     paramNames: ["trigger"],
     workletOptions: () => ({
       numberOfInputs: 1,
-      numberOfOutputs: 2,
+      numberOfOutputs: 1,
       outputChannelCount: [2],
     }),
   }
