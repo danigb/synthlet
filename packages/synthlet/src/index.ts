@@ -8,6 +8,7 @@ import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
 import { registerEuclidWorklet } from "@synthlet/euclid";
 import { registerImpulseWorklet } from "@synthlet/impulse";
+import { registerKarplusStrongWorklet } from "@synthlet/karplus-strong";
 import { registerLfoWorklet } from "@synthlet/lfo";
 import { registerNoiseWorklet } from "@synthlet/noise";
 import { registerParamWorklet } from "@synthlet/param";
@@ -25,6 +26,7 @@ export * from "@synthlet/clock";
 export * from "@synthlet/dattorro-reverb";
 export * from "@synthlet/euclid";
 export * from "@synthlet/impulse";
+export * from "@synthlet/karplus-strong";
 export * from "@synthlet/lfo";
 export * from "@synthlet/noise";
 export * from "@synthlet/param";
@@ -52,6 +54,7 @@ export function registerAllWorklets(
     registerDattorroReverbWorklet(context),
     registerEuclidWorklet(context),
     registerImpulseWorklet(context),
+    registerKarplusStrongWorklet(context),
     registerPolyblepOscillatorWorklet(context),
     registerLfoWorklet(context),
     registerNoiseWorklet(context),

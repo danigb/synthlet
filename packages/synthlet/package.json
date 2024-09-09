@@ -30,6 +30,7 @@
     "@synthlet/dattorro-reverb": "^0.1.0",
     "@synthlet/euclid": "^0.1.0",
     "@synthlet/impulse": "^0.1.0",
+    "@synthlet/karplus-strong": "^0.0.0",
     "@synthlet/lfo": "^0.1.0",
     "@synthlet/noise": "^0.1.0",
     "@synthlet/param": "^0.1.0",

@@ -5,26 +5,30 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export const registerKarplusStrongOscillatorWorklet = createRegistrar(
+export const registerKarplusStrongWorklet = createRegistrar(
   "KS-OSC",
   PROCESSOR
 );
 
-export type KarplusStrongOscillatorInputs = {
+export type KarplusStrongInputs = {
   trigger: ParamInput;
+  frequency: ParamInput;
+  feedback: ParamInput;
 };
 
-export type KarplusStrongOscillatorWorkletNode = AudioWorkletNode & {
+export type KarplusStrongWorkletNode = AudioWorkletNode & {
   trigger: AudioParam;
+  frequency: AudioParam;
+  feedback: AudioParam;
   dispose(): void;
 };
 
-export const KarplusStrongOscillator = createWorkletConstructor<
-  KarplusStrongOscillatorWorkletNode,
-  KarplusStrongOscillatorInputs
+export const KarplusStrong = createWorkletConstructor<
+  KarplusStrongWorkletNode,
+  KarplusStrongInputs
 >({
   processorName: "KsProcessor",
-  paramNames: ["trigger"],
+  paramNames: ["trigger", "frequency", "feedback"],
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,

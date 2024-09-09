@@ -1,0 +1,44 @@
+---
+title: Karplus-Strong
+description: A Karplus-Strong source node
+---
+
+`@synthlet/karplus-strong`
+
+import KsExample from "../../../examples/KsExample";
+
+A source generator based on the Karplus-Strong algorithm.
+
+```ts
+import { registerKarplusStrongWorklet, KarplusStrong } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerKarplusStrongWorklet(audioContext);
+
+const osc = KarplusStrong(audioContext, {});
+osc.connect(audioContext.destination);
+
+// Trigger the source
+osc.trigger.value = 1;
+```
+
+<KsExample />
+
+## Parameters
+
+- `type`: The type of noise to generate. Can be one of:
+  - 0 `KsType.White`: White noise that uses `Math.rand` for random numbers.
+  - 10: `KsType.Pink`: Pink noise based on this [Larry Trammel algorithm](https://www.ridgerat-tech.us/pink/newpink.htm)
+
+Since type is an audio param, any arbitrary value can be used, but only the above values are valid. If you suply an invalid value, a warning will be printed and the noise will default to white random.
+
+## References
+
+- https://en.wikipedia.org/wiki/Colors_of_noise
+- Voss-McCartney algorithm:
+  - https://www.firstpr.com.au/dsp/pink-noise/
+  - https://dsp.stackexchange.com/questions/62342/understanding-voss-mccartney-pink-noise-generation-algorithm
+- Larry-Trammel algorithm:
+  - https://www.ridgerat-tech.us/pink/newpink.htm
+- Mathlab pink noise implementation: https://ccrma.stanford.edu/~jos/sasp/Example_Synthesis_1_F_Ks.html
+- https://github.com/Stenzel/newshadeofpink

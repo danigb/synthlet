@@ -1,6 +1,6 @@
 {
-  "name": "@synthlet/karplus-strong-oscillator",
-  "version": "0.1.0",
+  "name": "@synthlet/karplus-strong",
+  "version": "0.0.0",
   "description": "Karplus Strong generator audio worklet",
   "keywords": [
     "karplus-strong-oscillator",
