@@ -4,11 +4,16 @@ export type GainInputs = {
   gain?: ParamInput;
 };
 
-export function Gain(context: AudioContext, options: Partial<GainInputs> = {}) {
+function createGain(context: AudioContext, options: Partial<GainInputs> = {}) {
   const node = new GainNode(context);
   const conns = connectParams(node, ["gain"], options);
   return disposable(node, conns);
 }
+
+export const Gain = Object.assign(createGain, {
+  val: (context: AudioContext, value?: ParamInput) =>
+    createGain(context, { gain: value }),
+});
 
 export function ConstantSource(context: AudioContext, value: number) {
   const node = new ConstantSourceNode(context, { offset: value });

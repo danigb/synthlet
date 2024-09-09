@@ -13,7 +13,7 @@ The oscillator is implemented using the PolyBLEP algorithm. This algorithm is us
 import { PolyblepOscillator } from "synthlet";
 
 const osc = PolyblepOscillator(audioContext, {
-  type: PolyblepOscillatorType.SAWTOOTH;
+  type: PolyblepOscillatorType.Sawtooth;
   frequency: 440,
 });
 ```
@@ -23,7 +23,15 @@ const osc = PolyblepOscillator(audioContext, {
 ## Parameters
 
 - `type`: A number representing the waveform type. Default is 0 (saw). The available types are:
-  - `PolyblepOscillatorType.SAWTOOTH` 0
-  - `PolyblepOscillatorType.SQUARE` 1
-  - `PolyblepOscillatorType.TRIANGLE` 2
 - `frequency`: The frequency of the oscillator in Hz. Default is 440.
+- `detune`: The detune in cents. Default is 0
+
+Oscillator types are:
+
+- `PolybleopOscillatorType.Sawtooth` = 0
+- `PolybleopOscillatorType.Square` = 1
+- `PolybleopOscillatorType.Triangle` = 2
+
+## References
+
+- [PolyBLEP by Tale](https://www.taletn.com/reaper/mono_synth/)

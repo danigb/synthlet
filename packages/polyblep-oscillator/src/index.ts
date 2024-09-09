@@ -10,6 +10,7 @@ export { PolyblepOscillatorType } from "./dsp";
 export type PolyblepOscillatorInputs = {
   type?: ParamInput;
   frequency?: ParamInput;
+  detune?: ParamInput;
 };
 
 /**
@@ -18,6 +19,7 @@ export type PolyblepOscillatorInputs = {
 export type PolyblepOscillatorWorkletNode = AudioWorkletNode & {
   type: AudioParam;
   frequency: AudioParam;
+  detune: AudioParam;
   dispose(): void;
 };
 
@@ -31,7 +33,7 @@ export const PolyblepOscillator = createWorkletConstructor<
   PolyblepOscillatorInputs
 >({
   processorName: "PolyBLEProcessor",
-  paramNames: ["type", "frequency"],
+  paramNames: ["type", "frequency", "detune"],
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
