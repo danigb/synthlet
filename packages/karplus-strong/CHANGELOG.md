@@ -1,0 +1,5 @@
+# @synthlet/karplus-strong-oscillator
+
+## 0.1.0
+
+- Initial release
