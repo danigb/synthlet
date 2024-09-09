@@ -5,7 +5,7 @@ exports[`ProcessorNode has parameter descriptors 1`] = `
   {
     "automationRate": "k-rate",
     "defaultValue": 1,
-    "maxValue": 3,
+    "maxValue": 10,
     "minValue": 0,
     "name": "type",
   },
@@ -17,10 +17,10 @@ exports[`ProcessorNode has parameter descriptors 1`] = `
     "name": "frequency",
   },
   {
-    "automationRate": "a-rate",
-    "defaultValue": 1,
+    "automationRate": "k-rate",
+    "defaultValue": 0.5,
     "maxValue": 40,
-    "minValue": 0,
+    "minValue": 0.025,
     "name": "Q",
   },
 ]
