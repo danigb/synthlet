@@ -212,5 +212,12 @@ exports[`ProcessorNode has parameter descriptors 1`] = `
     "minValue": 0,
     "name": "frequency",
   },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 10000,
+    "minValue": 0,
+    "name": "detune",
+  },
 ]
 `;
