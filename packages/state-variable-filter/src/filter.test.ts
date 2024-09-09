@@ -1,28 +1,25 @@
-import { SVFilter } from "./dsp";
+import { createFilter, SvfType } from "./dsp";
 
 describe("SVFilter", () => {
   it("filters the signal", () => {
-    const filter = SVFilter(20);
+    const filter = createFilter(20)(SvfType.LowPass);
     const input = new Float32Array(20);
     const output = new Float32Array(20);
+    const frequency = new Float32Array(20);
+    const q = new Float32Array(20);
 
     for (let i = 0; i < input.length; i++) {
       input[i] = i % 2 ? 1 : -1;
     }
     expect(input).toMatchSnapshot();
-    filter.update({
-      type: [1],
-      frequency: [10],
-      resonance: [0.5],
-    });
-    filter.fill(input, output);
+    frequency.fill(10);
+    q.fill(0.5);
+    filter(input, output, frequency, q);
     expect(output).toMatchSnapshot();
-    filter.update({
-      type: [1],
-      frequency: [5],
-      resonance: [0.5],
-    });
-    filter.fill(input, output);
+
+    frequency.fill(5);
+    q.fill(0.5);
+    filter(input, output, frequency, q);
     expect(output).toMatchSnapshot();
   });
 });

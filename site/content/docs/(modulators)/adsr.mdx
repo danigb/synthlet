@@ -18,7 +18,7 @@ const adsr = AdsrEnv(audioContext, {
   sustain: 0.5,
   release: 0.1,
 });
-const filter = StateVariableFilter(audioContext, {
+const filter = Svf(audioContext, {
   frequency: 440,
   Q: 1,
   type: "lowpass",

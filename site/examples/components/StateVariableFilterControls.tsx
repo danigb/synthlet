@@ -1,13 +1,7 @@
 import { Slider } from "./Slider";
 type Param = { value: number };
 
-export function StateVariableFilterControls({
-  frequency,
-  resonance,
-}: {
-  frequency: Param;
-  resonance: Param;
-}) {
+export function SvfControls({ frequency, Q }: { frequency: Param; Q: Param }) {
   return (
     <>
       <Slider
@@ -20,12 +14,12 @@ export function StateVariableFilterControls({
         units="Hz"
       />
       <Slider
-        label="resonance"
+        label="Q"
         inputClassName="col-span-2"
         min={0.01}
         max={40}
         step={0.01}
-        param={resonance}
+        param={Q}
       />
     </>
   );

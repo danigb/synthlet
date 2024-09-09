@@ -1,81 +1,91 @@
-/**
- * Limit the value between min and max
- * @param value
- * @param min
- * @param max
- * @returns
- */
-export function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-export enum StateVariableFilterType {
+export enum SvfType {
   ByPass = 0,
   LowPass = 1,
   BandPass = 2,
   HighPass = 3,
 }
 
-export type Inputs = {
-  type: number[];
-  frequency: number[];
-  resonance: number[];
-};
+export type Filter = (
+  input: Float32Array,
+  output: Float32Array,
+  frequency: Float32Array,
+  Q: Float32Array
+) => void;
 
-/**
- * A State Variable Filter following the Andy Simper's implementation described in http://www.cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf
- *
- * Various implementations:
- * https://github.com/Ardour/ardour/blob/71e049202c017c0a546f39b455bdc9e4be182f06/libs/plugins/a-eq.lv2/a-eq.c
- * https://github.com/SoundStacks/cmajor/blob/main/standard_library/std_library_filters.cmajor#L157
- */
-export function SVFilter(sampleRate: number) {
-  // Params
-  let $frequency = 1000;
-  let $resonance = 0.5;
-  let $type = 0;
-
-  const period = 0.5 / sampleRate;
-  const pi2 = 2 * Math.PI;
-
-  let d = 0;
-  let a = 0;
-  let g1 = 0;
-  let z0 = 0;
-  let z1 = 0;
-  let high = 0;
-  let band = 0;
-  let low = 0;
-
-  function update(inputs: Inputs) {
-    $type = inputs.type[0];
-    if (
-      inputs.frequency[0] !== $frequency ||
-      inputs.resonance[0] !== $resonance
-    ) {
-      $frequency = inputs.frequency[0];
-      $resonance = inputs.resonance[0];
-      const cutoffFreq = clamp($frequency, 16, sampleRate / 2);
-      const Q = clamp($resonance, 0.025, 40);
-      const invQ = 1.0 / Q;
-      // TODO: review - something weird here (sampleRate * period = 0.5)
-      a = 2.0 * sampleRate * Math.tan(pi2 * period * cutoffFreq) * period;
-      d = 1.0 / (1.0 + invQ * a + a * a);
-      g1 = a + invQ;
-    }
-  }
-
-  function fill(input: Float32Array, output: Float32Array) {
+export function createFilter(sampleRate: number) {
+  const bypass: Filter = (input, output) => {
     for (let i = 0; i < input.length; i++) {
-      const x = input[i];
-      high = (x - g1 * z0 - z1) * d;
-      band = a * high + z0;
-      low = a * band + z1;
-      z0 = a * high + band;
-      z1 = a * band + low;
-      output[i] =
-        $type === 1 ? low : $type === 2 ? high : $type === 3 ? band : x;
+      output[i] = input[i];
     }
-  }
-  return { update, fill };
+  };
+
+  // state
+  let z1 = 0;
+  let z2 = 0;
+
+  // coefficients
+  let c1 = 0;
+  let c2 = 0;
+
+  // previous frequency and Q
+  let prefFreq = 0;
+  let prefQ = 0;
+
+  const updateCoefficients = (frequency: number, q: number) => {
+    if (frequency === prefFreq && q === prefQ) return;
+    const f = frequency / sampleRate;
+    // TODO: optimize
+    const w = 2 * Math.tan(Math.PI * f);
+    const a = w / (q ?? 0.000001);
+    const b = w * w;
+    c1 = (a + b) / (1 + a / 2 + b / 4);
+    c2 = b / (a + b);
+  };
+
+  const hipass: Filter = (input, output, frequency, Q) => {
+    for (let i = 0; i < input.length; i++) {
+      updateCoefficients(frequency[i], Q[i]);
+      const d0 = 1 - c1 / 2 + (c1 * c2) / 4;
+      const x = input[i] - z1 - z2;
+      output[i] = d0 * x;
+      z2 += c2 * z1;
+      z1 += c1 * x;
+    }
+  };
+
+  const bandpass: Filter = (input, output, frequency, Q) => {
+    for (let i = 0; i < input.length; i++) {
+      updateCoefficients(frequency[0], Q[0]);
+      const d0 = ((1 - c2) * c1) / 2;
+      const d1 = 1 - c2;
+      const x = input[0] - z1 - z2;
+      output[i] = d0 * x + d1 * z1;
+      z2 += c2 * z1;
+      z1 += c1 * x;
+    }
+  };
+
+  const lowpass: Filter = (input, output, frequency, Q) => {
+    for (let i = 0; i < input.length; i++) {
+      updateCoefficients(frequency[0], Q[0]);
+      const d0 = (c1 * c2) / 4;
+      const x = input[0] - z1 - z2;
+      z2 += c2 * z1;
+      output[i] = d0 * x + z2;
+      z1 += c1 * x;
+    }
+  };
+
+  return function get(type: number) {
+    switch (type) {
+      case SvfType.LowPass:
+        return lowpass;
+      case SvfType.BandPass:
+        return bandpass;
+      case SvfType.HighPass:
+        return hipass;
+      default:
+        return bypass;
+    }
+  };
 }

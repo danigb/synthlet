@@ -1,7 +1,7 @@
 import { AdsrInputs } from "@synthlet/adsr";
 import { LfoInputs, LfoType } from "@synthlet/lfo";
 import { PolyblepOscillatorInputs } from "@synthlet/polyblep-oscillator";
-import { StateVariableFilterInputs } from "@synthlet/state-variable-filter";
+import { SvfInputs } from "@synthlet/state-variable-filter";
 import { ParamInput } from "../_worklet";
 import { getSynthlet } from "../synthlet";
 
@@ -11,7 +11,7 @@ export type MonoSynthInputs = {
   volume?: ParamInput;
   vibrato?: LfoInputs;
   osc?: PolyblepOscillatorInputs;
-  filter?: StateVariableFilterInputs;
+  filter?: SvfInputs;
   amp?: AdsrInputs;
 };
 

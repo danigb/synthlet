@@ -3,15 +3,17 @@ title: State Variable Filter
 description: A resonant filter
 ---
 
+import SvfExample from "../../../examples/SvfExample";
+
 A filter implemented with a state variable filter algorithm.
 
 ```ts
-import { StateVariableFilter, StateVariableFilterType } from "synthlet";
+import { Svf, SvfType } from "synthlet";
 
 const audioContext = new AudioContext();
 const osc = new OscillatorNode(audioContext);
-const filter = StateVariableFilter(audioContext, {
-  type: StateVariableFilterType.LowPass
+const filter = Svf(audioContext, {
+  type: SvfType.LowPass
   frequency: 440,
   Q: 1,
 });
@@ -19,8 +21,10 @@ const filter = StateVariableFilter(audioContext, {
 osc.connect(filter).connect(audioContext.destination);
 
 filter.frequency.value = 880;
-filter.resonance.value = 3;
+filter.Q.value = 3;
 ```
+
+<SvfExample />
 
 ## Parameters
 
@@ -30,4 +34,10 @@ filter.resonance.value = 3;
   - `2`: bandpass
   - `3`: bypass
 - `frequency`: the frequency of the filter in Hz. Default is 440Hz. Range: [20-2000]
-- `resonance`: the resonance of the filter. Default is 1. Range: [0-40]
+- `Q`: the Q of the filter. Default is 1. Range: [0-40]
+
+## References
+
+- [Digital State Variable Filters](https://kokkinizita.linuxaudio.org/papers/digsvfilt.pdf) by Fons Adriaensen
+- [State Variable Filters](https://ccrma.stanford.edu/~jos/svf/svf.pdf) by Julius O. Smith III
+- [Solving continuous SVF equations using trapezoidal integration](https://www.cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf) by Andrew Simper (Cytomic)

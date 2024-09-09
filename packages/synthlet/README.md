@@ -8,8 +8,8 @@ Collection of synth modules implemented as AudioWorklets.
 import {
   registerAllWorklets,
   AdsrAmp,
-  StateVariableFilter,
-  StateVariableFilterType,
+  Svf,
+  SvfType,
   PolyblepOscillator
 } from "synthlet";
 
@@ -18,8 +18,8 @@ await registerAllWorklets(ac);
 
 // Simplest synth: Oscillator -> Filter -> Amplifier
 const osc = PolyblepOscillator(ac, { frequency: 440 });
-const filter = StateVariableFilter(ac, {
-  type: StateVariableFilterType.LowPass
+const filter = Svf(ac, {
+  type: SvfType.LowPass
   frequency: 4000,
 });
 const amp = AdsrAmp(ac, { attack: 0.1, release: 0.5 });

@@ -4,12 +4,12 @@ describe("ProcessorNode", () => {
 
   beforeAll(async () => {
     createWorkletTestContext(sampleRate);
-    Processor = (await import("./worklet")).Processor;
+    Processor = (await import("./worklet")).SvfProcessor;
   });
 
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
-      "StateVariableFilterWorkletProcessor",
+      "SvfProcessor",
       Processor
     );
   });

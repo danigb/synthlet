@@ -19,11 +19,7 @@ import { Lfo } from "@synthlet/lfo";
 import { Noise } from "@synthlet/noise";
 import { Param, ParamInputs, ParamScaleType } from "@synthlet/param";
 import { PolyblepOscillator } from "@synthlet/polyblep-oscillator";
-import {
-  StateVariableFilter,
-  StateVariableFilterInputs,
-  StateVariableFilterType,
-} from "@synthlet/state-variable-filter";
+import { Svf, SvfInputs, SvfType } from "@synthlet/state-variable-filter";
 import { Connector, Disposable } from "./_worklet";
 
 export function operator<P, N extends AudioNode>(
@@ -56,7 +52,7 @@ export function createOperators() {
   const lfo = operator(Lfo);
   const noise = operator(Noise);
   const polyblep = operator(PolyblepOscillator);
-  const svf = operator(StateVariableFilter);
+  const svf = operator(Svf);
   const param = operator(Param);
   const wt = operator(WavetableOscillator);
 
@@ -99,20 +95,12 @@ export function createOperators() {
     noise: Object.assign(noise, {}),
     polyblep: Object.assign(polyblep, {}),
     svf: Object.assign(svf, {
-      lp: (
-        frequency: ParamInput,
-        params?: Partial<StateVariableFilterInputs>
-      ) => svf({ type: StateVariableFilterType.LowPass, frequency, ...params }),
-      hp: (
-        frequency: ParamInput,
-        params?: Partial<StateVariableFilterInputs>
-      ) =>
-        svf({ type: StateVariableFilterType.HighPass, frequency, ...params }),
-      bp: (
-        frequency: ParamInput,
-        params?: Partial<StateVariableFilterInputs>
-      ) =>
-        svf({ type: StateVariableFilterType.BandPass, frequency, ...params }),
+      lp: (frequency: ParamInput, params?: Partial<SvfInputs>) =>
+        svf({ type: SvfType.LowPass, frequency, ...params }),
+      hp: (frequency: ParamInput, params?: Partial<SvfInputs>) =>
+        svf({ type: SvfType.HighPass, frequency, ...params }),
+      bp: (frequency: ParamInput, params?: Partial<SvfInputs>) =>
+        svf({ type: SvfType.BandPass, frequency, ...params }),
     }),
 
     env: Object.assign(adsrEnv, {
