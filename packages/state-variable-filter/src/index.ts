@@ -5,32 +5,26 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export { StateVariableFilterType } from "./dsp";
+export { SvfType } from "./dsp";
 
-export type StateVariableFilterInputs = {
+export type SvfInputs = {
   type?: ParamInput;
   frequency?: ParamInput;
-  resonance?: ParamInput;
+  Q?: ParamInput;
 };
 
-export type StateVariableFilterWorkletNode = AudioWorkletNode & {
+export type SvfWorkletNode = AudioWorkletNode & {
   type: AudioParam;
   frequency: AudioParam;
-  resonance: AudioParam;
+  Q: AudioParam;
   dispose(): void;
 };
 
-export const registerStateVariableFilterWorklet = createRegistrar(
-  "SVF",
-  PROCESSOR
-);
+export const registerSvfWorklet = createRegistrar("SVF", PROCESSOR);
 
-export const StateVariableFilter = createWorkletConstructor<
-  StateVariableFilterWorkletNode,
-  StateVariableFilterInputs
->({
-  processorName: "StateVariableFilterWorkletProcessor",
-  paramNames: ["type", "frequency", "resonance"],
+export const Svf = createWorkletConstructor<SvfWorkletNode, SvfInputs>({
+  processorName: "SvfProcessor",
+  paramNames: ["type", "frequency", "Q"],
   workletOptions() {
     return { numberOfInputs: 1, numberOfOutputs: 1 };
   },

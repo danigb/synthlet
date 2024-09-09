@@ -1,15 +1,36 @@
 # synthlet
 
+## 0.6.0
+
+### Minor Changes
+
+- d9ae8bf: State Variable Filter improvements:
+
+  - It uses a better algorithm (by Andrew Simper and Freq Anton Corvest)
+  - `frequency` is now a a-rate parameter suitable for modulation
+  - Renamed `resonance` to `Q` to match Web Audio API standard
+
+### Patch Changes
+
+- Updated dependencies [d9ae8bf]
+  - @synthlet/state-variable-filter@0.2.0
+
+## 0.5.0
+
+- New chorus @synthlet/chorus
+
+- Updated dependencies
+  - @synthlet/chorus@0.1.0
+  - @synthlet/chorus-t@0.1.1
+
 ## 0.4.0
 
-- New @synthlet/arp package
+- New arpeggiator @synthlet/arp package
 
 ## 0.3.0
 
+- New reverb @synthlet/dattorro-reverb
 - Function `registerSynthlet` renamed to `registerAllWorklets`
-
-- Initial release of:
-  - @synthlet/dattorro-reverb@0.1.0
 
 ## 0.2.0
 

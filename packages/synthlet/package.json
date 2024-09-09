@@ -1,6 +1,6 @@
 {
   "name": "synthlet",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Modular synthesis in the browser",
   "keywords": [
     "modular",
@@ -34,7 +34,7 @@
     "@synthlet/noise": "^0.1.0",
     "@synthlet/param": "^0.1.0",
     "@synthlet/polyblep-oscillator": "^0.1.0",
-    "@synthlet/state-variable-filter": "^0.1.0",
+    "@synthlet/state-variable-filter": "^0.2.0",
     "@synthlet/wavetable-oscillator": "^0.1.0"
   },
   "scripts": {

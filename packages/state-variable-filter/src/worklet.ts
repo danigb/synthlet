@@ -1,13 +1,13 @@
-import { SVFilter } from "./dsp";
+import { createFilter } from "./dsp";
 
-export class Processor extends AudioWorkletProcessor {
-  f: ReturnType<typeof SVFilter>;
+export class SvfProcessor extends AudioWorkletProcessor {
   r: boolean; // running
+  p: ReturnType<typeof createFilter>;
 
   constructor() {
     super();
-    this.f = SVFilter(sampleRate);
     this.r = true;
+    this.p = createFilter(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "STOP":
@@ -17,33 +17,29 @@ export class Processor extends AudioWorkletProcessor {
     };
   }
 
-  process(
-    inputs: Float32Array[][],
-    outputs: Float32Array[][],
-    parameters: any
-  ) {
+  process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
+    if (inputs[0].length === 0) return this.r;
+
     const input = inputs[0][0];
     const output = outputs[0][0];
-    this.f.update(parameters);
-    if (input && output) {
-      this.f.fill(input, output);
-    }
+    this.p(input, output, params.type[0], params.frequency, params.Q[0]);
+
     return this.r;
   }
 
   static get parameterDescriptors() {
     return [
-      ["type", 1, 0, 3],
-      ["frequency", 1000, 20, 20000],
-      ["resonance", 1, 0, 40],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
+      ["type", 1, 0, 10, "k"],
+      ["frequency", 1000, 20, 20000, "a"],
+      ["Q", 0.5, 0.025, 40, "k"],
+    ].map(([name, defaultValue, minValue, maxValue, rate]) => ({
       name,
       defaultValue,
       minValue,
       maxValue,
-      automationRate: "k-rate",
+      automationRate: rate + "-rate",
     }));
   }
 }
 
-registerProcessor("StateVariableFilterWorkletProcessor", Processor);
+registerProcessor("SvfProcessor", SvfProcessor);

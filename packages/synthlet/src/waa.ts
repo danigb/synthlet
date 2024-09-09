@@ -52,3 +52,23 @@ export function BiquadFilter(
   );
   return disposable(filter, conn);
 }
+
+export function ConnSerial(nodes: Disposable<AudioNode>[]) {
+  return disposable(
+    nodes.reduce((prev, next) => {
+      prev.connect(next);
+      return next;
+    }),
+    nodes
+  );
+}
+
+export function ConnMixInto(
+  nodes: Disposable<AudioNode>[],
+  target: Disposable<AudioNode>
+) {
+  nodes.forEach((node) => node.connect(target));
+  return disposable(target, nodes);
+}
+
+export function Synthlet<N extends AudioNode>(output: Disposable<N>) {}

@@ -12,7 +12,7 @@ import { registerLfoWorklet } from "@synthlet/lfo";
 import { registerNoiseWorklet } from "@synthlet/noise";
 import { registerParamWorklet } from "@synthlet/param";
 import { registerPolyblepOscillatorWorklet } from "@synthlet/polyblep-oscillator";
-import { registerStateVariableFilterWorklet } from "@synthlet/state-variable-filter";
+import { registerSvfWorklet } from "@synthlet/state-variable-filter";
 import { registerWavetableOscillatorWorklet } from "@synthlet/wavetable-oscillator";
 
 export * from "@synthlet/ad";
@@ -57,7 +57,7 @@ export function registerAllWorklets(
     registerNoiseWorklet(context),
     registerParamWorklet(context),
     registerNoiseWorklet(context),
-    registerStateVariableFilterWorklet(context),
+    registerSvfWorklet(context),
     registerWavetableOscillatorWorklet(context),
   ]).then(() => context);
 }

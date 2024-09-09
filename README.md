@@ -8,8 +8,8 @@ Collection of synth modules implemented as AudioWorklets.
 import {
   registerAllWorklets,
   AdsrAmp,
-  StateVariableFilter,
-  StateVariableFilterType,
+  Svf,
+  SvfType,
   PolyblepOscillator
 } from "synthlet";
 
@@ -18,8 +18,8 @@ await registerAllWorklets(ac);
 
 // Simplest synth: Oscillator -> Filter -> Amplifier
 const osc = PolyblepOscillator(ac, { frequency: 440 });
-const filter = StateVariableFilter(ac, {
-  type: StateVariableFilterType.LowPass
+const filter = Svf(ac, {
+  type: SvfType.LowPass
   frequency: 4000,
 });
 const amp = AdsrAmp(ac, { attack: 0.1, release: 0.5 });
@@ -84,7 +84,6 @@ This library wouldn't be possible with all the people writing books, blog posts 
 - https://github.com/BillyDM/awesome-audio-dsp
 - https://paulbatchelor.github.io/sndkit/algos/
 - https://www.musicdsp.org/
-- [Cytomic technical papers](https://cytomic.com/technical-papers/) specially famous for its [State Variable Filters](https://cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf)
 - [Signalsmith Audio blog](https://signalsmith-audio.co.uk/writing/)
 - [Valhalla DSP Blog](https://valhalladsp.com/category/learn/plugin-design-learn/)
 - http://synthworks.eu/ - DIY Synthetizers

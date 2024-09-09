@@ -8,7 +8,7 @@ const VcaSynth = (context: AudioContext) => {
   const s = getSynthlet(context);
   const gate = s.param();
 
-  return s.withParams(s.conn.serial(s.noise.white(), s.amp.adsr(gate)), {
+  return s.withParams(s.conn.serial(s.osc.sin(440), s.amp.adsr(gate)), {
     gate,
   });
 };
@@ -25,7 +25,7 @@ function WavetableExample() {
 }
 
 export default () => (
-  <ExamplePane label="VCA">
+  <ExamplePane label="ADSR">
     <WavetableExample />
   </ExamplePane>
 );

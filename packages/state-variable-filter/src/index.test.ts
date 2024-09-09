@@ -1,4 +1,4 @@
-import { registerStateVariableFilterWorklet } from "./index";
+import { registerSvfWorklet } from "./index";
 
 describe("Noise", () => {
   it("registers only once", () => {
@@ -6,9 +6,9 @@ describe("Noise", () => {
     // @ts-ignore
     global.AudioNode = class AudioNode {};
 
-    registerStateVariableFilterWorklet(context.asAudioContext());
+    registerSvfWorklet(context.asAudioContext());
     expect(context.audioWorklet?.addModule).toHaveBeenCalledTimes(1);
-    registerStateVariableFilterWorklet(context.asAudioContext());
+    registerSvfWorklet(context.asAudioContext());
     expect(context.audioWorklet?.addModule).toHaveBeenCalledTimes(1);
   });
 });
@@ -41,7 +41,7 @@ class AudioWorkletNodeMock {
   ) {
     this.params = {
       frequency: new ParamMock(),
-      resonance: new ParamMock(),
+      Q: new ParamMock(),
       filterType: new ParamMock(),
     };
 

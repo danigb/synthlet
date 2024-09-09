@@ -1,81 +1,120 @@
-/**
- * Limit the value between min and max
- * @param value
- * @param min
- * @param max
- * @returns
- */
-export function clamp(value: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, value));
-}
-
-export enum StateVariableFilterType {
+export enum SvfType {
   ByPass = 0,
   LowPass = 1,
   BandPass = 2,
   HighPass = 3,
+  Notch = 4,
+  Peak = 5,
+  AllPass = 6,
+  // Not implemented yet
+  // LowShelf = 7,
+  // HighShelf = 8,
 }
 
-export type Inputs = {
-  type: number[];
-  frequency: number[];
-  resonance: number[];
-};
+export type Filter = () => void;
 
-/**
- * A State Variable Filter following the Andy Simper's implementation described in http://www.cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf
- *
- * Various implementations:
- * https://github.com/Ardour/ardour/blob/71e049202c017c0a546f39b455bdc9e4be182f06/libs/plugins/a-eq.lv2/a-eq.c
- * https://github.com/SoundStacks/cmajor/blob/main/standard_library/std_library_filters.cmajor#L157
- */
-export function SVFilter(sampleRate: number) {
-  // Params
-  let $frequency = 1000;
-  let $resonance = 0.5;
-  let $type = 0;
+// Implementation based on https://github.com/FredAntonCorvest/Common-DSP/blob/master/Filter/SvfLinearTrapOptimised2.hpp
+export function createFilter(sampleRate: number) {
+  const invSr = 1 / sampleRate;
 
-  const period = 0.5 / sampleRate;
-  const pi2 = 2 * Math.PI;
+  // coefficients
+  let _a1 = 0,
+    _a2 = 0,
+    _a3 = 0,
+    _m0 = 0,
+    _m1 = 0,
+    _m2 = 0;
+  let _ic1eq = 0,
+    _ic2eq = 0,
+    _v1 = 0,
+    _v2 = 0,
+    _v3 = 0;
 
-  let d = 0;
-  let a = 0;
-  let g1 = 0;
-  let z0 = 0;
-  let z1 = 0;
-  let high = 0;
-  let band = 0;
-  let low = 0;
+  // previous frequency and Q
+  let currType = -1;
+  let currFreq = 0;
+  let currQ = 0;
 
-  function update(inputs: Inputs) {
-    $type = inputs.type[0];
-    if (
-      inputs.frequency[0] !== $frequency ||
-      inputs.resonance[0] !== $resonance
-    ) {
-      $frequency = inputs.frequency[0];
-      $resonance = inputs.resonance[0];
-      const cutoffFreq = clamp($frequency, 16, sampleRate / 2);
-      const Q = clamp($resonance, 0.025, 40);
-      const invQ = 1.0 / Q;
-      // TODO: review - something weird here (sampleRate * period = 0.5)
-      a = 2.0 * sampleRate * Math.tan(pi2 * period * cutoffFreq) * period;
-      d = 1.0 / (1.0 + invQ * a + a * a);
-      g1 = a + invQ;
+  function update(type: number, freq: number, q: number) {
+    if (freq === currFreq && currType === type && q === currQ) return;
+
+    // Range [0, 6] (clamped by AudioWorklet)
+    currType = type;
+    // Range [16, sampleRate / 2] (clamped by AudioWorklet)
+    currFreq = freq;
+    // Range [0.025, 40] (clamped by AudioWorklet)
+    currQ = q;
+
+    const g = Math.tan(freq * invSr * Math.PI);
+    const k = 1 / Math.max(q, 0.0001);
+
+    _a1 = 1 / (1 + g * (g + k));
+    _a2 = g * _a1;
+    _a3 = g * _a2;
+
+    switch (type) {
+      case SvfType.LowPass:
+        _m0 = 0;
+        _m1 = 0;
+        _m2 = 1;
+        break;
+      case SvfType.BandPass:
+        _m0 = 0;
+        _m1 = 1;
+        _m2 = 0;
+        break;
+
+      case SvfType.HighPass:
+        _m0 = 1;
+        _m1 = -k;
+        _m2 = -1;
+        break;
+      case SvfType.Notch:
+        _m0 = 1;
+        _m1 = -k;
+        _m2 = 0;
+        break;
+      case SvfType.Peak:
+        _m0 = 1;
+        _m1 = -k;
+        _m2 = -2;
+        break;
+      case SvfType.AllPass:
+        _m0 = 1;
+        _m1 = -2 * k;
+        _m2 = 0;
+      default:
+        _m0 = 1;
+        _m1 = 0;
+        _m2 = 0;
+        break;
     }
   }
 
-  function fill(input: Float32Array, output: Float32Array) {
+  return function filter(
+    input: Float32Array,
+    output: Float32Array,
+    type: number,
+    frequency: Float32Array,
+    q: number
+  ) {
+    update(type, frequency[0], q);
+    const isARateParam = frequency.length === input.length;
     for (let i = 0; i < input.length; i++) {
-      const x = input[i];
-      high = (x - g1 * z0 - z1) * d;
-      band = a * high + z0;
-      low = a * band + z1;
-      z0 = a * high + band;
-      z1 = a * band + low;
-      output[i] =
-        $type === 1 ? low : $type === 2 ? high : $type === 3 ? band : x;
+      let x = input[i];
+      let freq = frequency[i];
+
+      if (isARateParam) update(type, frequency[i], q);
+
+      _v3 = x - _ic2eq;
+      _v1 = _a1 * _ic1eq + _a2 * _v3;
+      _v2 = _ic2eq + _a2 * _ic1eq + _a3 * _v3;
+      _ic1eq = 2 * _v1 - _ic1eq;
+      _ic2eq = 2 * _v2 - _ic2eq;
+
+      const out = _m0 * x + _m1 * _v1 + _m2 * _v2;
+
+      output[i] = out;
     }
-  }
-  return { update, fill };
+  };
 }

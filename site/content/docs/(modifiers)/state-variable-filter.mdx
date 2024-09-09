@@ -1,17 +1,21 @@
 ---
 title: State Variable Filter
-description: A resonant filter
+description: A resonant filter suitable for modulation
 ---
 
-A filter implemented with a state variable filter algorithm.
+[![NPM Version](https://img.shields.io/npm/v/@synthlet/state-variable-filter?label=@synthlet/state-variable-filter&color=%2322d3ee)](https://www.npmjs.com/package/@synthlet/state-variable-filter)
+
+import SvfExample from "../../../examples/SvfExample";
+
+A filter implemented with a state variable filter algorithm suitable for modulation.
 
 ```ts
-import { StateVariableFilter, StateVariableFilterType } from "synthlet";
+import { Svf, SvfType } from "synthlet";
 
 const audioContext = new AudioContext();
 const osc = new OscillatorNode(audioContext);
-const filter = StateVariableFilter(audioContext, {
-  type: StateVariableFilterType.LowPass
+const filter = Svf(audioContext, {
+  type: SvfType.LowPass
   frequency: 440,
   Q: 1,
 });
@@ -19,15 +23,41 @@ const filter = StateVariableFilter(audioContext, {
 osc.connect(filter).connect(audioContext.destination);
 
 filter.frequency.value = 880;
-filter.resonance.value = 3;
+filter.Q.value = 3;
 ```
+
+<SvfExample />
+
+## What
+
+This is an alternative filter from [BiquadFilterNode](https://developer.mozilla.org/en-US/docs/Web/API/BiquadFilterNode) implemented in Web Audio API.
+
+From [Digital State Variable Filters](https://kokkinizita.linuxaudio.org/papers/digsvfilt.pdf):
+
+> ... the biquad is not without problems. One of them is potential instability in case the coefficients are interpolated, for example to avoid ’zipper noise’ in audio equalisers. Another problem is numerical precision.
+
+> The digital state-variable filter does not have these problems. So one may wonder why it is not used more often.
+
+It uses an optimized version described by [Solving continuous SVF equations using trapezoidal integration](https://www.cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf) by Andrew Simper (Cytomic) and implemented by [Fred Anton Corvest](https://github.com/FredAntonCorvest/Common-DSP/blob/master/Filter/SvfLinearTrapOptimised2.hpp). Thanks both!
 
 ## Parameters
 
-- `filterType`: the type of the filter. Range: [0-3]
-  - `0`: lowpass
-  - `1`: highpass
-  - `2`: bandpass
-  - `3`: bypass
+- `filterType`: the type of the filter. By default is `SvfType.LowPass`.
 - `frequency`: the frequency of the filter in Hz. Default is 440Hz. Range: [20-2000]
-- `resonance`: the resonance of the filter. Default is 1. Range: [0-40]
+- `Q`: the resonance of the filter. Default is 0.5. Range: [0.025-40]
+
+Available filter types are:
+
+- `SvfType.ByPass` = 0,
+- `SvfType.LowPass` = 1,
+- `SvfType.BandPass` = 2,
+- `SvfType.HighPass` = 3,
+- `SvfType.Notch` = 4,
+- `SvfType.Peak` = 5,
+- `SvfType.AllPass` = 6,
+
+## References
+
+- [Digital State Variable Filters](https://kokkinizita.linuxaudio.org/papers/digsvfilt.pdf) by Fons Adriaensen
+- [State Variable Filters](https://ccrma.stanford.edu/~jos/svf/svf.pdf) by Julius O. Smith III
+- [Solving continuous SVF equations using trapezoidal integration](https://www.cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf) by Andrew Simper (Cytomic)

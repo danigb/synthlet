@@ -8,8 +8,8 @@ Collection of synth modules implemented as AudioWorklets.
 import {
   registerAllWorklets,
   AdsrAmp,
-  StateVariableFilter,
-  StateVariableFilterType,
+  Svf,
+  SvfType,
   PolyblepOscillator
 } from "synthlet";
 
@@ -18,8 +18,8 @@ await registerAllWorklets(ac);
 
 // Simplest synth: Oscillator -> Filter -> Amplifier
 const osc = PolyblepOscillator(ac, { frequency: 440 });
-const filter = StateVariableFilter(ac, {
-  type: StateVariableFilterType.LowPass
+const filter = Svf(ac, {
+  type: SvfType.LowPass
   frequency: 4000,
 });
 const amp = AdsrAmp(ac, { attack: 0.1, release: 0.5 });
@@ -55,7 +55,7 @@ Documentation and examples are [here](https://danigb.github.io/synthlet/docs/qui
 
 ### Why?
 
-Mostly, because I want to learn dsp.
+Mostly, because I want to learn dsp. But I'd like to create a collection of high quality sounding sources and effects.
 
 ### Is it a good idea to write dsp in Typescript?
 
@@ -63,7 +63,7 @@ Probably not, but I've seen [a talk at WAC 2022](https://zenodo.org/records/6767
 
 ### Should I use it?
 
-Just for fun and curiosity. If you want to make music, [Tone.js](https://github.com/Tonejs/Tone.js) is probably the way to go.
+Maybe, for fun and profit. If you want to make music, [Tone.js](https://github.com/Tonejs/Tone.js) is probably the way to go.
 
 If you want to deploy dsp modules to web in production, currently [Faust](https://faustdoc.grame.fr/) and [Cmajor](https://github.com/cmajor-lang/cmajor) or [Elementary Audio](https://github.com/elemaudio/elementary) are better alternatives.
 
@@ -84,7 +84,6 @@ This library wouldn't be possible with all the people writing books, blog posts 
 - https://github.com/BillyDM/awesome-audio-dsp
 - https://paulbatchelor.github.io/sndkit/algos/
 - https://www.musicdsp.org/
-- [Cytomic technical papers](https://cytomic.com/technical-papers/) specially famous for its [State Variable Filters](https://cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf)
 - [Signalsmith Audio blog](https://signalsmith-audio.co.uk/writing/)
 - [Valhalla DSP Blog](https://valhalladsp.com/category/learn/plugin-design-learn/)
 - http://synthworks.eu/ - DIY Synthetizers
