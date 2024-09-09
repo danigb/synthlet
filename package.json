@@ -26,7 +26,7 @@
     "test": "jest --coverage",
     "test:ci": "npm run api && npm run build && npm run test",
     "processors": "find ./packages -name 'processor.ts' -exec wc -m {} +",
-    "publish": "npm run publish:prepare && changeset publish",
+    "bump": "changeset version && npm run publish:prepare",
     "publish:prepare": "cp README.md packages/synthlet && cp packages/synthlet/CHANGELOG.md CHANGELOG.md"
   },
   "packageManager": "npm@7.21.0"
