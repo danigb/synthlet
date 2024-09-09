@@ -55,7 +55,7 @@ Documentation and examples are [here](https://danigb.github.io/synthlet/docs/qui
 
 ### Why?
 
-Mostly, because I want to learn dsp. But I'd like to create a collection of high quality sounding sources and effects.
+Mostly, because I want to learn dsp.
 
 ### Is it a good idea to write dsp in Typescript?
 
@@ -63,7 +63,7 @@ Probably not, but I've seen [a talk at WAC 2022](https://zenodo.org/records/6767
 
 ### Should I use it?
 
-Maybe, for fun and profit. If you want to make music, [Tone.js](https://github.com/Tonejs/Tone.js) is probably the way to go.
+Just for fun and curiosity. If you want to make music, [Tone.js](https://github.com/Tonejs/Tone.js) is probably the way to go.
 
 If you want to deploy dsp modules to web in production, currently [Faust](https://faustdoc.grame.fr/) and [Cmajor](https://github.com/cmajor-lang/cmajor) or [Elementary Audio](https://github.com/elemaudio/elementary) are better alternatives.
 
@@ -89,11 +89,12 @@ This library wouldn't be possible with all the people writing books, blog posts 
 - http://synthworks.eu/ - DIY Synthetizers
 - [Karplus-Strong original paper](https://users.soe.ucsc.edu/~karplus/papers/digitar.pdf)
 
-### Open source repositories
+### Synthesis open source repositories
 
-- https://github.com/VCVRack/Rack
-- https://github.com/grame-cncm/faust
-- https://github.com/SoundStacks/cmajor
+- [Faust](https://github.com/grame-cncm/faust)
+- [Cmajor](https://github.com/SoundStacks/cmajor)
+- [VCVRack](https://github.com/VCVRack/Rack)
+- [The Synthesis ToolKit](https://github.com/thestk/stk)
 - https://github.com/jd-13/WE-Core
 - https://github.com/mhetrick/nonlinearcircuits
 - https://github.com/timowest/analogue

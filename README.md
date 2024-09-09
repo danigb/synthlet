@@ -89,11 +89,12 @@ This library wouldn't be possible with all the people writing books, blog posts 
 - http://synthworks.eu/ - DIY Synthetizers
 - [Karplus-Strong original paper](https://users.soe.ucsc.edu/~karplus/papers/digitar.pdf)
 
-### Open source repositories
+### Synthesis open source repositories
 
-- https://github.com/VCVRack/Rack
-- https://github.com/grame-cncm/faust
-- https://github.com/SoundStacks/cmajor
+- [Faust](https://github.com/grame-cncm/faust)
+- [Cmajor](https://github.com/SoundStacks/cmajor)
+- [VCVRack](https://github.com/VCVRack/Rack)
+- [The Synthesis ToolKit](https://github.com/thestk/stk)
 - https://github.com/jd-13/WE-Core
 - https://github.com/mhetrick/nonlinearcircuits
 - https://github.com/timowest/analogue

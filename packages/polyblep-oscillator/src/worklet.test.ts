@@ -24,6 +24,7 @@ describe("ProcessorNode", () => {
     const params = {
       type: [0],
       frequency: [2],
+      detune: [0],
     };
     processor.process(inputs, outputs, params);
     expect(outputs).toMatchSnapshot();
@@ -34,6 +35,7 @@ describe("ProcessorNode", () => {
     const params = {
       type: [1],
       frequency: [2],
+      detune: [0],
     };
     processor.process(inputs, outputs, params);
     expect(outputs).toMatchSnapshot();
@@ -44,6 +46,7 @@ describe("ProcessorNode", () => {
     const params = {
       type: [2],
       frequency: [2],
+      detune: [0],
     };
     processor.process(inputs, outputs, params);
     expect(outputs).toMatchSnapshot();
@@ -54,6 +57,7 @@ describe("ProcessorNode", () => {
     const params = {
       type: [3],
       frequency: [2],
+      detune: [0],
     };
     processor.process(inputs, outputs, params);
     expect(outputs).toMatchSnapshot();

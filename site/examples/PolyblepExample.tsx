@@ -1,25 +1,24 @@
 "use client";
 
-import { getSynthlet, PolyblepOscillatorType } from "synthlet";
-import { ExamplePane, GateButton } from "./components/ExamplePane";
+import { ConnSerial, Gain, Lfo, Param, PolyblepOscillator } from "synthlet";
+import { ExamplePane } from "./components/ExamplePane";
+import { SelectorParam } from "./components/Selector";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function PolyblepSynth(context: AudioContext) {
-  const s = getSynthlet(context);
-  const gate = s.param();
-  const type = s.param(PolyblepOscillatorType.SAWTOOTH);
-  const frequency = s.param(200);
-  const volume = s.param.db(-100);
+function PolyblepSynth(ac: AudioContext) {
+  const volume = Param.db(ac, -24);
 
-  return s.withParams(
-    s.conn.serial(
-      s.polyblep({ type, frequency }),
-      s.amp.adsr(gate),
-      s.amp(volume)
-    ),
-    { gate, type, frequency, volume }
-  );
+  const lfo = Lfo(ac, { frequency: 1, gain: 0 });
+  const osc = PolyblepOscillator(ac, { frequency: 440, detune: lfo });
+  const amp = Gain(ac, { gain: volume });
+
+  return Object.assign(ConnSerial([osc, amp]), {
+    osc,
+    lfo,
+    amp,
+    volume: volume.input,
+  });
 }
 
 function Example() {
@@ -29,18 +28,29 @@ function Example() {
   return (
     <>
       <div className="grid grid-cols-4 gap-4">
+        <SelectorParam
+          name="Waveform"
+          inputClassName="col-span-2"
+          param={synth.osc.type}
+          valueNames={["Saw", "Square", "Triangle"]}
+        />
+
         <Slider
           label="Frequency"
           inputClassName="col-span-2"
           min={20}
           max={3000}
           units="Hz"
-          param={synth.frequency}
+          param={synth.osc.frequency}
         />
 
-        <div className="flex col-span-4">
-          <GateButton gate={synth.gate} />
-        </div>
+        <Slider
+          label="Modulation"
+          inputClassName="col-span-2"
+          min={0}
+          max={1000}
+          param={synth.lfo.gain}
+        />
       </div>
       <div className="flex px-1 pt-2 mt-2 border-t border-fd-border gap-4">
         <Slider

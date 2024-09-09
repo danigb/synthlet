@@ -1,10 +1,12 @@
+// TODO: Add more waveforms: https://gist.github.com/danigb/c86f94ad5145f2367fb4880c227824ec
+
 export enum PolyblepOscillatorType {
-  SAWTOOTH = 0,
-  SQUARE = 1,
-  TRIANGLE = 2,
+  Sawtooth = 0,
+  Square = 1,
+  Triangle = 2,
 }
 
-export function createNoise(sampleRate: number) {
+export function createPolyblep(sampleRate: number) {
   const ivsr = 1 / sampleRate;
 
   let type = 0;
@@ -23,18 +25,26 @@ export function createNoise(sampleRate: number) {
   const GENS = [saw, square, triangle];
   let gen = GENS[0];
 
+  // Param cache
+  let $detune = 0;
+
   return function generate(
     output: Float32Array,
     waveformType: number,
-    frequency: number
+    frequency: number,
+    detune: number
   ) {
     if (type !== waveformType) {
       type = waveformType;
       gen = GENS[type] ?? GENS[0];
     }
-    if (freq !== frequency) {
+    if (freq !== frequency || detune !== $detune) {
       freq = frequency;
-      inc = freq * ivsr;
+      $detune = detune;
+
+      const detuneFactor = Math.pow(2, detune / 1200);
+      const freqWithDetune = freq * detuneFactor;
+      inc = freqWithDetune * ivsr;
     }
     gen(output);
   };
