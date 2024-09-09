@@ -1,0 +1,66 @@
+---
+title: AD Amplifier
+description: A VCA with an AD envelope
+---
+
+[![NPM Version](https://img.shields.io/npm/v/@synthlet/ad?label=@synthlet/ad&color=%2322d3ee)](https://www.npmjs.com/package/@synthlet/ad)
+
+import AmpAdExample from "../../../examples/AmpAdExample";
+
+A Voltage Controlled Amplifier (VCA) module with an Attack-Decay envelope
+
+Use it to add an percusive envelopes to the synth voices.
+
+```ts
+import { AdAmp, OscillatorNode } from "synthlet";
+
+const osc = new OscillatorNode(audioContext, {
+  frequency: 440,
+});
+const vca = AdAmp(audioContext, {
+  gain: 0.5,
+  attack: 0.1,
+  decay: 0.1,
+  sustain: 0.5,
+  release: 0.1,
+});
+// Connect the oscillator to the VCA and to the output
+osc.connect(vca).connect(audioContext.destination);
+// Start the envelope (start attack phase)
+vca.gate.value = 1;
+// Stop the envelope (start release phase)
+vca.gate.value = 0;
+```
+
+<AmpAdExample />
+
+## Parameters
+
+Same as [ad](/docs/modifiers/ad) envelope:
+
+- `attack`: The attack time in seconds. Default is 0.1.
+- `decay`: The decay time in seconds. Default is 0.1.
+- `trigger`: The envelope trigger. 1 means start. You need to move the trigger back to 1 to restart the envelope.
+- `offset`: The offset of the envelope. Default is 0.
+- `gain`: The gain of the envelope. Default is 1.
+
+<Callout title="Offset is silence" type="warn">
+  The ADSR will output `offset` value when the gate is closed. If you want to
+  silence the output, set the `offset` to 0.
+</Callout>
+
+## Package
+
+This module is exported from '@synthlet/ad' package.
+
+```ts
+import { AdAmp, registerAdWorklet } from "@synthlet/ad";
+
+const ac = new AudioContext();
+await registerAdWorklet(ac);
+const amp = AdAmp(ac, {
+  attack: 0.1,
+  decay: 0.1,
+  gain: 1,
+});
+```
