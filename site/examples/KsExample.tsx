@@ -34,9 +34,9 @@ function Example() {
         param={synth.ks.frequency}
       />
       <Slider
-        label="Feedback"
+        label="Damping"
         inputClassName="col-span-2"
-        param={synth.ks.feedback}
+        param={synth.ks.damping}
       />
       <div className="col-span-4">
         <TriggerButton trigger={synth.trigger} />

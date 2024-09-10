@@ -13,13 +13,13 @@ export const registerKarplusStrongWorklet = createRegistrar(
 export type KarplusStrongInputs = {
   trigger: ParamInput;
   frequency: ParamInput;
-  feedback: ParamInput;
+  damping: ParamInput;
 };
 
 export type KarplusStrongWorkletNode = AudioWorkletNode & {
   trigger: AudioParam;
   frequency: AudioParam;
-  feedback: AudioParam;
+  damping: AudioParam;
   dispose(): void;
 };
 
@@ -28,7 +28,7 @@ export const KarplusStrong = createWorkletConstructor<
   KarplusStrongInputs
 >({
   processorName: "KsProcessor",
-  paramNames: ["trigger", "frequency", "feedback"],
+  paramNames: ["trigger", "frequency", "damping"],
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,

@@ -1,97 +1,103 @@
-export function createKS(sampleRate: number) {
+export function createKS(sampleRate: number, minFrequency: number) {
   let active = false;
-  let startEnvelope = false;
+  let startExciter = false;
 
-  const ad = createEnvelope(100);
+  const excite = createExciter(1000);
 
   // Delay line
-  const maxDelaySecs = 0.5;
-  const maxIndex = maxDelaySecs * sampleRate - 1;
-  const delayLine = new Float32Array(maxIndex + 1);
-  let writeIndex = 0;
-  let readIndex = Math.floor(0.2 * sampleRate);
-  let fracA = 1;
-  let fracB = 0;
+  const maxIndex = Math.floor(sampleRate / minFrequency + 0.5);
+  const delay = new InterpolatedDelayLine(maxIndex);
 
   // One pole filter for delay
-  let zNoise = 0;
-
-  // One pole filter for output
-  let zDelay = 0;
+  let filterAlpha = 0.99;
+  let prevFilterOut = 0;
 
   // Feedback
-  let fb = 0;
+  let lossFactor = 0.99;
 
   // Param cache
   let $freq = 0;
-  let $feedback = 0;
+  let $damping = 0;
 
   return function (
     output: Float32Array,
     trigger: number,
     frequency: number,
-    feedback: number
+    damping: number
   ) {
     if ($freq !== frequency) {
       $freq = frequency;
-      const delaySamples = sampleRate / frequency;
-      let offset = Math.floor(delaySamples);
-      readIndex = writeIndex + delayLine.length - offset;
-      fracA = delaySamples - offset;
-      fracB = 1 - fracA;
-      while (readIndex > maxIndex) readIndex -= delayLine.length;
-      console.log("DELAY SAMPLES", {
-        delaySamples,
-        offset,
-        readIndex,
-        writeIndex,
-        fracA,
-        fracB,
-      });
+      delay.setDelayLength(sampleRate / frequency);
     }
-    if ($feedback !== feedback) {
-      fb = Math.max(0.01, Math.min(0.99, feedback));
+    if ($damping !== damping) {
+      $damping = damping;
+      lossFactor = damping * 0.2 + 0.792;
+      filterAlpha = Math.max(0, Math.min(1, damping));
     }
 
     if (trigger === 1) {
       if (!active) {
         active = true;
-        startEnvelope = true;
-        console.log("START!", fb);
+        startExciter = true;
       }
     } else {
       active = false;
     }
 
     for (let i = 0; i < output.length; i++) {
-      let env = ad(startEnvelope);
-      startEnvelope = false;
-      const noise = env !== 0 ? env * Math.random() * 2 - 1 : 0;
-      const filteredNoise = noise - zNoise * 0.999;
-      zNoise = noise;
+      const pluck = excite(startExciter);
+      startExciter = false;
 
-      // Read delay with
-      let a = delayLine[readIndex];
-      let b = readIndex === maxIndex ? delayLine[0] : delayLine[readIndex + 1];
-      const delayRead = a * fracA + b * fracB;
-
-      // Apply one pole filter delay
-      const filteredDelay = delayRead + zDelay * 0.999;
-      zDelay = filteredDelay;
-
-      delayLine[writeIndex] = noise + fb * delayRead;
-
-      readIndex++;
-      if (readIndex > maxIndex) readIndex = 0;
-      writeIndex++;
-      if (writeIndex > maxIndex) writeIndex = 0;
-
-      output[i] = filteredNoise + delayRead;
+      //const prev = delay.read(delayLength - 1);
+      const curr = delay.read();
+      const filterOut =
+        curr * 1.0 * filterAlpha + prevFilterOut * (1 - filterAlpha);
+      prevFilterOut = filterOut;
+      output[i] = pluck * filterOut * lossFactor;
     }
   };
 }
 
-function createEnvelope(durationInSamples: number) {
+class InterpolatedDelayLine {
+  buffer: Float32Array;
+  writeIndex: number;
+  delayLength: number;
+  position: number; //
+
+  constructor(public readonly size: number) {
+    this.buffer = new Float32Array(size);
+    this.writeIndex = 0;
+    this.delayLength = 10;
+    this.position = size - this.delayLength;
+  }
+
+  setDelayLength(delayLength: number) {
+    this.delayLength = delayLength;
+    this.position = this.writeIndex - delayLength;
+    while (this.position < 0) this.position += this.size;
+  }
+
+  writeAndUpdateIndex(value: number) {
+    this.buffer[this.writeIndex] = value;
+    this.writeIndex++;
+    if (this.writeIndex >= this.size) this.writeIndex = 0;
+    this.position++;
+    if (this.position >= this.size) this.position -= this.size;
+  }
+
+  read() {
+    while (this.position < 0) this.position += this.size;
+    const curr = Math.floor(this.position);
+    let next = curr + 1;
+    while (next >= this.size) next -= this.size;
+    const frac = this.position - curr;
+    const currVal = this.buffer[curr];
+    const nextVal = this.buffer[next];
+    return currVal - frac + (nextVal - currVal);
+  }
+}
+
+function createExciter(durationInSamples: number) {
   const window = new Float32Array(durationInSamples);
 
   // Create a triangular envelope
@@ -105,7 +111,8 @@ function createEnvelope(durationInSamples: number) {
     if (start) index = 0;
     if (index < window.length) {
       index++;
-      return window[index];
+      const noise = Math.random() * 2 - 1;
+      return noise * window[index];
     } else {
       return 0;
     }
