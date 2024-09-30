@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/reverb-delay",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Faust reverb delay as an audio worklet",
   "keywords": [
     "reverb-delay",
