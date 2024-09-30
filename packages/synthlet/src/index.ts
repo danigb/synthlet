@@ -13,6 +13,7 @@ import { registerLfoWorklet } from "@synthlet/lfo";
 import { registerNoiseWorklet } from "@synthlet/noise";
 import { registerParamWorklet } from "@synthlet/param";
 import { registerPolyblepOscillatorWorklet } from "@synthlet/polyblep-oscillator";
+import { registerReverbDelayWorklet } from "@synthlet/reverb-delay";
 import { registerSvfWorklet } from "@synthlet/state-variable-filter";
 import { registerWavetableOscillatorWorklet } from "@synthlet/wavetable-oscillator";
 
@@ -31,6 +32,7 @@ export * from "@synthlet/lfo";
 export * from "@synthlet/noise";
 export * from "@synthlet/param";
 export * from "@synthlet/polyblep-oscillator";
+export * from "@synthlet/reverb-delay";
 export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/wavetable-oscillator";
 export { ParamInput } from "./_worklet";
@@ -44,22 +46,23 @@ export function registerAllWorklets(
   context: AudioContext
 ): Promise<AudioContext> {
   return Promise.all([
-    registerAdWorklet(context),
     registerAdsrWorklet(context),
+    registerAdWorklet(context),
     registerArpWorklet(context),
-    registerChorusWorklet(context),
     registerChorusTWorklet(context),
+    registerChorusWorklet(context),
     registerClipAmpWorklet(context),
     registerClockWorklet(context),
     registerDattorroReverbWorklet(context),
     registerEuclidWorklet(context),
     registerImpulseWorklet(context),
     registerKarplusStrongWorklet(context),
-    registerPolyblepOscillatorWorklet(context),
     registerLfoWorklet(context),
     registerNoiseWorklet(context),
-    registerParamWorklet(context),
     registerNoiseWorklet(context),
+    registerParamWorklet(context),
+    registerPolyblepOscillatorWorklet(context),
+    registerReverbDelayWorklet(context),
     registerSvfWorklet(context),
     registerWavetableOscillatorWorklet(context),
   ]).then(() => context);

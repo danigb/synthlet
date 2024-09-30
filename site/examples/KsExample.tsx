@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ConnSerial, Gain, NoiseType, Param } from "synthlet";
-import { KarplusStrong } from "../../packages/karplus-strong/src";
+import { ConnSerial, Gain, KarplusStrong, NoiseType, Param } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";

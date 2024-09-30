@@ -1,45 +1,35 @@
 # synthlet
 
+## 0.9.0
+
+- New ReverbDelay effect `@synthlet/reverb-delay`
+
+## 0.8.0
+
+- New KarplusStrong audio source `@synthlet/karplus-strong`
+
 ## 0.7.0
 
-### Minor Changes
-
-- - Add `detune` parameter to Polyblep oscillator
-
-### Patch Changes
-
-- Updated dependencies
-  - @synthlet/polyblep-oscillator@0.2.0
+- Add `detune` parameter to Polyblep oscillator
 
 ## 0.6.0
-
-### Minor Changes
 
 - State Variable Filter improvements:
   - It uses a better algorithm (by Andrew Simper and Freq Anton Corvest)
   - `frequency` is now a a-rate parameter suitable for modulation
   - Renamed `resonance` to `Q` to match Web Audio API standard
 
-### Patch Changes
-
-- Updated dependencies [d9ae8bf]
-  - @synthlet/state-variable-filter@0.2.0
-
 ## 0.5.0
 
-- New chorus @synthlet/chorus
-
-- Updated dependencies
-  - @synthlet/chorus@0.1.0
-  - @synthlet/chorus-t@0.1.1
+- New chorus `@synthlet/chorus`
 
 ## 0.4.0
 
-- New arpeggiator @synthlet/arp package
+- New arpeggiator `@synthlet/arp` package
 
 ## 0.3.0
 
-- New reverb @synthlet/dattorro-reverb
+- New reverb `@synthlet/dattorro-reverb`
 - Function `registerSynthlet` renamed to `registerAllWorklets`
 
 ## 0.2.0

@@ -1,9 +1,12 @@
 {
-  "name": "@synthlet/noise",
+  "name": "@synthlet/reverb-delay",
   "version": "0.1.0",
-  "description": "Noise generator module for Synthlet",
+  "description": "Faust reverb delay as an audio worklet",
   "keywords": [
-    "noise"
+    "reverb-delay",
+    "modular",
+    "synthesis",
+    "synthlet"
   ],
   "main": "dist/index.js",
   "module": "dist/index.mjs",

@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/karplus-strong",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Karplus Strong generator audio worklet",
   "keywords": [
     "karplus-strong-oscillator",
@@ -20,7 +20,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "@types/jest": "^29.5.11",
+    "@types/jest": "^29.5.13",
     "jest": "^29.7.0",
     "ts-jest": "^29.1.1"
   },
