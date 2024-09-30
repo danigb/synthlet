@@ -79,7 +79,7 @@ This library wouldn't be possible with all the people writing books, blog posts 
 - [Generating Sound and Organizing Time](https://cycling74.com/books/go)
 - [Designing Audio FX Plugins 2nd Edition](https://www.willpirkle.com/)
 
-### Posts and papers
+### Blogs and papers
 
 - https://github.com/BillyDM/awesome-audio-dsp
 - https://paulbatchelor.github.io/sndkit/algos/

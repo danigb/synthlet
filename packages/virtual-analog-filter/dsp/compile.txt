@@ -1,0 +1,5 @@
+ faust -lang rust -cn Moog moog.dsp -o moog.rs
+ faust -lang rust -cn MoogHalf moog-half.dsp -o moog-half.rs
+ faust -lang rust -cn Korg35LPF korg35-lpf.dsp -o korg35-lpf.rs
+ faust -lang rust -cn Korg35HPF korg35-hpf.dsp -o korg35-hpf.rs
+ faust -lang rust -cn Oberheim oberheim.dsp -o oberheim.rs
