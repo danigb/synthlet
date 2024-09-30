@@ -95,6 +95,8 @@ This library wouldn't be possible with all the people writing books, blog posts 
 - [Cmajor](https://github.com/SoundStacks/cmajor)
 - [VCVRack](https://github.com/VCVRack/Rack)
 - [The Synthesis ToolKit](https://github.com/thestk/stk)
+- [Surge synth](https://github.com/surge-synthesizer/surge)
+- [Surge Rust](https://github.com/klebs6/surge-rs)
 - https://github.com/jd-13/WE-Core
 - https://github.com/mhetrick/nonlinearcircuits
 - https://github.com/timowest/analogue

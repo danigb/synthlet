@@ -1,120 +1,78 @@
 export function createKS(sampleRate: number, minFrequency: number) {
-  let active = false;
-  let startExciter = false;
+  const targetAmplitude = 0.001; // Amplitude decays to 0.1% of initial value
+  const maxDelayLineLength = Math.ceil(sampleRate / minFrequency) + 2; // Extra samples for interpolation
 
-  const excite = createExciter(1000);
+  const delayLine = new Float32Array(maxDelayLineLength);
 
-  // Delay line
-  const maxIndex = Math.floor(sampleRate / minFrequency + 0.5);
-  const delay = new InterpolatedDelayLine(maxIndex);
+  let delayInSamples = maxDelayLineLength - 2;
+  let writeIndex = 0;
 
-  // One pole filter for delay
-  let filterAlpha = 0.99;
-  let prevFilterOut = 0;
+  let isPlaying = false;
+  let prevTrigger = 0;
 
-  // Feedback
-  let lossFactor = 0.99;
-
-  // Param cache
-  let $freq = 0;
-  let $damping = 0;
-
-  return function (
+  return (
     output: Float32Array,
     trigger: number,
     frequency: number,
-    damping: number
-  ) {
-    if ($freq !== frequency) {
-      $freq = frequency;
-      delay.setDelayLength(sampleRate / frequency);
-    }
-    if ($damping !== damping) {
-      $damping = damping;
-      lossFactor = damping * 0.2 + 0.792;
-      filterAlpha = Math.max(0, Math.min(1, damping));
-    }
+    decay: number
+  ) => {
+    const outputLength = output.length;
 
-    if (trigger === 1) {
-      if (!active) {
-        active = true;
-        startExciter = true;
+    const decayTimeInSamples = decay * sampleRate;
+    const filterCoefficient = Math.pow(targetAmplitude, 1 / decayTimeInSamples);
+
+    if (trigger > 0 && prevTrigger <= 0) {
+      delayInSamples = sampleRate / frequency;
+      delayInSamples = Math.min(
+        Math.max(delayInSamples, 1),
+        maxDelayLineLength - 2
+      );
+
+      for (let i = 0; i < maxDelayLineLength; i++) {
+        delayLine[i] = Math.random() * 2 - 1;
+      }
+      writeIndex = 0;
+      isPlaying = true;
+    }
+    prevTrigger = trigger;
+
+    if (isPlaying) {
+      for (let i = 0; i < outputLength; i++) {
+        let readIndex = writeIndex - delayInSamples;
+        if (readIndex < 0) {
+          readIndex += maxDelayLineLength;
+        }
+
+        const readIndexInt = Math.floor(readIndex);
+        const frac = readIndex - readIndexInt;
+
+        // Wrap around the delay line
+        const index0 = readIndexInt % maxDelayLineLength;
+        const index1 = (readIndexInt + 1) % maxDelayLineLength;
+
+        // Linear interpolation between two samples
+        const sample0 = delayLine[index0];
+        const sample1 = delayLine[index1];
+        const currentSample = sample0 + frac * (sample1 - sample0);
+
+        const nextSample = filterCoefficient * currentSample;
+        delayLine[writeIndex] = nextSample;
+        output[i] = currentSample;
+
+        writeIndex = (writeIndex + 1) % maxDelayLineLength;
+
+        // Stop playing if the signal has decayed below a threshold
+        if (Math.abs(currentSample) < 1e-6) {
+          isPlaying = false;
+          for (let j = i + 1; j < outputLength; j++) {
+            output[j] = 0;
+          }
+          break;
+        }
       }
     } else {
-      active = false;
-    }
-
-    for (let i = 0; i < output.length; i++) {
-      const pluck = excite(startExciter);
-      startExciter = false;
-
-      //const prev = delay.read(delayLength - 1);
-      const curr = delay.read();
-      const filterOut =
-        curr * 1.0 * filterAlpha + prevFilterOut * (1 - filterAlpha);
-      prevFilterOut = filterOut;
-      output[i] = pluck * filterOut * lossFactor;
-    }
-  };
-}
-
-class InterpolatedDelayLine {
-  buffer: Float32Array;
-  writeIndex: number;
-  delayLength: number;
-  position: number; //
-
-  constructor(public readonly size: number) {
-    this.buffer = new Float32Array(size);
-    this.writeIndex = 0;
-    this.delayLength = 10;
-    this.position = size - this.delayLength;
-  }
-
-  setDelayLength(delayLength: number) {
-    this.delayLength = delayLength;
-    this.position = this.writeIndex - delayLength;
-    while (this.position < 0) this.position += this.size;
-  }
-
-  writeAndUpdateIndex(value: number) {
-    this.buffer[this.writeIndex] = value;
-    this.writeIndex++;
-    if (this.writeIndex >= this.size) this.writeIndex = 0;
-    this.position++;
-    if (this.position >= this.size) this.position -= this.size;
-  }
-
-  read() {
-    while (this.position < 0) this.position += this.size;
-    const curr = Math.floor(this.position);
-    let next = curr + 1;
-    while (next >= this.size) next -= this.size;
-    const frac = this.position - curr;
-    const currVal = this.buffer[curr];
-    const nextVal = this.buffer[next];
-    return currVal - frac + (nextVal - currVal);
-  }
-}
-
-function createExciter(durationInSamples: number) {
-  const window = new Float32Array(durationInSamples);
-
-  // Create a triangular envelope
-  for (let i = 0; i < durationInSamples; i++) {
-    window[i] = 1 - Math.abs(i / (durationInSamples / 2) - 1);
-  }
-
-  let index = window.length;
-
-  return function (start: boolean) {
-    if (start) index = 0;
-    if (index < window.length) {
-      index++;
-      const noise = Math.random() * 2 - 1;
-      return noise * window[index];
-    } else {
-      return 0;
+      // Output silence when not playing
+      output.fill(0);
     }
   };
 }

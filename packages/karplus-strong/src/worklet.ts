@@ -7,7 +7,7 @@ export class KsProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.r = true;
-    this.g = createKS(sampleRate, 20);
+    this.g = createKS(sampleRate, 100);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -19,7 +19,7 @@ export class KsProcessor extends AudioWorkletProcessor {
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     const output = outputs[0][0];
-    this.g(output, params.trigger[0], params.frequency[0], params.damping[0]);
+    this.g(output, params.trigger[0], params.frequency[0], params.decay[0]);
 
     return this.r;
   }
@@ -28,7 +28,7 @@ export class KsProcessor extends AudioWorkletProcessor {
     return [
       ["trigger", 0, 0, 1],
       ["frequency", 440, 20, 20000],
-      ["damping", 0.1, 0, 1],
+      ["decay", 0.1, 0.01, 5],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,
       defaultValue,

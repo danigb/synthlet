@@ -29,14 +29,16 @@ function Example() {
       <Slider
         label="Frequency"
         inputClassName="col-span-2"
-        min={20}
-        max={20000}
+        min={100}
+        max={2000}
         param={synth.ks.frequency}
       />
       <Slider
-        label="Damping"
+        label="Decay"
         inputClassName="col-span-2"
-        param={synth.ks.damping}
+        param={synth.ks.decay}
+        min={0.01}
+        max={1}
       />
       <div className="col-span-4">
         <TriggerButton trigger={synth.trigger} />
