@@ -45,10 +45,16 @@ export class VAF extends AudioWorkletProcessor {
     if (this.t !== t) {
       this.t = t;
       this.d = this.p[t] || this.p[0];
+      console.log("USING FILTER", t, this.d);
     }
 
     if (inputs[0].length === 0) return this.r;
-    this.d.update(params.frequency[0], params.resonance[0]);
+    const detune = params.detune[0];
+    const freq = params.frequency[0];
+    this.d.update(
+      freq * (detune ? Math.pow(2, params.detune[0] / 12) : 1),
+      params.resonance[0]
+    );
     this.d.process(inputs[0][0], outputs[0][0]);
     return this.r;
   }
@@ -57,7 +63,8 @@ export class VAF extends AudioWorkletProcessor {
     return [
       ["type", 0, 0, 8],
       ["frequency", 1000, 20, 20000],
-      ["Q", 0.8, 0, 1],
+      ["detune", 0, -127, 127],
+      ["resonance", 0.8, 0, 1],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,
       defaultValue,

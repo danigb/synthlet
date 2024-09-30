@@ -25,13 +25,15 @@ export const registerVirtualAnalogFilterWorklet = createRegistrar(
 export type VirtualAnalogFilterInputs = {
   type: ParamInput;
   frequency: ParamInput;
-  Q: ParamInput;
+  detune: ParamInput;
+  resonance: ParamInput;
 };
 
 export type VirtualAnalogFilterWorkletNode = AudioWorkletNode & {
   type: AudioParam;
   frequency: AudioParam;
-  Q: AudioParam;
+  detune: AudioParam;
+  resonance: AudioParam;
   dispose(): void;
 };
 
@@ -41,9 +43,9 @@ export const VirtualAnalogFilter = Object.assign(
     VirtualAnalogFilterInputs
   >({
     processorName: "VAFProcessor",
-    paramNames: ["type", "frequency", "Q"],
+    paramNames: ["type", "frequency", "detune", "resonance"],
     workletOptions: () => ({
-      numberOfInputs: 0,
+      numberOfInputs: 1,
       numberOfOutputs: 1,
     }),
   }),

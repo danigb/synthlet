@@ -1,14 +1,13 @@
 // The MoogLadder filter implemented in Faust
 export function Moog(sampleRate: number) {
   let fHslider0 = 0;
-  let fConst0 = 0;
   let fHslider1 = 0;
   let fRec0 = [0, 0];
   let fRec1 = [0, 0];
   let fRec2 = [0, 0];
   let fRec3 = [0, 0];
 
-  fConst0 = 3.1415927 / Math.min(1.92e5, Math.max(1.0, sampleRate));
+  const fConst0 = 3.1415927 / Math.min(1.92e5, Math.max(1.0, sampleRate));
 
   return { update, process };
 
