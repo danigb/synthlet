@@ -38,7 +38,7 @@ export class ReverbDelayProcessor extends AudioWorkletProcessor {
     return [
       ["delay", 0.2, 0.001, 1.45],
       ["damping", 0.3, 0, 0.99],
-      ["size", 1, 0.5, 3],
+      ["size", 1, 0.1, 3],
       ["diffusion", 0.5, 0, 0.99],
       ["feedback", 0.9, 0, 1],
       ["modDepth", 0.1, 0, 1],

@@ -353,7 +353,7 @@ export class ReverbDelayDsp {
 
   process(inputs: Float32Array[], outputs: Float32Array[]) {
     const inputs0 = inputs[0];
-    const inputs1 = inputs[1];
+    const inputs1 = inputs[1] || inputs[0];
     const outputs0 = outputs[0];
     const outputs1 = outputs[1];
 

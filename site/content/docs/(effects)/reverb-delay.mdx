@@ -1,0 +1,35 @@
+---
+title: Reverb Delay
+description: A reverb-delay effect from Faust library ported to the web
+---
+
+import ReverbDelayExample from "../../../examples/ReverbDelayExample";
+
+This is a reverb delay (aka gray hole) from Faust library ported to the web:
+
+```ts
+import { ReverbDelay } from "synthlet";
+
+const clave = ClaveDrum(context);
+const reverb = ReverbDelay(audioContext, {
+  delay: 1,
+});
+
+clave.connect(reverb).connect(audioContext.destination);
+```
+
+<ReverbDelayExample />
+
+## Parameters
+
+- `delay`: The delay time [0, 10]
+- `damping`: The damping factor [0, 0.99]
+- `size`: The size of the reverb [0.5, 3]
+- `diffusion`: Early diffusion [0, 0.99]
+- `feedback`: Feedback level [0, 1]
+- `modDepth`: Modulation depth [0, 1]
+- `modFreq`: Modulation frequency [0, 10]
+
+## References
+
+- [Faust original code](https://github.com/grame-cncm/faustlibraries/blob/master/reverbs.lib#L850)
