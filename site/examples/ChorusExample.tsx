@@ -1,7 +1,6 @@
 "use client";
 
-import { AdsrAmp, Oscillator, Param } from "synthlet";
-import { Chorus } from "../../packages/chorus/src";
+import { AdsrAmp, Chorus, Oscillator, Param } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
