@@ -1,24 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { getSynthlet, NoiseType } from "synthlet";
+import { ConnSerial, Gain, Noise, NoiseType, Param } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function NoiseSynth(context: AudioContext) {
-  const s = getSynthlet(context);
-  const volume = s.param.db(-100);
-  const noiseType = s.param(NoiseType.White);
-  return s.withParams(
-    s.conn.serial(s.noise({ type: noiseType }), s.amp(volume)),
-    { volume, noiseType }
-  );
+function createSynth(ac: AudioContext) {
+  const volume = Param.db(ac, -24);
+  const noise = Noise(ac, { type: NoiseType.White });
+  const amp = Gain.val(ac, volume);
+  return Object.assign(ConnSerial([noise, amp]), {
+    noise,
+    volume: volume.input,
+  });
 }
 
 function Example() {
   const [currentNoise, setCurrentNoise] = useState<NoiseType>(NoiseType.White);
-  const synth = useSynth(NoiseSynth);
+  const synth = useSynth(createSynth);
   if (!synth) return null;
 
   return (
@@ -29,7 +29,7 @@ function Example() {
         onChange={(e) => {
           const type = parseInt(e.target.value);
           setCurrentNoise(type);
-          synth.noiseType.value = type;
+          synth.noise.type.value = type;
         }}
       >
         <option value={NoiseType.White}>White</option>

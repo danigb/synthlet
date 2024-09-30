@@ -1,0 +1,31 @@
+---
+title: Karplus-Strong
+description: A Karplus-Strong source node
+---
+
+`@synthlet/karplus-strong`
+
+import KsExample from "../../../examples/KsExample";
+
+A (currently) very simple Karplus-Strong source node:
+
+```ts
+import { registerKarplusStrongWorklet, KarplusStrong } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerKarplusStrongWorklet(audioContext);
+
+const osc = KarplusStrong(audioContext, {});
+osc.connect(audioContext.destination);
+
+// Trigger the source
+osc.trigger.value = 1;
+```
+
+<KsExample />
+
+## Parameters
+
+- `trigger`: A trigger to start the sound (1 means start)
+- `frequency`: The frequency of the generated sound.
+- `decay`: The decay time of the generated sound.
