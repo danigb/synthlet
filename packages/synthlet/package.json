@@ -37,6 +37,7 @@
     "@synthlet/polyblep-oscillator": "^0.2.0",
     "@synthlet/reverb-delay": "^0.1.0",
     "@synthlet/state-variable-filter": "^0.2.0",
+    "@synthlet/virtual-analog-filter": "^0.0.0",
     "@synthlet/wavetable-oscillator": "^0.1.0"
   },
   "scripts": {

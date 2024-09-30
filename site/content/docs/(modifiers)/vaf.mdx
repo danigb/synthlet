@@ -1,0 +1,40 @@
+---
+title: Virtual Analog Filter
+description: A Voltage Controlled Filter (VCF) module
+---
+
+```ts
+import { VirtualAnalogFilter, PolyblepOscillator, AdsrAmp } from "synthlet";
+
+const osc = PolyblepOscillator(audioContext, {
+  frequency: 440,
+});
+const filter = VirtualAnalogFilter(audioContext, {
+  type: VirtualAnalogFilter.MOOG_LADDER,
+  frequency: 4000,
+});
+const vca = AdsrAmp(audioContext);
+osc.connect(filter).connect(vca).connect(audioContext.destination);
+
+vca.trigger();
+```
+
+## Parameters
+
+Same as [ad](/docs/modifiers/ad) envelope:
+
+- `type`: The filter type [0-6]. See below.
+- `frequency`: The filter cutoff frequency in Hz.
+- `Q`: The filter resonance [0-1]. 1 means self oscillation.
+
+Valid types are:
+
+- `VirtualAnalogFilter.MOOG_LADDER`
+- `VirtualAnalogFilter.MOOG_HALF_LADDER`
+- `VirtualAnalogFilter.KORG35_LPF`
+- `VirtualAnalogFilter.KORG35_HPF`
+- `VirtualAnalogFilter.DIODE_LADDER`
+- `VirtualAnalogFilter.OBERHEIM_LPF`
+- `VirtualAnalogFilter.OBERHEIM_HPF`
+- `VirtualAnalogFilter.OBERHEIM_BPF`
+- `VirtualAnalogFilter.OBERHEIM_BSF`

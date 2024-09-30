@@ -1,3 +1,4 @@
+import { Diode } from "./diode";
 import { Korg35 } from "./korg35";
 import { Moog } from "./moog";
 import { MoogHalf } from "./moog-half";
@@ -22,6 +23,7 @@ export class VAF extends AudioWorkletProcessor {
       MoogHalf(sampleRate),
       Korg35(sampleRate, 0),
       Korg35(sampleRate, 1),
+      Diode(sampleRate),
       Oberheim(sampleRate, 0),
       Oberheim(sampleRate, 1),
       Oberheim(sampleRate, 2),
@@ -53,7 +55,7 @@ export class VAF extends AudioWorkletProcessor {
 
   static get parameterDescriptors() {
     return [
-      ["type", 0, 0, 7],
+      ["type", 0, 0, 8],
       ["frequency", 1000, 20, 20000],
       ["Q", 0.8, 0, 1],
     ].map(([name, defaultValue, minValue, maxValue]) => ({

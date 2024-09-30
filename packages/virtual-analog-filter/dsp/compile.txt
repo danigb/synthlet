@@ -3,3 +3,4 @@
  faust -lang rust -cn Korg35LPF korg35-lpf.dsp -o korg35-lpf.rs
  faust -lang rust -cn Korg35HPF korg35-hpf.dsp -o korg35-hpf.rs
  faust -lang rust -cn Oberheim oberheim.dsp -o oberheim.rs
+ faust -lang rust -cn Diode diode.dsp -o diode.rs
