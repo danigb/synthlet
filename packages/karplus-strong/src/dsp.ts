@@ -18,10 +18,11 @@ export function createKS(sampleRate: number, minFrequency: number) {
   ) => {
     const outputLength = output.length;
 
-    const decayTimeInSamples = decay * sampleRate;
+    const decayTimeInSamples = 0.1 * decay * sampleRate;
     const filterCoefficient = Math.pow(targetAmplitude, 1 / decayTimeInSamples);
 
-    if (trigger > 0 && prevTrigger <= 0) {
+    if (trigger >= 1 && prevTrigger < 0.9) {
+      // Some hysterisis to avoid double triggering
       delayInSamples = sampleRate / frequency;
       delayInSamples = Math.min(
         Math.max(delayInSamples, 1),
@@ -62,7 +63,7 @@ export function createKS(sampleRate: number, minFrequency: number) {
         writeIndex = (writeIndex + 1) % maxDelayLineLength;
 
         // Stop playing if the signal has decayed below a threshold
-        if (Math.abs(currentSample) < 1e-6) {
+        if (Math.abs(currentSample) < 1e-8) {
           isPlaying = false;
           for (let j = i + 1; j < outputLength; j++) {
             output[j] = 0;
