@@ -34,7 +34,7 @@ const creteSynth = (context: AudioContext) => {
 };
 
 function Example() {
-  const [currentType, setCurrentType] = useState(
+  const [currentType, setCurrentType] = useState<number>(
     VirtualAnalogFilter.MOOG_LADDER
   );
   const synth = useSynth(creteSynth);
