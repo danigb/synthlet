@@ -1,5 +1,9 @@
 # synthlet
 
+## 0.10.0
+
+- New VirtualAnalogFilter module `@synthlet/virtual-analog-filter`
+
 ## 0.9.0
 
 - New ReverbDelay effect `@synthlet/reverb-delay`
