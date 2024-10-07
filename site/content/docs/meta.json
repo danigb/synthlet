@@ -3,9 +3,8 @@
   "pages": [
     "quick-start",
     "guide",
-    "dsl",
     "synths",
-    "---Available Modules---",
+    "---Modules---",
     "(sources)",
     "(modifiers)",
     "(modulators)",

@@ -5,11 +5,6 @@ description: How to get started with Synthlet
 
 Synthlet is a collection of audio modules implemented as [AudioWorkletNodes](https://developer.mozilla.org/en-US/docs/Web/API/AudioWorklet) that you can use to create synthesizers and audio effects in the browser.
 
-<Callout title="Synthlet is still wip" type="warn">
-  Currently Synthlet is under development and not ready for production use. Use
-  at your own risk.
-</Callout>
-
 ## Install
 
 You can installl all modules using the `synthlet` package:
@@ -52,17 +47,16 @@ Here's the full gist:
 import {
   registerAllWorklets
   PolyblepOscillator,
-  Svf,
+  VirtualAnalogFilter,
   AdsrAmp,
 } from "synthlet";
 
 const ac = await registerAllWorklets(new AudioContext());
 
 const osc = PolyblepOscillator(ac, {frequency: 440 });
-const filter = Svf(ac, {
-  type: SvfType.Lowpass,
-  frequency: 5000,
-  Q: 2,
+const filter = VirtualAnalogFilter(ac, {
+  type: VirtualAnalogFilter.MOOG_LADDER,
+  frequency: 1500,
 });
 const vca = AdsrAmp(ac, {
   attack: 0.01,
@@ -90,32 +84,3 @@ At this point you should able to hear some sound. If you don't hear anything, ch
 </Callout>
 
 Read more about how to use the modules in the [guide](/docs/guide).
-
-## Operators
-
-The `synthlet` package wraps the modules in a set of operators to create complex synths by combining simple modules in a functional way. This is the exact same example as above in a Synthlet way:
-
-```js
-import { synthlet } from "synthlet";
-
-// Register all modules and create the operators
-const audioContext = await registerAllWorklets(new AudioContext());
-const s = getSynthlet(audioContext);
-
-// Create the parameters you want to control
-const gate = s.param();
-const filterFreq = s.param(1500);
-// Create and connect the modules
-const out = s.conn(
-  s.polyblep.saw(440),
-  s.svf.lp(filterFreq),
-  s.amp.adsr(gate, 0.01, 0.1, 0.7, 0.3)
-);
-
-// Start the gate
-gate.value = 1;
-// Change the filter frequency
-filterFreq.value = 5000;
-```
-
-Read more about how to use the operators in the [operators guide](/docs/dsl).

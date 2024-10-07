@@ -22,11 +22,14 @@ export default async function Page({
 
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
-      {(page.data as any).package && (
-        <a href="https://www.npmjs.com/package/@synthlet/clip-amp">
+      {page.data.package && (
+        <a
+          href={`https://www.npmjs.com/package/@synthlet/${page.data.package}`}
+        >
           <img
+            className="rounded-full"
             alt="npm package"
-            src="https://img.shields.io/npm/v/@synthlet/clip-amp"
+            src={`https://img.shields.io/npm/v/@synthlet/${page.data.package}?label=@synthlet/${page.data.package}&color=%2322d3ee`}
           />
         </a>
       )}
