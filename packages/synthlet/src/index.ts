@@ -7,6 +7,7 @@ import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
 import { registerEuclidWorklet } from "@synthlet/euclid";
+import { registerGraniteWorklet } from "@synthlet/granite/src";
 import { registerImpulseWorklet } from "@synthlet/impulse";
 import { registerKarplusStrongWorklet } from "@synthlet/karplus-strong";
 import { registerLfoWorklet } from "@synthlet/lfo";
@@ -27,6 +28,7 @@ export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
 export * from "@synthlet/dattorro-reverb";
 export * from "@synthlet/euclid";
+export * from "@synthlet/granite";
 export * from "@synthlet/impulse";
 export * from "@synthlet/karplus-strong";
 export * from "@synthlet/lfo";
@@ -57,6 +59,7 @@ export function registerAllWorklets(
     registerClockWorklet(context),
     registerDattorroReverbWorklet(context),
     registerEuclidWorklet(context),
+    registerGraniteWorklet(context),
     registerImpulseWorklet(context),
     registerKarplusStrongWorklet(context),
     registerLfoWorklet(context),
