@@ -1,9 +1,11 @@
 "use client";
 
 import { createSynthAudioContext } from "@/app/audio-context";
+import { Slider } from "@/examples/components/Slider";
 import { useMemo, useState } from "react";
+import { Granite, type GraniteWorkletNode } from "synthlet";
 
-export function GraniteDemo() {
+export default function GraniteDemo() {
   const [status, setStatus] = useState("loading");
   const player = useMemo(() => new GranitePlayer(setStatus), [setStatus]);
   return (
@@ -17,6 +19,30 @@ export function GraniteDemo() {
       >
         {player.isPlaying() ? "Stop" : "Play"}
       </button>
+
+      {player.granite && (
+        <div className="grid grid-cols-3 gap-4">
+          <Slider label="Wet" param={player.granite.wet} min={0} max={1} />
+          <Slider
+            label="Frequency"
+            param={player.granite.frequency}
+            min={1}
+            max={30}
+          />
+          <Slider
+            label="Density"
+            param={player.granite.density}
+            min={1}
+            max={30}
+          />
+          <Slider
+            label="Spread"
+            param={player.granite.spread}
+            min={0}
+            max={1}
+          />
+        </div>
+      )}
     </div>
   );
 }
@@ -25,12 +51,15 @@ class GranitePlayer {
   buffer: AudioBuffer | null = null;
   source: AudioBufferSourceNode | null = null;
   ac: AudioContext | null = null;
+  granite: GraniteWorkletNode | null = null;
 
   constructor(private readonly onChange: (status: string) => void) {
     onChange("loading");
     createSynthAudioContext()
       .then((ac) => {
         this.ac = ac;
+        this.granite = Granite(this.ac, {});
+        this.granite.connect(this.ac.destination);
         return ac;
       })
       .then((ac) => {
@@ -53,11 +82,13 @@ class GranitePlayer {
   }
 
   start() {
-    if (!this.isReady() || this.isPlaying()) return;
+    if (!this.ac || !this.granite) return;
+    if (!this.buffer) return;
+    if (this.source) return;
 
-    const source = this.ac!.createBufferSource();
+    const source = this.ac.createBufferSource();
     source.buffer = this.buffer;
-    source.connect(this.ac!.destination);
+    source.connect(this.granite);
     source.start();
     this.onChange("playing");
     this.source = source;

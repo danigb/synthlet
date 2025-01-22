@@ -1,4 +1,6 @@
-import { GraniteDemo } from "./GraniteDemo";
+import dynamic from "next/dynamic";
+
+const GraniteDemo = dynamic(() => import("./GraniteDemo"), { ssr: false });
 
 export default function GranitePage() {
   return (

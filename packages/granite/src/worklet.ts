@@ -21,7 +21,7 @@ export class GraniteProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], p: any) {
-    this.u(p.wet[0]);
+    this.u(p.wet[0], p.frequency[0], p.density[0], p.spread[0]);
     const in1 = inputs[0];
     const out1 = outputs[0];
 
@@ -29,6 +29,25 @@ export class GraniteProcessor extends AudioWorkletProcessor {
       return this.r;
     }
 
+    this.c(in1, out1, in1[0].length);
+
     return this.r;
   }
+
+  static get parameterDescriptors() {
+    return [
+      ["wet", 0.5, 0, 1],
+      ["frequency", 10, 0, 100],
+      ["density", 15, 0, 30],
+      ["spread", 0.5, 0, 1],
+    ].map(([name, defaultValue, minValue, maxValue]) => ({
+      name,
+      defaultValue,
+      minValue,
+      maxValue,
+      automationRate: "k-rate",
+    }));
+  }
 }
+
+registerProcessor("GraniteProcessor", GraniteProcessor);
