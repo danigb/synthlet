@@ -1,0 +1,26 @@
+---
+title: Granite
+description: A granular effect
+package: granite
+---
+
+This is a mono-to-stereo granular effect. See [demo](/demos/granite)
+
+```ts
+import { Granite } from "synthlet";
+
+const osc = new OscillatorNode(audioContext);
+const granite = Granite(audioContext, {
+  speed: 10,
+  density: 15,
+  spread: 0.5,
+});
+
+osc.connect(granite).connect(audioContext.destination);
+```
+
+## Parameters
+
+- `speed`: The sampling of the grains [0, 100]
+- `density`: The density of the grains [0, 30]
+- `spread`: The spread of the grains [0, 1]

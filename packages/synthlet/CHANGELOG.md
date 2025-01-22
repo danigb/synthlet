@@ -1,16 +1,20 @@
 # synthlet
 
+## 0.11.0
+
+- Granite effect module `@synthlet/granite`
+
 ## 0.10.0
 
-- New VirtualAnalogFilter module `@synthlet/virtual-analog-filter`
+- VirtualAnalogFilter effect module `@synthlet/virtual-analog-filter`
 
 ## 0.9.0
 
-- New ReverbDelay effect `@synthlet/reverb-delay`
+- ReverbDelay effect module `@synthlet/reverb-delay`
 
 ## 0.8.0
 
-- New KarplusStrong audio source `@synthlet/karplus-strong`
+- KarplusStrong source module `@synthlet/karplus-strong`
 
 ## 0.7.0
 

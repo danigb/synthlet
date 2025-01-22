@@ -1,6 +1,6 @@
 {
   "name": "synthlet",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "description": "Modular synthesis in the browser",
   "keywords": [
     "modular",
@@ -29,6 +29,7 @@
     "@synthlet/clock": "^0.1.0",
     "@synthlet/dattorro-reverb": "^0.1.0",
     "@synthlet/euclid": "^0.1.0",
+    "@synthlet/granite": "^0.1.0",
     "@synthlet/impulse": "^0.1.0",
     "@synthlet/karplus-strong": "^0.1.0",
     "@synthlet/lfo": "^0.1.0",
