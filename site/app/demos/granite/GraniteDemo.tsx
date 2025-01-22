@@ -23,12 +23,7 @@ export default function GraniteDemo() {
       {player.granite && (
         <div className="grid grid-cols-3 gap-4">
           <Slider label="Wet" param={player.granite.wet} min={0} max={1} />
-          <Slider
-            label="Frequency"
-            param={player.granite.frequency}
-            min={1}
-            max={30}
-          />
+          <Slider label="Speed" param={player.granite.speed} min={1} max={30} />
           <Slider
             label="Density"
             param={player.granite.density}

@@ -45,7 +45,7 @@ export function createDsp(sampleRate: number) {
     const outLeft = outputs[0];
     const outRight = outputs[1];
 
-    // Update the read frequency phasor and trigger grain read
+    // Update the read speed phasor and trigger grain read
     freqPhasor += freqPhasorInc * count;
     if (freqPhasor > 1) {
       freqPhasor -= 1;
@@ -53,7 +53,7 @@ export function createDsp(sampleRate: number) {
       currentGrain = (currentGrain + 1) % NUMBER_OF_GRAINS;
     }
 
-    // Update the write frequency phasor
+    // Update the write speed phasor
     densityPhasor += densityPhasorInc * count;
     if (densityPhasor > 1) {
       densityPhasor -= 1;
@@ -111,8 +111,8 @@ function createHiPassFilter(sampleRate: number) {
   let previousInput: number = 0;
   let previousOutput: number = 0;
 
-  function freq(frequency: number): void {
-    cutoffFrequency = frequency;
+  function freq(speed: number): void {
+    cutoffFrequency = speed;
     const rc = 1 / (2 * Math.PI * cutoffFrequency);
     alpha = rc / (rc + 1 / sampleRate);
   }
@@ -167,8 +167,8 @@ class Grain {
     this.rightGain = Math.sin((Math.PI / 4) * (pan + 1));
   }
 
-  filter(frequency: number) {
-    this.hipass.freq(frequency);
+  filter(speed: number) {
+    this.hipass.freq(speed);
   }
 
   read(input: Float32Array, window: Float32Array) {

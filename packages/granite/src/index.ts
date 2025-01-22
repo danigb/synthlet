@@ -9,14 +9,14 @@ export const registerGraniteWorklet = createRegistrar("GRANITE", PROCESSOR);
 
 export type GraniteInputs = {
   wet?: ParamInput;
-  frequency?: ParamInput;
+  speed?: ParamInput;
   density?: ParamInput;
   spread?: ParamInput;
 };
 
 export type GraniteWorkletNode = AudioWorkletNode & {
   wet: AudioParam;
-  frequency: AudioParam;
+  speed: AudioParam;
   density: AudioParam;
   spread: AudioParam;
   dispose(): void;
@@ -27,7 +27,7 @@ export const Granite = createWorkletConstructor<
   GraniteInputs
 >({
   processorName: "GraniteProcessor",
-  paramNames: ["wet", "frequency", "density", "spread"],
+  paramNames: ["wet", "speed", "density", "spread"],
   workletOptions: () => ({
     numberOfInputs: 1,
     numberOfOutputs: 1,
