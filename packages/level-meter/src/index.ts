@@ -1,7 +1,11 @@
 import { PROCESSOR } from "./_processor";
 import { createRegistrar, disposable } from "./_worklet";
+export { LevelMeterUI } from "./meter-ui";
 
-export const registerMeterWorklet = createRegistrar("LEVEL_METER", PROCESSOR);
+export const registerLevelMeterWorklet = createRegistrar(
+  "LEVEL_METER",
+  PROCESSOR
+);
 
 export type LevelMeterInputs = {};
 
