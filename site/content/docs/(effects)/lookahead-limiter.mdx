@@ -1,0 +1,17 @@
+---
+title: Lookahead Limiter
+description: A lookahead brickwall limiter
+package: lookahead-limiter
+---
+
+A lookahead brickwall limiter that is designed to be used as last effect before the destination. It ensures the output level is always below the threshold.
+
+```ts
+import { LookaheadLimiter } from "synthlet";
+
+const limiter = LookaheadLimiter(audioContext, {
+  threshold: -1,
+});
+
+connect(limiter).connect(audioContext.destination);
+```
