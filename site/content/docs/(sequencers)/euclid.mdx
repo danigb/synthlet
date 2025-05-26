@@ -9,19 +9,14 @@ import EuclidExample from "../../../examples/EuclidExample";
 Generates an euclidean rhythm when connected to a clock:
 
 ```ts
-import {
-  registerAllWorklets,
-  ClockNode,
-  EuclidNode,
-  ClaveDrumNode,
-} from "synthlet";
+import { registerAllWorklets, Clock, Euclid, ClaveDrum } from "synthlet";
 
 const ac = new AudioContext();
 await registerAllWorklets(ac);
 
-const clock = ClockNode(ac, { bpm: 60 });
-const euclid = EuclidNode(ac, { steps: 16, beats: 4, clock });
-const clave = ClaveDrumNode(ac, { trigger: euclid });
+const clock = Clock(ac, { bpm: 60 });
+const euclid = Euclid(ac, { steps: 16, beats: 4, clock });
+const clave = ClaveDrum(ac, { trigger: euclid });
 clave.connect(ac.destination);
 clock.bpm.value = 150;
 ```

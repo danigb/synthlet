@@ -7,7 +7,7 @@ import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
 import { registerEuclidWorklet } from "@synthlet/euclid";
-import { registerGraniteWorklet } from "@synthlet/granite/src";
+import { registerGraniteWorklet } from "@synthlet/granite";
 import { registerImpulseWorklet } from "@synthlet/impulse";
 import { registerKarplusStrongWorklet } from "@synthlet/karplus-strong";
 import { registerLfoWorklet } from "@synthlet/lfo";
