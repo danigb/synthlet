@@ -1,6 +1,6 @@
 {
   "name": "synthlet",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Modular synthesis in the browser",
   "keywords": [
     "modular",
@@ -34,6 +34,7 @@
     "@synthlet/karplus-strong": "^0.1.0",
     "@synthlet/lfo": "^0.1.0",
     "@synthlet/lookahead-limiter": "^0.1.0",
+    "@synthlet/level-meter": "^0.1.0",
     "@synthlet/noise": "^0.1.0",
     "@synthlet/param": "^0.1.0",
     "@synthlet/polyblep-oscillator": "^0.2.0",
