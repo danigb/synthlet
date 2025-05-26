@@ -6,33 +6,41 @@ Collection of synth modules implemented as AudioWorklets.
 
 ```ts
 import {
-  registerAllWorklets,
-  AdsrAmp,
-  Svf,
-  SvfType,
-  PolyblepOscillator
+  // Modules
+  Amp, // Amplifier with an envelope
+  Output, // Output with gain control
+  Polyblep, // Polyblep oscillator
+  Svf, // State Variable Filter
+
+  // Connections
+  Patch, // Create a patch
+  Serial, // Serial connection
+
+  // Utils
+  registerWorklets, // Register worklets
 } from "synthlet";
 
+// Initialize AudioContext
 const ac = new AudioContext();
-await registerAllWorklets(ac);
+await registerWorklets(ac);
 
-// Simplest synth: Oscillator -> Filter -> Amplifier
-const osc = PolyblepOscillator(ac, { frequency: 440 });
-const filter = Svf(ac, {
-  type: SvfType.LowPass
-  frequency: 4000,
-});
-const amp = AdsrAmp(ac, { attack: 0.1, release: 0.5 });
-osc.connect(filter).connect(amp).connect(ac.destination);
+// Create modules
+const osc = Polybleb.saw(ac, { frequency: 440 });
+const filter = Svf.lp(ac, { frequency: 1000 });
+const amp = Amp.adsr(ac, { trigger, attack: 0.01, release: 0.3 });
+const out = Output(ac, { db: -3 });
 
-// Change parameters
-osc.frequency.value = 1200;
+// Make connections
+Serial([osc, filter, amp, out]);
 
-// Start sound
-amp.gate.value = 1;
+// Create a patch
+const patch = Patch(out, { osc, filter, amp });
 
-// Stop sound
-vca.gate.value = 0;
+// Use the patch
+patch.connect(ctx.destination);
+patch.osc.frequency.value = 300;
+patch.amp.gate.value = 1; // start sound
+patch.amp.gate.value = 0; // stop sound
 ```
 
 ## Install

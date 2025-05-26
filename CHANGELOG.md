@@ -1,5 +1,12 @@
 # synthlet
 
+## 0.12.0
+
+Measure and control output signal:
+
+- Add level-meter `@synhtlet/level-meter`
+- Add lookahead-limiter `@synthlet/lookahead-limiter`
+
 ## 0.11.0
 
 - Granite effect module `@synthlet/granite`
@@ -14,7 +21,7 @@
 
 ## 0.8.0
 
-- KarplusStrong source module `@synthlet/karplus-strong`
+- KarplusStrong module `@synthlet/karplus-strong`
 
 ## 0.7.0
 

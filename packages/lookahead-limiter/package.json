@@ -1,0 +1,38 @@
+{
+  "name": "@synthlet/lookahead-limiter",
+  "version": "0.1.0",
+  "description": "Audio lookahead brickwall limiter audio worklet",
+  "keywords": [
+    "audio-limiter",
+    "brickwall",
+    "compressor",
+    "lookahead-limiter",
+    "modular",
+    "synthesis",
+    "synthlet"
+  ],
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "author": "danigb@gmail.com",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.13",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1"
+  },
+  "jest": {
+    "preset": "ts-jest"
+  },
+  "scripts": {
+    "worklet": "esbuild src/processor.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/_processor.ts",
+    "lib": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
+    "build": "npm run worklet && npm run lib"
+  }
+}

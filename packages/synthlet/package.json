@@ -1,6 +1,6 @@
 {
   "name": "synthlet",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Modular synthesis in the browser",
   "keywords": [
     "modular",
@@ -23,8 +23,8 @@
     "@synthlet/ad": "^0.1.0",
     "@synthlet/adsr": "^0.1.0",
     "@synthlet/arp": "^0.1.0",
-    "@synthlet/chorus": "^0.1.0",
     "@synthlet/chorus-t": "^0.1.1",
+    "@synthlet/chorus": "^0.1.0",
     "@synthlet/clip-amp": "^0.1.0",
     "@synthlet/clock": "^0.1.0",
     "@synthlet/dattorro-reverb": "^0.1.0",
@@ -33,6 +33,8 @@
     "@synthlet/impulse": "^0.1.0",
     "@synthlet/karplus-strong": "^0.1.0",
     "@synthlet/lfo": "^0.1.0",
+    "@synthlet/lookahead-limiter": "^0.1.0",
+    "@synthlet/level-meter": "^0.1.0",
     "@synthlet/noise": "^0.1.0",
     "@synthlet/param": "^0.1.0",
     "@synthlet/polyblep-oscillator": "^0.2.0",

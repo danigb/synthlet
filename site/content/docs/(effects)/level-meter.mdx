@@ -1,0 +1,35 @@
+---
+title: Level Meter
+description: A level meter
+package: level-meter
+---
+
+Not an audio effect per se: a level meter that con be used to track output level meter.
+
+The level meter has two parts, one worklet that measures the signal:
+
+```ts
+import { LevelMeter } from "synthlet";
+
+const levelMeter = LevelMeter(audioContext);
+
+connect(levelMeter).connect(audioContext.destination);
+```
+
+And one UI component that displays the level:
+
+```ts
+import { LevelMeterUI } from "synthlet";
+
+const levelMeterUI = LevelMeterUI({
+  orientation: "horizontal",
+});
+
+levelMeterUI.setCanvas(htmlCanvasElement);
+
+const numberOfChannels = 2;
+
+requestAnimationFrame(() => {
+  levelMeterUI.render(levelMeter.peaks, numberOfChannels);
+});
+```
