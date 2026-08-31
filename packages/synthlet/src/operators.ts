@@ -11,7 +11,6 @@ import {
   OscillatorInputs,
 } from "./waa";
 
-import { ChorusT } from "@synthlet/chorus-t";
 import { Clock } from "@synthlet/clock";
 import { Euclid } from "@synthlet/euclid";
 import { Impulse } from "@synthlet/impulse";
@@ -45,7 +44,6 @@ export function createOperators() {
   const ad = operator(AdEnv);
   const adsrAmp = operator(AdsrAmp);
   const adsrEnv = operator(AdsrEnv);
-  const chorusT = operator(ChorusT);
   const clock = operator(Clock);
   const euclid = operator(Euclid);
   const impulse = operator(Impulse);
@@ -88,7 +86,6 @@ export function createOperators() {
         gainOp({ gain: ad({ trigger, ...params }) }),
     }),
     clock: Object.assign(clock, {}),
-    chorusT: Object.assign(chorusT, {}),
     euclid: Object.assign(euclid, {}),
     impulse: Object.assign(impulse, {}),
     lfo: Object.assign(lfo, {}),

@@ -1,6 +1,5 @@
 import { AdEnv, AdInputs } from "@synthlet/ad";
 import { AdsrAmp, AdsrEnv, AdsrInputs } from "@synthlet/adsr";
-import { ChorusT } from "@synthlet/chorus-t";
 import { ClipAmp, ClipType } from "@synthlet/clip-amp";
 import { Clock } from "@synthlet/clock";
 import { Euclid } from "@synthlet/euclid";
@@ -50,7 +49,6 @@ function createSynthlet(context: AudioContext) {
   const ad = operator(AdEnv);
   const adsrAmp = operator(AdsrAmp);
   const adsrEnv = operator(AdsrEnv);
-  const chorusT = operator(ChorusT);
   const clock = operator(Clock);
   const euclid = operator(Euclid);
   const impulse = operator(Impulse);
@@ -115,7 +113,6 @@ function createSynthlet(context: AudioContext) {
       soft: (preGain?: ParamInput, postGain?: ParamInput) =>
         clip({ type: ClipType.Tanh, preGain, postGain }),
     }),
-    chorusT: Object.assign(chorusT, {}),
     euclid: Object.assign(euclid, {}),
     impulse: Object.assign(impulse, {
       trigger: (trigger: ParamInput) => impulse({ trigger }),
