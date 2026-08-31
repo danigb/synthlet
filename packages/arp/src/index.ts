@@ -5,13 +5,12 @@ import {
 } from "./_worklet";
 import { PROCESSOR } from "./processor";
 
-export { ArpScale, ArpType } from "./dsp";
+export { ArpScale } from "./dsp";
 
 export const registerArpWorklet = createRegistrar("ARP", PROCESSOR);
 
 export type ArpInputs = {
   trigger?: ParamInput;
-  type?: ParamInput;
   baseNote?: ParamInput;
   scale?: ParamInput;
   octaves?: ParamInput;
@@ -19,7 +18,6 @@ export type ArpInputs = {
 
 export type ArpWorkletNode = AudioWorkletNode & {
   trigger: AudioParam;
-  type: AudioParam;
   baseNote: AudioParam;
   scale: AudioParam;
   octaves: AudioParam;
@@ -28,7 +26,7 @@ export type ArpWorkletNode = AudioWorkletNode & {
 
 export const Arp = createWorkletConstructor<ArpWorkletNode, ArpInputs>({
   processorName: "ArpProcessor",
-  paramNames: ["trigger", "type", "baseNote", "scale", "octaves"],
+  paramNames: ["trigger", "baseNote", "scale", "octaves"],
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,

@@ -83,6 +83,7 @@ export function createFilter(sampleRate: number) {
         _m0 = 1;
         _m1 = -2 * k;
         _m2 = 0;
+        break;
       default:
         _m0 = 1;
         _m1 = 0;

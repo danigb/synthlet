@@ -30,6 +30,7 @@
   "scripts": {
     "worklet": "esbuild src/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/processor.ts",
     "lib": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
-    "build": "npm run worklet && npm run lib"
+    "build": "npm run worklet && npm run lib",
+    "test": "jest"
   }
 }
