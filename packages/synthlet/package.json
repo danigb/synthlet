@@ -44,6 +44,7 @@
   },
   "scripts": {
     "build": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "jest"
   }
 }

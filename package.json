@@ -17,7 +17,10 @@
   },
   "jest": {
     "preset": "ts-jest",
-    "testEnvironment": "node"
+    "testEnvironment": "node",
+    "moduleNameMapper": {
+      "^@synthlet/(.*)$": "<rootDir>/packages/$1/src/index.ts"
+    }
   },
   "scripts": {
     "build": "turbo build",

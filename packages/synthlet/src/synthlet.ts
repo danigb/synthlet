@@ -202,7 +202,14 @@ function createSynthlet(context: AudioContext) {
       out: Disposable<N>;
       params: P;
       modules?: M;
-    }) => Object.assign(withParams(synth.out, synth.params), synth.modules),
+    }) =>
+      Object.assign(
+        withParams(
+          withDependencies(synth.out, moduleNodes(synth.modules)),
+          synth.params
+        ),
+        synth.modules
+      ),
     op:
       <I>(fn: (context: AudioContext, params?: I) => AudioNode) =>
       (params?: I) =>
@@ -318,6 +325,15 @@ function paramToInputs<P extends ControlParams>(
     }
   }
   return inputs;
+}
+
+// Modules a compound declares are nodes it created, so it owns their teardown.
+function moduleNodes(modules: unknown): Disposable<AudioNode>[] {
+  if (!modules) return [];
+  return Object.values(modules).filter(
+    (m): m is Disposable<AudioNode> =>
+      !!m && typeof (m as any).dispose === "function"
+  );
 }
 
 function withDependencies<N extends AudioNode>(
