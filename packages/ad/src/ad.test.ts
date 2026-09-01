@@ -46,6 +46,55 @@ describe("AdWorkletNode", () => {
   it("has parameter descriptors", () => {
     expect(AdWorklet.parameterDescriptors).toMatchSnapshot();
   });
+
+  describe("modulator mode", () => {
+    const params = {
+      trigger: [1],
+      attack: [0.5],
+      decay: [0.5],
+      offset: [0],
+      gain: [1],
+    };
+    const modulator = () =>
+      new AdWorklet({ processorOptions: { mode: "modulator" } });
+
+    it("multiplies a constant 1 input by the generator's envelope", () => {
+      const expected = runProcessMono(new AdWorklet(), 10, params);
+      const output = runProcessWithInput(
+        modulator(),
+        new Float32Array(10).fill(1),
+        params
+      );
+      expect(Array.from(output)).toEqual(Array.from(expected));
+    });
+
+    it("is silent for a 0 input", () => {
+      const output = runProcessWithInput(
+        modulator(),
+        new Float32Array(10),
+        params
+      );
+      expect(output).toEqual(new Float32Array(10));
+    });
+
+    it("applies gain and offset to the product, like adsr", () => {
+      const loud = { ...params, offset: [100], gain: [50] };
+      const expected = runProcessMono(new AdWorklet(), 10, loud);
+      const output = runProcessWithInput(
+        modulator(),
+        new Float32Array(10).fill(1),
+        loud
+      );
+      expect(Array.from(output)).toEqual(Array.from(expected));
+    });
+
+    it("treats an unconnected input as silence", () => {
+      const node = modulator();
+      const outputs = [[new Float32Array(10)]];
+      expect(() => node.process([[]], outputs, params)).not.toThrow();
+      expect(outputs[0][0]).toEqual(new Float32Array(10));
+    });
+  });
 });
 
 function createWorkletTestContext(sampleRate = 10) {
@@ -102,5 +151,15 @@ export function runProcessMono(
 ) {
   const { inputs, outputs } = createInputsOutputs({ length: size });
   worklet.process(inputs, outputs, params);
+  return outputs[0][0];
+}
+
+export function runProcessWithInput(
+  worklet: Worklet,
+  input: Float32Array,
+  params: any = {}
+) {
+  const outputs = [[new Float32Array(input.length)]];
+  worklet.process([[input]], outputs, params);
   return outputs[0][0];
 }

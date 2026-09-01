@@ -45,6 +45,12 @@ export const Param = Object.assign(Create, {
     Create(context, { input: value }),
   db: (context: AudioContext, db: ParamInput) =>
     Create(context, { scale: ParamScaleType.DbToGain, input: db }),
+  lin: (
+    context: AudioContext,
+    input: ParamInput,
+    min: ParamInput,
+    max: ParamInput
+  ) => Create(context, { scale: ParamScaleType.Linear, input, min, max }),
   inv: (context: AudioContext, value: ParamInput) =>
     Create(context, { input: value, gain: -1 }),
 });

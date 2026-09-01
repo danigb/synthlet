@@ -4,6 +4,10 @@
 
 Part of [Synthlet](https://github.com/danigb/synthlet)
 
+Exports `AdEnv` (an envelope generator with no input) and `AdAmp` (an
+amplifier: one input, multiplied by the same envelope - the percussive
+counterpart of `AdsrAmp`).
+
 ## Credits
 
 The attack-decay envelope follows the approach described in

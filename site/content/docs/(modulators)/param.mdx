@@ -30,3 +30,16 @@ The acceptes values for `type` are:
 - 3 `ParamScaleType.Linear`: From [0,1] to [min,max]
 
 Other different values will be ignored and bypass will be used.
+
+## Shortcuts
+
+`Param` carries statics for the common conversions:
+
+- `Param.db(ac, db)`: decibels to gain (`ParamScaleType.DbToGain`)
+- `Param.lin(ac, input, min, max)`: a `0…1` input scaled to `min…max` (`ParamScaleType.Linear`)
+- `Param.inv(ac, input)`: the input with its sign inverted (`gain: -1`)
+
+```ts
+const tone = Param(audioContext, { input: 0.5 });
+const frequency = Param.lin(audioContext, tone, 20, 100); // 60
+```

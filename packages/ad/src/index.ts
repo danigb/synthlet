@@ -24,12 +24,32 @@ export type AdInputs = {
   gain?: ParamInput;
 };
 
+const PARAM_NAMES = ["trigger", "attack", "decay", "offset", "gain"] as const;
+
+/**
+ * An attack-decay envelope generator: no input, the envelope on its output.
+ */
 export const AdEnv = createWorkletConstructor<AdWorkletNode, AdInputs>({
   processorName: "AdProcessor",
-  paramNames: ["trigger", "attack", "decay", "offset", "gain"],
+  paramNames: PARAM_NAMES,
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
+    processorOptions: { mode: "generator" },
+  }),
+});
+
+/**
+ * An attack-decay amplifier: one input, multiplied by the envelope. The
+ * percussive counterpart of `AdsrAmp`.
+ */
+export const AdAmp = createWorkletConstructor<AdWorkletNode, AdInputs>({
+  processorName: "AdProcessor",
+  paramNames: PARAM_NAMES,
+  workletOptions: () => ({
+    numberOfInputs: 1,
+    numberOfOutputs: 1,
+    processorOptions: { mode: "modulator" },
   }),
 });
 
