@@ -179,10 +179,29 @@ inferred. Nothing below derives from third-party source.
 | `@synthlet/impulse` | Original |
 | `@synthlet/karplus-strong` | Original, from the published algorithm: Karplus & Strong, [*Digital Synthesis of Plucked String and Drum Timbres*](https://users.soe.ucsc.edu/~karplus/papers/digitar.pdf), CMJ 7(2), 1983 |
 | `@synthlet/level-meter` | Original |
-| `@synthlet/lookahead-limiter` | Provenance under review; unpublished. Tracked separately in `thoughts/tickets/reimplement-lookahead-limiter.md` |
+| `@synthlet/lookahead-limiter` | Original, re-derived from published algorithm descriptions: Hämäläinen, [*Smoothing of the Control Signal without Clipped Output in Digital Peak Limiters*](https://www.dafx.de/paper-archive/2002/papers/DAFX02_Hamalainen_smoothing_control_signal.pdf), DAFx-02, §3.5, and ITU-R BS.1770-4 Annex 2 (BS.1770-*style* 4× true-peak detection: the interpolator is a 48-tap Hann-windowed sinc, **not** the ITU reference coefficients). Rewritten from scratch in 2026; the earlier implementation, which cited `DanielRudrich/SimpleCompressor` (GPL-3.0), was removed in full |
 | `@synthlet/param` | Original |
 | `@synthlet/wavetable-oscillator` | Original. Wavetables are loaded at runtime from [WaveEdit Online](https://waveeditonline.com/), not bundled |
 | `synthlet` | Original. Umbrella package |
+
+**On the strength of the lookahead-limiter claim.** This is re-derivation from
+published, permissively-citable sources with the chain recorded — not
+clean-room. Clean-room is a two-team protocol (a specification team that has
+read the original and an implementation team that has not), and this was
+written by one person who had read the prior implementation. What is recorded
+is which published equations each step implements, in the header of
+`packages/lookahead-limiter/src/dsp.ts`. No code from `SimpleCompressor`, and
+none from any other third-party limiter, is present.
+
+Two parts of it are not in the sources at all, and are marked as such in that
+header rather than being allowed to borrow the sources' authority. The release
+cascade is derived from five stated requirements. The true-peak interpolator is
+in the family BS.1770-4 Annex 2 describes but is not its coefficient table:
+Attachment 1 of that annex publishes a specific 48-coefficient 4-phase filter,
+and this package designs its own 48-tap Hann-windowed sinc instead. What the
+package claims about that filter is therefore measured, not inherited — a
+full-scale sine reads within ±0.1 dB from 60 Hz to 10 kHz at 48 kHz, and within
+±0.35 dB from there to 20 kHz, asserted by `dsp.test.ts`.
 
 **Affirmative statement on the reading list.** The root README links a number of
 open-source synthesis projects — Surge, VCV Rack, the Synthesis ToolKit, stmlib,

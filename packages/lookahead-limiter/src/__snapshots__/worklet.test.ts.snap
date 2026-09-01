@@ -1,0 +1,27 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`LookaheadLimiterProcessor has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "a-rate",
+    "defaultValue": -1,
+    "maxValue": 0,
+    "minValue": -24,
+    "name": "threshold",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 168,
+    "maxValue": 1000,
+    "minValue": 10,
+    "name": "release",
+  },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 24,
+    "minValue": -12,
+    "name": "gain",
+  },
+]
+`;

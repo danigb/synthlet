@@ -57,9 +57,16 @@ describe("descriptors", () => {
     expect(withDescriptors.map(([name]) => name)).toEqual(EXPECTED);
   });
 
-  it("the parameterless modules expose an empty list", () => {
+  it("LevelMeter, the one parameterless module, exposes an empty list", () => {
     expect(synthlet.LevelMeter.descriptors).toEqual([]);
-    expect(synthlet.LookaheadLimiter.descriptors).toEqual([]);
+  });
+
+  it("LookaheadLimiter exposes its three performance parameters", () => {
+    expect(synthlet.LookaheadLimiter.descriptors.map((d) => d.name)).toEqual([
+      "threshold",
+      "release",
+      "gain",
+    ]);
   });
 
   it("keeps Svf's frequency at a-rate", () => {
