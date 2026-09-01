@@ -51,3 +51,6 @@ export const VirtualAnalogFilter = Object.assign(
   }),
   TYPES
 );
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

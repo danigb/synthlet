@@ -57,3 +57,6 @@ export const DattorroReverb = createWorkletConstructor<
     outputChannelCount: [2],
   }),
 });
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

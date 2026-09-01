@@ -29,3 +29,6 @@ export const Svf = createWorkletConstructor<SvfWorkletNode, SvfInputs>({
     return { numberOfInputs: 1, numberOfOutputs: 1 };
   },
 });
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

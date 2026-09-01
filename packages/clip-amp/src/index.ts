@@ -33,3 +33,6 @@ export const ClipAmp = createWorkletConstructor<
     numberOfOutputs: 1,
   }),
 });
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

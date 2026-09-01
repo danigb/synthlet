@@ -64,3 +64,6 @@ export const AdsrAmp = createWorkletConstructor<AdsrWorkletNode, AdsrInputs>({
     };
   },
 });
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

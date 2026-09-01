@@ -68,3 +68,6 @@ export function loadWavetable(
 export function fetchWavetableNames(): Promise<string[]> {
   return WavetableLoader.fetchAvailableNames();
 }
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

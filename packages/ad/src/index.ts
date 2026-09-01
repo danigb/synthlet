@@ -32,3 +32,6 @@ export const AdEnv = createWorkletConstructor<AdWorkletNode, AdInputs>({
     numberOfOutputs: 1,
   }),
 });
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

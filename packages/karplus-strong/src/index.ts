@@ -34,3 +34,6 @@ export const KarplusStrong = createWorkletConstructor<
     numberOfOutputs: 1,
   }),
 });
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

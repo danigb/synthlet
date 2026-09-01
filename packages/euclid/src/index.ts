@@ -34,3 +34,6 @@ export const Euclid = createWorkletConstructor<EuclidWorkletNode, EuclidInputs>(
     }),
   }
 );
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

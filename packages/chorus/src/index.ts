@@ -33,3 +33,6 @@ export const Chorus = createWorkletConstructor<ChorusWorkletNode, ChorusInputs>(
     }),
   }
 );
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

@@ -41,3 +41,6 @@ export const LevelMeter = (
 
   return disposable(node);
 };
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";

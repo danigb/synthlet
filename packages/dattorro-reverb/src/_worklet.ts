@@ -2,8 +2,9 @@
 // use ./scripts/copy_files.ts to copy this file to the right place
 // the goal is to avoid external dependencies on packages
 
-// A "Connector" is a function that takes an AudioContext and returns an AudioNode
-// or an custom object with a connect method (that returns a disconnect method)
+// A Connector defers construction of a node until it has a context: given an
+// AudioContext it returns the node. Anywhere a module takes a ParamInput you
+// can pass a number, a live AudioNode, or a Connector.
 export type Connector<N extends AudioNode> = (context: AudioContext) => N;
 
 export type ParamInput = number | Connector<AudioNode> | AudioNode;
@@ -71,6 +72,17 @@ export function connectParams(
   return connected;
 }
 
+/**
+ * Give `node` ownership of the nodes it was built from.
+ *
+ * The returned node gains a `dispose()` that disconnects it, posts a `DISPOSE`
+ * message to its worklet port if it has one, then disposes every dependency in
+ * `dependencies` (calling `dispose()` when present, `disconnect()` otherwise,
+ * and plain functions as teardown callbacks).
+ *
+ * It composes with any `dispose` the node already has rather than replacing it,
+ * and is idempotent - calling it twice is a no-op.
+ */
 export function disposable<N extends AudioNode>(
   node: N,
   dependencies?: ConnectedUnit[]

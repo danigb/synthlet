@@ -48,3 +48,6 @@ export const Param = Object.assign(Create, {
   inv: (context: AudioContext, value: ParamInput) =>
     Create(context, { input: value, gain: -1 }),
 });
+
+export { disposable } from "./_worklet";
+export type { Connector, Disposable, ParamInput } from "./_worklet";
