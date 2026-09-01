@@ -6,32 +6,46 @@ package: adsr
 
 This is an ADSR envelope generator module that can be used to modulate any other parameter.
 
-Is based on the code by [Will Pirkle](https://www.willpirkle.com/) from his [Synth Book](https://www.willpirkle.com/synthbook/).
+It is based on Nigel Redmon's [EG generators](https://www.earlevel.com/main/2013/06/01/EG-generators/), with two TCO constants from [Will Pirkle](https://www.willpirkle.com/)'s [SynthLab](https://github.com/willpirkleaudio/SynthLab).
 
-# Example
+## Example
 
 ```ts
-import { AdsrEnv } from "synthlet";
+import { AdsrEnv, Svf, SvfType } from "synthlet";
 
 const adsr = AdsrEnv(audioContext, {
-  attack: 0.1,
+  attack: 0.01,
   decay: 0.1,
   sustain: 0.5,
-  release: 0.1,
+  release: 0.3,
 });
 const filter = Svf(audioContext, {
   frequency: 440,
   Q: 1,
-  type: "lowpass",
+  type: SvfType.LowPass,
 });
 adsr.connect(filter.frequency);
 ```
 
-#### Parameters
+## Parameters
 
-- `attack`: The attack time in seconds. Default is 0.1.
+- `gate`: Opens the envelope while positive, releases it at 0. Default is 0.
+- `attack`: The attack time in seconds. Default is 0.01.
 - `decay`: The decay time in seconds. Default is 0.1.
 - `sustain`: The sustain level. Default is 0.5.
-- `release`: The release time in seconds. Default is 0.1.
+- `release`: The release time in seconds. Default is 0.3.
 - `offset`: The start offset. Default is 0.
-- `gain`: The gain. Default is 1. It is the maximum amplitude after the attach and affects the sustain level. For example, a gain of 100 and sustain of 0.5 will make the sustain level to be 50.
+- `gain`: The gain. Default is 1. It is the maximum amplitude after the attack and affects the sustain level. For example, a gain of 100 and sustain of 0.5 will make the sustain level to be 50.
+
+## Behaviour
+
+Two things worth knowing before you reach for a parameter that doesn't exist:
+
+- **Retrigger is legato.** Opening the gate again during the release phase resumes the attack from the current level instead of restarting from zero, so a quick re-press has no click and no dropout. There is no retrigger mode to change. For a hard restart, leave the gate closed long enough for the release to reach zero.
+- **Sustain changes apply instantly.** While sustaining, the output tracks `sustain` sample by sample, so automating it mid-note steps to the new value rather than gliding to it. Change it between notes, or ramp `gain` instead.
+
+<Callout title="Don't smooth a gate line" type="warn">
+  Use `setValueAtTime` or `linearRampToValueAtTime` on `gate`. `setTargetAtTime`
+  approaches zero without ever arriving, so the envelope never releases. The
+  envelope is the smoother.
+</Callout>

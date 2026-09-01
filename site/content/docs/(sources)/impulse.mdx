@@ -1,13 +1,13 @@
 ---
 title: Impulse
-description: Impuse generator
+description: Impulse generator
 ---
 
 import { ImpulseExample } from "../../../examples/ImpulseExample";
 
 `@synthlet/impulse`
 
-This module generates an impulse when a gate is opened. Useful to generate a click sound.
+This module generates a one-sample impulse each time it is triggered. Useful to generate a click sound, or to excite a resonator.
 
 ```ts
 import { registerImpulseWorklet, Impulse } from "synthlet";
@@ -16,27 +16,34 @@ const audioContext = new AudioContext();
 await registerImpulseWorklet(audioContext);
 const impulse = Impulse(audioContext);
 
-impulse.gate.value = 1;
+impulse.trigger.value = 1;
 ```
 
 ## Example
 
+Wire a [Param](/docs/modulators/param) into the trigger so the UI has something
+to drive:
+
 ```js
-const s = await synthlet(new AudioContext());
-const trigger = s.param();
-const impulse = s.impulse(trigger);
+import { Impulse, Param } from "synthlet";
+
+const trigger = Param(audioContext);
+const impulse = Impulse(audioContext, { trigger });
+impulse.connect(audioContext.destination);
 
 // UI
-onMouseDown(() => (trigger.value = 1));
-onMouseUp(() => (trigger.value = 0));
+onMouseDown(() => (trigger.input.value = 1));
+onMouseUp(() => (trigger.input.value = 0));
 ```
 
 <ImpulseExample />
 
 ## Parameters
 
-- `trigger`: The gate trigger. 0 means off, 1 means on.
+- `trigger`: Fires an impulse on the rising edge, when it goes from 0 to a positive value. Default is 0.
 
 <Callout title="Triggering" type="warn">
-  the trigger value is 0, it needs to move back to 0 in order to trigger again.
+  The impulse fires on the rising edge, so the trigger has to move back to 0
+  before it will fire again. It is read once per render block: setting it to 1
+  and back to 0 in the same tick leaves nothing for the worklet to see.
 </Callout>
