@@ -1,4 +1,5 @@
 import { ComputeFn, createDsp, UpdateFn } from "./dsp";
+import { PARAMS } from "./params";
 
 export class DattorroReverbProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -46,26 +47,7 @@ export class DattorroReverbProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["filter", 0.7, 0, 1],
-      ["inputDiffusion1", 0.75, 0, 1],
-      ["inputDiffusion2", 0.625, 0, 1],
-      ["decayDiffusion1", 0.7, 0, 0.999999],
-      ["decayDiffusion2", 0.5, 0, 0.999999],
-      ["decay", 0.5, 0, 1],
-      ["damping", 0.25, 0, 1],
-      ["dryWet", 1, -1, 1], // -1 dry, 0 equal, 1 wet
-      ["level", 0.0, 0, 1], // decibels
-    ].map(
-      (x) =>
-        new Object({
-          name: x[0],
-          defaultValue: x[1],
-          minValue: x[2],
-          maxValue: x[3],
-          automationRate: "k-rate",
-        })
-    );
+    return PARAMS;
   }
 }
 

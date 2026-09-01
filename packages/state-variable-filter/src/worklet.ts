@@ -1,4 +1,5 @@
 import { createFilter } from "./dsp";
+import { PARAMS } from "./params";
 
 export class SvfProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -28,17 +29,7 @@ export class SvfProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["type", 1, 0, 10, "k"],
-      ["frequency", 1000, 20, 20000, "a"],
-      ["Q", 0.5, 0.025, 40, "k"],
-    ].map(([name, defaultValue, minValue, maxValue, rate]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: rate + "-rate",
-    }));
+    return PARAMS;
   }
 }
 

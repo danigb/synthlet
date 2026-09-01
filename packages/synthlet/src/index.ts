@@ -41,11 +41,30 @@ export * from "@synthlet/reverb-delay";
 export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/virtual-analog-filter";
 export * from "@synthlet/wavetable-oscillator";
-export { ParamInput } from "./_worklet";
 
-export { getSynthlet, Synthlet } from "./synthlet";
+// tsup's dts bundler drops enums from the `export *` re-exports above, so the
+// umbrella names them: without this they exist at runtime but not in the types.
+export { ArpScale } from "@synthlet/arp";
+export { ClipType } from "@synthlet/clip-amp";
+export { LfoType } from "@synthlet/lfo";
+export { NoiseType } from "@synthlet/noise";
+export { ParamScaleType } from "@synthlet/param";
+export { PolyblepOscillatorType } from "@synthlet/polyblep-oscillator";
+export { SvfType } from "@synthlet/state-variable-filter";
+
+export { Compound, disposable } from "./_worklet";
+export type {
+  CompoundNode,
+  ConnectedUnit,
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";
+
 export * from "./synths/drums";
 export * from "./synths/mono";
+export { registerDrums, registerMonoSynth } from "./synths/registrars";
 export * from "./waa";
 
 export function registerAllWorklets(

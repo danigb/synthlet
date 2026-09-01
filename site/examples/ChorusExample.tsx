@@ -1,19 +1,28 @@
 "use client";
 
-import { AdsrAmp, Chorus, Oscillator, Param } from "synthlet";
+import { AdsrAmp, Chorus, Compound, Oscillator, Param } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function ChorusSynth(context: AudioContext) {
-  const gate = Param(context, { input: 0.1 });
-  const osc = Oscillator(context, { frequency: 440 });
-  const amp = AdsrAmp(context, { gate });
-  const chorus = Chorus(context, {});
+function ChorusSynth(ac: AudioContext) {
+  const gate = Param(ac, { input: 0.1 });
+  const osc = Oscillator(ac, { frequency: 440 });
+  const amp = AdsrAmp(ac, { gate });
+  const chorus = Chorus(ac, {});
 
   osc.connect(amp).connect(chorus);
 
-  return Object.assign(chorus, { osc, amp, gate, chorus });
+  return Compound({
+    output: chorus,
+    owns: [osc, amp, gate],
+    exposes: {
+      osc,
+      amp,
+      chorus,
+      gate: gate.input,
+    },
+  });
 }
 
 function Example() {
@@ -44,7 +53,7 @@ function Example() {
           param={synth.chorus.deviation}
         />
       </div>
-      <GateButton gate={synth.gate.input} />
+      <GateButton gate={synth.gate} />
     </>
   );
 }

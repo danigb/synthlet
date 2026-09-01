@@ -1,4 +1,5 @@
 import { createAdsr } from "./dsp";
+import { PARAMS } from "./params";
 
 export class AdsrProcessor extends AudioWorkletProcessor {
   p: ReturnType<typeof createAdsr>; // processor
@@ -26,21 +27,7 @@ export class AdsrProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["gate", 0, 0, 1],
-      ["attack", 0.01, 0, 10],
-      ["decay", 0.1, 0, 10],
-      ["sustain", 0.5, 0, 1],
-      ["release", 0.3, 0, 100],
-      ["offset", 0, 0, 20000],
-      ["gain", 1, -20000, 20000],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

@@ -1,39 +1,55 @@
 "use client";
 
-import { ClaveDrum, getSynthlet, KickDrum } from "synthlet";
+import {
+  ClaveDrum,
+  Clock,
+  Compound,
+  Euclid,
+  Gain,
+  KickDrum,
+  Param,
+} from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-const RhythmBox = (context: AudioContext) => {
-  const s = getSynthlet(context).use({
-    clave: ClaveDrum,
-    kick: KickDrum,
-  });
-  const bpm = s.param(100);
-  const clock = s.clock({ bpm });
-  const volume = s.param.db(-12);
-  const clave = s.clave({
-    trigger: s.euclid({
+const RhythmBox = (ac: AudioContext) => {
+  const bpm = Param(ac, { input: 100 });
+  const volume = Param.db(ac, -12);
+  const clock = Clock(ac, { bpm });
+
+  // One clock, two euclidean patterns, two drums mixed into the output.
+  const clave = ClaveDrum(ac, {
+    trigger: Euclid(ac, {
       clock,
       steps: 16,
       beats: 7,
-      subdivison: 4,
+      subdivision: 4,
       rotation: 3,
     }),
     volume,
   });
-  const kick = s.kick({
-    trigger: s.euclid({
+  const kick = KickDrum(ac, {
+    trigger: Euclid(ac, {
       clock,
       steps: 16,
       beats: 5,
-      subdivison: 4,
+      subdivision: 4,
     }),
     volume,
   });
+  const out = Gain(ac);
 
-  return s.withParams(s.conn([clave, kick], s.gain()), { bpm, volume });
+  [clave, kick].forEach((drum) => drum.connect(out));
+
+  return Compound({
+    output: out,
+    owns: [clave, kick, clock, bpm, volume],
+    exposes: {
+      bpm: bpm.input,
+      volume: volume.input,
+    },
+  });
 };
 
 function Example() {

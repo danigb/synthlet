@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export { ClipType } from "./dsp";
@@ -27,9 +28,19 @@ export const ClipAmp = createWorkletConstructor<
   ClipAmpInputs
 >({
   processorName: "ClipAmpProcessor",
-  paramNames: ["type", "preGain", "postGain"],
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 1,
     numberOfOutputs: 1,
   }),
 });
+
+export { Compound, disposable } from "./_worklet";
+export type {
+  CompoundNode,
+  ConnectedUnit,
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

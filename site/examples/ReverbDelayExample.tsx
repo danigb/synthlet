@@ -1,17 +1,27 @@
 "use client";
 
-import { ClaveDrum, ReverbDelay } from "synthlet";
+import { ClaveDrum, Compound, Gain, ReverbDelay } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function ReverbDelaySynth(context: AudioContext) {
-  const clave = ClaveDrum(context);
-  const reverb = ReverbDelay(context, {});
+function ReverbDelaySynth(ac: AudioContext) {
+  const clave = ClaveDrum(ac);
+  const reverb = ReverbDelay(ac, {});
+  const out = Gain(ac);
 
-  clave.connect(reverb).connect(context.destination);
+  // The dry drum and the reverb's output, mixed into one bus.
+  clave.connect(out);
+  clave.connect(reverb).connect(out);
 
-  return Object.assign(clave, { reverb });
+  return Compound({
+    output: out,
+    owns: [clave, reverb],
+    exposes: {
+      reverb,
+      trigger: clave.trigger,
+    },
+  });
 }
 
 function Example() {

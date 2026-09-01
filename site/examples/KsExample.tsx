@@ -1,20 +1,27 @@
 "use client";
 
 import { useState } from "react";
-import { ConnSerial, Gain, KarplusStrong, NoiseType, Param } from "synthlet";
+import { Compound, Gain, KarplusStrong, NoiseType, Param } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
 function createSynth(ac: AudioContext) {
-  const trigger = Param.input(ac);
+  const trigger = Param(ac);
   const volume = Param.db(ac, -24);
   const ks = KarplusStrong(ac, { trigger });
+  const out = Gain(ac, { gain: volume });
 
-  return Object.assign(ConnSerial([ks, Gain.val(ac, volume)]), {
-    ks,
-    volume: volume.input,
-    trigger: trigger.input,
+  ks.connect(out);
+
+  return Compound({
+    output: out,
+    owns: [ks, trigger, volume],
+    exposes: {
+      ks,
+      volume: volume.input,
+      trigger: trigger.input,
+    },
   });
 }
 

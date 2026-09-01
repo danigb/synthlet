@@ -32,7 +32,9 @@ export class AudioNodeMock {
 
 export class AudioWorkletNodeMock extends AudioNodeMock {
   readonly messages: unknown[] = [];
-  readonly port = { postMessage: (message: unknown) => this.messages.push(message) };
+  readonly port = {
+    postMessage: (message: unknown) => this.messages.push(message),
+  };
   readonly parameters: { get(name: string): AudioParamMock };
 
   constructor(
@@ -112,7 +114,18 @@ export class ConstantSourceNodeMock extends AudioNodeMock {
  * creation order.
  */
 export function createAudioContextMock() {
-  const context = { sampleRate: 48000, nodes: [] as AudioNodeMock[] };
+  const context = {
+    sampleRate: 48000,
+    nodes: [] as AudioNodeMock[],
+    // createRegistrar() adds each processor as a module, once per context.
+    addedModules: [] as string[],
+    audioWorklet: {
+      addModule(url: string) {
+        context.addedModules.push(url);
+        return Promise.resolve();
+      },
+    },
+  };
 
   const globals = global as any;
   // connectParams() branches on `input instanceof AudioNode`.
@@ -126,5 +139,6 @@ export function createAudioContextMock() {
   return {
     context: context as unknown as AudioContext,
     nodes: context.nodes,
+    addedModules: context.addedModules,
   };
 }

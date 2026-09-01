@@ -1,24 +1,29 @@
 "use client";
 
-import { getSynthlet } from "synthlet";
+import { AdAmp, Compound, Oscillator, Param } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-const VcaSynth = (context: AudioContext) => {
-  const s = getSynthlet(context);
-  const trigger = s.param();
-  const attack = s.param(0.01);
-  const release = s.param(0.3);
+const VcaSynth = (ac: AudioContext) => {
+  const trigger = Param(ac);
+  const attack = Param(ac, { input: 0.01 });
+  const release = Param(ac, { input: 0.3 });
 
-  return s.withParams(
-    s.conn.serial(s.osc.sin(440), s.amp.perc(trigger, attack, release)),
-    {
-      trigger,
-      attack,
-      release,
-    }
-  );
+  const osc = Oscillator(ac, { type: "sine", frequency: 440 });
+  const amp = AdAmp(ac, { trigger, attack, decay: release });
+
+  osc.connect(amp);
+
+  return Compound({
+    output: amp,
+    owns: [osc, trigger, attack, release],
+    exposes: {
+      trigger: trigger.input,
+      attack: attack.input,
+      release: release.input,
+    },
+  });
 };
 
 function WavetableExample() {

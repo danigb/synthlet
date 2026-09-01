@@ -73,6 +73,7 @@ class PolyDrumSynth {
     for (const synth of this.synths.values()) {
       synth.dispose();
     }
+    this.output.disconnect();
   }
 }
 

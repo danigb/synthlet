@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export type AdsrInputs = {
@@ -29,21 +30,11 @@ export type AdsrWorkletNode = AudioWorkletNode & {
   dispose(): void;
 };
 
-const PARAM_NAMES = [
-  "gate",
-  "attack",
-  "decay",
-  "sustain",
-  "release",
-  "offset",
-  "gain",
-] as const;
-
 export const registerAdsrWorklet = createRegistrar("ADSR", PROCESSOR);
 
 export const AdsrEnv = createWorkletConstructor<AdsrWorkletNode, AdsrInputs>({
   processorName: "AdsrProcessor",
-  paramNames: PARAM_NAMES,
+  descriptors: PARAMS,
   workletOptions() {
     return {
       numberOfInputs: 0,
@@ -55,7 +46,7 @@ export const AdsrEnv = createWorkletConstructor<AdsrWorkletNode, AdsrInputs>({
 
 export const AdsrAmp = createWorkletConstructor<AdsrWorkletNode, AdsrInputs>({
   processorName: "AdsrProcessor",
-  paramNames: PARAM_NAMES,
+  descriptors: PARAMS,
   workletOptions() {
     return {
       numberOfInputs: 1,
@@ -64,3 +55,13 @@ export const AdsrAmp = createWorkletConstructor<AdsrWorkletNode, AdsrInputs>({
     };
   },
 });
+
+export { Compound, disposable } from "./_worklet";
+export type {
+  CompoundNode,
+  ConnectedUnit,
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

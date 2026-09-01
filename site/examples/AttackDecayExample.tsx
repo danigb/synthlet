@@ -2,21 +2,35 @@
 
 import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
-import { getSynthlet } from "synthlet";
+import { AdEnv, Compound, Gain, Oscillator, Param } from "synthlet";
 import { useSynth } from "./useSynth";
 
-const AttackDecaySynth = (context: AudioContext) => {
-  const s = getSynthlet(context);
-  const trigger = s.param();
-  const decay = s.param();
-  const attack = s.param();
+const AttackDecaySynth = (ac: AudioContext) => {
+  const trigger = Param(ac);
+  const decay = Param(ac);
+  const attack = Param(ac);
 
-  return s.synth({
-    out: s.conn.serial(
-      s.osc.sin(s.env.ad(trigger, { attack, decay, offset: 440, gain: 2000 })),
-      s.amp(0.2)
-    ),
-    params: { trigger, attack, decay },
+  // The envelope is the oscillator's frequency: 440 Hz at rest, 2440 at peak.
+  const pitchEnv = AdEnv(ac, {
+    trigger,
+    attack,
+    decay,
+    offset: 440,
+    gain: 2000,
+  });
+  const osc = Oscillator(ac, { type: "sine", frequency: pitchEnv });
+  const out = Gain(ac, { gain: 0.2 });
+
+  osc.connect(out);
+
+  return Compound({
+    output: out,
+    owns: [osc, pitchEnv, trigger, attack, decay],
+    exposes: {
+      trigger: trigger.input,
+      attack: attack.input,
+      decay: decay.input,
+    },
   });
 };
 

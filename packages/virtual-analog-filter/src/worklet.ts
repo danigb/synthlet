@@ -3,6 +3,7 @@ import { Korg35 } from "./korg35";
 import { Moog } from "./moog";
 import { MoogHalf } from "./moog-half";
 import { Oberheim } from "./oberheim";
+import { PARAMS } from "./params";
 
 type Filter = {
   update: (frequency: number, resonance: number) => void;
@@ -59,18 +60,7 @@ export class VAF extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["type", 0, 0, 8],
-      ["frequency", 1000, 20, 20000],
-      ["detune", 0, -127, 127],
-      ["resonance", 0.8, 0, 1],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

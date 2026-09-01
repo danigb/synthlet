@@ -33,9 +33,8 @@
   "scripts": {
     "build": "turbo build",
     "lint": "turbo lint",
-    "api": "python scripts/export-api.py",
     "test": "jest --coverage",
-    "test:ci": "npm run api && npm run build && npm run test",
+    "test:ci": "npm run build && npm run test",
     "processors": "find ./packages -name 'processor.ts' -exec wc -m {} +",
     "bump": "changeset version && npm run publish:prepare",
     "publish:prepare": "cp README.md packages/synthlet && cp packages/synthlet/CHANGELOG.md CHANGELOG.md"

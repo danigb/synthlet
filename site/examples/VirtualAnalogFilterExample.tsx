@@ -2,42 +2,48 @@
 
 import { useState } from "react";
 import {
+  Compound,
   Gain,
   Lfo,
   LfoType,
   Oscillator,
   Param,
-  ParamScaleType,
   VirtualAnalogFilter,
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-const creteSynth = (context: AudioContext) => {
-  const osc = Oscillator(context, { type: "sawtooth", frequency: 5000 });
-  const volume = Param(context, { scale: ParamScaleType.DbToGain, input: -12 });
-  const lfo = Lfo(context, {
+const createSynth = (ac: AudioContext) => {
+  const volume = Param.db(ac, -12);
+  const osc = Oscillator(ac, { type: "sawtooth", frequency: 5000 });
+  const lfo = Lfo(ac, {
     frequency: 10,
     type: LfoType.RandSampleHold,
     gain: 0,
   });
-  const filter = VirtualAnalogFilter(context, {
-    frequency: 2000,
-    detune: lfo,
+  const filter = VirtualAnalogFilter(ac, { frequency: 2000, detune: lfo });
+  const out = Gain(ac, { gain: volume });
+
+  osc.connect(filter).connect(out);
+
+  return Compound({
+    output: out,
+    owns: [osc, filter, lfo, volume],
+    exposes: {
+      osc,
+      filter,
+      lfo,
+      volume: volume.input,
+    },
   });
-  const gain = Gain(context, { gain: volume });
-
-  osc.connect(filter).connect(gain).connect(context.destination);
-
-  return Object.assign(gain, { osc, filter, volume: volume.input, lfo });
 };
 
 function Example() {
   const [currentType, setCurrentType] = useState<number>(
     VirtualAnalogFilter.MOOG_LADDER
   );
-  const synth = useSynth(creteSynth);
+  const synth = useSynth(createSynth);
 
   if (!synth) return null;
 

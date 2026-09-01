@@ -1,4 +1,5 @@
 import { createArpeggiator } from "./dsp";
+import { PARAMS } from "./params";
 
 export class ArpProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -30,18 +31,7 @@ export class ArpProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["trigger", 0, 0, 1],
-      ["baseNote", 60, 0, 200],
-      ["scale", 1, 1, 4095],
-      ["octaves", 1, 1, 10],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

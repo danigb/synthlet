@@ -17,10 +17,20 @@ export const LookaheadLimiter = createWorkletConstructor<
   LookaheadLimiterInputs
 >({
   processorName: "LookaheadLimiterProcessor",
-  paramNames: [],
+  descriptors: [],
   workletOptions: () => ({
     numberOfInputs: 1,
     numberOfOutputs: 1,
     outputChannelCount: [2],
   }),
 });
+
+export { Compound, disposable } from "./_worklet";
+export type {
+  CompoundNode,
+  ConnectedUnit,
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

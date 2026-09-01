@@ -1,10 +1,14 @@
+import { PARAMS } from "./params";
+
 export class AdProcessor extends AudioWorkletProcessor {
   r: boolean; // running
+  m: boolean; // modulator mode: multiply the input by the envelope
   d: ReturnType<typeof createEnvelope>;
 
-  constructor() {
+  constructor(options?: any) {
     super();
     this.r = true;
+    this.m = options?.processorOptions?.mode === "modulator";
     this.d = createEnvelope(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -15,31 +19,29 @@ export class AdProcessor extends AudioWorkletProcessor {
     };
   }
 
-  process(_inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
+  process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
+    const output = outputs[0][0];
     this.d.update(params.trigger[0], params.attack[0], params.decay[0]);
-    this.d.gen(outputs[0][0], params.offset[0], params.gain[0]);
+    // In modulator mode an unconnected input has no channels; treat it as
+    // silence so the envelope keeps running instead of process() throwing.
+    const input = this.m ? inputs[0][0] ?? silence(output.length) : undefined;
+    this.d.gen(output, params.offset[0], params.gain[0], input);
 
     return this.r;
   }
 
   static get parameterDescriptors() {
-    return [
-      ["trigger", 0, 0, 1],
-      ["attack", 0.01, 0, 10],
-      ["decay", 0.1, 0, 10],
-      ["offset", 0, 0, 20000],
-      ["gain", 1, 0, 10000],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 
 registerProcessor("AdProcessor", AdProcessor);
+
+let SILENCE = new Float32Array(128);
+function silence(length: number) {
+  if (SILENCE.length < length) SILENCE = new Float32Array(length);
+  return SILENCE;
+}
 
 // Attack-Decay envelope based on https://paulbatchelor.github.io/sndkit/env/
 function createEnvelope(sampleRate: number) {
@@ -83,7 +85,15 @@ function createEnvelope(sampleRate: number) {
         decayEnv = Math.exp(-1.0 / tau);
       }
     },
-    gen(output: Float32Array, offset: number, gain: number) {
+    // Generator mode (no input) writes the envelope itself; modulator mode
+    // multiplies each input sample by it. Gain and offset apply to the result
+    // in both cases, the same way the adsr package does it.
+    gen(
+      output: Float32Array,
+      offset: number,
+      gain: number,
+      input?: Float32Array
+    ) {
       let out = 0;
       for (let i = 0; i < output.length; i++) {
         if (mode === MODE_ATTACK) {
@@ -102,7 +112,8 @@ function createEnvelope(sampleRate: number) {
           out = 0;
         }
 
-        output[i] = offset + out * gain;
+        const value = input ? input[i] * out : out;
+        output[i] = offset + value * gain;
       }
     },
   };

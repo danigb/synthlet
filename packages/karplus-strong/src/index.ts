@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export const registerKarplusStrongWorklet = createRegistrar(
@@ -28,9 +29,19 @@ export const KarplusStrong = createWorkletConstructor<
   KarplusStrongInputs
 >({
   processorName: "KsProcessor",
-  paramNames: ["trigger", "frequency", "decay"],
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
   }),
 });
+
+export { Compound, disposable } from "./_worklet";
+export type {
+  CompoundNode,
+  ConnectedUnit,
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

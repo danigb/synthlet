@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export const registerImpulseWorklet = createRegistrar("IMPULSE", PROCESSOR);
@@ -21,9 +22,19 @@ export const Impulse = createWorkletConstructor<
   ImpulseInputs
 >({
   processorName: "ImpulseProcessor",
-  paramNames: ["trigger"],
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
   }),
 });
+
+export { Compound, disposable } from "./_worklet";
+export type {
+  CompoundNode,
+  ConnectedUnit,
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

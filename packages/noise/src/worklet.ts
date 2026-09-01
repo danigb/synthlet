@@ -1,4 +1,5 @@
 import { getNoiseAlgorithm, NoiseAlgorithm } from "./dsp";
+import { PARAMS } from "./params";
 
 export class NoiseWorkletProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -33,15 +34,7 @@ export class NoiseWorkletProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [["type", 0, 0, 100]].map(
-      ([name, defaultValue, minValue, maxValue]) => ({
-        name,
-        defaultValue,
-        minValue,
-        maxValue,
-        automationRate: "k-rate",
-      })
-    );
+    return PARAMS;
   }
 }
 

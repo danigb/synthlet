@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ConnSerial, Gain, Noise, NoiseType, Param } from "synthlet";
+import { Compound, Gain, Noise, NoiseType, Param } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
@@ -9,10 +9,17 @@ import { useSynth } from "./useSynth";
 function createSynth(ac: AudioContext) {
   const volume = Param.db(ac, -24);
   const noise = Noise(ac, { type: NoiseType.White });
-  const amp = Gain.val(ac, volume);
-  return Object.assign(ConnSerial([noise, amp]), {
-    noise,
-    volume: volume.input,
+  const out = Gain(ac, { gain: volume });
+
+  noise.connect(out);
+
+  return Compound({
+    output: out,
+    owns: [noise, volume],
+    exposes: {
+      noise,
+      volume: volume.input,
+    },
   });
 }
 

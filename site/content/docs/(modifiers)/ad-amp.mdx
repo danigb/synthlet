@@ -6,9 +6,11 @@ package: ad
 
 import AmpAdExample from "../../../examples/AmpAdExample";
 
-A Voltage Controlled Amplifier (VCA) module with an Attack-Decay envelope
+A Voltage Controlled Amplifier (VCA) module with an Attack-Decay envelope: one
+input, multiplied by the envelope. It is the percussive counterpart of
+[ADSR Amplifier](/docs/modifiers/adsr-amp).
 
-Use it to add an percusive envelopes to the synth voices.
+Use it to add percussive envelopes to synth voices.
 
 ```ts
 import { AdAmp, OscillatorNode } from "synthlet";
@@ -17,35 +19,35 @@ const osc = new OscillatorNode(audioContext, {
   frequency: 440,
 });
 const vca = AdAmp(audioContext, {
-  gain: 0.5,
-  attack: 0.1,
-  decay: 0.1,
-  sustain: 0.5,
-  release: 0.1,
+  attack: 0.01,
+  decay: 0.3,
 });
 // Connect the oscillator to the VCA and to the output
 osc.connect(vca).connect(audioContext.destination);
-// Start the envelope (start attack phase)
-vca.gate.value = 1;
-// Stop the envelope (start release phase)
-vca.gate.value = 0;
+// Fire the envelope (attack, then decay back to silence)
+vca.trigger.value = 1;
+// Move the trigger back to 0 so the next 1 fires it again
+vca.trigger.value = 0;
 ```
 
 <AmpAdExample />
 
 ## Parameters
 
-Same as [ad](/docs/modifiers/ad) envelope:
+Same as the [AD](/docs/modulators/ad) envelope:
 
-- `attack`: The attack time in seconds. Default is 0.1.
+- `trigger`: The envelope trigger. 1 means start. You need to move the trigger back to 0 to be able to restart the envelope.
+- `attack`: The attack time in seconds. Default is 0.01.
 - `decay`: The decay time in seconds. Default is 0.1.
-- `trigger`: The envelope trigger. 1 means start. You need to move the trigger back to 1 to restart the envelope.
-- `offset`: The offset of the envelope. Default is 0.
-- `gain`: The gain of the envelope. Default is 1.
+- `offset`: Added to the output. Default is 0.
+- `gain`: Multiplies the output. Default is 1.
+
+The output is `input × envelope × gain + offset`, the same formula as the ADSR
+amplifier.
 
 <Callout title="Offset is silence" type="warn">
-  The ADSR will output `offset` value when the gate is closed. If you want to
-  silence the output, set the `offset` to 0.
+  The amplifier outputs `offset` while the envelope is at rest. If you want to
+  silence the output, leave `offset` at 0.
 </Callout>
 
 ## Package
@@ -58,8 +60,7 @@ import { AdAmp, registerAdWorklet } from "@synthlet/ad";
 const ac = new AudioContext();
 await registerAdWorklet(ac);
 const amp = AdAmp(ac, {
-  attack: 0.1,
-  decay: 0.1,
-  gain: 1,
+  attack: 0.01,
+  decay: 0.3,
 });
 ```

@@ -88,7 +88,12 @@ A parameter accepts a node wherever it accepts a number, which is how you
 modulate:
 
 ```ts
-import { registerAllWorklets, Lfo, LfoType, PolyblepOscillator } from "synthlet";
+import {
+  registerAllWorklets,
+  Lfo,
+  LfoType,
+  PolyblepOscillator,
+} from "synthlet";
 
 const ac = await registerAllWorklets(new AudioContext());
 
@@ -104,9 +109,16 @@ osc.connect(ac.destination);
 expose their own parameters, and the modules they're made of:
 
 ```ts
-import { registerAllWorklets, MonoSynth, KickDrum } from "synthlet";
+import {
+  registerDrums,
+  registerMonoSynth,
+  MonoSynth,
+  KickDrum,
+} from "synthlet";
 
-const ac = await registerAllWorklets(new AudioContext());
+// Each compound registers only what it's made of, and they compose
+const ac = new AudioContext();
+await Promise.all([registerMonoSynth(ac), registerDrums(ac)]);
 
 const synth = MonoSynth(ac, { frequency: 220 });
 synth.connect(ac.destination);

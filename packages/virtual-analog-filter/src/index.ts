@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 const TYPES = {
@@ -43,7 +44,7 @@ export const VirtualAnalogFilter = Object.assign(
     VirtualAnalogFilterInputs
   >({
     processorName: "VAFProcessor",
-    paramNames: ["type", "frequency", "detune", "resonance"],
+    descriptors: PARAMS,
     workletOptions: () => ({
       numberOfInputs: 1,
       numberOfOutputs: 1,
@@ -51,3 +52,13 @@ export const VirtualAnalogFilter = Object.assign(
   }),
   TYPES
 );
+
+export { Compound, disposable } from "./_worklet";
+export type {
+  CompoundNode,
+  ConnectedUnit,
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

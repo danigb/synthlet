@@ -5,7 +5,7 @@ exports[`NoiseWorkletNode has parameter descriptors 1`] = `
   {
     "automationRate": "k-rate",
     "defaultValue": 0,
-    "maxValue": 100,
+    "maxValue": 1,
     "minValue": 0,
     "name": "type",
   },

@@ -1,4 +1,5 @@
 import { createPolyblep } from "./dsp";
+import { PARAMS } from "./params";
 
 export class PolyBLEProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -24,17 +25,7 @@ export class PolyBLEProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["type", 0, 0, 2],
-      ["frequency", 440, 0, 20000],
-      ["detune", 0, 0, 10000],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

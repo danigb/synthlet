@@ -17,10 +17,10 @@ const lfo = Lfo(audioContext, {
 
 ## Params
 
-- `frequency`: the frequency of the oscillator in Hz. Default is 1Hz. Range: [0.01-100]
+- `frequency`: the frequency of the oscillator in Hz. Default is 10Hz. Range: [0-200]
 - `type`: the type of the oscillator. You can use `LfoType` enum. Default is `LfoType.Sine`.
-- `gain`: the amplitude of the oscillator. Default is 1. Range: [0-1]
-- `offset`: the offset of the oscillator. Default is 0. Range: [-1,1]
+- `gain`: the amplitude of the oscillator. Default is 1. Range: [0-10000]
+- `offset`: the offset of the oscillator. Default is 0. Range: [-1000, 1000]
 
 Available waveform types (through `LfoType` enum) are:
 

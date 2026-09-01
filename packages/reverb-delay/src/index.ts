@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export const registerReverbDelayWorklet = createRegistrar(
@@ -36,18 +37,20 @@ export const ReverbDelay = createWorkletConstructor<
   ReverbDelayInputs
 >({
   processorName: "ReverbDelayProcessor",
-  paramNames: [
-    "delay",
-    "damping",
-    "size",
-    "diffusion",
-    "feedback",
-    "modDepth",
-    "modFreq",
-  ],
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 1,
     numberOfOutputs: 1,
     outputChannelCount: [2],
   }),
 });
+
+export { Compound, disposable } from "./_worklet";
+export type {
+  CompoundNode,
+  ConnectedUnit,
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

@@ -1,4 +1,5 @@
 import { createChorus } from "./dsp";
+import { PARAMS } from "./params";
 
 export class ChorusProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -37,18 +38,7 @@ export class ChorusProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["delay", 0.5, 0, 1],
-      ["rate", 0.5, 0, 1],
-      ["depth", 0.5, 0, 1],
-      ["deviation", 0.5, 0, 1],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 
