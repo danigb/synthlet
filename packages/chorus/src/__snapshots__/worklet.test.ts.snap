@@ -1,0 +1,34 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ChorusProcessor has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.5,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "delay",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.5,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "rate",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.5,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "depth",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.5,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "deviation",
+  },
+]
+`;

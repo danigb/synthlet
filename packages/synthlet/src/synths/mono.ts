@@ -27,10 +27,11 @@ export function MonoSynth(context: AudioContext, inputs: MonoSynthInputs = {}) {
     type: LfoType.Sine,
     gain: 0,
     frequency: 10,
+    ...inputs.vibrato,
   });
   vibrato.connect(osc.frequency);
   const filterEnv = s.env.adsr(gate, { gain: 3000, offset: 2000 });
-  const filter = s.svf({ frequency: filterEnv });
+  const filter = s.svf({ frequency: filterEnv, ...inputs.filter });
   const amp = s.amp.adsr(gate, { ...inputs.amp });
 
   return s.synth({

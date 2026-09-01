@@ -14,19 +14,18 @@ Generates a note sequence from a given scale.
 </Callout>
 
 ```ts
-import { registerAllWorklets, ArpType, ArpScale } from "synthlet";
+import { registerAllWorklets, Arp, ArpScale, Clock, MonoSynth } from "synthlet";
 
 const audioContext = await registerAllWorklets(new AudioContext());
 const clock = Clock(audioContext, { bpm: 120 });
 const arp = Arp(audioContext, {
   trigger: clock,
-  type: ArpType.Random,
   scale: ArpScale.Major,
   octaves: 2,
 });
 
 const mono = MonoSynth(audioContext, {
-  trigger: clock,
+  gate: clock,
   frequency: arp,
 });
 ```
@@ -36,20 +35,18 @@ const mono = MonoSynth(audioContext, {
 ## Parameters
 
 - `trigger`: The clock signal to advance the arpeggiator. It will output the next note.
-- `type`: The arpeggiator type. Default is `ArpType.Random`.
 - `baseNote`: The base midi note of the arpeggiator. Default is `60`.
-- `scale`: The scale type. Default is `ArpScale.Major`.
-- `octaves`: The number of octaves to span. Default is 2.
+- `scale`: The scale bitmask. Default is `1` (root only). See below.
+- `octaves`: The number of octaves to span. Default is `1`.
 
 ## Scales
 
-You can use `ArpScale` to specify the scale of the arpeggiator. Or just have fun with random numbers!
+Scales are 12-bit masks: bit `i` set means the pitch class `i` semitones above
+the root belongs to the scale (bit 0 is the root). Use `ArpScale` for the
+common ones, or pass any number between 1 and 4095 and have fun:
 
-- `ArpScale.Major`
-- `ArpScale.Minor`
-- `ArpScale.PentatonicMinor`
-- `ArpScale.Blues`
-- `ArpScale.WholeTone`
-- `ArpScale.Chromatic`
-- `ArpScale.Melodic`
-- `ArpScale.Harmonic`
+- `ArpScale.Major`, `ArpScale.Minor`, `ArpScale.Dorian`, `ArpScale.Phrygian`, `ArpScale.Lydian`, `ArpScale.Mixolydian`, `ArpScale.Locrian`
+- `ArpScale.HarmonicMinor`, `ArpScale.MelodicMinor`
+- `ArpScale.PentatonicMajor`, `ArpScale.PentatonicMinor`, `ArpScale.Blues`
+- `ArpScale.WholeTone`, `ArpScale.Chromatic`, `ArpScale.Augmented`, `ArpScale.WholeHalfDiminished`, `ArpScale.HalfWholeDiminished`
+- Chords: `ArpScale.TriadMajor`, `ArpScale.TriadMinor`, `ArpScale.TriadDiminished`, `ArpScale.TriadAugmented`, `ArpScale.Sus2`, `ArpScale.Sus4`, `ArpScale.Major6th`, `ArpScale.Major7th`, `ArpScale.Dominant7th`, `ArpScale.Minor7th`, `ArpScale.MinorMajor7th`

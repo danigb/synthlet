@@ -1,4 +1,22 @@
-
+/*
+ * The `chorus_mono` definition below is copied verbatim from the Faust
+ * distribution, examples/SAM/chorus/chorusForBrowser.dsp.
+ *
+ *   FAUST compiler
+ *   Copyright (C) 2003-2024 GRAME, Centre National de Creation Musicale
+ *   Copyright (C) 2023-2024 INRIA
+ *
+ * The Faust distribution is licensed under the GNU Lesser General Public
+ * License, version 2.1 or (at your option) any later version. This file is
+ * therefore NOT covered by synthlet's MIT licence.
+ *
+ * `chorus_mono` has no equivalent in faustlibraries, so the copy cannot be
+ * replaced with a library reference. The generated DSP in ../src is compiler
+ * output and is not affected: GRAME state that the compiler's licence does not
+ * propagate to generated code (https://faustdoc.grame.fr/manual/faq/).
+ *
+ * See THIRD-PARTY-LICENSES.md at the repository root.
+ */
 import("stdfaust.lib");
 
 voices = 8; // MUST BE EVEN

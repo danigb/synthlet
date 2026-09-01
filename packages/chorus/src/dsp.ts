@@ -55,8 +55,6 @@ export function createChorus(sampleRate: number) {
 
       fRec1[0] = fSlow1 + 0.999 * fRec1[1];
       fRec2[0] = fSlow2 * fRec1[0] + 0.999 * fRec2[1];
-      // Simulate i32::wrapping_sub: not sure if needed
-      //let iTemp2 = (1 - iVec0[1] + 4294967296) % 4294967296;
       let iTemp2 = 1 - iVec0[1];
       fRec5[0] = fSlow3 + fConst1 * fRec5[1];
       let fTemp3 = iTemp2 !== 0 ? 0.0 : fRec4[1] + fConst3 * fRec5[0];

@@ -1,0 +1,13 @@
+{
+  // Tests resolve @synthlet/* to package sources, mirroring the jest
+  // moduleNameMapper. Without this, TypeScript follows each package's
+  // "types" field to dist/, which only exists after a build - so `npm test`
+  // on a fresh clone saw `unknown` for every cross-package type.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@synthlet/*": ["packages/*/src/index.ts"]
+    }
+  }
+}

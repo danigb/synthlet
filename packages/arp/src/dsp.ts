@@ -1,12 +1,14 @@
-export enum ArpType {
-  Random = 0,
-}
-
+/**
+ * Scales encoded as 12-bit pitch-class masks: bit `i` set means pitch class
+ * `i` (semitones above the root) belongs to the scale. Bit 0 is the root, so
+ * e.g. the major scale [0,2,4,5,7,9,11] is 0b101010110101 = 2741.
+ *
+ * Any number in 1..4095 is a valid (if unusual) scale.
+ */
 export enum ArpScale {
   Augmented = 2457,
   Blues = 1257,
   Chromatic = 4095,
-  Diminished = 2925,
   Dominant7th = 1169,
   Dorian = 1709,
   HalfWholeDiminished = 1755,
@@ -21,7 +23,6 @@ export enum ArpScale {
   Minor = 1453,
   MinorMajor7th = 2185,
   Mixolydian = 1717,
-  Pentatonic = 1193,
   PentatonicMajor = 661,
   PentatonicMinor = 1193,
   Phrygian = 1451,
@@ -41,14 +42,12 @@ export function createArpeggiator() {
   let $octaves = 1;
 
   let scaleNotes = [0];
-  let position = 0;
   let len = 1;
   let active = false;
   let current = $note;
 
   return function update(
     trigger: number,
-    type: number,
     baseNote: number,
     scale: number,
     octaves: number
@@ -60,13 +59,12 @@ export function createArpeggiator() {
       $scale = scale;
       scaleNotes = getPitchClasses(scale);
       len = scaleNotes.length;
-      position = position % len;
     }
 
     if (trigger === 1) {
       if (!active) {
         active = true;
-        current = getNextNote(type);
+        current = nextRandom();
       }
     } else {
       active = false;
@@ -77,28 +75,23 @@ export function createArpeggiator() {
     return freq;
   };
 
-  function getNextNote(type: number) {
-    switch (type) {
-      case ArpType.Random:
-      default:
-        return nextRandom();
-    }
-  }
-
   function nextRandom() {
-    const octave = Math.floor(Math.random() * ($octaves - 1));
-    const randomFromChord = scaleNotes[Math.floor(Math.random() * len)];
-    return $note + randomFromChord + octave * 12;
+    const octave = Math.floor(Math.random() * $octaves);
+    const randomFromScale = scaleNotes[Math.floor(Math.random() * len)];
+    return $note + randomFromScale + octave * 12;
   }
 }
 
-function getPitchClasses(scale: number) {
-  const binary = scale.toString(2);
+/**
+ * Decode a scale bitmask into its pitch classes (bit 0 = root).
+ * An empty mask yields the root alone.
+ */
+export function getPitchClasses(scale: number): number[] {
   const pitchClasses: number[] = [];
-  for (let i = 0; i < binary.length; i++) {
-    if (binary[i] === "1") {
+  for (let i = 0; i < 12; i++) {
+    if (scale & (1 << i)) {
       pitchClasses.push(i);
     }
   }
-  return pitchClasses;
+  return pitchClasses.length ? pitchClasses : [0];
 }

@@ -75,5 +75,3 @@ export function ConnMixInto(
   nodes.forEach((node) => node.connect(target));
   return disposable(target, nodes);
 }
-
-export function Synthlet<N extends AudioNode>(output: Disposable<N>) {}

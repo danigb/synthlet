@@ -2,7 +2,6 @@ import { registerAdWorklet } from "@synthlet/ad";
 import { registerAdsrWorklet } from "@synthlet/adsr";
 import { registerArpWorklet } from "@synthlet/arp";
 import { registerChorusWorklet } from "@synthlet/chorus";
-import { registerChorusTWorklet } from "@synthlet/chorus-t";
 import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
@@ -25,7 +24,6 @@ export * from "@synthlet/ad";
 export * from "@synthlet/adsr";
 export * from "@synthlet/arp";
 export * from "@synthlet/chorus";
-export * from "@synthlet/chorus-t";
 export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
 export * from "@synthlet/dattorro-reverb";
@@ -57,7 +55,6 @@ export function registerAllWorklets(
     registerAdsrWorklet(context),
     registerAdWorklet(context),
     registerArpWorklet(context),
-    registerChorusTWorklet(context),
     registerChorusWorklet(context),
     registerClipAmpWorklet(context),
     registerClockWorklet(context),
@@ -69,7 +66,6 @@ export function registerAllWorklets(
     registerLevelMeterWorklet(context),
     registerLfoWorklet(context),
     registerLookaheadLimiterWorklet(context),
-    registerNoiseWorklet(context),
     registerNoiseWorklet(context),
     registerParamWorklet(context),
     registerPolyblepOscillatorWorklet(context),

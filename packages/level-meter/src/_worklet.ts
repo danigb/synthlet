@@ -75,12 +75,16 @@ export function disposable<N extends AudioNode>(
   node: N,
   dependencies?: ConnectedUnit[]
 ): Disposable<N> {
+  // Compose with any dispose the node already has, so wrapping a node
+  // (withParams, ConnSerial) doesn't discard its cascade.
+  const previousDispose = (node as any).dispose as (() => void) | undefined;
   let disposed = false;
   return Object.assign(node, {
     dispose() {
       if (disposed) return;
-      disposed = true;
+      disposed = true; // set before previousDispose(): it may call back here
 
+      previousDispose?.call(node);
       node.disconnect();
       (node as any).port?.postMessage({ type: "DISPOSE" });
       if (!dependencies) return;

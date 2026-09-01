@@ -45,7 +45,6 @@ export class VAF extends AudioWorkletProcessor {
     if (this.t !== t) {
       this.t = t;
       this.d = this.p[t] || this.p[0];
-      console.log("USING FILTER", t, this.d);
     }
 
     if (inputs[0].length === 0) return this.r;

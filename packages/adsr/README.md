@@ -110,3 +110,13 @@ The advantage of the `gate` audio param is that it can be connected and therefor
 ## License
 
 MIT License
+
+## Credits
+
+Based on Nigel Redmon's ADSR code
+([earlevel.com](https://www.earlevel.com/main/2013/06/01/EG-generators/)), with
+two TCO constants from [Will Pirkle](https://www.willpirkle.com/)'s
+[SynthLab](https://github.com/willpirkleaudio/SynthLab) (Tritone Systems).
+
+See the repository's
+[THIRD-PARTY-LICENSES.md](https://github.com/danigb/synthlet/blob/main/THIRD-PARTY-LICENSES.md).

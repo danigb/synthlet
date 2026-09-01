@@ -20,7 +20,6 @@ export class ArpProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     const note = this.a(
       params.trigger[0],
-      params.type[0],
       params.baseNote[0],
       params.scale[0],
       params.octaves[0]
@@ -33,9 +32,8 @@ export class ArpProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return [
       ["trigger", 0, 0, 1],
-      ["type", 0, 0, 1],
       ["baseNote", 60, 0, 200],
-      ["scale", 1, 1, 2047],
+      ["scale", 1, 1, 4095],
       ["octaves", 1, 1, 10],
     ].map(([name, defaultValue, minValue, maxValue]) => ({
       name,
