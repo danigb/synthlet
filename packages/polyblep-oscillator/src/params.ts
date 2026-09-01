@@ -17,11 +17,12 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 20000,
     automationRate: "k-rate",
   },
+  // In cents: +/- one octave.
   {
     name: "detune",
     defaultValue: 0,
-    minValue: 0,
-    maxValue: 10000,
+    minValue: -1200,
+    maxValue: 1200,
     automationRate: "k-rate",
   },
 ];

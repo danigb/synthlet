@@ -10,11 +10,12 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "k-rate",
   },
+  // MIDI note numbers.
   {
     name: "baseNote",
     defaultValue: 60,
     minValue: 0,
-    maxValue: 200,
+    maxValue: 127,
     automationRate: "k-rate",
   },
   {

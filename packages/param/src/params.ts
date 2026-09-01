@@ -7,7 +7,7 @@ export const PARAMS: readonly ParamDescriptor[] = [
     name: "scale",
     defaultValue: 0,
     minValue: 0,
-    maxValue: 10,
+    maxValue: 3,
     automationRate: "k-rate",
   },
   {

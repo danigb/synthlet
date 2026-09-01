@@ -27,15 +27,15 @@ export const PARAMS: readonly ParamDescriptor[] = [
   {
     name: "offset",
     defaultValue: 0,
-    minValue: 0,
+    minValue: -20000,
     maxValue: 20000,
     automationRate: "k-rate",
   },
   {
     name: "gain",
     defaultValue: 1,
-    minValue: 0,
-    maxValue: 10000,
+    minValue: -20000,
+    maxValue: 20000,
     automationRate: "k-rate",
   },
 ];

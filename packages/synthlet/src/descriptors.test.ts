@@ -1,5 +1,13 @@
 import * as synthlet from "./index";
 import type { ParamDescriptor } from "./_worklet";
+import {
+  ClipType,
+  LfoType,
+  NoiseType,
+  ParamScaleType,
+  PolyblepOscillatorType,
+  SvfType,
+} from "./index";
 
 // Every module factory carries the parameter list its processor registered.
 // This test is the thing that keeps the two in step: a package that forgets to
@@ -76,5 +84,55 @@ describe.each(withDescriptors)("%s.descriptors", (_name, factory) => {
       expect(d.minValue).toBeLessThanOrEqual(d.defaultValue);
       expect(d.defaultValue).toBeLessThanOrEqual(d.maxValue);
     }
+  });
+});
+
+// An enum-typed parameter must not advertise a value its enum doesn't have: a
+// UI reading `maxValue` would offer members that don't exist.
+const members = (values: object) =>
+  Object.values(values).filter((v): v is number => typeof v === "number");
+
+const ENUM_PARAMS = [
+  {
+    name: "Noise.type",
+    values: NoiseType,
+    factory: synthlet.Noise,
+    param: "type",
+  },
+  { name: "Lfo.type", values: LfoType, factory: synthlet.Lfo, param: "type" },
+  {
+    name: "ClipAmp.type",
+    values: ClipType,
+    factory: synthlet.ClipAmp,
+    param: "type",
+  },
+  { name: "Svf.type", values: SvfType, factory: synthlet.Svf, param: "type" },
+  {
+    name: "Param.scale",
+    values: ParamScaleType,
+    factory: synthlet.Param,
+    param: "scale",
+  },
+  {
+    name: "PolyblepOscillator.type",
+    values: PolyblepOscillatorType,
+    factory: synthlet.PolyblepOscillator,
+    param: "type",
+  },
+  {
+    // Its types are a const object attached to the factory, not an enum.
+    name: "VirtualAnalogFilter.type",
+    values: synthlet.VirtualAnalogFilter,
+    factory: synthlet.VirtualAnalogFilter,
+    param: "type",
+  },
+];
+
+describe.each(ENUM_PARAMS)("$name", ({ values, factory, param }) => {
+  it("spans exactly its enum", () => {
+    const descriptor = factory.descriptors.find((d) => d.name === param);
+    expect(descriptor).toBeDefined();
+    expect(descriptor!.minValue).toBe(Math.min(...members(values)));
+    expect(descriptor!.maxValue).toBe(Math.max(...members(values)));
   });
 });
