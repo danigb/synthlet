@@ -114,20 +114,20 @@ Unlike the `connect` in standard WebAudio API, `dispose` can be called more than
 
 A group of modules wired together is itself a module: it has an output you can
 `connect()`, parameters you can automate, and a `dispose()` that tears the whole
-thing down. There is no special API for building one - four rules:
+thing down. There is no special API for building one - three rules:
 
 1. **Wire with `connect()`.** It chains, and a mix is two `connect()` calls into
    the same node.
 2. **End in a `Gain`.** The compound then has a predictable type, an input
    anything can connect to, and a `volume` for free.
-3. **Own what you built, with `disposable(out, [...])`.** Anything you passed to
-   a factory is already owned by the module you passed it to; list the nodes you
-   connected by hand. Listing extras is free - `dispose()` runs once per node -
-   so when in doubt, list everything you created.
-4. **Expose the inlets with `Object.assign`.** An inlet is a `Param` node's
-   `.input` when it needs scaling (a volume in decibels) or fan-out (one gate
-   driving two envelopes). Otherwise expose the module's own `AudioParam`
-   directly.
+3. **Own what you built and publish what you expose, with
+   `disposable(out, [...], { ... })`.** Anything you passed to a factory is
+   already owned by the module you passed it to; list the nodes you connected by
+   hand. Listing extras is free - `dispose()` runs once per node - so when in
+   doubt, list everything you created. The third argument is the compound's
+   surface: an inlet is a `Param` node's `.input` when it needs scaling (a
+   volume in decibels) or fan-out (one gate driving two envelopes), and the
+   module's own `AudioParam` otherwise.
 
 ```ts
 import {
@@ -154,10 +154,12 @@ function Voice(ac: AudioContext, frequency = 440) {
 
   osc.connect(filter).connect(amp).connect(out);
 
-  return Object.assign(
-    disposable(out, [osc, filterEnv, filter, amp, gate, volume]),
-    { gate: gate.input, volume: volume.input, osc, filter }
-  );
+  return disposable(out, [osc, filterEnv, filter, amp, gate, volume], {
+    gate: gate.input,
+    volume: volume.input,
+    osc,
+    filter,
+  });
 }
 ```
 

@@ -12,7 +12,7 @@ const VcaSynth = (ac: AudioContext) => {
 
   osc.connect(amp);
 
-  return Object.assign(disposable(amp, [osc, gate]), { gate: gate.input });
+  return disposable(amp, [osc, gate], { gate: gate.input });
 };
 
 function WavetableExample() {

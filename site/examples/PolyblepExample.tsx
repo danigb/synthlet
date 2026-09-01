@@ -15,7 +15,7 @@ function PolyblepSynth(ac: AudioContext) {
 
   osc.connect(out);
 
-  return Object.assign(disposable(out, [osc, lfo, volume]), {
+  return disposable(out, [osc, lfo, volume], {
     osc,
     lfo,
     volume: volume.input,

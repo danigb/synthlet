@@ -87,7 +87,8 @@ export function connectParams(
 }
 
 /**
- * Give `node` ownership of the nodes it was built from.
+ * Give `node` ownership of the nodes it was built from, and the properties it
+ * exposes.
  *
  * The returned node gains a `dispose()` that disconnects it, posts a `DISPOSE`
  * message to its worklet port if it has one, then disposes every dependency in
@@ -96,16 +97,25 @@ export function connectParams(
  *
  * It composes with any `dispose` the node already has rather than replacing it,
  * and is idempotent - calling it twice is a no-op.
+ *
+ * `exposed` is merged onto the node: it is how a compound publishes its inlets
+ * and, if it wants to, the modules it is made of.
+ *
+ * ```ts
+ * return disposable(out, [osc, amp, gate], { gate: gate.input, osc });
+ * ```
  */
-export function disposable<N extends AudioNode>(
+export function disposable<N extends AudioNode, E extends object = {}>(
   node: N,
-  dependencies?: ConnectedUnit[]
-): Disposable<N> {
+  dependencies?: ConnectedUnit[],
+  exposed?: E
+): Disposable<N> & E {
   // Compose with any dispose the node already has, so wrapping a node
   // (a compound owning its output gain) doesn't discard its cascade.
   const previousDispose = (node as any).dispose as (() => void) | undefined;
   let disposed = false;
-  return Object.assign(node, {
+  // `exposed` goes on first, so a stray `dispose` key can't replace the cascade.
+  return Object.assign(node, exposed, {
     dispose() {
       if (disposed) return;
       disposed = true; // set before previousDispose(): it may call back here
@@ -128,7 +138,7 @@ export function disposable<N extends AudioNode>(
         }
       }
     },
-  });
+  }) as Disposable<N> & E;
 }
 
 export function createRegistrar(processorName: string, processor: string) {

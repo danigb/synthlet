@@ -15,7 +15,7 @@ const VcaSynth = (ac: AudioContext) => {
 
   osc.connect(amp);
 
-  return Object.assign(disposable(amp, [osc, trigger, attack, release]), {
+  return disposable(amp, [osc, trigger, attack, release], {
     trigger: trigger.input,
     attack: attack.input,
     release: release.input,

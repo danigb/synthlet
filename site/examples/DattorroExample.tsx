@@ -18,7 +18,7 @@ function DattorroSynth(ac: AudioContext) {
   clave.connect(out);
   clave.connect(reverb).connect(out);
 
-  return Object.assign(disposable(out, [clave, reverb]), {
+  return disposable(out, [clave, reverb], {
     reverb,
     trigger: clave.trigger,
   });

@@ -25,7 +25,7 @@ const WavetableSynth = (ac: AudioContext) => {
 
   osc.connect(amp).connect(out);
 
-  return Object.assign(disposable(out, [osc, amp, gate, freq, volume]), {
+  return disposable(out, [osc, amp, gate, freq, volume], {
     osc,
     gate: gate.input,
     freq: freq.input,

@@ -13,7 +13,7 @@ function ChorusSynth(ac: AudioContext) {
 
   osc.connect(amp).connect(chorus);
 
-  return Object.assign(disposable(chorus, [osc, amp, gate]), {
+  return disposable(chorus, [osc, amp, gate], {
     osc,
     amp,
     chorus,

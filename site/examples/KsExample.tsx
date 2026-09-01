@@ -14,7 +14,7 @@ function createSynth(ac: AudioContext) {
 
   ks.connect(out);
 
-  return Object.assign(disposable(out, [ks, trigger, volume]), {
+  return disposable(out, [ks, trigger, volume], {
     ks,
     volume: volume.input,
     trigger: trigger.input,

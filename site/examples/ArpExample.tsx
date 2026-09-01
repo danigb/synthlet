@@ -39,7 +39,7 @@ function ArpSynth(context: AudioContext) {
   });
   synth1.connect(reverb);
 
-  return Object.assign(disposable(reverb, [synth1, arp, euclid, clock]), {
+  return disposable(reverb, [synth1, arp, euclid, clock], {
     synth1,
     arp,
     clock,

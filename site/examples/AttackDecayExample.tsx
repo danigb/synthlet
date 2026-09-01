@@ -23,14 +23,11 @@ const AttackDecaySynth = (ac: AudioContext) => {
 
   osc.connect(out);
 
-  return Object.assign(
-    disposable(out, [osc, pitchEnv, trigger, attack, decay]),
-    {
-      trigger: trigger.input,
-      attack: attack.input,
-      decay: decay.input,
-    }
-  );
+  return disposable(out, [osc, pitchEnv, trigger, attack, decay], {
+    trigger: trigger.input,
+    attack: attack.input,
+    decay: decay.input,
+  });
 };
 
 export function AttackDecayExample() {

@@ -42,7 +42,7 @@ const RhythmBox = (ac: AudioContext) => {
 
   [clave, kick].forEach((drum) => drum.connect(out));
 
-  return Object.assign(disposable(out, [clave, kick, clock, bpm, volume]), {
+  return disposable(out, [clave, kick, clock, bpm, volume], {
     bpm: bpm.input,
     volume: volume.input,
   });

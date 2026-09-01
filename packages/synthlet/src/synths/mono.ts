@@ -44,11 +44,15 @@ export function MonoSynth(context: AudioContext, inputs: MonoSynthInputs = {}) {
   vibrato.connect(osc.frequency);
   osc.connect(filter).connect(amp).connect(out);
 
-  return Object.assign(
-    disposable(out, [gate, volume, osc, vibrato, filterEnv, filter, amp]),
+  return disposable(out, [gate, volume, osc, vibrato, filterEnv, filter, amp], {
     // Params are flat AudioParams: the performance surface.
-    { gate: gate.input, volume: volume.input },
+    gate: gate.input,
+    volume: volume.input,
     // MonoSynth is a kit, so it exposes the modules it's made of.
-    { osc, vibrato, filterEnv, filter, amp }
-  );
+    osc,
+    vibrato,
+    filterEnv,
+    filter,
+    amp,
+  });
 }

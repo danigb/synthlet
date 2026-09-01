@@ -8,7 +8,7 @@ const ImpulseSynth = (ac: AudioContext) => {
   const trigger = Param(ac);
   const impulse = Impulse(ac, { trigger });
 
-  return Object.assign(disposable(impulse, [trigger]), {
+  return disposable(impulse, [trigger], {
     trigger: trigger.input,
   });
 };

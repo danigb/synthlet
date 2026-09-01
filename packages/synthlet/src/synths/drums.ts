@@ -48,7 +48,7 @@ function drum(
   params: DrumParams,
   owned: Disposable<AudioNode>[]
 ): DrumNode {
-  return Object.assign(disposable(out, [...owned, ...Object.values(params)]), {
+  return disposable(out, [...owned, ...Object.values(params)], {
     trigger: params.trigger.input,
     decay: params.decay.input,
     volume: params.volume.input,

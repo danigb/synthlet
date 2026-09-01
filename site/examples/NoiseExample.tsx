@@ -13,7 +13,7 @@ function createSynth(ac: AudioContext) {
 
   noise.connect(out);
 
-  return Object.assign(disposable(out, [noise, volume]), {
+  return disposable(out, [noise, volume], {
     noise,
     volume: volume.input,
   });

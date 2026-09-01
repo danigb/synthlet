@@ -25,7 +25,7 @@ const createSynth = (ac: AudioContext) => {
   osc.connect(filter).connect(out);
   lfo.connect(filter.frequency);
 
-  return Object.assign(disposable(out, [osc, filter, lfo, volume]), {
+  return disposable(out, [osc, filter, lfo, volume], {
     osc,
     filter,
     lfo,

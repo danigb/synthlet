@@ -18,15 +18,13 @@ const osc = Oscillator(ac, { type: "sine", frequency: 440 });
 const amp = AdsrAmp(ac, { gate });
 osc.connect(amp);
 
-const synth = Object.assign(disposable(amp, [osc, gate]), {
-  gate: gate.input,
-});
+const synth = disposable(amp, [osc, gate], { gate: gate.input });
 ```
 
-Four rules, now written up as "Composing modules" in the guide: wire with
-`connect()`, end in a `Gain`, own what you built with `disposable(out, [...])`,
-and expose the inlets with `Object.assign`. `disposable` is exported from every
-package since 0.10, and the built-in compounds are written this way.
+Three rules, now written up as "Composing modules" in the guide: wire with
+`connect()`, end in a `Gain`, and own what you built while publishing what you
+expose with `disposable(out, [...], { ... })`. `disposable` is exported from
+every package since 0.10, and the built-in compounds are written this way.
 
 The deleted operators were documented as "very likely to change" and kept their
 state on the AudioContext, so two bundled copies of `synthlet` silently
