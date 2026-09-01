@@ -32,7 +32,7 @@ noise.type.value = NoiseType.Pink;
   - 0 `NoiseType.White`: White noise that uses `Math.rand` for random numbers.
   - 1: `NoiseType.Pink`: Pink noise based on this [Larry Trammell algorithm](https://www.ridgerat-tech.us/pink/newpink.htm)
 
-Since type is an audio param, any arbitrary value can be used, but only the above values are valid. If you suply an invalid value, a warning will be printed and the noise will default to white random.
+Since type is an audio param, any arbitrary value can be used, but only the above values are valid. Any other value falls back to white noise.
 
 ## References
 

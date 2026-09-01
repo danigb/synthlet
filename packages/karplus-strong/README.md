@@ -1,4 +1,4 @@
-# @synthlet/karplus-strong-oscillator
+# @synthlet/karplus-strong
 
 > An oscillator based on Karplus-Strong synthesis
 

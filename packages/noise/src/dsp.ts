@@ -12,7 +12,6 @@ export function getNoiseAlgorithm(type: number): NoiseAlgorithm {
     case NoiseType.Pink:
       return createPinkLarryTrammel();
     default:
-      console.warn("Unknown noise type: " + type);
       return whiteRnd;
   }
 }

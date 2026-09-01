@@ -3,21 +3,11 @@ class LevelMeterProcessor extends AudioWorkletProcessor {
   max: number;
   r: boolean;
 
-  log = true;
-
   constructor(options: AudioWorkletNodeOptions) {
     super();
     this.r = true;
-    console.log("level meter options", options);
     const peaksBuffer = options.processorOptions.peaksBuffer;
     this.peaks = new Float32Array(peaksBuffer);
-    console.log(
-      "level meter data",
-      options.processorOptions,
-      peaksBuffer,
-      this.peaks,
-      this.peaks.length
-    );
     this.max = 8;
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -37,17 +27,6 @@ class LevelMeterProcessor extends AudioWorkletProcessor {
     const output = outputs[0];
 
     let channels = Math.min(input.length, this.max);
-
-    if (this.log) {
-      console.log(
-        "level meter",
-        input.length,
-        output.length,
-        input[0].length,
-        channels
-      );
-      this.log = false;
-    }
 
     for (let channel = 0; channel < channels; channel++) {
       const chIn = input[channel];
