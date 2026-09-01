@@ -4,7 +4,11 @@ description: A lookahead brickwall limiter
 package: lookahead-limiter
 ---
 
+import LookaheadLimiterExample from "../../../examples/LookaheadLimiterExample";
+
 A lookahead brickwall limiter that is designed to be used as last effect before the destination. It ensures the output level is always below the threshold.
+
+It looks ahead by a couple of milliseconds, so it can bring the gain down _before_ a peak arrives rather than reacting after it, and it measures peaks on a 4× oversampled reconstruction — so a signal that never exceeds full scale sample-by-sample, but overshoots between samples, is still caught.
 
 ```ts
 import { LookaheadLimiter } from "synthlet";
@@ -15,3 +19,36 @@ const limiter = LookaheadLimiter(audioContext, {
 
 connect(limiter).connect(audioContext.destination);
 ```
+
+<LookaheadLimiterExample />
+
+## Parameters
+
+- `threshold`: The true-peak ceiling in dBTP [-24, 0], default -1
+- `release`: Recovery time in ms, measured 10-90% [10, 1000], default 168
+- `gain`: Input drive in dB, applied _before_ the detector [-12, 24], default 0
+- `lookahead`: The lookahead window in ms [0.5, 5], default 2 — a construction option, not an `AudioParam`: it sizes the delay line, so changing it would change the node's latency
+
+`gain` is a drive, not a makeup gain. A makeup gain multiplies the output _after_ the ceiling is enforced, which would destroy the guarantee, so there isn't one — push `gain` up and lower `threshold` instead.
+
+Below the threshold the limiter is a bit-exact passthrough, delayed. Automating `threshold` downward takes `lookahead` samples to reach the smoothed gain, though the arithmetic backstop reads the current value, so the hard bound holds instantly.
+
+## Latency
+
+The node reports the delay it introduces — the lookahead window plus the detector's 6-sample group delay:
+
+```ts
+limiter.latencySamples; // 102 at 48 kHz with the default 2 ms
+limiter.latencyTime; // the same, in seconds
+```
+
+Web Audio has no automatic delay compensation, so any dry signal mixed in parallel with the limiter must be delayed by this much by hand:
+
+```ts
+const dry = new DelayNode(audioContext, { delayTime: limiter.latencyTime });
+```
+
+## References
+
+- Hämäläinen, [_Smoothing of the Control Signal without Clipped Output in Digital Peak Limiters_](https://www.dafx.de/paper-archive/2002/papers/DAFX02_Hamalainen_smoothing_control_signal.pdf), DAFx-02, §3.5
+- [ITU-R BS.1770-4](https://www.itu.int/rec/R-REC-BS.1770), Annex 2 — true-peak measurement. Detection here is BS.1770-_style_ 4× true-peak: the interpolator is a 48-tap Hann-windowed sinc, not the ITU reference coefficients, and its measured accuracy is ±0.1 dB from 60 Hz to 10 kHz at 48 kHz, ±0.35 dB from there to 20 kHz
