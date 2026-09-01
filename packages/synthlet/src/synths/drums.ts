@@ -30,15 +30,28 @@ export type DrumNode = CompoundNode<
   }
 >;
 
+// Every drum's attack and decay was tuned by ear against the AD's old
+// seconds->time-constant conversion (tau = attack x 0.05, tau = decay x 0.1).
+// The envelope takes true seconds now - attack is the time to the peak, decay
+// the time to -60 dB - so the old numbers are *converted* rather than
+// re-tuned: same time constants, same drums.
+const LEGACY_ATTACK = 0.05 * Math.log(100); // 0.2303
+const LEGACY_DECAY = 0.1 * Math.log(1000); // 0.6908
+
 /**
  * The four knobs every drum has, as Param nodes. Each one is scaled (`volume`,
  * from decibels) or fanned out to several modules (`trigger`, to every
  * envelope), so a plain AudioParam won't do: the inlet has to be a node.
  */
 function toParams(context: AudioContext, inputs: DrumInputs = {}) {
+  const decay = Param(context, { input: inputs.decay ?? 0.5 });
   return {
     trigger: Param(context, { input: inputs.trigger }),
-    decay: Param(context, { input: inputs.decay ?? 0.5 }),
+    decay,
+    // What the envelopes actually get: the knob is still 0...1, but the AD
+    // takes seconds now, so it is converted rather than re-tuned (see
+    // LEGACY_DECAY). Every drum's decay derives from this, not from the knob.
+    decayTime: Param.mul(context, decay, LEGACY_DECAY),
     volume: Param.db(context, inputs.volume ?? 0),
     tone: Param(context, { input: inputs.tone ?? 0.5 }),
   };
@@ -74,8 +87,13 @@ const perc = (
   context: AudioContext,
   params: DrumParams,
   attack: number,
-  decay: ParamInput = params.decay,
-) => AdAmp(context, { trigger: params.trigger, attack, decay });
+  decay: ParamInput = params.decayTime,
+) =>
+  AdAmp(context, {
+    trigger: params.trigger,
+    attack: attack * LEGACY_ATTACK,
+    decay,
+  });
 
 const OSC_BANK_FREQUENCIES = [263, 400, 421, 474, 587, 845];
 
@@ -98,8 +116,8 @@ export const KickDrum = (
 
   const pitchEnv = AdEnv(context, {
     trigger: params.trigger,
-    attack: 0.1,
-    decay: params.decay,
+    attack: 0.1 * LEGACY_ATTACK,
+    decay: params.decayTime,
     offset: freq,
     gain: 50,
   });
@@ -193,7 +211,7 @@ export const CowBellDrum = (
   const params = toParams(context, inputs);
   const hiFreq = Param.lin(context, params.tone, 700, 900);
   const lowFreq = Param.lin(context, params.tone, 440, 540);
-  const shortDecay = Param.mul(context, params.decay, 0.1);
+  const shortDecay = Param.mul(context, params.decayTime, 0.1);
 
   const hiOsc = Oscillator(context, { type: "square", frequency: hiFreq });
   const hiAmp = perc(context, params, 0.001);
@@ -223,9 +241,9 @@ export const CymbalDrum = (
   const lowFreq = Param.lin(context, params.tone, 440, 540);
   const midFreq = Param.lin(context, params.tone, 600, 1700);
   const hiFreq = Param.lin(context, params.tone, 2000, 5000);
-  const lowDecay = Param.mul(context, params.decay, 0.5);
-  const midDecay = Param.mul(context, params.decay, 0.2);
-  const hiDecay = Param.mul(context, params.decay, 5);
+  const lowDecay = Param.mul(context, params.decayTime, 0.5);
+  const midDecay = Param.mul(context, params.decayTime, 0.2);
+  const hiDecay = Param.mul(context, params.decayTime, 5);
 
   const bank = oscBank(context);
   const out = Gain(context, { gain: params.volume });

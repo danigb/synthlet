@@ -36,10 +36,13 @@ describe("AdWorkletNode", () => {
       gain: [50],
     };
     let output = runProcessMono(node, 10, params);
+    // sampleRate is 10 here, so `attack: 0.5` peaks on sample 4 (0.5 s) and
+    // `decay: 0.5` runs from sample 5 to silence on sample 9. offset 100 and
+    // gain 50 put the envelope's 0...1 on 100...150.
     expect(Array.from(output)).toEqual([
-      149.08421325683594, 149.9832305908203, 149.99969482421875, 150, 150, 150,
-      106.76676177978516, 100.91577911376953, 100.12393951416016,
-      100.01676940917969,
+      130.39862060546875, 142.5005340576172, 147.31838989257812,
+      149.23641967773438, 150, 112.55943298339844, 103.15478515625,
+      100.79244995117188, 100.19905090332031, 100.05000305175781,
     ]);
   });
 
@@ -124,6 +127,92 @@ describe("AdWorkletNode", () => {
       node.process([[]], outputs, { ...params, offset: [100] });
       expect(outputs[0][0]).toEqual(new Float32Array(10).fill(100));
       expect(outputs[0][1]).toEqual(new Float32Array(10).fill(100));
+    });
+  });
+
+  // The AD's `attack` and `decay` are seconds: attack is the time to the peak,
+  // decay the time from the peak to silence (-60 dB). Same definitions as
+  // @synthlet/adsr. These run at a real sample rate - the processor reads the
+  // global `sampleRate` when it is constructed - so the numbers below are the
+  // contract stated in seconds rather than in regenerated literals.
+  describe("timing, in seconds", () => {
+    const SAMPLE_RATE = 44100;
+    const SECONDS = [0.01, 0.1, 0.5, 1, 2, 10];
+
+    // Constructs a processor at SAMPLE_RATE and restores the file's fixture.
+    const atFullRate = () => {
+      // @ts-ignore
+      global.sampleRate = SAMPLE_RATE;
+      const node = new AdWorklet();
+      // @ts-ignore
+      global.sampleRate = 10;
+      return node;
+    };
+
+    it.each(SECONDS)("peaks at `attack` seconds (attack: %p)", (attack) => {
+      const expected = Math.round(attack * SAMPLE_RATE);
+      const output = runProcessMono(atFullRate(), expected + 8, {
+        trigger: [1],
+        attack: [attack],
+        decay: [10],
+        offset: [0],
+        gain: [1],
+      });
+
+      // The peak is the first sample that reaches 1: attack is over there and
+      // the decay starts on the next one.
+      const peak = output.indexOf(1);
+      expect(peak).toBeGreaterThan(-1);
+      // Linear in `attack`: doubling the parameter doubles this index.
+      expect(Math.abs(peak + 1 - expected)).toBeLessThanOrEqual(1);
+    });
+
+    it.each(SECONDS)("is silent after `decay` seconds (decay: %p)", (decay) => {
+      const expected = Math.round(decay * SAMPLE_RATE);
+      const output = runProcessMono(atFullRate(), expected + 8, {
+        trigger: [1],
+        attack: [0],
+        decay: [decay],
+        offset: [0],
+        gain: [1],
+      });
+
+      // With a zero-length attack the peak is sample 0, so the decay runs from
+      // sample 1 and the first zero is `decay` seconds after the peak.
+      const peak = output.indexOf(1);
+      const silent = output.indexOf(0, peak + 1);
+      expect(peak).toBe(0);
+      expect(silent).toBeGreaterThan(-1);
+      expect(Math.abs(silent - peak - expected)).toBeLessThanOrEqual(1);
+    });
+  });
+
+  describe("zero-length stages", () => {
+    const params = {
+      trigger: [1],
+      attack: [0],
+      decay: [0],
+      offset: [0],
+      gain: [1],
+    };
+
+    it("peaks for one sample, then is silent, without NaN", () => {
+      const output = runProcessMono(new AdWorklet(), 10, params);
+      expect(Array.from(output).every(Number.isFinite)).toBe(true);
+      // Zero attack snaps to the peak; zero decay drops to 0 the next sample.
+      expect(Array.from(output)).toEqual([1, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    });
+
+    it("a zero attack still decays over `decay` seconds", () => {
+      const output = runProcessMono(new AdWorklet(), 10, {
+        ...params,
+        decay: [0.5], // 5 samples at the fixture's sampleRate of 10
+      });
+      expect(Array.from(output).every(Number.isFinite)).toBe(true);
+      expect(output[0]).toBe(1);
+      // -60 dB lands exactly on sample 5 here, so rounding decides whether the
+      // hard-zero happens on it or the next one.
+      expect(Math.abs(output.indexOf(0) - 5)).toBeLessThanOrEqual(1);
     });
   });
 

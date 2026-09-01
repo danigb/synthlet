@@ -48,6 +48,24 @@ describe("AdsrWorkletNode", () => {
     expect(Math.abs(peak - (attackSamples - 1))).toBeLessThanOrEqual(1);
   });
 
+  it("reaches silence at `decay` seconds with no sustain", () => {
+    // The mirror of the AD's `decay` contract: with nothing to sustain, the
+    // decay is the time from the peak to silence. Same second in both packages.
+    const DECAY_SECONDS = 0.1;
+    const decaySamples = DECAY_SECONDS * SAMPLE_RATE;
+    const output = runProcessMono(generator(), 2 * decaySamples, {
+      ...params,
+      attack: [0],
+      decay: [DECAY_SECONDS],
+      sustain: [0],
+    });
+
+    // A zero-length attack snaps to the peak on sample 0, so the decay runs
+    // from sample 1 and lands on 0 `decay` seconds later.
+    expect(output[0]).toBe(1);
+    expect(Math.abs(output.indexOf(0) - decaySamples)).toBeLessThanOrEqual(2);
+  });
+
   it("snaps through zero-length stages without NaN", () => {
     const node = generator();
     const zero = { ...params, attack: [0], decay: [0], release: [0] };
