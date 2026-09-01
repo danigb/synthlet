@@ -102,3 +102,7 @@ function createInputsOutputs(
   }
   return { inputs, outputs };
 }
+
+// This file declares helpers at the top level: make it a module so they don't
+// collide with the identically named helpers in sibling packages.
+export {};

@@ -1,6 +1,7 @@
 import * as synthlet from "./index";
 import type { ParamDescriptor } from "./_worklet";
 import {
+  ArpScale,
   ClipType,
   LfoType,
   NoiseType,
@@ -134,5 +135,39 @@ describe.each(ENUM_PARAMS)("$name", ({ values, factory, param }) => {
     expect(descriptor).toBeDefined();
     expect(descriptor!.minValue).toBe(Math.min(...members(values)));
     expect(descriptor!.maxValue).toBe(Math.max(...members(values)));
+  });
+});
+
+// The umbrella names every enum in an explicit re-export, because tsup's dts
+// bundler drops enums from `export *`: without those lines they exist at
+// runtime but not in the published declarations. The declaration itself is
+// checked at build time; this is the cheap runtime half, and fails if a name
+// stops being exported at all.
+const ENUMS = {
+  ArpScale,
+  ClipType,
+  LfoType,
+  NoiseType,
+  ParamScaleType,
+  PolyblepOscillatorType,
+  SvfType,
+};
+
+describe.each(Object.entries(ENUMS))("%s", (name, values) => {
+  it("is exported by the umbrella", () => {
+    expect(Object.keys(synthlet)).toContain(name);
+    expect((synthlet as Record<string, unknown>)[name]).toBe(values);
+  });
+
+  it("is an enum: every member is a number its name maps back from", () => {
+    const map = values as unknown as Record<string, string | number>;
+    const named = Object.keys(map).filter((key) => isNaN(Number(key)));
+
+    expect(named.length).toBeGreaterThan(0);
+    for (const member of named) {
+      const value = map[member];
+      expect(typeof value).toBe("number");
+      expect(map[String(value)]).toBe(member);
+    }
   });
 });

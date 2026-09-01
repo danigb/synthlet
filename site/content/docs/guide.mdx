@@ -52,7 +52,7 @@ Unlike WebAudioAPI, Synthlet create functions accepts other modules as parameter
 
 ```js
 const lfo = Lfo(audioContext, { type: LfoType.ExpRampUp });
-const amp = createAmpNode(audioContext, { gain: lfo });
+const amp = Gain(audioContext, { gain: lfo });
 ```
 
 The lfo is now connected and modulating the gain of the amp node.
@@ -72,11 +72,11 @@ adsr.gate.value = 1; // equivalent to start()
 adsr.gate.value = 0; // equivalent to stop()
 ```
 
-The advantage is that you can use a module to start/stop other modules. Evertying can be connected.
+The advantage is that you can use a module to start/stop other modules. Everything can be connected.
 
 ## Connect and disconnect
 
-Synthlet modules isses the same [connect](https://developer.mozilla.org/en-US/docs/Web/API/AudioNode/connect) and [disconnect](https://developer.mozilla.org/en-US/docs/Web/API/AudioNode/disconnect) methods as any other AudioNode:
+Synthlet modules use the same [connect](https://developer.mozilla.org/en-US/docs/Web/API/AudioNode/connect) and [disconnect](https://developer.mozilla.org/en-US/docs/Web/API/AudioNode/disconnect) methods as any other AudioNode:
 
 ```js
 adsr.connect(osc.frequency);
@@ -91,7 +91,7 @@ adsr.connect(amplitude.gain);
 
 ## Dispose
 
-Dispose is a handy function that funlly disconnects and stop the module:
+Dispose is a handy function that fully disconnects and stop the module:
 
 ```js
 osc.dispose();
@@ -100,12 +100,12 @@ osc.dispose();
 It also disconnects all dependencies:
 
 ```js
-const trigger = createTriggerNode(audioContext, {});
-const adsr = AdsrEnv(audioContext, { trigger });
+const gate = Param(audioContext);
+const adsr = AdsrEnv(audioContext, { gate });
 const osc = PolyblepOscillator(audioContext, { frequency: adsr });
 
 ...
-osc.dispose(); // Disconnects also trigger and adsr
+osc.dispose(); // disposes adsr, and the gate Param with it
 ```
 
 Unlike the `connect` in standard WebAudio API, `dispose` can be called more than once (but only the first call will have effect) and once called, the module is not usable anymore.

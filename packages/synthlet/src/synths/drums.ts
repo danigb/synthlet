@@ -125,8 +125,12 @@ export const SnareDrum = (
   inputs: DrumInputs = {}
 ): DrumNode => {
   const params = toParams(context, inputs);
+  // The two sines the snare's body is made of, an octave apart. At the default
+  // tone of 0.5 they sit at 100 and 200 Hz, where they have always been.
+  const freq = Param.lin(context, params.tone, 60, 140);
+  const freq2 = Param.mul(context, freq, 2);
 
-  const oscs = [100, 200].map((frequency) =>
+  const oscs = [freq, freq2].map((frequency) =>
     Oscillator(context, { type: "sine", frequency })
   );
   const snap = perc(context, params, 0.01);
@@ -139,7 +143,7 @@ export const SnareDrum = (
   const out = Gain(context, { gain: params.volume });
   [snap, splash].forEach((node) => node.connect(out));
 
-  return drum(out, params, [...oscs, snap, noise, splash]);
+  return drum(out, params, [freq, freq2, ...oscs, snap, noise, splash]);
 };
 
 export const ClaveDrum = (
