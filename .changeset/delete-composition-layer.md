@@ -1,5 +1,5 @@
 ---
-"synthlet": major
+"synthlet": minor
 ---
 
 **Breaking:** remove `getSynthlet`, the `Synthlet` type, `ConnSerial` and
@@ -29,6 +29,10 @@ Three rules, now written up as "Composing modules" in the guide: wire with
 `connect()`, end in a `Gain`, and declare the result with
 `Compound({ output, owns, exposes })`. The built-in compounds are written this
 way.
+
+This is a breaking change released as a minor: synthlet is pre-1.0, where a
+minor is the breaking boundary - `^0.12.0` will not resolve to `0.13.0`. The
+1.0.0 version number is reserved for the 1.0 release itself.
 
 The deleted operators were documented as "very likely to change" and kept their
 state on the AudioContext, so two bundled copies of `synthlet` silently
