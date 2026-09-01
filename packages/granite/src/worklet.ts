@@ -1,4 +1,5 @@
 import { ComputeFn, createDsp, UpdateFn } from "./dsp";
+import { PARAMS } from "./params";
 
 export class GraniteProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -35,18 +36,7 @@ export class GraniteProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["wet", 0.5, 0, 1],
-      ["speed", 10, 0, 100],
-      ["density", 15, 0, 30],
-      ["spread", 0.5, 0, 1],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

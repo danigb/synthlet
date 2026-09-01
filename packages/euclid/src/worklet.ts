@@ -1,3 +1,5 @@
+import { PARAMS } from "./params";
+
 type GenerateFn = (
   output: Float32Array,
   clock: number,
@@ -34,19 +36,7 @@ export class EuclidProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["clock", 0, 0, 1],
-      ["steps", 0, 0, 100],
-      ["beats", 0, 0, 100],
-      ["subdivision", 1, 1, 20],
-      ["rotation", 0, 0, 100],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

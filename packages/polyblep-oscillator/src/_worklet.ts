@@ -9,9 +9,19 @@ export type Connector<N extends AudioNode> = (context: AudioContext) => N;
 
 export type ParamInput = number | Connector<AudioNode> | AudioNode;
 
+// A module's description of one of its parameters: exactly what Web Audio's
+// `parameterDescriptors` needs, and the shape exposed as `X.descriptors`.
+export type ParamDescriptor = {
+  name: string;
+  defaultValue: number;
+  minValue: number;
+  maxValue: number;
+  automationRate: "a-rate" | "k-rate";
+};
+
 type CreateWorkletOptions<N, P> = {
   processorName: string;
-  paramNames: readonly string[];
+  descriptors: readonly ParamDescriptor[];
   workletOptions: (params: Partial<P>) => AudioWorkletNodeOptions;
   postCreate?: (node: N) => void;
 };
@@ -22,7 +32,8 @@ export function createWorkletConstructor<
   N extends AudioWorkletNode,
   P extends Record<string, ParamInput>
 >(options: CreateWorkletOptions<N, P>) {
-  return (
+  const paramNames = options.descriptors.map((d) => d.name);
+  const create = (
     audioContext: AudioContext,
     inputs: Partial<P> = {}
   ): Disposable<N> => {
@@ -33,10 +44,13 @@ export function createWorkletConstructor<
     ) as N;
 
     (node as any).__PROCESSOR_NAME__ = options.processorName;
-    const connected = connectParams(node, options.paramNames, inputs);
+    const connected = connectParams(node, paramNames, inputs);
     options.postCreate?.(node);
     return disposable(node, connected);
   };
+
+  // The parameter list travels with the factory: `AdsrEnv.descriptors`.
+  return Object.assign(create, { descriptors: options.descriptors });
 }
 
 type ConnectedUnit = AudioNode | (() => void);

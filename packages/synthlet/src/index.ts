@@ -42,7 +42,12 @@ export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/virtual-analog-filter";
 export * from "@synthlet/wavetable-oscillator";
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";
 
 export { getSynthlet, Synthlet } from "./synthlet";
 export * from "./synths/drums";

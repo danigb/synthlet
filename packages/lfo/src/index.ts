@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export { LfoType } from "./dsp";
@@ -25,7 +26,7 @@ export type LfoWorklet = AudioWorkletNode & {
 export const registerLfoWorklet = createRegistrar("LFO", PROCESSOR);
 export const Lfo = createWorkletConstructor<LfoWorklet, LfoInputs>({
   processorName: "LfoProcessor",
-  paramNames: ["type", "frequency", "gain", "offset"] as const,
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
@@ -33,4 +34,9 @@ export const Lfo = createWorkletConstructor<LfoWorklet, LfoInputs>({
 });
 
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

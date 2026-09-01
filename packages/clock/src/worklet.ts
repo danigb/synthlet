@@ -1,3 +1,5 @@
+import { PARAMS } from "./params";
+
 export class ClockWorkletProcessor extends AudioWorkletProcessor {
   r: boolean; // running
   bpm: number;
@@ -41,15 +43,7 @@ export class ClockWorkletProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [["bpm", 120, 0, 1000]].map(
-      ([name, defaultValue, minValue, maxValue]) => ({
-        name,
-        defaultValue,
-        minValue,
-        maxValue,
-        automationRate: "k-rate",
-      })
-    );
+    return PARAMS;
   }
 }
 

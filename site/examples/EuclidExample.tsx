@@ -18,7 +18,7 @@ const RhythmBox = (context: AudioContext) => {
       clock,
       steps: 16,
       beats: 7,
-      subdivison: 4,
+      subdivision: 4,
       rotation: 3,
     }),
     volume,
@@ -28,7 +28,7 @@ const RhythmBox = (context: AudioContext) => {
       clock,
       steps: 16,
       beats: 5,
-      subdivison: 4,
+      subdivision: 4,
     }),
     volume,
   });

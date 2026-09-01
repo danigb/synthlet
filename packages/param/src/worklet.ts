@@ -1,4 +1,5 @@
 import { ConvertFn, getConverter } from "./dsp";
+import { PARAMS } from "./params";
 
 export class ParamProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -34,21 +35,7 @@ export class ParamProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["scale", 0, 0, 10],
-      ["input", 0, -20000, 20000],
-      ["offset", 0, -20000, 20000],
-      ["min", 0, -20000, 20000],
-      ["max", 1, -20000, 20000],
-      ["gain", 1, -20000, 20000],
-      ["mod", 0, -20000, 20000],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

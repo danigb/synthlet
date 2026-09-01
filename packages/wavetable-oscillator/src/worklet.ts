@@ -1,29 +1,10 @@
 import { WavetableOscillator } from "./wavetable-oscillator";
+import { PARAMS } from "./params";
 
 export class WavetableOscillatorWorkletProcessor extends AudioWorkletProcessor {
-  static parameterDescriptors = [
-    {
-      name: "baseFrequency",
-      defaultValue: 220,
-      minValue: 0,
-      maxValue: 20000,
-      automationRate: "k-rate",
-    },
-    {
-      name: "frequency",
-      defaultValue: 440,
-      minValue: 0,
-      maxValue: 20000,
-      automationRate: "k-rate",
-    },
-    {
-      name: "morphFrequency",
-      defaultValue: 0.05,
-      minValue: 0,
-      maxValue: 10,
-      automationRate: "k-rate",
-    },
-  ];
+  static get parameterDescriptors() {
+    return PARAMS;
+  }
 
   u: ReturnType<typeof WavetableOscillator>; // unit
   r: boolean; // running

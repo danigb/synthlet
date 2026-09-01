@@ -1,4 +1,5 @@
 import { ReverbDelayDsp } from "./dsp";
+import { PARAMS } from "./params";
 
 export class ReverbDelayProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -35,21 +36,7 @@ export class ReverbDelayProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["delay", 0.2, 0.001, 1.45],
-      ["damping", 0.3, 0, 0.99],
-      ["size", 1, 0.1, 3],
-      ["diffusion", 0.5, 0, 0.99],
-      ["feedback", 0.9, 0, 1],
-      ["modDepth", 0.1, 0, 1],
-      ["modFreq", 2, 0, 10],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

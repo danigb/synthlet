@@ -1,4 +1,5 @@
 import { createKS } from "./dsp";
+import { PARAMS } from "./params";
 
 export class KsProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -25,17 +26,7 @@ export class KsProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["trigger", 0, 0, 1],
-      ["frequency", 440, 20, 20000],
-      ["decay", 0.1, 0.01, 5],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

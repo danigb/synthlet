@@ -1,4 +1,5 @@
 import { createLfo } from "./dsp";
+import { PARAMS } from "./params";
 
 export class LfoWorkletProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -27,18 +28,7 @@ export class LfoWorkletProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["type", 1, 0, 100],
-      ["frequency", 10, 0, 200],
-      ["gain", 1, 0, 10000],
-      ["offset", 0, -1000, 1000],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

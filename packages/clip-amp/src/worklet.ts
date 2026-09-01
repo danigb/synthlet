@@ -1,4 +1,5 @@
 import { getClipFn } from "./dsp";
+import { PARAMS } from "./params";
 
 export class ClipAmpProcessor extends AudioWorkletProcessor {
   r: boolean; // running
@@ -45,17 +46,7 @@ export class ClipAmpProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["type", 0, 0, 10],
-      ["preGain", 1, 0, 10],
-      ["postGain", 1, 0, 10],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

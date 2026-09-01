@@ -4,6 +4,7 @@ import {
   ParamInput,
 } from "./_worklet";
 import { NoiseType } from "./dsp";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export { NoiseType };
@@ -27,7 +28,7 @@ export function getNoiseTypes(): { name: string; value: number }[] {
 export const registerNoiseWorklet = createRegistrar("NOISE", PROCESSOR);
 export const Noise = createWorkletConstructor<NoiseWorkletNode, NoiseInputs>({
   processorName: "NoiseWorkletProcessor",
-  paramNames: ["type"],
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
@@ -35,4 +36,9 @@ export const Noise = createWorkletConstructor<NoiseWorkletNode, NoiseInputs>({
 });
 
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

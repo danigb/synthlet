@@ -1,3 +1,5 @@
+import { PARAMS } from "./params";
+
 export class ImpulseProcessor extends AudioWorkletProcessor {
   r: boolean; // running
   g: boolean; // gate
@@ -35,15 +37,7 @@ export class ImpulseProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [["trigger", 0, 0, 1]].map(
-      ([name, defaultValue, minValue, maxValue]) => ({
-        name,
-        defaultValue,
-        minValue,
-        maxValue,
-        automationRate: "k-rate",
-      })
-    );
+    return PARAMS;
   }
 }
 

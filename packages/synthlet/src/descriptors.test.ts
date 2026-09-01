@@ -1,0 +1,80 @@
+import * as synthlet from "./index";
+import type { ParamDescriptor } from "./_worklet";
+
+// Every module factory carries the parameter list its processor registered.
+// This test is the thing that keeps the two in step: a package that forgets to
+// attach `descriptors`, or attaches a list with a bad range, fails here.
+
+type Factory = { descriptors: readonly ParamDescriptor[] };
+
+const EXPECTED = [
+  "AdAmp",
+  "AdEnv",
+  "AdsrAmp",
+  "AdsrEnv",
+  "Arp",
+  "BiquadFilter",
+  "Chorus",
+  "ClipAmp",
+  "Clock",
+  "DattorroReverb",
+  "Euclid",
+  "Gain",
+  "Granite",
+  "Impulse",
+  "KarplusStrong",
+  "LevelMeter",
+  "Lfo",
+  "LookaheadLimiter",
+  "Noise",
+  "Oscillator",
+  "Param",
+  "PolyblepOscillator",
+  "ReverbDelay",
+  "Svf",
+  "VirtualAnalogFilter",
+  "WavetableOscillator",
+];
+
+const withDescriptors = Object.entries(synthlet as Record<string, unknown>)
+  .filter(
+    (entry): entry is [string, Factory] =>
+      typeof entry[1] === "function" && "descriptors" in entry[1]
+  )
+  .sort(([a], [b]) => a.localeCompare(b));
+
+describe("descriptors", () => {
+  it("every module factory exposes them", () => {
+    expect(withDescriptors.map(([name]) => name)).toEqual(EXPECTED);
+  });
+
+  it("the parameterless modules expose an empty list", () => {
+    expect(synthlet.LevelMeter.descriptors).toEqual([]);
+    expect(synthlet.LookaheadLimiter.descriptors).toEqual([]);
+  });
+
+  it("keeps Svf's frequency at a-rate", () => {
+    const aRate = synthlet.Svf.descriptors.filter(
+      (d) => d.automationRate === "a-rate"
+    );
+    expect(aRate.map((d) => d.name)).toEqual(["frequency"]);
+  });
+});
+
+describe.each(withDescriptors)("%s.descriptors", (_name, factory) => {
+  it("names its parameters exactly once", () => {
+    const names = factory.descriptors.map((d) => d.name);
+    expect(names).toEqual([...new Set(names)]);
+  });
+
+  it("is a well formed descriptor list", () => {
+    for (const d of factory.descriptors) {
+      expect(typeof d.name).toBe("string");
+      expect(d.name).not.toBe("");
+      expect(["a-rate", "k-rate"]).toContain(d.automationRate);
+      expect(Number.isFinite(d.defaultValue)).toBe(true);
+      expect(d.minValue).toBeLessThanOrEqual(d.defaultValue);
+      expect(d.defaultValue).toBeLessThanOrEqual(d.maxValue);
+    }
+  });
+});

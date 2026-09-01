@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export const registerGraniteWorklet = createRegistrar("GRANITE", PROCESSOR);
@@ -27,7 +28,7 @@ export const Granite = createWorkletConstructor<
   GraniteInputs
 >({
   processorName: "GraniteProcessor",
-  paramNames: ["wet", "speed", "density", "spread"],
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 1,
     numberOfOutputs: 1,
@@ -36,4 +37,9 @@ export const Granite = createWorkletConstructor<
 });
 
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export const registerAdWorklet = createRegistrar("AD", PROCESSOR);
@@ -24,14 +25,12 @@ export type AdInputs = {
   gain?: ParamInput;
 };
 
-const PARAM_NAMES = ["trigger", "attack", "decay", "offset", "gain"] as const;
-
 /**
  * An attack-decay envelope generator: no input, the envelope on its output.
  */
 export const AdEnv = createWorkletConstructor<AdWorkletNode, AdInputs>({
   processorName: "AdProcessor",
-  paramNames: PARAM_NAMES,
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
@@ -45,7 +44,7 @@ export const AdEnv = createWorkletConstructor<AdWorkletNode, AdInputs>({
  */
 export const AdAmp = createWorkletConstructor<AdWorkletNode, AdInputs>({
   processorName: "AdProcessor",
-  paramNames: PARAM_NAMES,
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 1,
     numberOfOutputs: 1,
@@ -54,4 +53,9 @@ export const AdAmp = createWorkletConstructor<AdWorkletNode, AdInputs>({
 });
 
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

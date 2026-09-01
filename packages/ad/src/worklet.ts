@@ -1,3 +1,5 @@
+import { PARAMS } from "./params";
+
 export class AdProcessor extends AudioWorkletProcessor {
   r: boolean; // running
   m: boolean; // modulator mode: multiply the input by the envelope
@@ -29,19 +31,7 @@ export class AdProcessor extends AudioWorkletProcessor {
   }
 
   static get parameterDescriptors() {
-    return [
-      ["trigger", 0, 0, 1],
-      ["attack", 0.01, 0, 10],
-      ["decay", 0.1, 0, 10],
-      ["offset", 0, 0, 20000],
-      ["gain", 1, 0, 10000],
-    ].map(([name, defaultValue, minValue, maxValue]) => ({
-      name,
-      defaultValue,
-      minValue,
-      maxValue,
-      automationRate: "k-rate",
-    }));
+    return PARAMS;
   }
 }
 

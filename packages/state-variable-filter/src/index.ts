@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export { SvfType } from "./dsp";
@@ -24,11 +25,16 @@ export const registerSvfWorklet = createRegistrar("SVF", PROCESSOR);
 
 export const Svf = createWorkletConstructor<SvfWorkletNode, SvfInputs>({
   processorName: "SvfProcessor",
-  paramNames: ["type", "frequency", "Q"],
+  descriptors: PARAMS,
   workletOptions() {
     return { numberOfInputs: 1, numberOfOutputs: 1 };
   },
 });
 
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

@@ -4,6 +4,7 @@ import {
   ParamInput,
 } from "./_worklet";
 import { ParamScaleType } from "./dsp";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export { ParamScaleType } from "./dsp";
@@ -33,7 +34,7 @@ export type ParamWorkletNode = AudioWorkletNode & {
 
 const Create = createWorkletConstructor<ParamWorkletNode, ParamInputs>({
   processorName: "ParamProcessor",
-  paramNames: ["scale", "input", "offset", "min", "max", "gain", "mod"],
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
@@ -56,4 +57,9 @@ export const Param = Object.assign(Create, {
 });
 
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

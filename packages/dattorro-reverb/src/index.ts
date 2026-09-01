@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export const registerDattorroReverbWorklet = createRegistrar(
@@ -18,8 +19,8 @@ export type DattorroReverbInputs = {
   decayDiffusion2?: ParamInput;
   decay?: ParamInput;
   damping?: ParamInput;
-  // dryWet?: ParamInput;
-  // level?: ParamInput;
+  dryWet?: ParamInput;
+  level?: ParamInput;
 };
 
 export type DattorroReverbWorkletNode = AudioWorkletNode & {
@@ -30,8 +31,8 @@ export type DattorroReverbWorkletNode = AudioWorkletNode & {
   decayDiffusion2: AudioParam;
   decay: AudioParam;
   damping: AudioParam;
-  // dryWet: AudioParam;
-  // level: AudioParam;
+  dryWet: AudioParam;
+  level: AudioParam;
   dispose(): void;
 };
 
@@ -40,17 +41,7 @@ export const DattorroReverb = createWorkletConstructor<
   DattorroReverbInputs
 >({
   processorName: "DattorroReverbProcessor",
-  paramNames: [
-    "filter",
-    "inputDiffusion1",
-    "inputDiffusion2",
-    "decayDiffusion1",
-    "decayDiffusion2",
-    "decay",
-    "damping",
-    // "dryWet",
-    // "level",
-  ],
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 1,
     numberOfOutputs: 1,
@@ -59,4 +50,9 @@ export const DattorroReverb = createWorkletConstructor<
 });
 
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

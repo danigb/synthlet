@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 import { Wavetable, WavetableLoader } from "./wavetable-loader";
 
@@ -34,7 +35,7 @@ export const WavetableOscillator = createWorkletConstructor<
   WavetableInputs
 >({
   processorName: "WavetableOscillatorWorkletProcessor",
-  paramNames: ["baseFrequency", "frequency", "morphFrequency"] as const,
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
@@ -70,4 +71,9 @@ export function fetchWavetableNames(): Promise<string[]> {
 }
 
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";

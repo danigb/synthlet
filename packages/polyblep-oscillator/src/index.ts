@@ -3,6 +3,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
 export { PolyblepOscillatorType } from "./dsp";
@@ -33,7 +34,7 @@ export const PolyblepOscillator = createWorkletConstructor<
   PolyblepOscillatorInputs
 >({
   processorName: "PolyBLEProcessor",
-  paramNames: ["type", "frequency", "detune"],
+  descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
@@ -41,4 +42,9 @@ export const PolyblepOscillator = createWorkletConstructor<
 });
 
 export { disposable } from "./_worklet";
-export type { Connector, Disposable, ParamInput } from "./_worklet";
+export type {
+  Connector,
+  Disposable,
+  ParamDescriptor,
+  ParamInput,
+} from "./_worklet";
