@@ -1,5 +1,13 @@
 # Ideas
 
+> **Nothing in this file is implemented.** It is a design scratchpad exploring
+> composition APIs — `Connect`, `Serial`, `Patch` and friends — none of which
+> ship. The block below labelled "FROM README" is a sketch that the root README
+> was once written against by mistake; it was never a working API.
+>
+> For the API that actually exists, see [../README.md](../README.md) and the
+> [docs site](https://danigb.github.io/synthlet/docs/quick-start).
+
 ## API
 
 Use a "universal" Connect module:
