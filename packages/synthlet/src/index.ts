@@ -52,6 +52,7 @@ export type {
 export { getSynthlet, Synthlet } from "./synthlet";
 export * from "./synths/drums";
 export * from "./synths/mono";
+export { registerDrums, registerMonoSynth } from "./synths/registrars";
 export * from "./waa";
 
 export function registerAllWorklets(
