@@ -6,9 +6,9 @@ export class AdsrProcessor extends AudioWorkletProcessor {
   r: boolean = true; // running;
   m: boolean;
 
-  constructor(options: any) {
+  constructor(options?: any) {
     super();
-    this.m = options.processorOptions.mode === "modulator";
+    this.m = options?.processorOptions?.mode === "modulator";
     this.p = createAdsr(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -20,8 +20,10 @@ export class AdsrProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
-    const input = this.m ? inputs[0][0] : undefined;
     const output = outputs[0][0];
+    // In modulator mode an unconnected input has no channels; treat it as
+    // silence so the envelope keeps running instead of process() throwing.
+    const input = this.m ? (inputs[0][0] ?? silence(output.length)) : undefined;
     this.p(input!, output, this.m, params);
     return this.r;
   }
@@ -32,3 +34,9 @@ export class AdsrProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor("AdsrProcessor", AdsrProcessor);
+
+let SILENCE = new Float32Array(128);
+function silence(length: number) {
+  if (SILENCE.length < length) SILENCE = new Float32Array(length);
+  return SILENCE;
+}

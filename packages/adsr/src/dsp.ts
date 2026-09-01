@@ -97,6 +97,7 @@ export function createAdsr(sampleRate: number) {
             current = 0.0;
             stage = Stage.Zero;
           }
+          break;
       }
       const value = modifier ? input[i] * current : current;
       output[i] = value * gain + offset;
