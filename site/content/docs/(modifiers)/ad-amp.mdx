@@ -39,7 +39,7 @@ vca.trigger.value = 0;
 
 Same as the [AD](/docs/modulators/ad) envelope:
 
-- `trigger`: The envelope trigger. 1 means start. You need to move the trigger back to 0 to be able to restart the envelope.
+- `trigger`: Fires the envelope on the rising edge, when it goes from 0 (or below) to a positive value. Move it back to 0 before firing it again. See [Gates and triggers](/docs/gates-and-triggers).
 - `attack`: The time to reach the peak, in seconds. Default is 0.01.
 - `decay`: The time to fall to silence (−60 dB), in seconds. Default is 0.1.
 - `offset`: Added to the output. Default is 0.

@@ -29,7 +29,7 @@ adsr.connect(filter.frequency);
 
 ## Parameters
 
-- `gate`: Opens the envelope while positive, releases it at 0. Default is 0.
+- `gate`: Opens the envelope while positive, releases it at 0. Default is 0. See [Gates and triggers](/docs/gates-and-triggers).
 - `attack`: The attack time in seconds. Default is 0.01.
 - `decay`: The decay time in seconds. Default is 0.1.
 - `sustain`: The sustain level. Default is 0.5.
@@ -49,3 +49,7 @@ Two things worth knowing before you reach for a parameter that doesn't exist:
   approaches zero without ever arriving, so the envelope never releases. The
   envelope is the smoother.
 </Callout>
+
+`gate` is `k-rate`, so triggers land on the next 128-frame block boundary
+(~2.9 ms at 44.1 kHz). For sample-accurate sequencing you can opt into a
+per-sample read - see [Gates and triggers](/docs/gates-and-triggers#timing).

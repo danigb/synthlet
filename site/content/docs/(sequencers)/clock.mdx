@@ -20,20 +20,36 @@ const clock = Clock(audioContext, { bpm: 10 });
 
 <ClockExample />
 
+## Two outputs: a phase and a gate
+
+A clock emits two different kinds of signal, and they are not interchangeable.
+
+- **The node itself is the phase**: a ramp rising from 0 to 1 over each beat.
+  [Euclid](/docs/sequencers/euclid) needs it, because subdividing a clock means
+  multiplying its phase.
+- **`clock.gate` is the gate**: high for `pulseWidth` of each beat. This is what
+  envelopes, drums and arpeggiators read.
+
+Feeding the phase ramp to a trigger used to fire on the beat by accident - the
+ramp reads exactly `1` on the block where it wraps, and the envelopes used to
+fire only on exactly `1`. Under the [gate contract](/docs/gates-and-triggers)
+it does not: connect `clock.gate` instead.
+
 ## Example
 
 Trigger a kick with a clock:
 
 ```ts
-import { registerAllWorklets, KickDrum } from "synthlet";
+import { registerAllWorklets, Clock, KickDrum } from "synthlet";
 
 const audioContext = new AudioContext();
 await registerAllWorklets(audioContext);
 const clock = Clock(audioContext, { bpm: 120 });
-const kick = createKickDrum(audioContext, { trigger: clock });
+const kick = KickDrum(audioContext, { trigger: clock.gate });
 kick.connect(audioContext.destination);
 ```
 
 ## Parameters
 
 - `bpm`: beats per minute
+- `pulseWidth`: how much of each beat `clock.gate` is high for, as a fraction of the beat. Default is `0.5`.

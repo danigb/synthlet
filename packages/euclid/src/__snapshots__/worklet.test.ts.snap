@@ -1,0 +1,48 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`EuclidProcessor has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "clock",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 100,
+    "minValue": 0,
+    "name": "steps",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 100,
+    "minValue": 0,
+    "name": "beats",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 20,
+    "minValue": 1,
+    "name": "subdivision",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 100,
+    "minValue": 0,
+    "name": "rotation",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.5,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "pulseWidth",
+  },
+]
+`;

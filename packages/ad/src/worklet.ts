@@ -1,3 +1,4 @@
+import { createGateDetector } from "./_gate";
 import { PARAMS } from "./params";
 
 export class AdProcessor extends AudioWorkletProcessor {
@@ -20,9 +21,10 @@ export class AdProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
-    this.d.update(params.trigger[0], params.attack[0], params.decay[0]);
+    this.d.update(params.attack[0], params.decay[0]);
     this.d.gen(
       outputs[0],
+      params.trigger,
       params.offset[0],
       params.gain[0],
       this.m ? inputs[0] : undefined,
@@ -61,7 +63,7 @@ function createEnvelope(sampleRate: number) {
   const decayTime2Tau = sampleRate / DECAY_TAUS;
 
   // Convert seconds to time constants
-  let gate = false;
+  const detectGate = createGateDetector();
   let attack = 0.1;
   let decay = 0.1;
   let attackEnv = Math.exp(-1.0 / (0.1 * attackTime2Tau));
@@ -71,15 +73,7 @@ function createEnvelope(sampleRate: number) {
   let prev = 0;
 
   return {
-    update(trigger: number, attackTime: number, decayTime: number) {
-      if (trigger === 1) {
-        if (!gate) {
-          gate = true;
-          mode = MODE_ATTACK;
-        }
-      } else {
-        gate = false;
-      }
+    update(attackTime: number, decayTime: number) {
       if (attackTime !== attack) {
         attack = attackTime;
         const tau = Math.max(attack * attackTime2Tau, 0.001);
@@ -99,6 +93,7 @@ function createEnvelope(sampleRate: number) {
     // channel the block has, so stereo in stays stereo out.
     gen(
       outputs: Float32Array[],
+      trigger: Float32Array,
       offset: number,
       gain: number,
       inputs?: Float32Array[],
@@ -107,6 +102,16 @@ function createEnvelope(sampleRate: number) {
       const channels = outputs.length;
       const length = outputs[0]?.length ?? 0;
       for (let i = 0; i < length; i++) {
+        // Read the trigger per sample when it is a-rate. The descriptor still
+        // declares k-rate, so by default this is `trigger[0]` for the whole
+        // block - identical to reading it once - but a caller who sets
+        // `trigger.automationRate = "a-rate"` now gets the sample-accurate
+        // firing they asked for instead of one quantised to the 128-frame
+        // block boundary (up to 2.9 ms at 44.1 kHz).
+        if (detectGate(trigger.length > 1 ? trigger[i] : trigger[0]) === true) {
+          mode = MODE_ATTACK;
+        }
+
         if (mode === MODE_ATTACK) {
           out = attackEnv * prev + (1.0 - attackEnv) * ATTACK_TARGET;
           if (out >= 1.0) {

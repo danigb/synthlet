@@ -42,3 +42,32 @@ describe.each(packages)("%s", (pkg) => {
     expect(readFileSync(copy, "utf8")).toBe(source);
   });
 });
+
+// The gate/trigger contract is copied the same way, but only into the packages
+// that produce or consume a gate - the ones detection must not drift between.
+const gateSource = readFileSync(join(root, "scripts/_gate.ts"), "utf8");
+const gatePackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_gate.ts")),
+);
+
+describe("the gate contract", () => {
+  it("is shared by every package that detects or emits a gate", () => {
+    expect(gatePackages).toEqual([
+      "ad",
+      "adsr",
+      "arp",
+      "clock",
+      "euclid",
+      "impulse",
+      "karplus-strong",
+    ]);
+  });
+});
+
+describe.each(gatePackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_gate.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_gate.ts"), "utf8"),
+    ).toBe(gateSource);
+  });
+});

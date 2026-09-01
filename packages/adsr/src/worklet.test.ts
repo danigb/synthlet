@@ -100,6 +100,71 @@ describe("AdsrWorkletNode", () => {
     expect(retriggered[0]).toBeGreaterThan(10 * fromZero);
   });
 
+  // The gate/trigger contract, shared with @synthlet/ad: on while positive,
+  // opened by the transition from non-positive to positive and closed by the
+  // return to <= 0. It replaces a Schmitt trigger that opened at 0.9, which
+  // silently ignored any gate peaking below 90% of nominal.
+  describe("gate detection", () => {
+    const held = (gate: number) =>
+      runProcessMono(generator(), 200, { ...params, gate: [gate] });
+
+    it.each([1, 0.99, 0.5, 0.05])("opens on a gate of %p", (gate) => {
+      expect(Math.max(...Array.from(held(gate)))).toBeGreaterThan(0);
+    });
+
+    it.each([0, -1])("stays closed on a gate of %p", (gate) => {
+      expect(Math.max(...Array.from(held(gate)))).toBe(0);
+    });
+
+    it("releases when the gate returns to 0", () => {
+      const node = generator();
+      runProcessMono(node, SAMPLE_RATE * 0.2, params); // to sustain
+      // `release` is 0.4 s, so run past it.
+      const releasing = runProcessMono(node, SAMPLE_RATE * 0.5, {
+        ...params,
+        gate: [0],
+      });
+      expect(releasing[releasing.length - 1]).toBe(0);
+    });
+
+    it("is driven by a bipolar square, at 50% duty", () => {
+      const node = generator();
+      const open = runProcessMono(node, 200, params);
+      expect(Math.max(...Array.from(open))).toBeGreaterThan(0);
+      const closed = runProcessMono(node, SAMPLE_RATE, {
+        ...params,
+        gate: [-1],
+      });
+      expect(closed[closed.length - 1]).toBe(0);
+    });
+
+    // Ticket 05: the gate is read per sample when it is a-rate, so a caller
+    // who opts in gets sample-accurate sequencing instead of one quantised to
+    // the 128-frame block boundary (up to 2.9 ms at 44.1 kHz).
+    it("opens at the sample an a-rate gate rises, not at index 0", () => {
+      const EDGE = 40;
+      const aRate = new Float32Array(200);
+      aRate.fill(1, EDGE);
+
+      const outputs = [[new Float32Array(200)]];
+      generator().process([[]], outputs, { ...params, gate: aRate });
+
+      const output = Array.from(outputs[0][0]);
+      expect(output.slice(0, EDGE)).toEqual(new Array(EDGE).fill(0));
+      expect(output[EDGE]).toBeGreaterThan(0);
+    });
+
+    it("is unchanged for a k-rate gate", () => {
+      const kRate = runProcessMono(generator(), 200, params);
+      const outputs = [[new Float32Array(200)]];
+      generator().process([[]], outputs, {
+        ...params,
+        gate: new Float32Array(1).fill(1),
+      });
+      expect(Array.from(outputs[0][0])).toEqual(Array.from(kRate));
+    });
+  });
+
   describe("modulator mode", () => {
     it("multiplies a constant 1 input by the generator's envelope", () => {
       const expected = runProcessMono(generator(), 100, params);

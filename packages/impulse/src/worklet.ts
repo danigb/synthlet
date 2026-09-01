@@ -1,13 +1,14 @@
+import { createGateDetector } from "./_gate";
 import { PARAMS } from "./params";
 
 export class ImpulseProcessor extends AudioWorkletProcessor {
   r: boolean; // running
-  g: boolean; // gate
+  g: ReturnType<typeof createGateDetector>; // gate detector
 
   constructor() {
     super();
     this.r = true;
-    this.g = false;
+    this.g = createGateDetector();
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -24,14 +25,11 @@ export class ImpulseProcessor extends AudioWorkletProcessor {
   ) {
     outputs[0][0].fill(0);
 
-    if (parameters.trigger[0] === 1) {
-      if (!this.g) {
-        this.g = true;
-        outputs[0][0][0] = 1;
-      }
-    } else {
-      this.g = false;
-    }
+    // The single sample goes at index 0 on purpose: the spec says a k-rate
+    // param is sampled at the very first sample-frame of each render quantum,
+    // so an impulse written anywhere else would be invisible to every k-rate
+    // consumer in the library.
+    if (this.g(parameters.trigger[0]) === true) outputs[0][0][0] = 1;
 
     return this.r;
   }

@@ -37,7 +37,7 @@ vca.gate.setValueAtTime(0, audioContext.currentTime + 0.5);
 
 Same as [adsr](/docs/modulators/adsr):
 
-- `gate`: Opens the envelope while positive, releases it at 0. Default is 0.
+- `gate`: Opens the envelope while positive, releases it at 0. Default is 0. See [Gates and triggers](/docs/gates-and-triggers).
 - `attack`: The attack time in seconds. Default is 0.01.
 - `decay`: The decay time in seconds. Default is 0.1.
 - `sustain`: The sustain level. Default is 0.5.
@@ -45,8 +45,11 @@ Same as [adsr](/docs/modulators/adsr):
 - `offset`: The start offset. Default is 0.
 - `gain`: The gain. Default is 1. It is the maximum amplitude after the attack and affects the sustain level. For example, a gain of 100 and sustain of 0.5 will make the sustain level to be 50.
 
-`gate` is read once per render block, so setting it to 1 and back to 0 in the
-same tick leaves nothing for the worklet to see. Schedule the edges, as above.
+`gate` is `k-rate`, so it is read once per render block (~2.9 ms at 44.1 kHz):
+setting it to 1 and back to 0 in the same tick leaves nothing for the worklet
+to see. Schedule the edges, as above. For sample-accurate timing you can opt
+into a per-sample read - see
+[Gates and triggers](/docs/gates-and-triggers#timing).
 
 <Callout title="Offset is silence" type="warn">
   The ADSR will output `offset` value when the gate is closed. If you want to

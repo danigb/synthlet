@@ -1,9 +1,11 @@
+import { gatePulse } from "./_gate";
 import { PARAMS } from "./params";
 
 type GenerateFn = (
   output: Float32Array,
   clock: number,
   subdivision: number,
+  pulseWidth: number,
 ) => void;
 
 type UpdateFn = (steps: number, beats: number, rotation: number) => void;
@@ -30,7 +32,12 @@ export class EuclidProcessor extends AudioWorkletProcessor {
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     this.u(params.steps[0], params.beats[0], params.rotation[0]);
-    this.g(outputs[0][0], params.clock[0], params.subdivision[0]);
+    this.g(
+      outputs[0][0],
+      params.clock[0],
+      params.subdivision[0],
+      params.pulseWidth[0],
+    );
 
     return this.r;
   }
@@ -52,15 +59,23 @@ function createEuclid(): [GenerateFn, UpdateFn] {
   let prevClock = 0;
   let current = 0;
 
-  function generate(output: Float32Array, clock: number, subdivision: number) {
+  function generate(
+    output: Float32Array,
+    clock: number,
+    subdivision: number,
+    pulseWidth: number,
+  ) {
     let currentClock = clock * subdivision;
     while (currentClock > 1) currentClock -= 1;
     const gate = currentClock < prevClock;
     prevClock = currentClock;
     // Advance the pattern
     if (gate) current = (current + 1) % pattern.length;
-    // Fill the output
-    output.fill(pattern[current]);
+    // A hit is a *pulse* over the first `pulseWidth` of its step, not the
+    // step's level held to the next step. Held levels merge adjacent hits -
+    // there is no falling edge between them, so no rising edge for the second,
+    // and a 4/4 pattern used to fire exactly once, ever.
+    output.fill(pattern[current] * gatePulse(currentClock, pulseWidth));
   }
 
   function update(steps: number, beats: number, rotation: number) {

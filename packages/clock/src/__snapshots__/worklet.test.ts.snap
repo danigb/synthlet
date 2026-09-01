@@ -1,0 +1,20 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ClockWorkletProcessor has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 120,
+    "maxValue": 1000,
+    "minValue": 0,
+    "name": "bpm",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.5,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "pulseWidth",
+  },
+]
+`;

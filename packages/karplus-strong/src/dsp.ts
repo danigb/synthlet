@@ -1,3 +1,5 @@
+import { createGateDetector } from "./_gate";
+
 export function createKS(sampleRate: number, minFrequency: number) {
   const targetAmplitude = 0.001; // Amplitude decays to 0.1% of initial value
   const maxDelayLineLength = Math.ceil(sampleRate / minFrequency) + 2; // Extra samples for interpolation
@@ -8,7 +10,7 @@ export function createKS(sampleRate: number, minFrequency: number) {
   let writeIndex = 0;
 
   let isPlaying = false;
-  let prevTrigger = 0;
+  const detectGate = createGateDetector();
 
   return (
     output: Float32Array,
@@ -21,8 +23,9 @@ export function createKS(sampleRate: number, minFrequency: number) {
     const decayTimeInSamples = 0.1 * decay * sampleRate;
     const filterCoefficient = Math.pow(targetAmplitude, 1 / decayTimeInSamples);
 
-    if (trigger >= 1 && prevTrigger < 0.9) {
-      // Some hysterisis to avoid double triggering
+    // The rising edge is the whole anti-double-trigger rule: re-plucking needs
+    // the trigger to return to <= 0 first, which is a genuine retrigger.
+    if (detectGate(trigger) === true) {
       delayInSamples = sampleRate / frequency;
       delayInSamples = Math.min(
         Math.max(delayInSamples, 1),
@@ -35,7 +38,6 @@ export function createKS(sampleRate: number, minFrequency: number) {
       writeIndex = 0;
       isPlaying = true;
     }
-    prevTrigger = trigger;
 
     if (isPlaying) {
       for (let i = 0; i < outputLength; i++) {

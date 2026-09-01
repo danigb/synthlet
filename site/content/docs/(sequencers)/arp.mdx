@@ -18,14 +18,16 @@ import { registerAllWorklets, Arp, ArpScale, Clock, MonoSynth } from "synthlet";
 
 const audioContext = await registerAllWorklets(new AudioContext());
 const clock = Clock(audioContext, { bpm: 120 });
+// `clock` is the phase ramp; `clock.gate` is the gate. Triggers and gates read
+// the gate - see [Gates and triggers](/docs/gates-and-triggers).
 const arp = Arp(audioContext, {
-  trigger: clock,
+  trigger: clock.gate,
   scale: ArpScale.Major,
   octaves: 2,
 });
 
 const mono = MonoSynth(audioContext, {
-  gate: clock,
+  gate: clock.gate,
   frequency: arp,
 });
 ```
@@ -34,7 +36,7 @@ const mono = MonoSynth(audioContext, {
 
 ## Parameters
 
-- `trigger`: The clock signal to advance the arpeggiator. It will output the next note.
+- `trigger`: Advances the arpeggiator on its rising edge - when it goes from 0 (or below) to a positive value. See [Gates and triggers](/docs/gates-and-triggers).
 - `baseNote`: The base midi note of the arpeggiator. Default is `60`.
 - `scale`: The scale bitmask. Default is `1` (root only). See below.
 - `octaves`: The number of octaves to span. Default is `1`.

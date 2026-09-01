@@ -1,0 +1,115 @@
+---
+title: Gates and triggers
+description: What a gate is in Synthlet, and which modules emit one
+---
+
+Synthlet has one rule for every module that reads a `trigger` or a `gate`:
+
+> **A gate is on while the signal is positive. A trigger is the transition from
+> non-positive to positive.**
+
+That is it. There is no threshold to remember and no magic value: `1`, `0.5`
+and `0.001` all fire, `0` and `-1` do not, and a signal already positive fires
+once — it has to return to `0` or below before it can fire again.
+
+```ts
+const amp = AdAmp(audioContext, { attack: 0.01, decay: 0.3 });
+
+amp.trigger.value = 1; // fires
+amp.trigger.value = 1; // nothing: already open
+amp.trigger.value = 0; // closes
+amp.trigger.value = 0.5; // fires again
+```
+
+It is the same rule SuperCollider (`gate > 0`), Faust (`t > 0`), Max and RNBO
+("any non-zero") use.
+
+## Why it has no threshold
+
+Because a threshold would silently break things. Attenuating a gate is an
+ordinary thing to do — `Param.mul(trigger, 0.5)`, a knob, a scaled envelope —
+and [Param](/docs/modulators/param) computes `input × gain + offset`, so with a
+positive gain a positive signal stays positive. Every module downstream still
+sees the gate. Under a threshold it would just stop working, with no error and
+no clue why.
+
+It also means bipolar signals are gates for free: every [Lfo](/docs/modulators/lfo)
+type swings ±1, so an `Lfo` square drives any trigger at 50 % duty, the way a
+comparator at 0 V behaves in modular.
+
+<Callout title="Never smooth a gate line" type="warn">
+  Use `setValueAtTime` or `linearRampToValueAtTime`. Do **not** use
+  `setTargetAtTime`, and do not put a slew or a lowpass on a gate: those
+  approach zero without ever arriving, so the gate would never close. The
+  envelope is the smoother — that is its job.
+</Callout>
+
+## Gate or trigger?
+
+Both words mean the same signal; they describe what the reader does with it.
+
+- A **trigger** fires something that then runs to completion — the module stops
+  caring what the signal does next. [AD](/docs/modulators/ad),
+  [Impulse](/docs/sources/impulse), [Karplus-Strong](/docs/sources/ks) and
+  [Arp](/docs/sequencers/arp) take triggers.
+- A **gate** is held: the module does one thing while it is high and another
+  when it goes low. [ADSR](/docs/modulators/adsr) takes a gate — it sustains
+  while the gate is open and releases when it closes.
+
+## Which modules emit one
+
+| Module                            | Emits        | Notes                                           |
+| --------------------------------- | ------------ | ----------------------------------------------- |
+| [Clock](/docs/sequencers/clock)   | `clock.gate` | The node itself is a **phase ramp**, not a gate |
+| [Euclid](/docs/sequencers/euclid) | its output   | One pulse per hit                               |
+| [Impulse](/docs/sources/impulse)  | its output   | A one-sample impulse                            |
+| [Lfo](/docs/modulators/lfo)       | its output   | Bipolar, so a square is a 50 % gate             |
+| [Param](/docs/modulators/param)   | its output   | The usual way to drive a gate from the UI       |
+
+The important row is the first. A phase ramp is a different kind of signal from
+a gate: it rises from 0 to 1 over each beat, which is what `Euclid` needs to
+subdivide a clock, but as a gate it is positive from the first beat onward and
+never falls back — so it would fire once and then latch open forever. Connect
+`clock.gate` to anything that triggers, and the `Clock` node itself only to
+`Euclid`.
+
+```ts
+const clock = Clock(audioContext, { bpm: 120 });
+
+Euclid(audioContext, { clock }); // the phase ramp
+KickDrum(audioContext, { trigger: clock.gate }); // the gate
+```
+
+Both `Clock` and `Euclid` take a `pulseWidth`: how much of each beat (or step)
+the gate is high for, as a fraction, defaulting to `0.5`. It is a _fraction_
+rather than a duration on purpose — see below.
+
+## Timing
+
+Trigger params are `k-rate`, which the Web Audio spec defines as sampled once
+per render quantum: _"the value of a k-rate parameter MUST be sampled at the
+time of the very first sample-frame, and that value MUST be used for the entire
+block."_ A render quantum is 128 frames — about **2.9 ms** at 44.1 kHz — so by
+default a trigger lands on the next block boundary.
+
+This is why gate widths are fractions of a beat and not milliseconds: a fixed
+short pulse (some environments use 1 ms) can fall entirely inside one block and
+be invisible. At 120 BPM the default `pulseWidth` of `0.5` is 250 ms, about 86
+render quanta.
+
+For sample-accurate sequencing, [AD](/docs/modulators/ad) and
+[ADSR](/docs/modulators/adsr) read their control param per sample when it is
+`a-rate`, so you can opt in:
+
+```ts
+env.gate.automationRate = "a-rate";
+env.gate.setValueAtTime(1, exactTime);
+```
+
+<Callout title="Unverified in a browser" type="info">
+  Overriding `automationRate` on an `AudioWorkletNode` parameter is allowed by
+  the spec — it is a writable attribute, and the fixed-rate constraints apply to
+  three other node types, not to worklets — but the spec does not describe what
+  happens when it changes mid-stream, and this opt-in has not yet been confirmed
+  against a real browser. The default `k-rate` behaviour is unaffected.
+</Callout>

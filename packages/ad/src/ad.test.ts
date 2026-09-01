@@ -216,6 +216,85 @@ describe("AdWorkletNode", () => {
     });
   });
 
+  // The gate/trigger contract: on while positive, fired by the transition from
+  // non-positive to positive. `gate.test.ts` pins the detector itself; these
+  // pin that the envelope actually uses it.
+  describe("trigger detection", () => {
+    const params = (trigger: number) => ({
+      trigger: [trigger],
+      attack: [0.5],
+      decay: [0.5],
+      offset: [0],
+      gain: [1],
+    });
+    const fired = (output: Float32Array) =>
+      Array.from(output).some((v) => v > 0);
+
+    it.each([1, 0.99, 0.5, 0.05])("fires on a trigger of %p", (trigger) => {
+      expect(fired(runProcessMono(new AdWorklet(), 10, params(trigger)))).toBe(
+        true,
+      );
+    });
+
+    it.each([0, -1])("does not fire on a trigger of %p", (trigger) => {
+      expect(fired(runProcessMono(new AdWorklet(), 10, params(trigger)))).toBe(
+        false,
+      );
+    });
+
+    it("does not retrigger while the trigger is held positive", () => {
+      const node = new AdWorklet();
+      runProcessMono(node, 10, params(1)); // attack and most of the decay
+      const held = runProcessMono(node, 10, params(1));
+      // Still decaying, not back at the peak.
+      expect(Math.max(...Array.from(held))).toBeLessThan(0.5);
+    });
+
+    it("retriggers after the trigger returns to 0", () => {
+      const node = new AdWorklet();
+      runProcessMono(node, 10, params(1));
+      runProcessMono(node, 10, params(0));
+      const again = runProcessMono(node, 10, params(1));
+      expect(Math.max(...Array.from(again))).toBe(1);
+    });
+
+    it("is driven by a bipolar square, at 50% duty", () => {
+      // Every LfoType is +/-1, so a square is a gate for free.
+      const node = new AdWorklet();
+      expect(fired(runProcessMono(node, 10, params(-1)))).toBe(false);
+      expect(fired(runProcessMono(node, 10, params(1)))).toBe(true);
+    });
+
+    // Ticket 05: the trigger is read per sample when it is a-rate, so a caller
+    // who opts in gets sample-accurate firing instead of one quantised to the
+    // 128-frame block boundary.
+    it("starts at the sample an a-rate trigger rises, not at index 0", () => {
+      const EDGE = 4;
+      const aRate = new Float32Array(10);
+      aRate.fill(1, EDGE);
+
+      const outputs = [[new Float32Array(10)]];
+      new AdWorklet().process([[]], outputs, {
+        ...params(0),
+        trigger: aRate,
+      });
+
+      const output = Array.from(outputs[0][0]);
+      expect(output.slice(0, EDGE)).toEqual(new Array(EDGE).fill(0));
+      expect(output[EDGE]).toBeGreaterThan(0);
+    });
+
+    it("is unchanged for a k-rate trigger", () => {
+      const kRate = runProcessMono(new AdWorklet(), 10, params(1));
+      const outputs = [[new Float32Array(10)]];
+      new AdWorklet().process([[]], outputs, {
+        ...params(0),
+        trigger: new Float32Array(1).fill(1),
+      });
+      expect(Array.from(outputs[0][0])).toEqual(Array.from(kRate));
+    });
+  });
+
   describe("generator mode", () => {
     it("writes the same envelope to every output channel", () => {
       const params = {

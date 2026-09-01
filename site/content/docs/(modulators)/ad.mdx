@@ -40,6 +40,10 @@ ad.trigger.value = 1;
 
 - `attack`: The time to reach the peak, in seconds. Default is 0.01.
 - `decay`: The time to fall to silence (−60 dB), in seconds. Default is 0.1.
-- `trigger`: Fires the envelope on the rising edge, when it goes from 0 to a positive value. Move it back to 0 before firing it again.
+- `trigger`: Fires the envelope on the rising edge, when it goes from 0 (or below) to a positive value. Move it back to 0 before firing it again. See [Gates and triggers](/docs/gates-and-triggers).
 - `offset`: The offset of the envelope. Default is 0.
 - `gain`: The gain of the envelope. Default is 1.
+
+`trigger` is `k-rate`, so it lands on the next 128-frame block boundary
+(~2.9 ms at 44.1 kHz). For sample-accurate firing you can opt into a
+per-sample read - see [Gates and triggers](/docs/gates-and-triggers#timing).
