@@ -131,21 +131,3 @@ export const BiquadFilter = Object.assign(
   },
   { descriptors: BIQUAD_FILTER_PARAMS }
 );
-
-export function ConnSerial(nodes: Disposable<AudioNode>[]) {
-  return disposable(
-    nodes.reduce((prev, next) => {
-      prev.connect(next);
-      return next;
-    }),
-    nodes
-  );
-}
-
-export function ConnMixInto(
-  nodes: Disposable<AudioNode>[],
-  target: Disposable<AudioNode>
-) {
-  nodes.forEach((node) => node.connect(target));
-  return disposable(target, nodes);
-}

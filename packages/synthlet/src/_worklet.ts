@@ -102,7 +102,7 @@ export function disposable<N extends AudioNode>(
   dependencies?: ConnectedUnit[]
 ): Disposable<N> {
   // Compose with any dispose the node already has, so wrapping a node
-  // (withParams, ConnSerial) doesn't discard its cascade.
+  // (a compound owning its output gain) doesn't discard its cascade.
   const previousDispose = (node as any).dispose as (() => void) | undefined;
   let disposed = false;
   return Object.assign(node, {

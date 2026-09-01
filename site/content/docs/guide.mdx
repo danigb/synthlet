@@ -110,6 +110,73 @@ osc.dispose(); // Disconnects also trigger and adsr
 
 Unlike the `connect` in standard WebAudio API, `dispose` can be called more than once (but only the first call will have effect) and once called, the module is not usable anymore.
 
+## Composing modules
+
+A group of modules wired together is itself a module: it has an output you can
+`connect()`, parameters you can automate, and a `dispose()` that tears the whole
+thing down. There is no special API for building one - four rules:
+
+1. **Wire with `connect()`.** It chains, and a mix is two `connect()` calls into
+   the same node.
+2. **End in a `Gain`.** The compound then has a predictable type, an input
+   anything can connect to, and a `volume` for free.
+3. **Own what you built, with `disposable(out, [...])`.** Anything you passed to
+   a factory is already owned by the module you passed it to; list the nodes you
+   connected by hand. Listing extras is free - `dispose()` runs once per node -
+   so when in doubt, list everything you created.
+4. **Expose the inlets with `Object.assign`.** An inlet is a `Param` node's
+   `.input` when it needs scaling (a volume in decibels) or fan-out (one gate
+   driving two envelopes). Otherwise expose the module's own `AudioParam`
+   directly.
+
+```ts
+import {
+  AdsrAmp,
+  AdsrEnv,
+  disposable,
+  Gain,
+  Param,
+  PolyblepOscillator,
+  Svf,
+} from "synthlet";
+
+function Voice(ac: AudioContext, frequency = 440) {
+  // Inlets: gate fans out to two envelopes, volume is in decibels.
+  // Both need a Param node; anything else can expose its AudioParam directly.
+  const gate = Param(ac);
+  const volume = Param.db(ac, -12);
+
+  const osc = PolyblepOscillator(ac, { frequency });
+  const filterEnv = AdsrEnv(ac, { gate, gain: 3000, offset: 2000 });
+  const filter = Svf(ac, { frequency: filterEnv });
+  const amp = AdsrAmp(ac, { gate });
+  const out = Gain(ac, { gain: volume });
+
+  osc.connect(filter).connect(amp).connect(out);
+
+  return Object.assign(
+    disposable(out, [osc, filterEnv, filter, amp, gate, volume]),
+    { gate: gate.input, volume: volume.input, osc, filter }
+  );
+}
+```
+
+The result is used like any other module:
+
+```ts
+const voice = Voice(ac, 220);
+voice.connect(ac.destination);
+
+voice.gate.value = 1;
+voice.osc.frequency.value = 330;
+
+voice.dispose(); // every node above, in one call
+```
+
+`MonoSynth` and the drums are written exactly this way - read
+[mono.ts](https://github.com/danigb/synthlet/blob/main/packages/synthlet/src/synths/mono.ts)
+for the same shape at full size.
+
 ## Installing individual modules
 
 If you want to optimize for bundle size, you can use the individual module packages and register each module individually.

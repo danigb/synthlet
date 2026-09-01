@@ -49,7 +49,6 @@ export type {
   ParamInput,
 } from "./_worklet";
 
-export { getSynthlet, Synthlet } from "./synthlet";
 export * from "./synths/drums";
 export * from "./synths/mono";
 export { registerDrums, registerMonoSynth } from "./synths/registrars";
