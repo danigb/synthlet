@@ -1,15 +1,15 @@
 "use client";
 
-import { getSynthlet } from "synthlet";
+import { disposable, Impulse, Param } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { useSynth } from "./useSynth";
 
-const ImpulseSynth = (context: AudioContext) => {
-  const s = getSynthlet(context);
-  const trigger = s.param();
-  return s.synth({
-    out: s.impulse.trigger(trigger),
-    params: { trigger },
+const ImpulseSynth = (ac: AudioContext) => {
+  const trigger = Param(ac);
+  const impulse = Impulse(ac, { trigger });
+
+  return Object.assign(disposable(impulse, [trigger]), {
+    trigger: trigger.input,
   });
 };
 

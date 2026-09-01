@@ -1,16 +1,18 @@
 "use client";
 
-import { getSynthlet } from "synthlet";
+import { AdsrAmp, disposable, Oscillator, Param } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { useSynth } from "./useSynth";
 
-const VcaSynth = (context: AudioContext) => {
-  const s = getSynthlet(context);
-  const gate = s.param();
+const VcaSynth = (ac: AudioContext) => {
+  const gate = Param(ac);
 
-  return s.withParams(s.conn.serial(s.osc.sin(440), s.amp.adsr(gate)), {
-    gate,
-  });
+  const osc = Oscillator(ac, { type: "sine", frequency: 440 });
+  const amp = AdsrAmp(ac, { gate });
+
+  osc.connect(amp);
+
+  return Object.assign(disposable(amp, [osc, gate]), { gate: gate.input });
 };
 
 function WavetableExample() {

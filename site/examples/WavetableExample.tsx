@@ -1,23 +1,36 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchWavetableNames, getSynthlet } from "synthlet";
+import {
+  AdsrAmp,
+  disposable,
+  fetchWavetableNames,
+  Gain,
+  Param,
+  WavetableOscillator,
+} from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-const WavetableSynth = () => (context: AudioContext) => {
-  const s = getSynthlet(context);
-  const gate = s.param();
-  const freq = s.param(440);
-  const volume = s.param.db(-24);
-  const osc = s.wt();
+const WavetableSynth = (ac: AudioContext) => {
+  const gate = Param(ac);
+  const freq = Param(ac, { input: 440 });
+  const volume = Param.db(ac, -24);
+
+  const osc = WavetableOscillator(ac, { frequency: freq });
   osc.loadWavetable("ACCESS_V");
-  const synth = s.withParams(
-    s.conn.serial(osc, s.amp.adsr(gate), s.amp(volume)),
-    { freq, volume, gate }
-  );
-  return Object.assign(synth, { osc });
+  const amp = AdsrAmp(ac, { gate });
+  const out = Gain(ac, { gain: volume });
+
+  osc.connect(amp).connect(out);
+
+  return Object.assign(disposable(out, [osc, amp, gate, freq, volume]), {
+    osc,
+    gate: gate.input,
+    freq: freq.input,
+    volume: volume.input,
+  });
 };
 
 function WavetableExample() {
@@ -31,7 +44,7 @@ function WavetableExample() {
       setAvailableNames(names);
     });
   }, []);
-  const synth = useSynth(WavetableSynth());
+  const synth = useSynth(WavetableSynth);
 
   if (!synth) return null;
 

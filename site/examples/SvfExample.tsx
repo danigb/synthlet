@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import {
+  disposable,
   Gain,
   Lfo,
   LfoType,
   Oscillator,
   Param,
-  ParamScaleType,
   Svf,
   SvfType,
 } from "synthlet";
@@ -15,26 +15,27 @@ import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-const creteSynth = (context: AudioContext) => {
-  const osc = Oscillator(context, { type: "sawtooth", frequency: 1000 });
-  const filter = Svf(context, { type: SvfType.LowPass, frequency: 1000, Q: 1 });
-  const volume = Param(context, { scale: ParamScaleType.DbToGain, input: -12 });
-  const lfo = Lfo(context, {
-    frequency: 2,
-    type: LfoType.RampUp,
-    gain: 0,
-  });
-  const gain = Gain(context, { gain: volume });
+const createSynth = (ac: AudioContext) => {
+  const volume = Param.db(ac, -12);
+  const osc = Oscillator(ac, { type: "sawtooth", frequency: 1000 });
+  const filter = Svf(ac, { type: SvfType.LowPass, frequency: 1000, Q: 1 });
+  const lfo = Lfo(ac, { frequency: 2, type: LfoType.RampUp, gain: 0 });
+  const out = Gain(ac, { gain: volume });
 
-  osc.connect(filter).connect(gain);
+  osc.connect(filter).connect(out);
   lfo.connect(filter.frequency);
 
-  return Object.assign(gain, { osc, filter, volume: volume.input, lfo });
+  return Object.assign(disposable(out, [osc, filter, lfo, volume]), {
+    osc,
+    filter,
+    lfo,
+    volume: volume.input,
+  });
 };
 
 function Example() {
   const [currentType, setCurrentType] = useState(SvfType.LowPass);
-  const synth = useSynth(creteSynth);
+  const synth = useSynth(createSynth);
 
   if (!synth) return null;
 

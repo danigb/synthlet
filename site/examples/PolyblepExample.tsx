@@ -1,6 +1,6 @@
 "use client";
 
-import { ConnSerial, Gain, Lfo, Param, PolyblepOscillator } from "synthlet";
+import { disposable, Gain, Lfo, Param, PolyblepOscillator } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { SelectorParam } from "./components/Selector";
 import { Slider } from "./components/Slider";
@@ -11,12 +11,13 @@ function PolyblepSynth(ac: AudioContext) {
 
   const lfo = Lfo(ac, { frequency: 1, gain: 0 });
   const osc = PolyblepOscillator(ac, { frequency: 440, detune: lfo });
-  const amp = Gain(ac, { gain: volume });
+  const out = Gain(ac, { gain: volume });
 
-  return Object.assign(ConnSerial([osc, amp]), {
+  osc.connect(out);
+
+  return Object.assign(disposable(out, [osc, lfo, volume]), {
     osc,
     lfo,
-    amp,
     volume: volume.input,
   });
 }

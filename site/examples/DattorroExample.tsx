@@ -1,6 +1,6 @@
 "use client";
 
-import { ClaveDrum, DattorroReverb } from "synthlet";
+import { ClaveDrum, DattorroReverb, disposable, Gain } from "synthlet";
 import {
   ExamplePane,
   ModulePane,
@@ -9,13 +9,19 @@ import {
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function DattorroSynth(context: AudioContext) {
-  const clave = ClaveDrum(context);
-  const reverb = DattorroReverb(context);
-  reverb.connect(context.destination);
-  clave.connect(reverb);
+function DattorroSynth(ac: AudioContext) {
+  const clave = ClaveDrum(ac);
+  const reverb = DattorroReverb(ac);
+  const out = Gain(ac);
 
-  return Object.assign(clave, { reverb });
+  // The dry drum and the reverb's output, mixed into one bus.
+  clave.connect(out);
+  clave.connect(reverb).connect(out);
+
+  return Object.assign(disposable(out, [clave, reverb]), {
+    reverb,
+    trigger: clave.trigger,
+  });
 }
 
 function Example() {
