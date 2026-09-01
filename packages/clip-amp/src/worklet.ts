@@ -33,12 +33,16 @@ export class ClipAmpProcessor extends AudioWorkletProcessor {
     }
     const pre = parameters.preGain[0];
     const post = parameters.postGain[0];
-    const input = inputs[0][0];
-    const output = outputs[0][0];
+    const input = inputs[0];
+    const output = outputs[0];
 
-    if (input && output) {
-      for (let i = 0; i < input.length; i++) {
-        output[i] = this.fn(input[i] * pre) * post;
+    // The clip is a pure function of the sample, so every channel is the same
+    // loop with no state to keep apart.
+    for (let c = 0; c < input.length && c < output.length; c++) {
+      const inputChannel = input[c];
+      const outputChannel = output[c];
+      for (let i = 0; i < inputChannel.length; i++) {
+        outputChannel[i] = this.fn(inputChannel[i] * pre) * post;
       }
     }
 

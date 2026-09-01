@@ -1,35 +1,35 @@
-describe("ProcessorNode", () => {
-  let Processor: any;
-  const sampleRate = 40;
+describe("VAFProcessor", () => {
+  let Worklet: any;
+  const MOOG_LADDER = 0;
+  const KORG35_LPF = 2;
 
   beforeAll(async () => {
-    createWorkletTestContext(sampleRate);
-    Processor = (await import("./worklet")).SvfProcessor;
+    createWorkletTestContext(8000);
+    Worklet = (await import("./worklet")).VAF;
   });
 
-  it("registers processor", () => {
-    expect(global.registerProcessor).toHaveBeenCalledWith(
-      "SvfProcessor",
-      Processor,
-    );
-  });
-
-  it("has parameter descriptors", () => {
-    expect(Processor.parameterDescriptors).toMatchSnapshot();
-  });
-
-  // A low pass well under Nyquist at this sample rate, so an impulse leaves a
-  // ring long enough to compare channel against channel.
-  const params = { type: [1], frequency: [5], Q: [4] };
+  const params = {
+    type: [MOOG_LADDER],
+    frequency: [1000],
+    detune: [0],
+    resonance: [0.5],
+  };
   const impulse = () => {
     const signal = new Float32Array(16);
     signal[0] = 1;
     return signal;
   };
 
+  it("registers processor", () => {
+    expect(global.registerProcessor).toHaveBeenCalledWith(
+      "VAFProcessor",
+      Worklet,
+    );
+  });
+
   it("processes every channel, not just the first", () => {
     const [left, right] = runProcessChannels(
-      new Processor(),
+      new Worklet(),
       [impulse(), impulse()],
       params,
     );
@@ -39,9 +39,9 @@ describe("ProcessorNode", () => {
   });
 
   it("filters the left channel exactly as it would filter it alone", () => {
-    const [mono] = runProcessChannels(new Processor(), [impulse()], params);
+    const [mono] = runProcessChannels(new Worklet(), [impulse()], params);
     const [left] = runProcessChannels(
-      new Processor(),
+      new Worklet(),
       [impulse(), impulse()],
       params,
     );
@@ -49,9 +49,9 @@ describe("ProcessorNode", () => {
   });
 
   it("gives each channel its own state, so a hard pan stays panned", () => {
-    const node = new Processor();
-    // The impulse only ever enters the left channel; the right must stay
-    // silent across blocks, not pick up the left channel's ringing.
+    const node = new Worklet();
+    // A ladder filter is all state: with one shared instance the left
+    // channel's ringing would come back out of the right one.
     const first = runProcessChannels(
       node,
       [impulse(), new Float32Array(16)],
@@ -67,6 +67,30 @@ describe("ProcessorNode", () => {
     );
     expect(Array.from(second[0]).some((value) => value !== 0)).toBe(true);
     expect(second[1]).toEqual(new Float32Array(16));
+  });
+
+  it("keeps each type's state when `type` changes", () => {
+    // Every channel holds one instance of every filter, so switching back to
+    // a type picks up where that filter left off rather than from silence.
+    const korg = { ...params, type: [KORG35_LPF] };
+    const node = new Worklet();
+    const [viaMoog] = runProcessChannels(node, [impulse()], params);
+    runProcessChannels(node, [impulse()], korg);
+    const [backToMoog] = runProcessChannels(
+      node,
+      [new Float32Array(16)],
+      params,
+    );
+
+    expect(Array.from(viaMoog).some((value) => value !== 0)).toBe(true);
+    // Still ringing from the first block, undisturbed by the Korg detour.
+    expect(Array.from(backToMoog).some((value) => value !== 0)).toBe(true);
+  });
+
+  it("is a no-op for an input with no channels", () => {
+    const outputs = [[new Float32Array(16)]];
+    expect(() => new Worklet().process([[]], outputs, params)).not.toThrow();
+    expect(outputs[0][0]).toEqual(new Float32Array(16));
   });
 });
 
@@ -88,7 +112,7 @@ function createWorkletTestContext(sampleRate = 10) {
     }
   };
   // @ts-ignore
-  global.registerProcessor = jest.fn(); // Mock registerProcessor
+  global.registerProcessor = jest.fn();
 }
 
 type Worklet = {

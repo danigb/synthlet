@@ -145,6 +145,57 @@ describe("AdsrWorkletNode", () => {
 
       expect(Array.from(output)).toEqual(Array.from(expected));
     });
+
+    it("processes every channel, not just the first", () => {
+      const envelope = Array.from(runProcessMono(generator(), 100, params));
+      const [left, right] = runProcessChannels(
+        modulator(),
+        [new Float32Array(100).fill(1), new Float32Array(100).fill(0.5)],
+        params,
+      );
+      // The right channel used to come out silent: same envelope, each
+      // channel scaled by its own input.
+      expect(Array.from(left)).toEqual(envelope);
+      expect(Array.from(right)).toEqual(envelope.map((v) => v * 0.5));
+    });
+
+    it("keeps a hard-panned input panned", () => {
+      const [left, right] = runProcessChannels(
+        modulator(),
+        [new Float32Array(100).fill(1), new Float32Array(100)],
+        params,
+      );
+      expect(Array.from(left).some((value) => value > 0)).toBe(true);
+      expect(right).toEqual(new Float32Array(100));
+    });
+
+    it("advances the envelope once per sample, not once per channel", () => {
+      // Two channels must not run the stage machine twice as fast: a stereo
+      // block has to match the mono block sample for sample.
+      const expected = Array.from(runProcessMono(generator(), 100, params));
+      const [left, right] = runProcessChannels(
+        modulator(),
+        [new Float32Array(100).fill(1), new Float32Array(100).fill(1)],
+        params,
+      );
+      expect(Array.from(left)).toEqual(expected);
+      expect(Array.from(right)).toEqual(expected);
+    });
+
+    it("writes the offset to every channel of an unconnected input", () => {
+      const outputs = [[new Float32Array(10), new Float32Array(10)]];
+      modulator().process([[]], outputs, { ...params, offset: [100] });
+      expect(outputs[0][0]).toEqual(new Float32Array(10).fill(100));
+      expect(outputs[0][1]).toEqual(new Float32Array(10).fill(100));
+    });
+  });
+
+  describe("generator mode", () => {
+    it("writes the same envelope to every output channel", () => {
+      const outputs = [[new Float32Array(100), new Float32Array(100)]];
+      generator().process([[]], outputs, params);
+      expect(outputs[0][1]).toEqual(outputs[0][0]);
+    });
   });
 });
 
@@ -188,6 +239,18 @@ function runProcessWithInput(
   const outputs = [[new Float32Array(input.length)]];
   worklet.process([[input]], outputs, params);
   return outputs[0][0];
+}
+
+// Runs one block with a multi-channel input and an output of the same shape,
+// the way Web Audio allocates it when no outputChannelCount is declared.
+function runProcessChannels(
+  worklet: Worklet,
+  input: Float32Array[],
+  params: any = {},
+) {
+  const outputs = [input.map((channel) => new Float32Array(channel.length))];
+  worklet.process([input], outputs, params);
+  return outputs[0];
 }
 
 // This file declares helpers at the top level: make it a module so they don't

@@ -62,17 +62,21 @@ export function createAdsr(sampleRate: number) {
 
   _updateAdsr(0.01, 0.1, 0.5, 0.3);
 
+  // The stage machine advances once per sample; the level it lands on is then
+  // applied to every channel the block has, so stereo in stays stereo out.
   return function adsr(
-    input: Float32Array,
-    output: Float32Array,
+    inputs: Float32Array[],
+    outputs: Float32Array[],
     modifier: boolean,
     params: AdsrParamInputs,
   ) {
     _readParams(params);
     const offset = params.offset[0];
     const gain = params.gain[0];
+    const channels = outputs.length;
+    const length = outputs[0]?.length ?? 0;
 
-    for (let i = 0; i < output.length; i++) {
+    for (let i = 0; i < length; i++) {
       switch (stage) {
         case Stage.Attack:
           current = attack.b + current * attack.c;
@@ -99,8 +103,12 @@ export function createAdsr(sampleRate: number) {
           }
           break;
       }
-      const value = modifier ? input[i] * current : current;
-      output[i] = value * gain + offset;
+      for (let c = 0; c < channels; c++) {
+        // A channel the input doesn't have -- including an input that isn't
+        // connected at all -- is silence, not a crash.
+        const value = modifier ? (inputs[c]?.[i] ?? 0) * current : current;
+        outputs[c][i] = value * gain + offset;
+      }
     }
   };
 

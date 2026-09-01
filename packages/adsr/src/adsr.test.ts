@@ -16,14 +16,14 @@ describe("Adsr Generator", () => {
       const adsr = createAdsr(20);
 
       const outputGateOn = new Float32Array(20);
-      adsr(undefined!, outputGateOn, false, {
+      adsr([], [outputGateOn], false, {
         ...defaultParams,
         gate: [1],
       });
       expect(outputGateOn).toMatchSnapshot();
 
       const outputGateOff = new Float32Array(20);
-      adsr(undefined!, outputGateOff, false, {
+      adsr([], [outputGateOff], false, {
         ...defaultParams,
         gate: [0],
       });
