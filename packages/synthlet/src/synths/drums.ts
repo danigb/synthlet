@@ -4,7 +4,13 @@ import { Impulse } from "@synthlet/impulse";
 import { Lfo, LfoType } from "@synthlet/lfo";
 import { Noise, NoiseType } from "@synthlet/noise";
 import { Param } from "@synthlet/param";
-import { Disposable, disposable, ParamInput } from "../_worklet";
+import {
+  Compound,
+  CompoundNode,
+  Disposable,
+  disposable,
+  ParamInput,
+} from "../_worklet";
 import { BiquadFilter, Gain, Oscillator } from "../waa";
 
 export type DrumInputs = {
@@ -14,12 +20,15 @@ export type DrumInputs = {
   tone?: ParamInput;
 };
 
-export type DrumNode = Disposable<GainNode> & {
-  trigger: AudioParam;
-  volume: AudioParam;
-  tone: AudioParam;
-  decay: AudioParam;
-};
+export type DrumNode = CompoundNode<
+  GainNode,
+  {
+    trigger: AudioParam;
+    volume: AudioParam;
+    tone: AudioParam;
+    decay: AudioParam;
+  }
+>;
 
 /**
  * The four knobs every drum has, as Param nodes. Each one is scaled (`volume`,
@@ -48,11 +57,15 @@ function drum(
   params: DrumParams,
   owned: Disposable<AudioNode>[]
 ): DrumNode {
-  return disposable(out, [...owned, ...Object.values(params)], {
-    trigger: params.trigger.input,
-    decay: params.decay.input,
-    volume: params.volume.input,
-    tone: params.tone.input,
+  return Compound({
+    output: out,
+    owns: [...owned, ...Object.values(params)],
+    exposes: {
+      trigger: params.trigger.input,
+      decay: params.decay.input,
+      volume: params.volume.input,
+      tone: params.tone.input,
+    },
   });
 }
 

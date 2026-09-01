@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   AdsrAmp,
-  disposable,
+  Compound,
   fetchWavetableNames,
   Gain,
   Param,
@@ -25,11 +25,15 @@ const WavetableSynth = (ac: AudioContext) => {
 
   osc.connect(amp).connect(out);
 
-  return disposable(out, [osc, amp, gate, freq, volume], {
-    osc,
-    gate: gate.input,
-    freq: freq.input,
-    volume: volume.input,
+  return Compound({
+    output: out,
+    owns: [osc, amp, gate, freq, volume],
+    exposes: {
+      osc,
+      gate: gate.input,
+      freq: freq.input,
+      volume: volume.input,
+    },
   });
 };
 

@@ -6,7 +6,7 @@ import {
   ArpScale,
   Clock,
   DattorroReverb,
-  disposable,
+  Compound,
   Euclid,
   MonoSynth,
   NoiseType,
@@ -39,11 +39,15 @@ function ArpSynth(context: AudioContext) {
   });
   synth1.connect(reverb);
 
-  return disposable(reverb, [synth1, arp, euclid, clock], {
-    synth1,
-    arp,
-    clock,
-    euclid,
+  return Compound({
+    output: reverb,
+    owns: [synth1, arp, euclid, clock],
+    exposes: {
+      synth1,
+      arp,
+      clock,
+      euclid,
+    },
   });
 }
 

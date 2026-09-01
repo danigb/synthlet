@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import {
-  disposable,
+  Compound,
   Gain,
   Lfo,
   LfoType,
@@ -25,11 +25,15 @@ const createSynth = (ac: AudioContext) => {
   osc.connect(filter).connect(out);
   lfo.connect(filter.frequency);
 
-  return disposable(out, [osc, filter, lfo, volume], {
-    osc,
-    filter,
-    lfo,
-    volume: volume.input,
+  return Compound({
+    output: out,
+    owns: [osc, filter, lfo, volume],
+    exposes: {
+      osc,
+      filter,
+      lfo,
+      volume: volume.input,
+    },
   });
 };
 

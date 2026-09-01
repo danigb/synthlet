@@ -6,7 +6,7 @@ import {
   PolyblepOscillatorInputs,
 } from "@synthlet/polyblep-oscillator";
 import { Svf, SvfInputs } from "@synthlet/state-variable-filter";
-import { disposable, ParamInput } from "../_worklet";
+import { Compound, ParamInput } from "../_worklet";
 import { Gain } from "../waa";
 
 export type MonoSynthInputs = {
@@ -44,15 +44,19 @@ export function MonoSynth(context: AudioContext, inputs: MonoSynthInputs = {}) {
   vibrato.connect(osc.frequency);
   osc.connect(filter).connect(amp).connect(out);
 
-  return disposable(out, [gate, volume, osc, vibrato, filterEnv, filter, amp], {
-    // Params are flat AudioParams: the performance surface.
-    gate: gate.input,
-    volume: volume.input,
-    // MonoSynth is a kit, so it exposes the modules it's made of.
-    osc,
-    vibrato,
-    filterEnv,
-    filter,
-    amp,
+  return Compound({
+    output: out,
+    owns: [gate, volume, osc, vibrato, filterEnv, filter, amp],
+    exposes: {
+      // Params are flat AudioParams: the performance surface.
+      gate: gate.input,
+      volume: volume.input,
+      // MonoSynth is a kit, so it exposes the modules it's made of.
+      osc,
+      vibrato,
+      filterEnv,
+      filter,
+      amp,
+    },
   });
 }

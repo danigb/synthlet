@@ -1,6 +1,6 @@
 "use client";
 
-import { ClaveDrum, DattorroReverb, disposable, Gain } from "synthlet";
+import { ClaveDrum, DattorroReverb, Compound, Gain } from "synthlet";
 import {
   ExamplePane,
   ModulePane,
@@ -18,9 +18,13 @@ function DattorroSynth(ac: AudioContext) {
   clave.connect(out);
   clave.connect(reverb).connect(out);
 
-  return disposable(out, [clave, reverb], {
-    reverb,
-    trigger: clave.trigger,
+  return Compound({
+    output: out,
+    owns: [clave, reverb],
+    exposes: {
+      reverb,
+      trigger: clave.trigger,
+    },
   });
 }
 

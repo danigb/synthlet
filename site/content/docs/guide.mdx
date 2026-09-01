@@ -120,11 +120,11 @@ thing down. There is no special API for building one - three rules:
    the same node.
 2. **End in a `Gain`.** The compound then has a predictable type, an input
    anything can connect to, and a `volume` for free.
-3. **Own what you built and publish what you expose, with
-   `disposable(out, [...], { ... })`.** Anything you passed to a factory is
-   already owned by the module you passed it to; list the nodes you connected by
+3. **Declare it with `Compound({ output, owns, exposes })`.** `owns` is what
+   `dispose()` tears down: anything you passed to a factory is already owned by
+   the module you passed it to, so this is the list of nodes you connected by
    hand. Listing extras is free - `dispose()` runs once per node - so when in
-   doubt, list everything you created. The third argument is the compound's
+   doubt, list everything you created. `exposes` is the compound's public
    surface: an inlet is a `Param` node's `.input` when it needs scaling (a
    volume in decibels) or fan-out (one gate driving two envelopes), and the
    module's own `AudioParam` otherwise.
@@ -133,7 +133,7 @@ thing down. There is no special API for building one - three rules:
 import {
   AdsrAmp,
   AdsrEnv,
-  disposable,
+  Compound,
   Gain,
   Param,
   PolyblepOscillator,
@@ -154,11 +154,15 @@ function Voice(ac: AudioContext, frequency = 440) {
 
   osc.connect(filter).connect(amp).connect(out);
 
-  return disposable(out, [osc, filterEnv, filter, amp, gate, volume], {
-    gate: gate.input,
-    volume: volume.input,
-    osc,
-    filter,
+  return Compound({
+    output: out,
+    owns: [osc, filterEnv, filter, amp, gate, volume],
+    exposes: {
+      gate: gate.input,
+      volume: volume.input,
+      osc,
+      filter,
+    },
   });
 }
 ```

@@ -46,8 +46,10 @@ export const LevelMeter = Object.assign(
   { descriptors: [] as readonly ParamDescriptor[] }
 );
 
-export { disposable } from "./_worklet";
+export { Compound, disposable } from "./_worklet";
 export type {
+  CompoundNode,
+  ConnectedUnit,
   Connector,
   Disposable,
   ParamDescriptor,

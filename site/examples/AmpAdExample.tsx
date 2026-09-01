@@ -1,6 +1,6 @@
 "use client";
 
-import { AdAmp, disposable, Oscillator, Param } from "synthlet";
+import { AdAmp, Compound, Oscillator, Param } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
@@ -15,10 +15,14 @@ const VcaSynth = (ac: AudioContext) => {
 
   osc.connect(amp);
 
-  return disposable(amp, [osc, trigger, attack, release], {
-    trigger: trigger.input,
-    attack: attack.input,
-    release: release.input,
+  return Compound({
+    output: amp,
+    owns: [osc, trigger, attack, release],
+    exposes: {
+      trigger: trigger.input,
+      attack: attack.input,
+      release: release.input,
+    },
   });
 };
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { AdsrAmp, disposable, Oscillator, Param } from "synthlet";
+import { AdsrAmp, Compound, Oscillator, Param } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { useSynth } from "./useSynth";
 
@@ -12,7 +12,11 @@ const VcaSynth = (ac: AudioContext) => {
 
   osc.connect(amp);
 
-  return disposable(amp, [osc, gate], { gate: gate.input });
+  return Compound({
+    output: amp,
+    owns: [osc, gate],
+    exposes: { gate: gate.input },
+  });
 };
 
 function WavetableExample() {

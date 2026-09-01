@@ -3,7 +3,7 @@
 import {
   ClaveDrum,
   Clock,
-  disposable,
+  Compound,
   Euclid,
   Gain,
   KickDrum,
@@ -42,9 +42,13 @@ const RhythmBox = (ac: AudioContext) => {
 
   [clave, kick].forEach((drum) => drum.connect(out));
 
-  return disposable(out, [clave, kick, clock, bpm, volume], {
-    bpm: bpm.input,
-    volume: volume.input,
+  return Compound({
+    output: out,
+    owns: [clave, kick, clock, bpm, volume],
+    exposes: {
+      bpm: bpm.input,
+      volume: volume.input,
+    },
   });
 };
 

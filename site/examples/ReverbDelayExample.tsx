@@ -1,6 +1,6 @@
 "use client";
 
-import { ClaveDrum, disposable, Gain, ReverbDelay } from "synthlet";
+import { ClaveDrum, Compound, Gain, ReverbDelay } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
@@ -14,9 +14,13 @@ function ReverbDelaySynth(ac: AudioContext) {
   clave.connect(out);
   clave.connect(reverb).connect(out);
 
-  return disposable(out, [clave, reverb], {
-    reverb,
-    trigger: clave.trigger,
+  return Compound({
+    output: out,
+    owns: [clave, reverb],
+    exposes: {
+      reverb,
+      trigger: clave.trigger,
+    },
   });
 }
 

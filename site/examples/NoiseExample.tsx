@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { disposable, Gain, Noise, NoiseType, Param } from "synthlet";
+import { Compound, Gain, Noise, NoiseType, Param } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
@@ -13,9 +13,13 @@ function createSynth(ac: AudioContext) {
 
   noise.connect(out);
 
-  return disposable(out, [noise, volume], {
-    noise,
-    volume: volume.input,
+  return Compound({
+    output: out,
+    owns: [noise, volume],
+    exposes: {
+      noise,
+      volume: volume.input,
+    },
   });
 }
 

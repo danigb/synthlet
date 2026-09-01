@@ -2,7 +2,7 @@
 
 import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
-import { AdEnv, disposable, Gain, Oscillator, Param } from "synthlet";
+import { AdEnv, Compound, Gain, Oscillator, Param } from "synthlet";
 import { useSynth } from "./useSynth";
 
 const AttackDecaySynth = (ac: AudioContext) => {
@@ -23,10 +23,14 @@ const AttackDecaySynth = (ac: AudioContext) => {
 
   osc.connect(out);
 
-  return disposable(out, [osc, pitchEnv, trigger, attack, decay], {
-    trigger: trigger.input,
-    attack: attack.input,
-    decay: decay.input,
+  return Compound({
+    output: out,
+    owns: [osc, pitchEnv, trigger, attack, decay],
+    exposes: {
+      trigger: trigger.input,
+      attack: attack.input,
+      decay: decay.input,
+    },
   });
 };
 

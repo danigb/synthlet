@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { disposable, Gain, KarplusStrong, NoiseType, Param } from "synthlet";
+import { Compound, Gain, KarplusStrong, NoiseType, Param } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
@@ -14,10 +14,14 @@ function createSynth(ac: AudioContext) {
 
   ks.connect(out);
 
-  return disposable(out, [ks, trigger, volume], {
-    ks,
-    volume: volume.input,
-    trigger: trigger.input,
+  return Compound({
+    output: out,
+    owns: [ks, trigger, volume],
+    exposes: {
+      ks,
+      volume: volume.input,
+      trigger: trigger.input,
+    },
   });
 }
 

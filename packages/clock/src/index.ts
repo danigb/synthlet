@@ -25,8 +25,10 @@ export const Clock = createWorkletConstructor<ClockWorkletNode, ClockInputs>({
 
 export const registerClockWorklet = createRegistrar("CLOCK", PROCESSOR);
 
-export { disposable } from "./_worklet";
+export { Compound, disposable } from "./_worklet";
 export type {
+  CompoundNode,
+  ConnectedUnit,
   Connector,
   Disposable,
   ParamDescriptor,

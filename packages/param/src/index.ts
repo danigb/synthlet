@@ -58,8 +58,10 @@ export const Param = Object.assign(Create, {
     Create(context, { input: value, gain: -1 }),
 });
 
-export { disposable } from "./_worklet";
+export { Compound, disposable } from "./_worklet";
 export type {
+  CompoundNode,
+  ConnectedUnit,
   Connector,
   Disposable,
   ParamDescriptor,

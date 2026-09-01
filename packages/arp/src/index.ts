@@ -34,8 +34,10 @@ export const Arp = createWorkletConstructor<ArpWorkletNode, ArpInputs>({
   }),
 });
 
-export { disposable } from "./_worklet";
+export { Compound, disposable } from "./_worklet";
 export type {
+  CompoundNode,
+  ConnectedUnit,
   Connector,
   Disposable,
   ParamDescriptor,

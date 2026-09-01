@@ -1,6 +1,6 @@
 "use client";
 
-import { disposable, Gain, Lfo, Param, PolyblepOscillator } from "synthlet";
+import { Compound, Gain, Lfo, Param, PolyblepOscillator } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { SelectorParam } from "./components/Selector";
 import { Slider } from "./components/Slider";
@@ -15,10 +15,14 @@ function PolyblepSynth(ac: AudioContext) {
 
   osc.connect(out);
 
-  return disposable(out, [osc, lfo, volume], {
-    osc,
-    lfo,
-    volume: volume.input,
+  return Compound({
+    output: out,
+    owns: [osc, lfo, volume],
+    exposes: {
+      osc,
+      lfo,
+      volume: volume.input,
+    },
   });
 }
 

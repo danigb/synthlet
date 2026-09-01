@@ -35,8 +35,10 @@ export const Noise = createWorkletConstructor<NoiseWorkletNode, NoiseInputs>({
   }),
 });
 
-export { disposable } from "./_worklet";
+export { Compound, disposable } from "./_worklet";
 export type {
+  CompoundNode,
+  ConnectedUnit,
   Connector,
   Disposable,
   ParamDescriptor,

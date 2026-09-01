@@ -70,8 +70,10 @@ export function fetchWavetableNames(): Promise<string[]> {
   return WavetableLoader.fetchAvailableNames();
 }
 
-export { disposable } from "./_worklet";
+export { Compound, disposable } from "./_worklet";
 export type {
+  CompoundNode,
+  ConnectedUnit,
   Connector,
   Disposable,
   ParamDescriptor,

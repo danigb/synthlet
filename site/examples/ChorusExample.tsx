@@ -1,6 +1,6 @@
 "use client";
 
-import { AdsrAmp, Chorus, disposable, Oscillator, Param } from "synthlet";
+import { AdsrAmp, Chorus, Compound, Oscillator, Param } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
@@ -13,11 +13,15 @@ function ChorusSynth(ac: AudioContext) {
 
   osc.connect(amp).connect(chorus);
 
-  return disposable(chorus, [osc, amp, gate], {
-    osc,
-    amp,
-    chorus,
-    gate: gate.input,
+  return Compound({
+    output: chorus,
+    owns: [osc, amp, gate],
+    exposes: {
+      osc,
+      amp,
+      chorus,
+      gate: gate.input,
+    },
   });
 }
 
