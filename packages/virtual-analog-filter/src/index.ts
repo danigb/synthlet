@@ -20,7 +20,7 @@ const TYPES = {
 
 export const registerVirtualAnalogFilterWorklet = createRegistrar(
   "VAF",
-  PROCESSOR
+  PROCESSOR,
 );
 
 export type VirtualAnalogFilterInputs = {
@@ -50,7 +50,7 @@ export const VirtualAnalogFilter = Object.assign(
       numberOfOutputs: 1,
     }),
   }),
-  TYPES
+  TYPES,
 );
 
 export { Compound, disposable } from "./_worklet";

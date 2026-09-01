@@ -28,7 +28,7 @@ describe.each(drumNames)("%s", (name) => {
       const param = nodeBehind(drum[knob], nodes);
       expect(param).toBeDefined();
       expect(param!.connections.length).toBeGreaterThan(0);
-    }
+    },
   );
 });
 
@@ -38,7 +38,7 @@ describe("SnareDrum", () => {
     const snare = drums.SnareDrum(context);
 
     const oscs = nodes.filter(
-      (node): node is OscillatorNodeMock => node instanceof OscillatorNodeMock
+      (node): node is OscillatorNodeMock => node instanceof OscillatorNodeMock,
     );
     const [freq, freq2] = oscs.map((osc) => driverOf(osc.frequency, nodes));
 

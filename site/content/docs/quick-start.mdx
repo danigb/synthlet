@@ -53,7 +53,7 @@ import {
 
 const ac = await registerAllWorklets(new AudioContext());
 
-const osc = PolyblepOscillator(ac, {frequency: 440 });
+const osc = PolyblepOscillator(ac, { frequency: 440 });
 const filter = VirtualAnalogFilter(ac, {
   type: VirtualAnalogFilter.MOOG_LADDER,
   frequency: 1500,

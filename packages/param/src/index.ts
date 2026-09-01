@@ -50,7 +50,7 @@ export const Param = Object.assign(Create, {
     context: AudioContext,
     input: ParamInput,
     min: ParamInput,
-    max: ParamInput
+    max: ParamInput,
   ) => Create(context, { scale: ParamScaleType.Linear, input, min, max }),
   mul: (context: AudioContext, input: ParamInput, gain: ParamInput) =>
     Create(context, { input, gain }),

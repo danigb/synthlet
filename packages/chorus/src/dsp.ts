@@ -38,7 +38,7 @@ export function createChorus(sampleRate: number) {
   function compute(
     input0: Float32Array,
     output0: Float32Array,
-    output1: Float32Array
+    output1: Float32Array,
   ): void {
     let fSlow0 = fConst2 * fVslider0;
     let fSlow1 = 4.096 * fVslider1;
@@ -65,7 +65,7 @@ export function createChorus(sampleRate: number) {
           fRec2[0] *
             ftbl0ChorusSIG0[
               Math.max(0, Math.min(Math.floor(65536.0 * fRec4[0]), 65535))
-            ]
+            ],
       );
       let iTemp5 = Math.floor(fTemp4);
       let fTemp6 = Math.floor(fTemp4);
@@ -77,7 +77,7 @@ export function createChorus(sampleRate: number) {
           fRec2[0] *
             ftbl1ChorusSIG1[
               Math.max(0, Math.min(Math.floor(65536.0 * fRec7[0]), 65535))
-            ]
+            ],
       );
       let fTemp9 = Math.floor(fTemp8);
       let iTemp10 = Math.floor(fTemp8);
@@ -90,7 +90,7 @@ export function createChorus(sampleRate: number) {
           fRec2[0] *
             ftbl0ChorusSIG0[
               Math.max(0, Math.min(Math.floor(65536.0 * fRec8[0]), 65535))
-            ]
+            ],
       );
       let iTemp14 = Math.floor(fTemp13);
       let fTemp15 = Math.floor(fTemp13);
@@ -116,14 +116,14 @@ export function createChorus(sampleRate: number) {
       fRec9[0] = fTemp16 - Math.floor(fTemp16);
       let iTemp17 = Math.max(
         0,
-        Math.min(Math.floor(65536.0 * fRec9[0]), 65535)
+        Math.min(Math.floor(65536.0 * fRec9[0]), 65535),
       );
       let fTemp18 = Math.min(
         4096.0,
         0.25 * fRec1[0] +
           fRec2[0] *
             (0.70710677 * ftbl1ChorusSIG1[iTemp17] +
-              0.70710677 * ftbl0ChorusSIG0[iTemp17])
+              0.70710677 * ftbl0ChorusSIG0[iTemp17]),
       );
       let iTemp19 = Math.floor(fTemp18);
       let fTemp20 = Math.floor(fTemp18);
@@ -131,14 +131,14 @@ export function createChorus(sampleRate: number) {
       fRec10[0] = fTemp21 - Math.floor(fTemp21);
       let iTemp22 = Math.max(
         0,
-        Math.min(Math.floor(65536.0 * fRec10[0]), 65535)
+        Math.min(Math.floor(65536.0 * fRec10[0]), 65535),
       );
       let fTemp23 = Math.min(
         4096.0,
         0.5 * fRec1[0] +
           fRec2[0] *
             (0.70710677 * ftbl0ChorusSIG0[iTemp22] -
-              0.70710677 * ftbl1ChorusSIG1[iTemp22])
+              0.70710677 * ftbl1ChorusSIG1[iTemp22]),
       );
       let iTemp24 = Math.floor(fTemp23);
       let fTemp25 = Math.floor(fTemp23);
@@ -146,14 +146,14 @@ export function createChorus(sampleRate: number) {
       fRec11[0] = fTemp26 - Math.floor(fTemp26);
       let iTemp27 = Math.max(
         0,
-        Math.min(Math.floor(65536.0 * fRec11[0]), 65535)
+        Math.min(Math.floor(65536.0 * fRec11[0]), 65535),
       );
       let fTemp28 = Math.min(
         4096.0,
         0.75 * fRec1[0] -
           fRec2[0] *
             (0.70710677 * ftbl1ChorusSIG1[iTemp27] +
-              0.70710677 * ftbl0ChorusSIG0[iTemp27])
+              0.70710677 * ftbl0ChorusSIG0[iTemp27]),
       );
       let iTemp29 = Math.floor(fTemp28);
       let fTemp30 = Math.floor(fTemp28);
@@ -161,14 +161,14 @@ export function createChorus(sampleRate: number) {
       fRec12[0] = fTemp31 - Math.floor(fTemp31);
       let iTemp32 = Math.max(
         0,
-        Math.min(Math.floor(65536.0 * fRec12[0]), 65535)
+        Math.min(Math.floor(65536.0 * fRec12[0]), 65535),
       );
       let fTemp33 = Math.min(
         4096.0,
         fRec1[0] +
           fRec2[0] *
             (0.70710677 * ftbl1ChorusSIG1[iTemp32] -
-              0.70710677 * ftbl0ChorusSIG0[iTemp32])
+              0.70710677 * ftbl0ChorusSIG0[iTemp32]),
       );
       let iTemp34 = Math.floor(fTemp33);
       let fTemp35 = Math.floor(fTemp33);
@@ -224,7 +224,7 @@ export function createChorus(sampleRate: number) {
     delay: number,
     rate: number,
     depth: number,
-    deviation: number
+    deviation: number,
   ): void {
     fVslider0 = delay;
     fVslider1 = rate;

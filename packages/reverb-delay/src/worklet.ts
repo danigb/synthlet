@@ -28,7 +28,7 @@ export class ReverbDelayProcessor extends AudioWorkletProcessor {
       params.diffusion[0],
       params.feedback[0],
       params.modDepth[0],
-      params.modFreq[0]
+      params.modFreq[0],
     );
     this.d.process(inputs[0], outputs[0]);
 

@@ -19,7 +19,7 @@ import { registerSvfWorklet } from "@synthlet/state-variable-filter";
  * its `gate` and `volume` inlets.
  */
 export function registerMonoSynth(
-  context: AudioContext
+  context: AudioContext,
 ): Promise<AudioContext> {
   return Promise.all([
     registerAdsrWorklet(context),

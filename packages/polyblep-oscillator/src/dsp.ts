@@ -32,7 +32,7 @@ export function createPolyblep(sampleRate: number) {
     output: Float32Array,
     waveformType: number,
     frequency: number,
-    detune: number
+    detune: number,
   ) {
     if (type !== waveformType) {
       type = waveformType;

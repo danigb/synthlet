@@ -21,7 +21,7 @@ export class LfoWorkletProcessor extends AudioWorkletProcessor {
   process(
     inputs: Float32Array[][],
     outputs: Float32Array[][],
-    parameters: any
+    parameters: any,
   ) {
     this.g(outputs[0][0], parameters);
     return this.r;

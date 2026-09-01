@@ -4,7 +4,7 @@ export { LevelMeterUI } from "./meter-ui";
 
 export const registerLevelMeterWorklet = createRegistrar(
   "LEVEL_METER",
-  PROCESSOR
+  PROCESSOR,
 );
 
 export type LevelMeterInputs = {};
@@ -21,11 +21,11 @@ export type LevelMeterOptions = {
 export const LevelMeter = Object.assign(
   (
     context: AudioContext,
-    options: LevelMeterOptions = {}
+    options: LevelMeterOptions = {},
   ): LevelMeterWorkletNode => {
     const maxChannels = options.maxChannels || 16;
     const peaksBuffer = new SharedArrayBuffer(
-      maxChannels * Float32Array.BYTES_PER_ELEMENT
+      maxChannels * Float32Array.BYTES_PER_ELEMENT,
     );
     const peaks = new Float32Array(peaksBuffer);
     const node = new AudioWorkletNode(context, "LevelMeterProcessor", {
@@ -43,7 +43,7 @@ export const LevelMeter = Object.assign(
     return disposable(node);
   },
   // No parameters: the meter is configured by options, not AudioParams.
-  { descriptors: [] as readonly ParamDescriptor[] }
+  { descriptors: [] as readonly ParamDescriptor[] },
 );
 
 export { Compound, disposable } from "./_worklet";

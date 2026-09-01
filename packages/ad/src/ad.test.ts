@@ -9,7 +9,7 @@ describe("AdWorkletNode", () => {
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
       "AdProcessor",
-      AdWorklet
+      AdWorklet,
     );
   });
 
@@ -63,7 +63,7 @@ describe("AdWorkletNode", () => {
       const output = runProcessWithInput(
         modulator(),
         new Float32Array(10).fill(1),
-        params
+        params,
       );
       expect(Array.from(output)).toEqual(Array.from(expected));
     });
@@ -72,7 +72,7 @@ describe("AdWorkletNode", () => {
       const output = runProcessWithInput(
         modulator(),
         new Float32Array(10),
-        params
+        params,
       );
       expect(output).toEqual(new Float32Array(10));
     });
@@ -83,7 +83,7 @@ describe("AdWorkletNode", () => {
       const output = runProcessWithInput(
         modulator(),
         new Float32Array(10).fill(1),
-        loud
+        loud,
       );
       expect(Array.from(output)).toEqual(Array.from(expected));
     });
@@ -119,7 +119,7 @@ function createWorkletTestContext(sampleRate = 10) {
 }
 
 function createInputsOutputs(
-  options: { ins?: number; outs?: number; length?: number } = {}
+  options: { ins?: number; outs?: number; length?: number } = {},
 ) {
   const inCount = options.ins ?? 1;
   const outCount = options.outs ?? 1;
@@ -140,14 +140,14 @@ type Worklet = {
   process: (
     inputs: Float32Array[][],
     outputs: Float32Array[][],
-    parameters: any
+    parameters: any,
   ) => boolean;
 };
 
 export function runProcessMono(
   worklet: Worklet,
   size: number,
-  params: any = {}
+  params: any = {},
 ) {
   const { inputs, outputs } = createInputsOutputs({ length: size });
   worklet.process(inputs, outputs, params);
@@ -157,7 +157,7 @@ export function runProcessMono(
 export function runProcessWithInput(
   worklet: Worklet,
   input: Float32Array,
-  params: any = {}
+  params: any = {},
 ) {
   const outputs = [[new Float32Array(input.length)]];
   worklet.process([[input]], outputs, params);

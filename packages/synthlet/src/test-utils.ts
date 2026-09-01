@@ -14,7 +14,10 @@ export class AudioNodeMock {
   readonly connections: unknown[] = [];
   disconnectCount = 0;
 
-  constructor(public readonly context: any, public readonly kind: string) {
+  constructor(
+    public readonly context: any,
+    public readonly kind: string,
+  ) {
     context.nodes.push(this);
   }
 
@@ -40,7 +43,7 @@ export class AudioWorkletNodeMock extends AudioNodeMock {
   constructor(
     context: any,
     processorName: string,
-    public readonly options?: unknown
+    public readonly options?: unknown,
   ) {
     super(context, processorName);
     const params = new Map<string, AudioParamMock>();

@@ -88,7 +88,12 @@ A parameter accepts a node wherever it accepts a number, which is how you
 modulate:
 
 ```ts
-import { registerAllWorklets, Lfo, LfoType, PolyblepOscillator } from "synthlet";
+import {
+  registerAllWorklets,
+  Lfo,
+  LfoType,
+  PolyblepOscillator,
+} from "synthlet";
 
 const ac = await registerAllWorklets(new AudioContext());
 

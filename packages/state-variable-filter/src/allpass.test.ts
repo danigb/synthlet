@@ -57,12 +57,12 @@ describe("SVF all-pass", () => {
   it("is not a bypass", () => {
     // Bypass has zero phase shift everywhere...
     expect(Math.cos(measure(SvfType.ByPass, CUTOFF).phase)).toBeGreaterThan(
-      0.999
+      0.999,
     );
     // ...the all-pass shifts phase below and above the cutoff too.
     expect(Math.abs(measure(SvfType.AllPass, 50).phase)).toBeGreaterThan(0.1);
     expect(Math.abs(measure(SvfType.AllPass, 10000).phase)).toBeGreaterThan(
-      0.1
+      0.1,
     );
   });
 });

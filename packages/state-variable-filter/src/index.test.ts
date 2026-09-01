@@ -37,7 +37,7 @@ class AudioWorkletNodeMock {
   constructor(
     public context: any,
     public processorName: any,
-    public options: any
+    public options: any,
   ) {
     this.params = {
       frequency: new ParamMock(),

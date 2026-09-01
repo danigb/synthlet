@@ -20,9 +20,9 @@ Ported from
 in FredAntonCorvest/Common-DSP, MIT licensed, Copyright (c) 2016 Fred Anton
 Corvest (FAC).
 
-The algorithm is Andrew Simper (Cytomic), [*Solving the continuous SVF equations
+The algorithm is Andrew Simper (Cytomic), [_Solving the continuous SVF equations
 using trapezoidal integration and equivalent
-currents*](https://www.cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf).
+currents_](https://www.cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf).
 
 Full notice in [LICENSE.md](LICENSE.md) and in the repository's
 [THIRD-PARTY-LICENSES.md](https://github.com/danigb/synthlet/blob/main/THIRD-PARTY-LICENSES.md).

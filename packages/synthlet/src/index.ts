@@ -68,7 +68,7 @@ export { registerDrums, registerMonoSynth } from "./synths/registrars";
 export * from "./waa";
 
 export function registerAllWorklets(
-  context: AudioContext
+  context: AudioContext,
 ): Promise<AudioContext> {
   return Promise.all([
     registerAdsrWorklet(context),

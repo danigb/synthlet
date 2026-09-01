@@ -32,7 +32,7 @@ export const Chorus = createWorkletConstructor<ChorusWorkletNode, ChorusInputs>(
       numberOfOutputs: 1,
       outputChannelCount: [2],
     }),
-  }
+  },
 );
 
 export { Compound, disposable } from "./_worklet";

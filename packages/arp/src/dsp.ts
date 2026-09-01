@@ -50,7 +50,7 @@ export function createArpeggiator() {
     trigger: number,
     baseNote: number,
     scale: number,
-    octaves: number
+    octaves: number,
   ): number {
     $note = baseNote;
     $octaves = octaves;

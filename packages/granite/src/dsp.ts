@@ -19,14 +19,14 @@ export function createDsp(sampleRate: number) {
   const window = createWindow(grainLength);
   const grains = Array.from(
     { length: NUMBER_OF_GRAINS },
-    () => new Grain(grainLength)
+    () => new Grain(grainLength),
   );
 
   function update(
     wetParam: number,
     freqParam: number,
     densityParam: number,
-    spreadParam: number
+    spreadParam: number,
   ) {
     wet = wetParam;
     freq = freqParam;
@@ -39,7 +39,7 @@ export function createDsp(sampleRate: number) {
   function compute(
     inputs: Float32Array[],
     outputs: Float32Array[],
-    count: number
+    count: number,
   ) {
     const input = inputs[0];
     const outLeft = outputs[0];

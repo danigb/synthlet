@@ -47,10 +47,10 @@ export function Oberheim(sampleRate: number, type: number) {
         type == 1
           ? fRec1 // High-pass
           : type == 2
-          ? fRec2 // Band-pass
-          : type == 3
-          ? fRec3 // Band-stop
-          : fRec0; // Low-pass
+            ? fRec2 // Band-pass
+            : type == 3
+              ? fRec3 // Band-stop
+              : fRec0; // Low-pass
       fRec4[1] = fRec4[0];
       fRec5[1] = fRec5[0];
     }

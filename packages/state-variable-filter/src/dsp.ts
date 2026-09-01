@@ -105,7 +105,7 @@ export function createFilter(sampleRate: number) {
     output: Float32Array,
     type: number,
     frequency: Float32Array,
-    q: number
+    q: number,
   ) {
     update(type, frequency[0], q);
     const isARateParam = frequency.length === input.length;

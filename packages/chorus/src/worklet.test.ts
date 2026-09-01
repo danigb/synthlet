@@ -10,7 +10,7 @@ describe("ChorusProcessor", () => {
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
       "ChorusProcessor",
-      Processor
+      Processor,
     );
   });
 
@@ -46,9 +46,14 @@ describe("ChorusProcessor", () => {
     const processor = new Processor();
     processor.port.onmessage({ data: { type: "DISPOSE" } });
     const outputs = [[new Float32Array(8), new Float32Array(8)]];
-    const params = { delay: [0.5], rate: [0.5], depth: [0.5], deviation: [0.5] };
+    const params = {
+      delay: [0.5],
+      rate: [0.5],
+      depth: [0.5],
+      deviation: [0.5],
+    };
     expect(processor.process([[new Float32Array(8)]], outputs, params)).toBe(
-      false
+      false,
     );
   });
 });

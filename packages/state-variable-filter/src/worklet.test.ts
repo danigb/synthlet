@@ -10,7 +10,7 @@ describe("ProcessorNode", () => {
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
       "SvfProcessor",
-      Processor
+      Processor,
     );
   });
 

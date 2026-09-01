@@ -13,13 +13,13 @@ describe("WavetableOscillatorWorkletNode", () => {
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
       "WavetableOscillatorWorkletProcessor",
-      WavetableOscillatorWorkletProcessor
+      WavetableOscillatorWorkletProcessor,
     );
   });
 
   it("has parameter descriptors", () => {
     expect(
-      WavetableOscillatorWorkletProcessor.parameterDescriptors
+      WavetableOscillatorWorkletProcessor.parameterDescriptors,
     ).toMatchSnapshot();
   });
 });

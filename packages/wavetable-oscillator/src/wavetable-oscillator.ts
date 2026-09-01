@@ -77,7 +77,7 @@ function interpolateLinear2d(
   buffer: Float32Array,
   len: number,
   plane: number,
-  offset: number
+  offset: number,
 ) {
   const index = Math.floor(offset);
   const frac = offset - index;

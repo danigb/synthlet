@@ -41,7 +41,7 @@ const createSynth = (ac: AudioContext) => {
 
 function Example() {
   const [currentType, setCurrentType] = useState<number>(
-    VirtualAnalogFilter.MOOG_LADDER
+    VirtualAnalogFilter.MOOG_LADDER,
   );
   const synth = useSynth(createSynth);
 
