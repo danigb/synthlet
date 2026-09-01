@@ -106,10 +106,13 @@ env.gate.automationRate = "a-rate";
 env.gate.setValueAtTime(1, exactTime);
 ```
 
-<Callout title="Unverified in a browser" type="info">
+<Callout title="Verified in Chrome" type="info">
   Overriding `automationRate` on an `AudioWorkletNode` parameter is allowed by
   the spec — it is a writable attribute, and the fixed-rate constraints apply to
-  three other node types, not to worklets — but the spec does not describe what
-  happens when it changes mid-stream, and this opt-in has not yet been confirmed
-  against a real browser. The default `k-rate` behaviour is unaffected.
+  three other node types, not to worklets — and an `OfflineAudioContext` probe
+  against Chrome 152 confirms it works: a parameter declared `k-rate` and
+  switched to `a-rate` before rendering delivers 128 values per block to the
+  processor while an automation ramp runs. Other engines, and changing the rate
+  mid-render, remain untested. The default `k-rate` behaviour is unaffected
+  either way.
 </Callout>
