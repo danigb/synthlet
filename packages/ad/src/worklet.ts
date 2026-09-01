@@ -20,12 +20,13 @@ export class AdProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
-    const output = outputs[0][0];
     this.d.update(params.trigger[0], params.attack[0], params.decay[0]);
-    // In modulator mode an unconnected input has no channels; treat it as
-    // silence so the envelope keeps running instead of process() throwing.
-    const input = this.m ? (inputs[0][0] ?? silence(output.length)) : undefined;
-    this.d.gen(output, params.offset[0], params.gain[0], input);
+    this.d.gen(
+      outputs[0],
+      params.offset[0],
+      params.gain[0],
+      this.m ? inputs[0] : undefined,
+    );
 
     return this.r;
   }
@@ -36,12 +37,6 @@ export class AdProcessor extends AudioWorkletProcessor {
 }
 
 registerProcessor("AdProcessor", AdProcessor);
-
-let SILENCE = new Float32Array(128);
-function silence(length: number) {
-  if (SILENCE.length < length) SILENCE = new Float32Array(length);
-  return SILENCE;
-}
 
 // Attack-Decay envelope based on https://paulbatchelor.github.io/sndkit/env/
 function createEnvelope(sampleRate: number) {
@@ -88,14 +83,19 @@ function createEnvelope(sampleRate: number) {
     // Generator mode (no input) writes the envelope itself; modulator mode
     // multiplies each input sample by it. Gain and offset apply to the result
     // in both cases, the same way the adsr package does it.
+    //
+    // The envelope advances once per sample and is then applied to every
+    // channel the block has, so stereo in stays stereo out.
     gen(
-      output: Float32Array,
+      outputs: Float32Array[],
       offset: number,
       gain: number,
-      input?: Float32Array,
+      inputs?: Float32Array[],
     ) {
       let out = 0;
-      for (let i = 0; i < output.length; i++) {
+      const channels = outputs.length;
+      const length = outputs[0]?.length ?? 0;
+      for (let i = 0; i < length; i++) {
         if (mode === MODE_ATTACK) {
           out = attackEnv * prev + (1.0 - attackEnv);
           if (out - prev <= EPS) {
@@ -112,8 +112,12 @@ function createEnvelope(sampleRate: number) {
           out = 0;
         }
 
-        const value = input ? input[i] * out : out;
-        output[i] = offset + value * gain;
+        for (let c = 0; c < channels; c++) {
+          // A channel the input doesn't have -- including an input that isn't
+          // connected at all -- is silence, not a crash.
+          const value = inputs ? (inputs[c]?.[i] ?? 0) * out : out;
+          outputs[c][i] = offset + value * gain;
+        }
       }
     },
   };

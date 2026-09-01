@@ -94,6 +94,52 @@ describe("AdWorkletNode", () => {
       expect(() => node.process([[]], outputs, params)).not.toThrow();
       expect(outputs[0][0]).toEqual(new Float32Array(10));
     });
+
+    it("processes every channel, not just the first", () => {
+      const envelope = Array.from(runProcessMono(new AdWorklet(), 10, params));
+      const [left, right] = runProcessChannels(
+        modulator(),
+        [new Float32Array(10).fill(1), new Float32Array(10).fill(0.5)],
+        params,
+      );
+      // Both channels get the same envelope, each scaled by its own input:
+      // the right channel used to come out silent.
+      expect(Array.from(left)).toEqual(envelope);
+      expect(Array.from(right)).toEqual(envelope.map((v) => v * 0.5));
+    });
+
+    it("keeps a hard-panned input panned", () => {
+      const [left, right] = runProcessChannels(
+        modulator(),
+        [new Float32Array(10).fill(1), new Float32Array(10)],
+        params,
+      );
+      expect(Array.from(left).some((v) => v > 0)).toBe(true);
+      expect(right).toEqual(new Float32Array(10));
+    });
+
+    it("writes the offset to every channel of an unconnected input", () => {
+      const node = modulator();
+      const outputs = [[new Float32Array(10), new Float32Array(10)]];
+      node.process([[]], outputs, { ...params, offset: [100] });
+      expect(outputs[0][0]).toEqual(new Float32Array(10).fill(100));
+      expect(outputs[0][1]).toEqual(new Float32Array(10).fill(100));
+    });
+  });
+
+  describe("generator mode", () => {
+    it("writes the same envelope to every output channel", () => {
+      const params = {
+        trigger: [1],
+        attack: [0.5],
+        decay: [0.5],
+        offset: [0],
+        gain: [1],
+      };
+      const outputs = [[new Float32Array(10), new Float32Array(10)]];
+      new AdWorklet().process([[]], outputs, params);
+      expect(outputs[0][1]).toEqual(outputs[0][0]);
+    });
   });
 });
 
@@ -162,4 +208,16 @@ export function runProcessWithInput(
   const outputs = [[new Float32Array(input.length)]];
   worklet.process([[input]], outputs, params);
   return outputs[0][0];
+}
+
+// Runs one block with a multi-channel input and an output of the same shape,
+// the way Web Audio allocates it when no outputChannelCount is declared.
+export function runProcessChannels(
+  worklet: Worklet,
+  input: Float32Array[],
+  params: any = {},
+) {
+  const outputs = [input.map((channel) => new Float32Array(channel.length))];
+  worklet.process([input], outputs, params);
+  return outputs[0];
 }
