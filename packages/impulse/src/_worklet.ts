@@ -30,17 +30,17 @@ export type Disposable<N extends AudioNode> = N & { dispose: () => void };
 
 export function createWorkletConstructor<
   N extends AudioWorkletNode,
-  P extends Record<string, ParamInput>
+  P extends Record<string, ParamInput>,
 >(options: CreateWorkletOptions<N, P>) {
   const paramNames = options.descriptors.map((d) => d.name);
   const create = (
     audioContext: AudioContext,
-    inputs: Partial<P> = {}
+    inputs: Partial<P> = {},
   ): Disposable<N> => {
     const node = new AudioWorkletNode(
       audioContext,
       options.processorName,
-      options.workletOptions(inputs)
+      options.workletOptions(inputs),
     ) as N;
 
     (node as any).__PROCESSOR_NAME__ = options.processorName;
@@ -58,7 +58,7 @@ export type ConnectedUnit = AudioNode | (() => void);
 export function connectParams(
   node: any,
   paramNames: readonly string[],
-  inputs: any
+  inputs: any,
 ): ConnectedUnit[] {
   const connected: ConnectedUnit[] = [];
 
@@ -102,7 +102,7 @@ export function connectParams(
  */
 export function disposable<N extends AudioNode>(
   node: N,
-  dependencies?: ConnectedUnit[]
+  dependencies?: ConnectedUnit[],
 ): Disposable<N> {
   // Compose with any dispose the node already has, so wrapping a node
   // (a compound owning its output gain) doesn't discard its cascade.
@@ -140,7 +140,7 @@ export function disposable<N extends AudioNode>(
  */
 export type CompoundNode<
   N extends AudioNode,
-  E extends object = {}
+  E extends object = {},
 > = Disposable<N> & E;
 
 /**
@@ -172,7 +172,7 @@ export function Compound<N extends AudioNode, E extends object = {}>(options: {
   // `exposes` goes on before the cascade, so it can't replace `dispose`.
   return disposable(
     Object.assign(options.output, options.exposes),
-    options.owns
+    options.owns,
   ) as CompoundNode<N, E>;
 }
 

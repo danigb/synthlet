@@ -34,10 +34,11 @@ const EXPECTED: Record<keyof typeof ArpScale, number[]> = {
 
 // Numeric enums have reverse mappings; keep only the name -> value entries.
 const MEMBERS = Object.entries(ArpScale).filter(
-  ([, value]) => typeof value === "number"
+  ([, value]) => typeof value === "number",
 ) as [keyof typeof ArpScale, number][];
 
-const freqToMidi = (freq: number) => Math.round(69 + 12 * Math.log2(freq / 440));
+const freqToMidi = (freq: number) =>
+  Math.round(69 + 12 * Math.log2(freq / 440));
 
 describe("ArpScale", () => {
   it("decodes every scale to its documented pitch classes", () => {
@@ -51,7 +52,7 @@ describe("ArpScale", () => {
 
   it("gives every scale a distinct note set", () => {
     const sets = new Set(
-      MEMBERS.map(([, value]) => JSON.stringify(getPitchClasses(value)))
+      MEMBERS.map(([, value]) => JSON.stringify(getPitchClasses(value))),
     );
     expect(sets.size).toBe(MEMBERS.length);
   });

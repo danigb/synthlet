@@ -19,7 +19,7 @@ class AudioWorkletNodeMock extends AudioNodeMock {
   constructor(
     public context: any,
     public processorName: string,
-    public options: any
+    public options: any,
   ) {
     super();
     const params = new Map<string, ParamMock>();

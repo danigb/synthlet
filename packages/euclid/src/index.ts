@@ -33,7 +33,7 @@ export const Euclid = createWorkletConstructor<EuclidWorkletNode, EuclidInputs>(
       numberOfInputs: 0,
       numberOfOutputs: 1,
     }),
-  }
+  },
 );
 
 export { Compound, disposable } from "./_worklet";

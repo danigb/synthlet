@@ -14,14 +14,14 @@ export class WavetableLoader {
 
   constructor(
     public readonly url: string,
-    public readonly wavetableLength: number
+    public readonly wavetableLength: number,
   ) {
     this.#loaded = this.#load();
   }
 
   static async fetchAvailableNames() {
     const res = await fetch(
-      "https://smpldsnds.github.io/wavedit-online/samples/files.json"
+      "https://smpldsnds.github.io/wavedit-online/samples/files.json",
     );
     if (!res.ok) throw Error("Failed to load wavetable list.");
     const json = await res.json();

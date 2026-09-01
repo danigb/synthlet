@@ -102,14 +102,14 @@ export type OscillatorInputs = {
 export const Oscillator = Object.assign(
   function oscillator(
     context: AudioContext,
-    inputs: OscillatorInputs = {}
+    inputs: OscillatorInputs = {},
   ): Disposable<OscillatorNode> {
     const osc = new OscillatorNode(context, { type: inputs.type });
     osc.start();
     const conn = connectParams(osc, names(OSCILLATOR_PARAMS), inputs);
     return disposable(osc, conn);
   },
-  { descriptors: OSCILLATOR_PARAMS }
+  { descriptors: OSCILLATOR_PARAMS },
 );
 
 export type BiquadFilterInputs = {
@@ -123,11 +123,11 @@ export type BiquadFilterInputs = {
 export const BiquadFilter = Object.assign(
   function biquadFilter(
     context: AudioContext,
-    inputs: Partial<BiquadFilterInputs> = {}
+    inputs: Partial<BiquadFilterInputs> = {},
   ) {
     const filter = new BiquadFilterNode(context, { type: inputs.type });
     const conn = connectParams(filter, names(BIQUAD_FILTER_PARAMS), inputs);
     return disposable(filter, conn);
   },
-  { descriptors: BIQUAD_FILTER_PARAMS }
+  { descriptors: BIQUAD_FILTER_PARAMS },
 );

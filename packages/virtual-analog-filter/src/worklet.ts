@@ -53,7 +53,7 @@ export class VAF extends AudioWorkletProcessor {
     const freq = params.frequency[0];
     this.d.update(
       freq * (detune ? Math.pow(2, params.detune[0] / 12) : 1),
-      params.resonance[0]
+      params.resonance[0],
     );
     this.d.process(inputs[0][0], outputs[0][0]);
     return this.r;

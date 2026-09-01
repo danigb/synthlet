@@ -14,7 +14,7 @@ export function createKS(sampleRate: number, minFrequency: number) {
     output: Float32Array,
     trigger: number,
     frequency: number,
-    decay: number
+    decay: number,
   ) => {
     const outputLength = output.length;
 
@@ -26,7 +26,7 @@ export function createKS(sampleRate: number, minFrequency: number) {
       delayInSamples = sampleRate / frequency;
       delayInSamples = Math.min(
         Math.max(delayInSamples, 1),
-        maxDelayLineLength - 2
+        maxDelayLineLength - 2,
       );
 
       for (let i = 0; i < maxDelayLineLength; i++) {

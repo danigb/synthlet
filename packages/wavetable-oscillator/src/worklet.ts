@@ -28,7 +28,7 @@ export class WavetableOscillatorWorkletProcessor extends AudioWorkletProcessor {
   process(
     inputs: Float32Array[][],
     outputs: Float32Array[][],
-    parameters: any
+    parameters: any,
   ) {
     this.u.agen(outputs[0][0], parameters);
     return this.r;
@@ -37,5 +37,5 @@ export class WavetableOscillatorWorkletProcessor extends AudioWorkletProcessor {
 
 registerProcessor(
   "WavetableOscillatorWorkletProcessor",
-  WavetableOscillatorWorkletProcessor
+  WavetableOscillatorWorkletProcessor,
 );

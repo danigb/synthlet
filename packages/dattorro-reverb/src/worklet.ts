@@ -32,7 +32,7 @@ export class DattorroReverbProcessor extends AudioWorkletProcessor {
       p.decay[0],
       p.damping[0],
       p.dryWet[0],
-      p.level[0]
+      p.level[0],
     );
 
     const in1 = inputs[0];

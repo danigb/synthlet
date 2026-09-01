@@ -20,7 +20,7 @@ export class ImpulseProcessor extends AudioWorkletProcessor {
   process(
     inputs: Float32Array[][],
     outputs: Float32Array[][],
-    parameters: any
+    parameters: any,
   ) {
     outputs[0][0].fill(0);
 

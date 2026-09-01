@@ -344,7 +344,7 @@ export class ReverbDelayDsp {
     diffusion: number,
     feedback: number,
     modDepth: number,
-    modFreq: number
+    modFreq: number,
   ) {
     this.fHslider0 = delayTime;
     this.fHslider1 = damping;
@@ -366,7 +366,7 @@ export class ReverbDelayDsp {
     const fSlow2: number = this.fHslider2;
     const fSlow3: number = this.fHslider3;
     const fSlow4: number = Math.floor(
-      Math.min(65533.0, this.fConst0 * this.fHslider4)
+      Math.min(65533.0, this.fConst0 * this.fHslider4),
     );
     const fSlow5: number = this.fHslider5;
     const fSlow6: number = this.fHslider6;
@@ -509,10 +509,10 @@ export class ReverbDelayDsp {
             ? this.fRec5[1]
             : 0.0
           : this.fRec6[1] === 0.0 && fSlow4 !== this.fRec7[1]
-          ? 4.5351473e-5
-          : this.fRec6[1] === 1.0 && fSlow4 !== this.fRec8[1]
-          ? -4.5351473e-5
-          : 0.0;
+            ? 4.5351473e-5
+            : this.fRec6[1] === 1.0 && fSlow4 !== this.fRec8[1]
+              ? -4.5351473e-5
+              : 0.0;
       this.fRec5[0] = fTemp18;
       this.fRec6[0] = Math.max(0.0, Math.min(1.0, this.fRec6[1] + fTemp18));
       this.fRec7[0] =

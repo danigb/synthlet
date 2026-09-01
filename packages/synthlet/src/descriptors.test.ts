@@ -48,7 +48,7 @@ const EXPECTED = [
 const withDescriptors = Object.entries(synthlet as Record<string, unknown>)
   .filter(
     (entry): entry is [string, Factory] =>
-      typeof entry[1] === "function" && "descriptors" in entry[1]
+      typeof entry[1] === "function" && "descriptors" in entry[1],
   )
   .sort(([a], [b]) => a.localeCompare(b));
 
@@ -64,7 +64,7 @@ describe("descriptors", () => {
 
   it("keeps Svf's frequency at a-rate", () => {
     const aRate = synthlet.Svf.descriptors.filter(
-      (d) => d.automationRate === "a-rate"
+      (d) => d.automationRate === "a-rate",
     );
     expect(aRate.map((d) => d.name)).toEqual(["frequency"]);
   });

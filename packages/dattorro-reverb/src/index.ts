@@ -8,7 +8,7 @@ import { PROCESSOR } from "./processor";
 
 export const registerDattorroReverbWorklet = createRegistrar(
   "DATTORRO_REVERB",
-  PROCESSOR
+  PROCESSOR,
 );
 
 export type DattorroReverbInputs = {

@@ -10,7 +10,7 @@ describe("ProcessorNode", () => {
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
       "PolyBLEProcessor",
-      Processor
+      Processor,
     );
   });
 
@@ -86,7 +86,7 @@ function createWorkletTestContext(sampleRate = 10) {
 }
 
 function createInputsOutputs(
-  options: { ins?: number; outs?: number; length?: number } = {}
+  options: { ins?: number; outs?: number; length?: number } = {},
 ) {
   const inCount = options.ins ?? 1;
   const outCount = options.outs ?? 1;

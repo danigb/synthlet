@@ -28,14 +28,14 @@ This package is generated from the Faust virtual analog filter library
 (`vaeffects.lib`). The following functions are used, each declared in
 `faustlibraries` under the STK-4.3 licence:
 
-| Faust function | Author |
-| --- | --- |
-| `ve.moogLadder` | Dario Sanfilippo |
-| `ve.moogHalfLadder` | Eric Tarr |
-| `ve.korg35LPF` | Eric Tarr |
-| `ve.korg35HPF` | Eric Tarr |
-| `ve.diodeLadder` | Eric Tarr |
-| `ve.oberheim` | Eric Tarr |
+| Faust function      | Author           |
+| ------------------- | ---------------- |
+| `ve.moogLadder`     | Dario Sanfilippo |
+| `ve.moogHalfLadder` | Eric Tarr        |
+| `ve.korg35LPF`      | Eric Tarr        |
+| `ve.korg35HPF`      | Eric Tarr        |
+| `ve.diodeLadder`    | Eric Tarr        |
+| `ve.oberheim`       | Eric Tarr        |
 
 `vaeffects.lib` further states: "Except where noted otherwise, the Faust
 functions below in this section are Copyright (C) 2003-2017 by Julius O. Smith

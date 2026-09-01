@@ -66,7 +66,7 @@ export function createAdsr(sampleRate: number) {
     input: Float32Array,
     output: Float32Array,
     modifier: boolean,
-    params: AdsrParamInputs
+    params: AdsrParamInputs,
   ) {
     _readParams(params);
     const offset = params.offset[0];
@@ -108,7 +108,7 @@ export function createAdsr(sampleRate: number) {
       params.attack[0],
       params.decay[0],
       params.sustain[0],
-      params.release[0]
+      params.release[0],
     );
 
     const gate = detectGate(params.gate[0]);
@@ -123,7 +123,7 @@ export function createAdsr(sampleRate: number) {
     _attack: number,
     _decay: number,
     _sustain: number,
-    _release: number
+    _release: number,
   ) {
     if ($sustain !== _sustain || $decay !== _decay) {
       $sustain = _sustain;
@@ -144,7 +144,7 @@ export function createAdsr(sampleRate: number) {
     filter: { b: number; c: number },
     time: number,
     level: number,
-    tco: number
+    tco: number,
   ) {
     const samples = time * sampleRate;
     filter.c = Math.exp(-Math.log((1.0 + tco) / tco) / samples);

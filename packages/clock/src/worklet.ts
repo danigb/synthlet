@@ -24,7 +24,7 @@ export class ClockWorkletProcessor extends AudioWorkletProcessor {
   process(
     inputs: Float32Array[][],
     outputs: Float32Array[][],
-    parameters: any
+    parameters: any,
   ) {
     if (parameters.bpm[0] !== this.bpm) {
       this.bpm = parameters.bpm[0];

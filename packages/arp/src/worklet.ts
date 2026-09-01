@@ -23,7 +23,7 @@ export class ArpProcessor extends AudioWorkletProcessor {
       params.trigger[0],
       params.baseNote[0],
       params.scale[0],
-      params.octaves[0]
+      params.octaves[0],
     );
     const output = outputs[0][0];
     if (output) output.fill(note);

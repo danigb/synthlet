@@ -29,7 +29,7 @@ describe("WavetableOscillator", () => {
         // third plane
         201, 202, 203, 204, 205, 206, 207, 208, 209, 210,
       ]),
-      10
+      10,
     );
     const inputs = {
       frequency: [440],

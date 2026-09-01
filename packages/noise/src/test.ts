@@ -11,7 +11,7 @@ describe("NoiseWorkletNode", () => {
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
       "NoiseWorkletProcessor",
-      NoiseWorklet
+      NoiseWorklet,
     );
   });
 
@@ -52,7 +52,7 @@ function createWorkletTestContext(sampleRate = 10) {
 }
 
 function createInputsOutputs(
-  options: { ins?: number; outs?: number; length?: number } = {}
+  options: { ins?: number; outs?: number; length?: number } = {},
 ) {
   const inCount = options.ins ?? 1;
   const outCount = options.outs ?? 1;
@@ -73,14 +73,14 @@ type Worklet = {
   process: (
     inputs: Float32Array[][],
     outputs: Float32Array[][],
-    parameters: any
+    parameters: any,
   ) => boolean;
 };
 
 export function runProcessMono(
   worklet: Worklet,
   size: number,
-  params: any = {}
+  params: any = {},
 ) {
   const { inputs, outputs } = createInputsOutputs({ length: size });
   worklet.process(inputs, outputs, params);

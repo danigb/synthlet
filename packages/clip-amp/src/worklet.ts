@@ -25,7 +25,7 @@ export class ClipAmpProcessor extends AudioWorkletProcessor {
   process(
     inputs: Float32Array[][],
     outputs: Float32Array[][],
-    parameters: any
+    parameters: any,
   ) {
     if (this.t !== parameters.type[0]) {
       this.t = parameters.type[0];

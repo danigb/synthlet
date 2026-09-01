@@ -15,7 +15,7 @@ const compounds = [
   ...Object.entries(drums)
     .filter(
       (entry): entry is [string, typeof drums.KickDrum] =>
-        typeof entry[1] === "function"
+        typeof entry[1] === "function",
     )
     .map(([name, build]) => ({ name, build })),
 ];

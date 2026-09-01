@@ -24,7 +24,7 @@ export class AdProcessor extends AudioWorkletProcessor {
     this.d.update(params.trigger[0], params.attack[0], params.decay[0]);
     // In modulator mode an unconnected input has no channels; treat it as
     // silence so the envelope keeps running instead of process() throwing.
-    const input = this.m ? inputs[0][0] ?? silence(output.length) : undefined;
+    const input = this.m ? (inputs[0][0] ?? silence(output.length)) : undefined;
     this.d.gen(output, params.offset[0], params.gain[0], input);
 
     return this.r;
@@ -92,7 +92,7 @@ function createEnvelope(sampleRate: number) {
       output: Float32Array,
       offset: number,
       gain: number,
-      input?: Float32Array
+      input?: Float32Array,
     ) {
       let out = 0;
       for (let i = 0; i < output.length; i++) {

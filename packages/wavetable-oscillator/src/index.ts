@@ -27,7 +27,7 @@ export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
 
 export const registerWavetableOscillatorWorklet = createRegistrar(
   "WT",
-  PROCESSOR
+  PROCESSOR,
 );
 
 export const WavetableOscillator = createWorkletConstructor<
@@ -58,7 +58,7 @@ export const WavetableOscillator = createWorkletConstructor<
 
 export function loadWavetable(
   nameOrUrl: string,
-  wavetableLength = 256
+  wavetableLength = 256,
 ): Promise<Wavetable> {
   const url = nameOrUrl.startsWith("http")
     ? nameOrUrl

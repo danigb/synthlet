@@ -9,7 +9,7 @@ describe("AdsrWorkletNode", () => {
   it("registers processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
       "AdsrProcessor",
-      Worklet
+      Worklet,
     );
   });
 

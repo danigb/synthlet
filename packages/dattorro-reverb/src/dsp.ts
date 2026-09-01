@@ -63,7 +63,7 @@ export function createDsp(sampleRate: number) {
     decayRate: number,
     damping: number,
     dryWet: number,
-    volume: number
+    volume: number,
   ) {
     fVslider0 = lpFilter;
     fVslider1 = diffussion1;
@@ -79,7 +79,7 @@ export function createDsp(sampleRate: number) {
   function compute(
     inputs: Float32Array[],
     outputs: Float32Array[],
-    count: number
+    count: number,
   ) {
     let inputs0 = inputs[0];
     let inputs1 = inputs.length === 1 ? inputs[0] : inputs[1];

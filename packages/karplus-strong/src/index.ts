@@ -8,7 +8,7 @@ import { PROCESSOR } from "./processor";
 
 export const registerKarplusStrongWorklet = createRegistrar(
   "KS-OSC",
-  PROCESSOR
+  PROCESSOR,
 );
 
 export type KarplusStrongInputs = {

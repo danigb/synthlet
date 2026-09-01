@@ -3,7 +3,7 @@ import { PARAMS } from "./params";
 type GenerateFn = (
   output: Float32Array,
   clock: number,
-  subdivision: number
+  subdivision: number,
 ) => void;
 
 type UpdateFn = (steps: number, beats: number, rotation: number) => void;

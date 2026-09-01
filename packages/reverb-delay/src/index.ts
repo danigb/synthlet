@@ -8,7 +8,7 @@ import { PROCESSOR } from "./processor";
 
 export const registerReverbDelayWorklet = createRegistrar(
   "REVERB-DELAY",
-  PROCESSOR
+  PROCESSOR,
 );
 
 export type ReverbDelayInputs = {

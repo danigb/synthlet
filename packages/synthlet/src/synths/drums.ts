@@ -55,7 +55,7 @@ type DrumParams = ReturnType<typeof toParams>;
 function drum(
   out: Disposable<GainNode>,
   params: DrumParams,
-  owned: Disposable<AudioNode>[]
+  owned: Disposable<AudioNode>[],
 ): DrumNode {
   return Compound({
     output: out,
@@ -74,7 +74,7 @@ const perc = (
   context: AudioContext,
   params: DrumParams,
   attack: number,
-  decay: ParamInput = params.decay
+  decay: ParamInput = params.decay,
 ) => AdAmp(context, { trigger: params.trigger, attack, decay });
 
 const OSC_BANK_FREQUENCIES = [263, 400, 421, 474, 587, 845];
@@ -82,7 +82,7 @@ const OSC_BANK_FREQUENCIES = [263, 400, 421, 474, 587, 845];
 /** The bank of squares that gives cymbals and hi-hats their metallic noise. */
 function oscBank(context: AudioContext) {
   const oscs = OSC_BANK_FREQUENCIES.map((frequency) =>
-    Oscillator(context, { type: "square", frequency })
+    Oscillator(context, { type: "square", frequency }),
   );
   const out = Gain(context, { gain: 0.3 });
   oscs.forEach((osc) => osc.connect(out));
@@ -91,7 +91,7 @@ function oscBank(context: AudioContext) {
 
 export const KickDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   const freq = Param.lin(context, params.tone, 20, 100);
@@ -122,7 +122,7 @@ export const KickDrum = (
 
 export const SnareDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   // The two sines the snare's body is made of, an octave apart. At the default
@@ -131,7 +131,7 @@ export const SnareDrum = (
   const freq2 = Param.mul(context, freq, 2);
 
   const oscs = [freq, freq2].map((frequency) =>
-    Oscillator(context, { type: "sine", frequency })
+    Oscillator(context, { type: "sine", frequency }),
   );
   const snap = perc(context, params, 0.01);
   oscs.forEach((osc) => osc.connect(snap));
@@ -148,7 +148,7 @@ export const SnareDrum = (
 
 export const ClaveDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   const freq = Param.lin(context, params.tone, 2400, 2500);
@@ -169,7 +169,7 @@ export const ClaveDrum = (
 
 export const HiHatDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   const loFreq = Param.lin(context, params.tone, 8000, 12000);
@@ -188,7 +188,7 @@ export const HiHatDrum = (
 
 export const CowBellDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   const hiFreq = Param.lin(context, params.tone, 700, 900);
@@ -217,7 +217,7 @@ export const CowBellDrum = (
 
 export const CymbalDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   const lowFreq = Param.lin(context, params.tone, 440, 540);
@@ -258,7 +258,7 @@ export const CymbalDrum = (
 
 export const MaracasDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   const freq = Param.lin(context, params.tone, 4000, 6000);
@@ -275,7 +275,7 @@ export const MaracasDrum = (
 
 export const HandclapDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   const freq = Param.lin(context, params.tone, 500, 1500);
@@ -303,7 +303,7 @@ export const HandclapDrum = (
 
 export const TomDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   const freq = Param.lin(context, params.tone, 125, 240);
@@ -333,7 +333,7 @@ export const TomDrum = (
 
 export const CongaDrum = (
   context: AudioContext,
-  inputs: DrumInputs = {}
+  inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
   const freq = Param.lin(context, params.tone, 220, 455);

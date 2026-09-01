@@ -3,7 +3,7 @@ import { createRegistrar, createWorkletConstructor } from "./_worklet";
 
 export const registerLookaheadLimiterWorklet = createRegistrar(
   "LOOKAHEAD_LIMITER",
-  PROCESSOR
+  PROCESSOR,
 );
 
 export type LookaheadLimiterInputs = {};

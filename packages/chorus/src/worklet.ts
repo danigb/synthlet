@@ -28,7 +28,7 @@ export class ChorusProcessor extends AudioWorkletProcessor {
       params.delay[0],
       params.rate[0],
       params.depth[0],
-      params.deviation[0]
+      params.deviation[0],
     );
     const input = inputs[0][0];
     const outputL = outputs[0][0];
