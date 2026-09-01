@@ -39,3 +39,13 @@ npm i @synthlet/lfo
 ## Usage
 
 You need to register the audio worklet before creating any instrument. See [/README.md#register] for details.
+
+## Credits
+
+`concaveTransform` is the MMA concave transform as presented by
+[Will Pirkle](https://www.willpirkle.com/) (Tritone Systems) in *Designing
+Software Synthesizer Plug-Ins in C++* and SynthLab, including the 5.0/12.0
+correction coefficient.
+
+See the repository's
+[THIRD-PARTY-LICENSES.md](https://github.com/danigb/synthlet/blob/main/THIRD-PARTY-LICENSES.md).

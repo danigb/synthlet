@@ -30,7 +30,7 @@ noise.type.value = NoiseType.Pink;
 
 - `type`: The type of noise to generate. Can be one of:
   - 0 `NoiseType.White`: White noise that uses `Math.rand` for random numbers.
-  - 10: `NoiseType.Pink`: Pink noise based on this [Larry Trammel algorithm](https://www.ridgerat-tech.us/pink/newpink.htm)
+  - 1: `NoiseType.Pink`: Pink noise based on this [Larry Trammell algorithm](https://www.ridgerat-tech.us/pink/newpink.htm)
 
 Since type is an audio param, any arbitrary value can be used, but only the above values are valid. If you suply an invalid value, a warning will be printed and the noise will default to white random.
 
@@ -40,7 +40,8 @@ Since type is an audio param, any arbitrary value can be used, but only the abov
 - Voss-McCartney algorithm:
   - https://www.firstpr.com.au/dsp/pink-noise/
   - https://dsp.stackexchange.com/questions/62342/understanding-voss-mccartney-pink-noise-generation-algorithm
-- Larry-Trammel algorithm:
+- Larry Trammell algorithm ("A New Shade of Pink"), (c) Larry Trammell 2016-2020,
+  licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/):
   - https://www.ridgerat-tech.us/pink/newpink.htm
 - Mathlab pink noise implementation: https://ccrma.stanford.edu/~jos/sasp/Example_Synthesis_1_F_Noise.html
 - https://github.com/Stenzel/newshadeofpink

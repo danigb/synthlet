@@ -22,9 +22,14 @@ export function bipolar(value: number): number {
 }
 
 /**
- * Create a concave/convex transform function using the correction factor
- * @param correctionFactor
- * @returns
+ * Create a concave/convex transform function using the correction factor.
+ *
+ * This is the MMA concave transform as presented by Will Pirkle (Tritone
+ * Systems) in "Designing Software Synthesizer Plug-Ins in C++" and SynthLab,
+ * including the 5.0/12.0 correction coefficient.
+ *
+ * @see https://www.willpirkle.com/
+ * @param coeff correction factor
  */
 function concaveTransform(coeff = 5.0 / 12.0) {
   // concave/convex transform correction factor at x = 0

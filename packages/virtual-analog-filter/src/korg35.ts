@@ -1,3 +1,6 @@
+// Generated from the Faust function `ve.korg35LPF` and `ve.korg35HPF` (vaeffects.lib).
+// Author: Eric Tarr. Licence: LicenseRef-STK-4.3.
+// See THIRD-PARTY-LICENSES.md at the repository root.
 export function Korg35(sampleRate: number, type: number) {
   let fSampleRate = 0;
   let fConst0 = 0;

@@ -1,3 +1,6 @@
+// Generated from the Faust function `ve.moogHalfLadder` (vaeffects.lib).
+// Author: Eric Tarr. Licence: LicenseRef-STK-4.3.
+// See THIRD-PARTY-LICENSES.md at the repository root.
 export function MoogHalf(sampleRate: number) {
   let fHslider0 = 0;
   let fConst0 = 0;

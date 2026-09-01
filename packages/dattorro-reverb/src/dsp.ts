@@ -1,6 +1,10 @@
 export type UpdateFn = ReturnType<typeof createDsp>["update"];
 export type ComputeFn = ReturnType<typeof createDsp>["compute"];
 
+// Generated from the Faust function `re.dattorro_rev` (reverbs.lib).
+// Author: Jakob Zerbian. Licence: LicenseRef-STK-4.3.
+// See THIRD-PARTY-LICENSES.md at the repository root.
+//
 // This is a dsp code generated from Faust to test if the Faust -> Rust -> Typescript conversion works
 export function createDsp(sampleRate: number) {
   let fConst0 = 44.1 / sampleRate;

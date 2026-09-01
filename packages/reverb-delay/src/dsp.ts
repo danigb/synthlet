@@ -1,3 +1,7 @@
+// Generated from the Faust function `re.greyhole` (reverbs.lib).
+// Author: Julian Parker, bug fixes and minor interface changes by Till
+// Bovermann. Licence: MIT.
+// See THIRD-PARTY-LICENSES.md at the repository root.
 export class ReverbDelayDsp {
   fConst0 = 0.0;
   fConst1 = 0.0;

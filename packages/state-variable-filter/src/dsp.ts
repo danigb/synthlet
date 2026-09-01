@@ -13,7 +13,15 @@ export enum SvfType {
 
 export type Filter = () => void;
 
-// Implementation based on https://github.com/FredAntonCorvest/Common-DSP/blob/master/Filter/SvfLinearTrapOptimised2.hpp
+// Ported from SvfLinearTrapOptimised2.hpp in FredAntonCorvest/Common-DSP,
+// MIT licensed, Copyright (c) 2016 Fred Anton Corvest (FAC).
+// https://github.com/FredAntonCorvest/Common-DSP/blob/master/Filter/SvfLinearTrapOptimised2.hpp
+//
+// The algorithm is Andrew Simper (Cytomic), "Solving the continuous SVF
+// equations using trapezoidal integration and equivalent currents".
+// https://www.cytomic.com/files/dsp/SvfLinearTrapOptimised2.pdf
+//
+// See THIRD-PARTY-LICENSES.md at the repository root.
 export function createFilter(sampleRate: number) {
   const invSr = 1 / sampleRate;
 

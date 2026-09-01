@@ -1,3 +1,6 @@
+// Generated from the Faust function `ve.oberheim` (vaeffects.lib).
+// Author: Eric Tarr. Licence: LicenseRef-STK-4.3.
+// See THIRD-PARTY-LICENSES.md at the repository root.
 export function Oberheim(sampleRate: number, type: number) {
   let fConst0 = 0;
   let fConst1 = 0;

@@ -97,7 +97,10 @@ This library wouldn't be possible with all the people writing books, blog posts 
 - http://synthworks.eu/ - DIY Synthetizers
 - [Karplus-Strong original paper](https://users.soe.ucsc.edu/~karplus/papers/digitar.pdf)
 
-### Synthesis open source repositories
+### Reading / inspiration
+
+Projects worth reading. None of synthlet's code derives from them — see
+[THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for what actually does.
 
 - [Faust](https://github.com/grame-cncm/faust)
 - [Cmajor](https://github.com/SoundStacks/cmajor)
@@ -116,4 +119,8 @@ This library wouldn't be possible with all the people writing books, blog posts 
 
 ## License
 
-MIT License
+MIT License. See [LICENSE.md](LICENSE.md).
+
+Some modules contain DSP derived from third-party work. Those derivations, their
+authors and the notices they require are collected in
+[THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).

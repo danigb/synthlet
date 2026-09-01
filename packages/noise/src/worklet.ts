@@ -9,7 +9,7 @@ export class NoiseWorkletProcessor extends AudioWorkletProcessor {
     super();
     this.r = true;
     this.t = 0;
-    this.d = getNoiseAlgorithm(sampleRate, 0);
+    this.d = getNoiseAlgorithm(0);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -26,7 +26,7 @@ export class NoiseWorkletProcessor extends AudioWorkletProcessor {
   ) {
     if (this.t !== parameters.type[0]) {
       this.t = parameters.type[0];
-      this.d = getNoiseAlgorithm(sampleRate, parameters.type[0]);
+      this.d = getNoiseAlgorithm(parameters.type[0]);
     }
     this.d(outputs[0][0]);
     return this.r;
