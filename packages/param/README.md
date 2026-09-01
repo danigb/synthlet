@@ -6,7 +6,8 @@ Part of [Synthlet](https://github.com/danigb/synthlet)
 
 `Param` also has shortcuts for the common conversions: `Param.db(ac, db)`
 (decibels to gain), `Param.lin(ac, input, min, max)` (a `0…1` input scaled to
-`min…max`) and `Param.inv(ac, input)` (sign inversion).
+`min…max`), `Param.mul(ac, input, gain)` (scaling) and `Param.inv(ac, input)`
+(sign inversion).
 
 `input`, `offset`, `min`, `max`, `gain` and `mod` all accept `±20000`. Unlike a
 module's own parameters, those bounds are a safety limit rather than a hint

@@ -1,5 +1,5 @@
 import { AudioNodeMock, createAudioContextMock } from "../test-utils";
-import { KickDrum } from "./drums";
+import * as drums from "./drums";
 import { MonoSynth } from "./mono";
 
 // Every teardown path in `disposable` ends in a disconnect(): a dependency with
@@ -10,7 +10,14 @@ const leaked = (nodes: AudioNodeMock[]) =>
 
 const compounds = [
   { name: "MonoSynth", build: MonoSynth },
-  { name: "KickDrum", build: KickDrum },
+  // Every drum: a compound that forgets to own one of its sources leaks it,
+  // and only running all ten catches the one that does.
+  ...Object.entries(drums)
+    .filter(
+      (entry): entry is [string, typeof drums.KickDrum] =>
+        typeof entry[1] === "function"
+    )
+    .map(([name, build]) => ({ name, build })),
 ];
 
 describe.each(compounds)("$name", ({ build }) => {

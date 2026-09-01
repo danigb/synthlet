@@ -1,5 +1,11 @@
-import { ParamInput } from "../_worklet";
-import { getSynthlet, Synthlet } from "../synthlet";
+import { AdAmp, AdEnv } from "@synthlet/ad";
+import { ClipAmp, ClipType } from "@synthlet/clip-amp";
+import { Impulse } from "@synthlet/impulse";
+import { Lfo, LfoType } from "@synthlet/lfo";
+import { Noise, NoiseType } from "@synthlet/noise";
+import { Param } from "@synthlet/param";
+import { Disposable, disposable, ParamInput } from "../_worklet";
+import { BiquadFilter, Gain, Oscillator } from "../waa";
 
 export type DrumInputs = {
   volume?: ParamInput;
@@ -8,239 +14,321 @@ export type DrumInputs = {
   tone?: ParamInput;
 };
 
-export type DrumNode = AudioNode & {
+export type DrumNode = Disposable<GainNode> & {
   trigger: AudioParam;
   volume: AudioParam;
   tone: AudioParam;
   decay: AudioParam;
-  dispose(): void;
 };
+
+/**
+ * The four knobs every drum has, as Param nodes. Each one is scaled (`volume`,
+ * from decibels) or fanned out to several modules (`trigger`, to every
+ * envelope), so a plain AudioParam won't do: the inlet has to be a node.
+ */
+function toParams(context: AudioContext, inputs: DrumInputs = {}) {
+  return {
+    trigger: Param(context, { input: inputs.trigger }),
+    decay: Param(context, { input: inputs.decay ?? 0.5 }),
+    volume: Param.db(context, inputs.volume ?? 0),
+    tone: Param(context, { input: inputs.tone ?? 0.5 }),
+  };
+}
+
+type DrumParams = ReturnType<typeof toParams>;
+
+/**
+ * Every drum ends the same way: the output gain owns everything the drum
+ * built, and the four knobs are exposed as plain AudioParams. A drum is a
+ * voice, not a kit - `trigger`, `tone`, `decay` and `volume` are the whole
+ * surface, so the modules stay private.
+ */
+function drum(
+  out: Disposable<GainNode>,
+  params: DrumParams,
+  owned: Disposable<AudioNode>[]
+): DrumNode {
+  return Object.assign(disposable(out, [...owned, ...Object.values(params)]), {
+    trigger: params.trigger.input,
+    decay: params.decay.input,
+    volume: params.volume.input,
+    tone: params.tone.input,
+  });
+}
+
+/** A percussive amplifier: the input, shaped by an attack-decay envelope. */
+const perc = (
+  context: AudioContext,
+  params: DrumParams,
+  attack: number,
+  decay: ParamInput = params.decay
+) => AdAmp(context, { trigger: params.trigger, attack, decay });
+
+const OSC_BANK_FREQUENCIES = [263, 400, 421, 474, 587, 845];
+
+/** The bank of squares that gives cymbals and hi-hats their metallic noise. */
+function oscBank(context: AudioContext) {
+  const oscs = OSC_BANK_FREQUENCIES.map((frequency) =>
+    Oscillator(context, { type: "square", frequency })
+  );
+  const out = Gain(context, { gain: 0.3 });
+  oscs.forEach((osc) => osc.connect(out));
+  return disposable(out, oscs);
+}
 
 export const KickDrum = (
   context: AudioContext,
   inputs: DrumInputs = {}
 ): DrumNode => {
-  const s = getSynthlet(context);
-  const params = toParams(s, inputs);
+  const params = toParams(context, inputs);
+  const freq = Param.lin(context, params.tone, 20, 100);
 
-  const freq = s.param.lin(20, 100, params.tone);
+  const pitchEnv = AdEnv(context, {
+    trigger: params.trigger,
+    attack: 0.1,
+    decay: params.decay,
+    offset: freq,
+    gain: 50,
+  });
+  const osc = Oscillator(context, { type: "sine", frequency: pitchEnv });
+  const click = Impulse(context, { trigger: params.trigger });
+  const mix = Gain(context);
+  const amp = perc(context, params, 0.01);
+  const clip = ClipAmp(context, {
+    type: ClipType.Tanh,
+    preGain: 5,
+    postGain: 0.6,
+  });
+  const out = Gain(context, { gain: params.volume });
 
-  const synth = s.conn.serial(
-    s.conn.mix(
-      s.osc.sin(
-        s.env.ad(params.trigger, {
-          attack: 0.1,
-          decay: params.decay,
-          offset: freq,
-          gain: 50,
-        })
-      ),
-      s.impulse.trigger(params.trigger)
-    ),
-    s.amp.perc(params.trigger, 0.01, params.decay),
-    s.clip.soft(5, 0.6)
-  );
-  return s.withParams(synth, params);
+  [osc, click].forEach((node) => node.connect(mix));
+  mix.connect(amp).connect(clip).connect(out);
+
+  return drum(out, params, [freq, pitchEnv, osc, click, mix, amp, clip]);
 };
 
 export const SnareDrum = (
   context: AudioContext,
   inputs: DrumInputs = {}
 ): DrumNode => {
-  const s = getSynthlet(context);
-  const params = toParams(s, inputs);
+  const params = toParams(context, inputs);
 
-  const snap = s.conn.mixInto(
-    [s.osc.sin(100), s.osc.sin(200)],
-    s.amp.perc(params.trigger, 0.01, params.decay)
+  const oscs = [100, 200].map((frequency) =>
+    Oscillator(context, { type: "sine", frequency })
   );
+  const snap = perc(context, params, 0.01);
+  oscs.forEach((osc) => osc.connect(snap));
 
-  const splash = s.conn.serial(
-    s.noise.white(),
-    s.amp.perc(params.trigger, 0.01, params.decay)
-  );
-  const synth = s.conn.mixInto([snap, splash], s.gain(params.volume));
-  return s.withParams(synth, params);
+  const noise = Noise(context, { type: NoiseType.White });
+  const splash = perc(context, params, 0.01);
+  noise.connect(splash);
+
+  const out = Gain(context, { gain: params.volume });
+  [snap, splash].forEach((node) => node.connect(out));
+
+  return drum(out, params, [...oscs, snap, noise, splash]);
 };
 
 export const ClaveDrum = (
   context: AudioContext,
   inputs: DrumInputs = {}
 ): DrumNode => {
-  const s = getSynthlet(context);
-  const params = toParams(s, inputs);
+  const params = toParams(context, inputs);
+  const freq = Param.lin(context, params.tone, 2400, 2500);
+  const filterFreq = Param.lin(context, params.tone, 1000, 3000);
 
-  const freq = s.param.lin(2400, 2500, params.tone);
-  const filterFreq = s.param.lin(1000, 3000, params.tone);
+  const osc = Oscillator(context, { type: "triangle", frequency: freq });
+  const amp = perc(context, params, 0.01);
+  const filter = BiquadFilter(context, {
+    type: "bandpass",
+    frequency: filterFreq,
+  });
+  const out = Gain(context, { gain: params.volume });
 
-  return s.withParams(
-    s.conn.serial(
-      s.osc.tri(freq),
-      s.amp.perc(params.trigger, 0.01, params.decay),
-      s.bqf.bandpass(filterFreq),
-      s.amp(params.volume)
-    ),
-    params
-  );
+  osc.connect(amp).connect(filter).connect(out);
+
+  return drum(out, params, [freq, filterFreq, osc, amp, filter]);
 };
 
-export const HiHatDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
-  const s = getSynthlet(context);
-  const params = toParams(s, inputs);
+export const HiHatDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode => {
+  const params = toParams(context, inputs);
+  const loFreq = Param.lin(context, params.tone, 8000, 12000);
+  const hiFreq = Param(context, { input: loFreq, offset: -2000 });
 
-  const loFreq = s.param.lin(8000, 12000, params.tone);
-  const hiFreq = s.param.add(-2000, loFreq);
+  const bank = oscBank(context);
+  const band = BiquadFilter(context, { type: "bandpass", frequency: loFreq });
+  const high = BiquadFilter(context, { type: "highpass", frequency: hiFreq });
+  const amp = perc(context, params, 0.01);
+  const out = Gain(context, { gain: params.volume });
 
-  const freqs = [263, 400, 421, 474, 587, 845];
-  const oscs = s.conn(
-    freqs.map((f) => s.osc.square(f)),
-    s.amp(0.3)
-  );
+  bank.connect(band).connect(high).connect(amp).connect(out);
 
-  return s.withParams(
-    s.conn(
-      oscs,
-      s.bqf.bandpass(loFreq),
-      s.bqf.hi(hiFreq),
-      s.amp.perc(params.trigger, 0.01, params.decay),
-      s.gain(params.volume)
-    ),
-    params
-  );
+  return drum(out, params, [loFreq, hiFreq, bank, band, high, amp]);
 };
 
-export const CowBellDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
-  const s = getSynthlet(context);
-  const { trigger, decay, volume, tone } = toParams(s, inputs);
+export const CowBellDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode => {
+  const params = toParams(context, inputs);
+  const hiFreq = Param.lin(context, params.tone, 700, 900);
+  const lowFreq = Param.lin(context, params.tone, 440, 540);
+  const shortDecay = Param.mul(context, params.decay, 0.1);
 
-  // Derived
-  const hiFreq = s.param.lin(700, 900, tone);
-  const lowFreq = s.param.lin(440, 540, tone);
-  const shortDecay = s.param.mul(0.1, decay);
+  const hiOsc = Oscillator(context, { type: "square", frequency: hiFreq });
+  const hiAmp = perc(context, params, 0.001);
+  const lowOsc = Oscillator(context, { type: "square", frequency: lowFreq });
+  const lowAmp = perc(context, params, 0.001, shortDecay);
+  const out = Gain(context, { gain: params.volume });
 
-  const synth = s.conn(
-    [
-      s.conn.serial(s.osc.square(hiFreq), s.amp.perc(trigger, 0.001, decay)),
-      s.conn.serial(
-        s.osc.square(lowFreq),
-        s.amp.perc(trigger, 0.001, shortDecay)
-      ),
-    ],
-    s.amp(volume)
-  );
-  return s.withParams(synth, { trigger, volume, tone, decay });
+  hiOsc.connect(hiAmp).connect(out);
+  lowOsc.connect(lowAmp).connect(out);
+
+  return drum(out, params, [
+    hiFreq,
+    lowFreq,
+    shortDecay,
+    hiOsc,
+    hiAmp,
+    lowOsc,
+    lowAmp,
+  ]);
 };
 
-export const CymbalDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
-  const s = getSynthlet(context);
-  const { trigger, decay, volume, tone } = toParams(s, inputs);
+export const CymbalDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode => {
+  const params = toParams(context, inputs);
+  const lowFreq = Param.lin(context, params.tone, 440, 540);
+  const midFreq = Param.lin(context, params.tone, 600, 1700);
+  const hiFreq = Param.lin(context, params.tone, 2000, 5000);
+  const lowDecay = Param.mul(context, params.decay, 0.5);
+  const midDecay = Param.mul(context, params.decay, 0.2);
+  const hiDecay = Param.mul(context, params.decay, 5);
 
-  // Derived
-  const lowFreq = s.param.lin(440, 540, tone);
-  const midFreq = s.param.lin(600, 1700, tone);
-  const hiFreq = s.param.lin(2000, 5000, tone);
-  const lowDecay = s.param.mul(0.5, decay);
-  const midDecay = s.param.mul(0.2, decay);
-  const hiDecay = s.param.mul(5, decay);
+  const bank = oscBank(context);
+  const out = Gain(context, { gain: params.volume });
 
-  const freqs = [263, 400, 421, 474, 587, 845];
-  const oscs = s.conn(
-    freqs.map((f) => s.osc.square(f)),
-    s.amp(0.3)
-  );
+  // Three filtered branches off the same bank, each with its own decay.
+  const branches = [
+    { type: "lowpass", frequency: lowFreq, decay: lowDecay },
+    { type: "bandpass", frequency: midFreq, decay: midDecay },
+    { type: "highpass", frequency: hiFreq, decay: hiDecay },
+  ] as const;
 
-  const synth = s.conn(
-    [
-      s.conn(oscs, s.bqf.lp(lowFreq), s.amp.perc(trigger, 0.001, lowDecay)),
-      s.conn(
-        oscs,
-        s.bqf.bandpass(midFreq),
-        s.amp.perc(trigger, 0.001, midDecay)
-      ),
-      s.conn(oscs, s.bqf.hi(hiFreq), s.amp.perc(trigger, 0.001, hiDecay)),
-    ],
-    s.amp(volume)
-  );
-  return s.withParams(synth, { trigger, volume, tone, decay });
+  const nodes = branches.flatMap(({ type, frequency, decay }) => {
+    const filter = BiquadFilter(context, { type, frequency });
+    const amp = perc(context, params, 0.001, decay);
+    bank.connect(filter).connect(amp).connect(out);
+    return [filter, amp];
+  });
+
+  return drum(out, params, [
+    lowFreq,
+    midFreq,
+    hiFreq,
+    lowDecay,
+    midDecay,
+    hiDecay,
+    bank,
+    ...nodes,
+  ]);
 };
 
-export const MaracasDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
-  const s = getSynthlet(context);
-  const params = toParams(s, inputs);
+export const MaracasDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode => {
+  const params = toParams(context, inputs);
+  const freq = Param.lin(context, params.tone, 4000, 6000);
 
-  const freq = s.param.lin(4000, 6000, params.tone);
+  const noise = Noise(context, { type: NoiseType.White });
+  const filter = BiquadFilter(context, { type: "highpass", frequency: freq });
+  const amp = perc(context, params, 0.02);
+  const out = Gain(context, { gain: params.volume });
 
-  const synth = s.conn(
-    s.noise.white(),
-    s.bqf.hi(freq),
-    s.amp.perc(params.trigger, 0.02, params.decay),
-    s.amp(params.volume)
-  );
-  return s.withParams(synth, params);
+  noise.connect(filter).connect(amp).connect(out);
+
+  return drum(out, params, [freq, noise, filter, amp]);
 };
 
 export const HandclapDrum = (
   context: AudioContext,
   inputs: DrumInputs = {}
-) => {
-  const s = getSynthlet(context);
-  const params = toParams(s, inputs);
-  const freq = s.param.lin(500, 1500, params.tone);
+): DrumNode => {
+  const params = toParams(context, inputs);
+  const freq = Param.lin(context, params.tone, 500, 1500);
 
-  const synth = s.conn(
-    [
-      s.conn(
-        s.noise.white(),
-        s.bqf.bandpass(freq),
-        s.amp.perc(params.trigger, 0.02, params.decay),
-        s.gain(s.lfo.rampUp(100))
-      ),
-      s.impulse.trigger(params.trigger),
-    ],
-    s.clip.soft(2, 0.5),
-    s.gain(params.volume)
-  );
-  return s.withParams(synth, params);
+  const noise = Noise(context, { type: NoiseType.White });
+  const filter = BiquadFilter(context, { type: "bandpass", frequency: freq });
+  const amp = perc(context, params, 0.02);
+  // The ramp chops the burst into the several claps of a handclap.
+  const ramp = Lfo(context, { type: LfoType.RampUp, frequency: 100 });
+  const chop = Gain(context, { gain: ramp });
+  const click = Impulse(context, { trigger: params.trigger });
+  const clip = ClipAmp(context, {
+    type: ClipType.Tanh,
+    preGain: 2,
+    postGain: 0.5,
+  });
+  const out = Gain(context, { gain: params.volume });
+
+  noise.connect(filter).connect(amp).connect(chop);
+  [chop, click].forEach((node) => node.connect(clip));
+  clip.connect(out);
+
+  return drum(out, params, [freq, noise, filter, amp, chop, click, clip]);
 };
 
-export const TomDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
-  const s = getSynthlet(context);
-  const params = toParams(s, inputs);
+export const TomDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode => {
+  const params = toParams(context, inputs);
+  const freq = Param.lin(context, params.tone, 125, 240);
 
-  const freq = s.param.lin(125, 240, params.tone);
+  const osc = Oscillator(context, { type: "sine", frequency: freq });
+  const oscAmp = perc(context, params, 0.01);
+  const click = Impulse(context, { trigger: params.trigger });
+  const clickAmp = Gain(context, { gain: 0.3 });
+  const noise = Noise(context, { type: NoiseType.Pink });
+  const noiseAmp = perc(context, params, 0.01);
+  const out = Gain(context, { gain: params.volume });
 
-  const synth = s.conn(
-    [
-      s.conn(s.osc.sin(freq), s.amp.perc(params.trigger, 0.01, params.decay)),
-      s.conn(s.impulse.trigger(params.trigger), s.gain(0.3)),
-      s.conn(s.noise.pink(), s.amp.perc(params.trigger, 0.01, params.decay)),
-    ],
-    s.amp(params.volume)
-  );
-  return s.withParams(synth, params);
+  osc.connect(oscAmp).connect(out);
+  click.connect(clickAmp).connect(out);
+  noise.connect(noiseAmp).connect(out);
+
+  return drum(out, params, [
+    freq,
+    osc,
+    oscAmp,
+    click,
+    clickAmp,
+    noise,
+    noiseAmp,
+  ]);
 };
 
-export const CongaDrum = (context: AudioContext, inputs: DrumInputs = {}) => {
-  const s = getSynthlet(context);
-  const params = toParams(s, inputs);
+export const CongaDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {}
+): DrumNode => {
+  const params = toParams(context, inputs);
+  const freq = Param.lin(context, params.tone, 220, 455);
 
-  const freq = s.param.lin(220, 455, params.tone);
+  const osc = Oscillator(context, { type: "sine", frequency: freq });
+  const oscAmp = perc(context, params, 0.001);
+  const click = Impulse(context, { trigger: params.trigger });
+  const clickAmp = Gain(context, { gain: 0.3 });
+  const out = Gain(context, { gain: params.volume });
 
-  const synth = s.conn(
-    [
-      s.conn(s.osc.sin(freq), s.amp.perc(params.trigger, 0.001, params.decay)),
-      s.conn(s.impulse.trigger(params.trigger), s.gain(0.3)),
-    ],
-    s.amp(1)
-  );
-  return s.withParams(synth, params);
+  osc.connect(oscAmp).connect(out);
+  click.connect(clickAmp).connect(out);
+
+  return drum(out, params, [freq, osc, oscAmp, click, clickAmp]);
 };
-
-function toParams(s: Synthlet, inputs: DrumInputs = {}) {
-  const trigger = s.param(inputs.trigger);
-  const decay = s.param(inputs.decay ?? 0.5);
-  const volume = s.param.db(inputs.volume ?? 0);
-  const tone = s.param(inputs.tone ?? 0.5);
-
-  return { trigger, decay, volume, tone };
-}

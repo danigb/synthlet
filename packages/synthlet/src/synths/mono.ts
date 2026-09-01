@@ -1,9 +1,13 @@
-import { AdsrInputs } from "@synthlet/adsr";
-import { LfoInputs, LfoType } from "@synthlet/lfo";
-import { PolyblepOscillatorInputs } from "@synthlet/polyblep-oscillator";
-import { SvfInputs } from "@synthlet/state-variable-filter";
-import { ParamInput } from "../_worklet";
-import { getSynthlet } from "../synthlet";
+import { AdsrAmp, AdsrEnv, AdsrInputs } from "@synthlet/adsr";
+import { Lfo, LfoInputs, LfoType } from "@synthlet/lfo";
+import { Param } from "@synthlet/param";
+import {
+  PolyblepOscillator,
+  PolyblepOscillatorInputs,
+} from "@synthlet/polyblep-oscillator";
+import { Svf, SvfInputs } from "@synthlet/state-variable-filter";
+import { disposable, ParamInput } from "../_worklet";
+import { Gain } from "../waa";
 
 export type MonoSynthInputs = {
   gate?: ParamInput;
@@ -16,27 +20,35 @@ export type MonoSynthInputs = {
 };
 
 export function MonoSynth(context: AudioContext, inputs: MonoSynthInputs = {}) {
-  const s = getSynthlet(context);
-  // Params
-  const gate = s.param(inputs.gate);
-  const volume = s.param.db(inputs.volume ?? 0);
+  // Params: the inlets. Each is a Param node because it has to be scaled
+  // (volume, in decibels) or fanned out (gate, to two envelopes).
+  const gate = Param(context, { input: inputs.gate });
+  const volume = Param.db(context, inputs.volume ?? 0);
 
   // Modules
-  const osc = s.polyblep({ frequency: inputs.frequency, ...inputs.osc });
-  const vibrato = s.lfo({
+  const osc = PolyblepOscillator(context, {
+    frequency: inputs.frequency,
+    ...inputs.osc,
+  });
+  const vibrato = Lfo(context, {
     type: LfoType.Sine,
     gain: 0,
     frequency: 10,
     ...inputs.vibrato,
   });
-  vibrato.connect(osc.frequency);
-  const filterEnv = s.env.adsr(gate, { gain: 3000, offset: 2000 });
-  const filter = s.svf({ frequency: filterEnv, ...inputs.filter });
-  const amp = s.amp.adsr(gate, { ...inputs.amp });
+  const filterEnv = AdsrEnv(context, { gate, gain: 3000, offset: 2000 });
+  const filter = Svf(context, { frequency: filterEnv, ...inputs.filter });
+  const amp = AdsrAmp(context, { gate, ...inputs.amp });
+  const out = Gain(context, { gain: volume });
 
-  return s.synth({
-    out: s.conn.serial(osc, filter, amp, s.amp(volume)),
-    params: { gate, volume },
-    modules: { osc, filterEnv, filter, amp, vibrato },
-  });
+  vibrato.connect(osc.frequency);
+  osc.connect(filter).connect(amp).connect(out);
+
+  return Object.assign(
+    disposable(out, [gate, volume, osc, vibrato, filterEnv, filter, amp]),
+    // Params are flat AudioParams: the performance surface.
+    { gate: gate.input, volume: volume.input },
+    // MonoSynth is a kit, so it exposes the modules it's made of.
+    { osc, vibrato, filterEnv, filter, amp }
+  );
 }
