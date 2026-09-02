@@ -16,5 +16,33 @@ exports[`FlexAudioBufferSourceProcessor has parameter descriptors 1`] = `
     "minValue": -1200,
     "name": "detune",
   },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 3600,
+    "minValue": 0,
+    "name": "startOffset",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 3600,
+    "minValue": 0,
+    "name": "endOffset",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "reverse",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "loop",
+  },
 ]
 `;

@@ -22,6 +22,14 @@ export type RawBuffer = {
 export type FlexAudioBufferSourceInputs = {
   playbackRate?: ParamInput;
   detune?: ParamInput;
+  /** Region start, in seconds into the buffer. */
+  startOffset?: ParamInput;
+  /** Region end, in seconds. 0 means the end of the buffer. */
+  endOffset?: ParamInput;
+  /** `> 0` plays the region backwards. */
+  reverse?: ParamInput;
+  /** `> 0` wraps at the region edge instead of ending. */
+  loop?: ParamInput;
   /**
    * Output channel count (default 2). Not an AudioParam: it sizes the output
    * bus, which Web Audio fixes at construction. A mono buffer fans out to
@@ -41,17 +49,29 @@ export type FlexAudioBufferSourceInputs = {
 export type FlexAudioBufferSourceWorkletNode = AudioWorkletNode & {
   playbackRate: AudioParam;
   detune: AudioParam;
+  startOffset: AudioParam;
+  endOffset: AudioParam;
+  reverse: AudioParam;
+  loop: AudioParam;
 
   /** Load a buffer. Resamples once, here, if its rate is not the context's. */
   setBuffer(buffer: AudioBuffer | RawBuffer): void;
-  /** Schedule playback. All three arguments are in seconds. */
+  /**
+   * Schedule playback. All three arguments are in seconds.
+   *
+   * `offset` and `duration` are sugar over `startOffset` / `endOffset`, and are
+   * only written when passed - so `start(when)` alone leaves a region you set
+   * deliberately alone.
+   */
   start(when?: number, offset?: number, duration?: number): void;
   /** Schedule the end of playback, in seconds. */
   stop(when?: number): void;
-  /** Set `playbackRate` so the clip lasts `seconds`. */
+  /** Set `playbackRate` so the *region* lasts `seconds`. */
   setDuration(seconds: number): void;
   /** The loaded clip's length in seconds at `playbackRate` 1, or 0. */
   readonly naturalDuration: number;
+  /** The length of `startOffset`..`endOffset` in seconds, at `playbackRate` 1. */
+  readonly regionDuration: number;
   /** Called once per playback, at the natural end or after `stop()`. */
   onended: (() => void) | null;
 
@@ -78,17 +98,25 @@ const create = createWorkletConstructor<
 });
 
 /**
- * A buffer player whose time and pitch move independently.
+ * A sampler whose time, pitch, region and direction all move independently.
  *
  * ```ts
- * const src = FlexAudioBufferSource(ac, { playbackRate: 0.5, detune: 300 });
+ * const src = FlexAudioBufferSource(ac, {
+ *   playbackRate: 0.5,
+ *   detune: 300,
+ *   startOffset: 2.5,
+ *   endOffset: 4,
+ *   loop: 1,
+ * });
  * src.setBuffer(await ac.decodeAudioData(bytes));
  * src.connect(ac.destination);
  * src.start();
  * ```
  *
  * `playbackRate` stretches time and leaves pitch alone; `detune` shifts pitch
- * and leaves duration alone. Both are automatable AudioParams.
+ * and leaves duration alone; `startOffset`/`endOffset` pick the slice,
+ * `reverse` the direction and `loop` whether it cycles. All six are automatable
+ * AudioParams, and all six can be moved while a note sounds.
  */
 export const FlexAudioBufferSource = Object.assign(
   (
@@ -124,19 +152,24 @@ export const FlexAudioBufferSource = Object.assign(
       );
     };
 
-    node.start = (when = 0, offset = 0, duration = 0) => {
+    node.start = (when = 0, offset?: number, duration?: number) => {
       if (playing) {
         throw Error(
           "FlexAudioBufferSource is already playing: stop() it before starting again",
         );
       }
       if (frames === 0) throw Error("FlexAudioBufferSource has no buffer");
+      // Sugar over the params, so the region has one source of truth - and
+      // only when the arguments are actually passed, so `start()` on its own
+      // cannot clobber a region the caller set deliberately.
+      if (offset !== undefined) node.startOffset.value = offset;
+      if (duration !== undefined) {
+        node.endOffset.value = (offset ?? node.startOffset.value) + duration;
+      }
       playing = true;
       node.port.postMessage({
         type: "START",
         when: when > 0 ? when : context.currentTime,
-        offset,
-        duration,
       });
     };
 
@@ -153,12 +186,28 @@ export const FlexAudioBufferSource = Object.assign(
       });
     };
 
-    node.setDuration = (seconds) => {
+    /** `startOffset`..`endOffset` resolved against the loaded buffer, in seconds. */
+    const regionDuration = () => {
       const natural = frames / context.sampleRate;
-      if (!(seconds > 0) || natural === 0) return;
-      node.playbackRate.value = natural / seconds;
+      const from = Math.max(0, Math.min(natural, node.startOffset.value));
+      const raw = node.endOffset.value;
+      // The same 0-means-the-end sentinel the worklet reads.
+      const to = raw > 0 ? Math.max(0, Math.min(natural, raw)) : natural;
+      return Math.max(0, to - from);
     };
 
+    node.setDuration = (seconds) => {
+      // The region, not the whole clip: the two are the same until someone
+      // moves the offsets, and once they have, the region is what plays.
+      const region = regionDuration();
+      if (!(seconds > 0) || region === 0) return;
+      node.playbackRate.value = region / seconds;
+    };
+
+    Object.defineProperty(node, "regionDuration", {
+      get: regionDuration,
+      enumerable: true,
+    });
     return Object.defineProperty(node, "naturalDuration", {
       get: () => frames / context.sampleRate,
       enumerable: true,

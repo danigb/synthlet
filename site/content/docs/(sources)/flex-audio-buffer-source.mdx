@@ -1,6 +1,6 @@
 ---
 title: Flex Audio Buffer Source
-description: A sample player with independent time and pitch
+description: A sampler with independent time, pitch, region and direction
 ---
 
 import FlexAudioBufferSourceExample from "../../../examples/FlexAudioBufferSourceExample";
@@ -10,10 +10,12 @@ import FlexAudioBufferSourceExample from "../../../examples/FlexAudioBufferSourc
 Web Audio's `AudioBufferSourceNode` is a varispeed: `playbackRate` and `detune`
 both resample, so playing a clip at half speed also drops it an octave. This is
 the same API with time and pitch pulled apart — stretch a sample to a target
-duration at constant pitch, or repitch it at constant duration.
+duration at constant pitch, or repitch it at constant duration — plus the three
+things a sampler is actually for: choose the slice, choose the direction, cycle
+it.
 
-It's backed by a WSOLA time-stretch engine, and both controls are real,
-automatable `AudioParam`s.
+It's backed by a WSOLA time-stretch engine, and all six controls are real,
+automatable `AudioParam`s that can be moved while a note sounds.
 
 ```ts
 import {
@@ -30,6 +32,9 @@ const buffer = await ac.decodeAudioData(bytes);
 const src = FlexAudioBufferSource(ac, {
   playbackRate: 0.5, // half speed, same pitch
   detune: 300, // +3 semitones, same duration
+  startOffset: 2.5, // play from 2.5s...
+  endOffset: 4.0, // ...to 4.0s
+  loop: 1, // round and round
 });
 src.setBuffer(buffer);
 src.connect(ac.destination);
@@ -46,11 +51,55 @@ src.start();
   1/16 to 16.
 - `detune`: pitch shift in cents, duration-preserving. Default 0, range ±1200 —
   which is the engine's ±12 semitone cap, enforced by the parameter's own range.
+- `startOffset`: region start, in seconds into the buffer. Default 0.
+- `endOffset`: region end, in seconds. Default 0, which is a **sentinel meaning
+  "the end of the buffer"** — an `AudioParam`'s range is fixed when the node is
+  built, and the buffer's length isn't known until `setBuffer`.
+- `reverse`: `> 0` plays the region backwards. Default 0.
+- `loop`: `> 0` cycles the region instead of ending. Default 0.
 
-Both are k-rate. WSOLA consumes a rate change when it starts its next analysis
-frame, so a per-sample rate has nothing it could mean; a ramp is a sequence of
-small per-block steps. Sample-accurate rate modulation is out of scope for this
-algorithm.
+All six are k-rate. WSOLA consumes a rate or region change when it starts its
+next analysis frame, so a per-sample value has nothing it could mean; a ramp is
+a sequence of small per-block steps, and a region edge lands on a block
+boundary. Sample-accurate modulation is out of scope for this algorithm.
+
+`reverse` and `loop` are `AudioParam`s too, which means they are patchable — a
+square LFO into `reverse` is a stutter, an envelope into `loop` is a one-shot
+that becomes a sustain. `> 0` is on, the same gate rule the rest of Synthlet
+uses.
+
+## Region, reverse and loop
+
+`startOffset` and `endOffset` are a live window onto the buffer, in seconds, and
+moving either mid-playback takes effect from the next analysis frame **without
+rewinding**. Sweeping a start point across a break is a technique, not a setup
+step.
+
+Three edges worth knowing: sweeping `endOffset` back past the playhead ends
+playback and fires `onended`; a region that momentarily inverts is _held_ rather
+than applied, so a crossing modulation can't kill a note; and starting with
+nothing to play still refuses and fires `onended`, so the node never sticks.
+
+`reverse` flips the direction of travel at unchanged pitch and duration, and
+flips it **in place** — the playhead walks back over what it just played rather
+than jumping to the mirror position. It is a separate flag rather than a
+negative `playbackRate` because a parameter's range can't be discontinuous:
+`[-16, 16]` would have to include 0, and rate 0 means freeze.
+
+`loop` cycles the region until `stop()`; while it is on, `onended` never arrives
+on its own. The seam needs no crossfade bolted on — WSOLA's overlap-add already
+is one, and its similarity search already exists to find where a waveform best
+continues, so the analysis position wraps between frames and the frames either
+side are aligned and added like any other pair. On a tone whose period doesn't
+divide the region, the largest sample-to-sample step across a looped render
+measures 1.01× the theoretical maximum for that tone, against 17× for a
+butt-join.
+
+What it costs: the seam needs one analysis frame of source past the loop point
+to crossfade with (30 ms at the default `frameMs`; half a frame measurably
+isn't enough). So a loop _inside_ a longer sample is exactly the length you
+asked for, while looping the whole buffer to its last sample comes up one frame
+short.
 
 ## Scheduling
 
@@ -62,6 +111,10 @@ src.start(ac.currentTime + 1); // in a second
 src.start(0, 2.5, 1.0); // now, from 2.5s in, for 1s
 src.stop(ac.currentTime + 4);
 ```
+
+`offset` and `duration` are sugar over `startOffset`/`endOffset`, written only
+when passed — so `start()` on its own leaves a region you set deliberately
+alone.
 
 One deliberate difference: **this node is restartable**. By spec an
 `AudioBufferSourceNode` is spent after a single play, so replaying a sample
@@ -79,11 +132,13 @@ of the rate, not a value. The modulatable primitive is `playbackRate`, and
 `setDuration` is a convenience over it:
 
 ```ts
-src.naturalDuration; // 3.2 - the clip at playbackRate 1
-src.setDuration(4); // sets playbackRate to 3.2 / 4 = 0.8
+src.naturalDuration; // 3.2 - the whole clip at playbackRate 1
+src.regionDuration; // 1.0 - startOffset..endOffset at playbackRate 1
+src.setDuration(4); // sets playbackRate to regionDuration / 4
 ```
 
-To "modulate the duration", automate `playbackRate`.
+`setDuration` divides the region, not the whole clip. To "modulate the
+duration", automate `playbackRate`.
 
 ## Buffers
 
@@ -111,8 +166,11 @@ is where the periodicity of real material lives.
 
 ## Limits
 
-Looping isn't implemented yet — a clickless seam needs a mid-stream re-prime or
-a crossfade. Pitch shifting moves the spectral envelope with the pitch, so large
-shifts sound chipmunky; that is inherent to resampling-based pitch shifting.
-WSOLA is very good on monophonic and rhythmic material, and merely acceptable on
-stretched transients and dense polyphony.
+There is one region, so a sample can't play an attack once and then sustain on a
+shorter loop — `AudioBufferSourceNode` keeps `start()`'s `offset` separate from
+`loopStart`/`loopEnd` for exactly that, and it needs a third position concept.
+Region edges are k-rate, so they land on a block boundary. Pitch shifting moves
+the spectral envelope with the pitch, so large shifts sound chipmunky; that is
+inherent to resampling-based pitch shifting. WSOLA is very good on monophonic
+and rhythmic material, and merely acceptable on stretched transients and dense
+polyphony.

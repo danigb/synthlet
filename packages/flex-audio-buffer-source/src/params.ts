@@ -30,4 +30,57 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1200,
     automationRate: "k-rate",
   },
+  {
+    // Region start, in seconds into the buffer. Live: sweeping it while a note
+    // sounds moves the read region without rewinding.
+    //
+    // k-rate because the engine consumes a region change when it starts its
+    // next analysis frame - the same reason `playbackRate` is k-rate - so a
+    // region edge lands on a block boundary, not on a sample.
+    //
+    // The range is arbitrary and has to be: an AudioParam's range is fixed at
+    // construction and the buffer's length is not known until `setBuffer`.
+    // An hour is longer than anything anyone streams through a worklet.
+    name: "startOffset",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 3600,
+    automationRate: "k-rate",
+  },
+  {
+    // Region end, in seconds. **0 means the end of the buffer** - the same
+    // sentinel `dsp.ts` already used for `duration`, kept rather than invented,
+    // and the only way to say "to the end" when the length is unknown here.
+    //
+    // k-rate and 3600 for the same reasons as `startOffset`.
+    name: "endOffset",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 3600,
+    automationRate: "k-rate",
+  },
+  {
+    // `> 0` plays the region back to front. Not a negative `playbackRate`: a
+    // parameter range cannot be discontinuous, so `[-16, 16]` would have to
+    // include 0, and rate 0 means freeze - a different feature with its own
+    // semantics. A separate flag keeps `playbackRate` strictly positive.
+    //
+    // `> 0` rather than `>= 0.5` is the repo-wide gate/trigger rule, and the
+    // one that survives `Param`'s input x gain + offset.
+    name: "reverse",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // `> 0` wraps at the region edge instead of ending. An ordinary k-rate
+    // param, so it is patchable: an envelope into it is a one-shot that
+    // becomes a sustain.
+    name: "loop",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
 ];

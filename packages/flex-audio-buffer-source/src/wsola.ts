@@ -192,7 +192,7 @@ export function findBestShift(
  * with Ha = Hs × rate, so rate 0.5 advances the analysis half as fast as the
  * synthesis and the output comes out twice as long.
  *
- * FIVE THINGS THIS FILE DOES THAT THE SOURCES DO NOT
+ * SEVEN THINGS THIS FILE DOES THAT THE SOURCES DO NOT
  *
  * 1. **Normalised cross-correlation, not eq. 9.** The paper's similarity
  *    measure is a plain cross-correlation, which is biased towards
@@ -256,12 +256,51 @@ export function findBestShift(
  *    treated as tied, and the one nearest zero wins. This is what makes rate 1
  *    transparent, and it is applied to the coarse and fine passes alike.
  *
+ * 6. **A loop seam made by wrapping the analysis position, not the read.** The
+ *    sources describe a one-shot stretch; nothing in them says how to cycle a
+ *    region. Three policies were prototyped against one metric - the largest
+ *    sample-to-sample step across three loops of a 220 Hz sine over a 10,000
+ *    sample region (49.9 periods, so the wrap lands mid-phase), measured
+ *    against the 0.03134 theoretical maximum for that tone:
+ *
+ *      naive butt-join (the control)              0.677    21.6x
+ *      wrap inside the frame read                 0.677    21.6x
+ *      ...plus no search at the seam              0.677    21.6x
+ *      wrap the analysis position, read on        0.03158   1.01x
+ *
+ *    Wrapping inside the read cannot work, and the reason is worth keeping:
+ *    it bakes the discontinuity into the frame *content* before the window
+ *    touches it, so the overlap-add faithfully reproduces a butt-join - which
+ *    is why it scores identically to the control to five decimals. Wrapping
+ *    the position *between* frames instead leaves the pre-wrap and post-wrap
+ *    frames as ordinary neighbours, aligned by the similarity search that is
+ *    already there and crossfaded by the overlap-add that is already there.
+ *
+ *    It costs one analysis frame of source past the loop point to crossfade
+ *    with, and half a frame is measurably not enough (0.890, 2 steps over 0.1
+ *    at Hs; 0.0316 and none at N). `dsp.ts` is what enforces that runway, by
+ *    clamping the region inwards by N when the buffer has nothing past it.
+ *
+ * 7. **Reverse as a coordinate mirror.** Reversed playback reads the region
+ *    through `toSource(p) = start + end - 1 - p`, so the engine runs *forwards*
+ *    in mirrored space: the template, `findBestShift`, `normalisedCorrelation`,
+ *    the advance and the exhaust test are all untouched, and so is
+ *    `wsola-oracle.ts`. The cost is one invariant, and it is stated where it
+ *    lives: `idealPos` and `adjustedPos` are mirrored coordinates, so whenever
+ *    `direction`, `start` or `end` changes they are converted out to source
+ *    coordinates and back in. That conversion is what makes a mid-playback flip
+ *    reverse the playhead *in place* rather than teleport it to the mirror
+ *    point, and it makes loop-with-reverse free: mirrored space is still
+ *    [start, end), so the same wrap serves both directions.
+ *
  * Two conventions differ from the paper's notation without changing the maths:
  * frames are addressed from their left edge rather than their centre (r from 0
- * to N−1 instead of −N/2 to N/2−1), and reads outside the source region return
+ * to N−1 instead of −N/2 to N/2−1), and reads outside what may be read return
  * zero. The zero-padding is what makes the tail come out right: past the last
  * sample the numerator is 0 while the window sum is not, so the output is
- * silence rather than a fade.
+ * silence rather than a fade. What may be read is the region normally and the
+ * whole buffer while looping - see deviation 6 - so a loop's region edges are
+ * soft to +/-N.
  */
 export function createWsolaEngine(): TimeStretchEngine {
   // Geometry, all set by configure().
@@ -283,8 +322,16 @@ export function createWsolaEngine(): TimeStretchEngine {
 
   // Playback state, all set by reset().
   let source: Float32Array[] = [];
+  let sourceLength = 0;
   let start = 0;
   let end = 0;
+  // What `readMono` and the overlap-add are allowed to touch, in SOURCE
+  // coordinates. The region normally; the whole buffer while looping, which is
+  // what gives the seam its runway - see `addFrame`.
+  let readLow = 0;
+  let readHigh = 0;
+  let direction: 1 | -1 = 1;
+  let loop = false;
   let rate = 1;
   let idealPos = 0; // mHa, fractional: Ha need not be an integer
   let adjustedPos = 0; // pₘ = mHa + Δₘ
@@ -297,11 +344,51 @@ export function createWsolaEngine(): TimeStretchEngine {
   const WINDOW_SUM_FLOOR = 1e-9;
   let scratch: SearchScratch;
 
-  /** One source sample, mixed to mono, or 0 outside the region. */
+  /**
+   * MIRRORED coordinates to source coordinates.
+   *
+   * `idealPos` and `adjustedPos` live in mirrored coordinates: forwards they
+   * are plain source positions, reversed they run from `end` back down to
+   * `start`. Every read goes through here, so the frame loop, the template, the
+   * similarity search, the advance and the exhaust test are all unchanged -
+   * they only ever see a signal that runs forwards. Reverse is a coordinate
+   * mirror, not direction-aware arithmetic.
+   *
+   * It is its own inverse, which is what `remap` below relies on.
+   */
+  const toSource = (position: number) =>
+    direction > 0 ? position : start + end - 1 - position;
+
+  // Scratch for the invariant: whenever `direction`, `start` or `end` changes,
+  // the playhead is converted out to source coordinates under the OLD mapping
+  // and back in under the NEW one. That is what reverses the playhead *in
+  // place* instead of teleporting it to the mirror point.
+  //
+  // Two fields rather than a callback so the live setters allocate nothing.
+  let idealSource = 0;
+  let adjustedSource = 0;
+
+  function unmap() {
+    idealSource = toSource(idealPos);
+    adjustedSource = toSource(adjustedPos);
+  }
+
+  function remap() {
+    idealPos = toSource(idealSource);
+    adjustedPos = toSource(adjustedSource);
+  }
+
+  function updateBounds() {
+    readLow = loop ? 0 : start;
+    readHigh = loop ? sourceLength : end;
+  }
+
+  /** One source sample, mixed to mono, or 0 outside what may be read. */
   function readMono(position: number) {
-    if (position < start || position >= end) return 0;
+    const at = toSource(position);
+    if (at < readLow || at >= readHigh) return 0;
     let sum = 0;
-    for (let c = 0; c < channels; c++) sum += source[c][position];
+    for (let c = 0; c < channels; c++) sum += source[c][at];
     return sum / channels;
   }
 
@@ -328,9 +415,9 @@ export function createWsolaEngine(): TimeStretchEngine {
       const channel = source[c];
       const target = accumulator[c];
       for (let n = 0; n < frame; n++) {
-        const position = adjustedPos + n;
-        if (position < start || position >= end) continue;
-        target[(writePos + n) % capacity] += shape[n] * channel[position];
+        const at = toSource(adjustedPos + n);
+        if (at < readLow || at >= readHigh) continue;
+        target[(writePos + n) % capacity] += shape[n] * channel[at];
       }
     }
     for (let n = 0; n < frame; n++) {
@@ -341,11 +428,33 @@ export function createWsolaEngine(): TimeStretchEngine {
     idealPos += synthesisHop * rate;
     framesAdded++;
 
-    if (Math.round(idealPos) >= end) {
-      exhausted = true;
-      // Everything the last frame could reach; past it the output is silence.
-      tailEnd = writePos - synthesisHop + frame;
+    if (Math.round(idealPos) < end) return;
+
+    if (loop) {
+      // Deviation 6: wrap the *analysis position* between frames and let each
+      // frame be read contiguously, rather than wrapping inside the read.
+      //
+      // `adjustedPos` is deliberately NOT wrapped with it. It still points at
+      // the frame just emitted, which sits at the far edge of the region, and
+      // the next frame's template is read from its natural progression - out
+      // past `end`, into the runway `readHigh` opens up. The search then aligns
+      // the post-wrap frame near `start` against that template, and the two
+      // overlap-add as ordinary neighbours. That is the whole seam: a
+      // half-frame Hann crossfade between the region's end and its beginning,
+      // aligned by machinery WSOLA already has.
+      //
+      // The modulo, rather than a single subtraction, is what handles a region
+      // shorter than one hop - several wraps between two frames.
+      const span = end - start;
+      if (span > 0) {
+        idealPos = start + ((((idealPos - start) % span) + span) % span);
+      }
+      return; // never exhausted while looping
     }
+
+    exhausted = true;
+    // Everything the last frame could reach; past it the output is silence.
+    tailEnd = writePos - synthesisHop + frame;
   }
 
   return {
@@ -404,10 +513,37 @@ export function createWsolaEngine(): TimeStretchEngine {
       rate = value;
     },
 
-    reset(buffer: Float32Array[], from: number, to: number) {
-      source = buffer;
+    setRegion(from: number, to: number) {
+      if (from === start && to === end) return;
+      unmap();
       start = from;
       end = to;
+      remap();
+      updateBounds();
+    },
+
+    setDirection(value: 1 | -1) {
+      if (value === direction) return;
+      unmap();
+      direction = value;
+      remap();
+    },
+
+    setLoop(value: boolean) {
+      if (value === loop) return;
+      loop = value;
+      updateBounds();
+    },
+
+    reset(buffer: Float32Array[], from: number, to: number) {
+      source = buffer;
+      sourceLength = buffer[0]?.length ?? 0;
+      start = from;
+      end = to;
+      updateBounds();
+      // In MIRRORED coordinates, so reversed playback begins on the region's
+      // *last* sample - and `firstWindow` puts its rise-free half there, so
+      // the onset guarantee holds in both directions.
       idealPos = from;
       adjustedPos = from;
       framesAdded = 0;

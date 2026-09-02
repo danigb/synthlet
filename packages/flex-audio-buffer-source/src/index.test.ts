@@ -108,6 +108,10 @@ describe("FlexAudioBufferSource", () => {
     expect(FlexAudioBufferSource.descriptors.map((d) => d.name)).toEqual([
       "playbackRate",
       "detune",
+      "startOffset",
+      "endOffset",
+      "reverse",
+      "loop",
     ]);
   });
 
@@ -184,15 +188,35 @@ describe("FlexAudioBufferSource", () => {
       return source;
     };
 
-    it("posts START with seconds", () => {
+    it("posts START with seconds, and writes the region to the params", () => {
       const source = started();
       source.start(12, 0.5, 2);
       expect(lastMessage(created(source), "START")).toEqual({
         type: "START",
         when: 12,
-        offset: 0.5,
-        duration: 2,
       });
+      expect(source.startOffset.value).toBe(0.5);
+      expect(source.endOffset.value).toBe(2.5);
+    });
+
+    it("leaves the region alone when start() is given no region", () => {
+      // `start(when)` must not clobber offsets the caller set deliberately -
+      // which is the whole reason the arguments are optional rather than
+      // defaulted to zero.
+      const source = started();
+      source.startOffset.value = 1;
+      source.endOffset.value = 3;
+      source.start(12);
+      expect(source.startOffset.value).toBe(1);
+      expect(source.endOffset.value).toBe(3);
+    });
+
+    it("takes `duration` from the region start when only it is given", () => {
+      const source = started();
+      source.startOffset.value = 1;
+      source.start(0, undefined, 2);
+      expect(source.startOffset.value).toBe(1);
+      expect(source.endOffset.value).toBe(3);
     });
 
     it("resolves `when` 0 to the context's current time", () => {
@@ -271,12 +295,30 @@ describe("FlexAudioBufferSource", () => {
       expect(oneSecond().naturalDuration).toBeCloseTo(1, 6);
     });
 
-    it("sets playbackRate to naturalDuration / seconds", () => {
+    it("reports the region duration, resolving the endOffset sentinel", () => {
+      const source = oneSecond();
+      // endOffset 0 means "the end of the buffer", so the region starts out
+      // being the whole clip.
+      expect(source.regionDuration).toBeCloseTo(1, 6);
+      source.startOffset.value = 0.25;
+      expect(source.regionDuration).toBeCloseTo(0.75, 6);
+      source.endOffset.value = 0.5;
+      expect(source.regionDuration).toBeCloseTo(0.25, 6);
+    });
+
+    it("sets playbackRate to regionDuration / seconds", () => {
       const source = oneSecond();
       source.setDuration(2);
       expect(source.playbackRate.value).toBeCloseTo(0.5, 6);
       source.setDuration(0.25);
       expect(source.playbackRate.value).toBeCloseTo(4, 6);
+    });
+
+    it("divides the region, not the whole clip", () => {
+      const source = oneSecond();
+      source.startOffset.value = 0.5;
+      source.setDuration(1);
+      expect(source.playbackRate.value).toBeCloseTo(0.5, 6);
     });
 
     it("ignores a non-positive duration rather than dividing by zero", () => {

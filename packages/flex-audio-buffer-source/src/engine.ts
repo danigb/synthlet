@@ -48,6 +48,32 @@ export type TimeStretchEngine = {
    */
   setRate(rate: number): void;
 
+  /**
+   * Move the region being played, in source samples, without rewinding.
+   *
+   * Live: it takes effect from the next analysis frame, and the playhead stays
+   * where it is - which is what lets a region be swept while a note sounds.
+   * `reset` is the rewind; this is not.
+   */
+  setRegion(start: number, end: number): void;
+
+  /**
+   * `+1` plays the region forwards, `-1` backwards.
+   *
+   * Live, and the playhead reverses *in place*: flipping mid-playback walks
+   * back over what was just played rather than teleporting to the mirror point.
+   */
+  setDirection(direction: 1 | -1): void;
+
+  /**
+   * Wrap at the region edge instead of ending. Live.
+   *
+   * While looping the engine reads a little either side of the region - it
+   * needs one analysis frame of runway past the edge to crossfade the seam with
+   * - so the region edges are soft to +/-N. `done()` never becomes true.
+   */
+  setLoop(loop: boolean): void;
+
   /** Point the engine at a region of a buffer and rewind. Does not allocate. */
   reset(source: Float32Array[], start: number, end: number): void;
 

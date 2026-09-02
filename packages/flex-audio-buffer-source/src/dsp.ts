@@ -62,7 +62,30 @@ export function createFlexSource(config: FlexConfig) {
   const taps = new Float32Array(2 * reach + 2);
   const pull: Float32Array[] = fifo; // engine writes straight into the FIFO
 
+  // The engine's analysis frame N, in samples - the same rounding `wsola.ts`'s
+  // `configure` does, because this is the loop seam's runway and it has to be
+  // the frame the engine actually uses. See `applyRunway`.
+  const frameSamples = (() => {
+    const n = Math.max(
+      4,
+      Math.round((config.frameMs * config.sampleRate) / 1000),
+    );
+    return n % 2 === 0 ? n : n + 1;
+  })();
+
   let source: Float32Array[] = [];
+  // The region, in source samples, and the direction and loop flag that go
+  // with it. Held here rather than recomputed at `start`: they are live
+  // controls, pushed into the engine every block by `setControls`.
+  let regionStart = 0;
+  let regionEnd = 0;
+  let reversed = false;
+  let looping = false;
+  // Whether the *last requested* region had anything in it. A momentarily
+  // inverted region holds the previous one rather than killing the note, but a
+  // `start()` into an empty one must still refuse - otherwise an offset past
+  // the end of the buffer would quietly play the whole thing.
+  let regionOk = false;
   let fifoStart = 0; // absolute engine index of fifo[*][0]
   let fifoFilled = 0; // valid samples from fifoStart
   let readPos = 0; // fractional absolute engine position
@@ -76,19 +99,87 @@ export function createFlexSource(config: FlexConfig) {
   function setBuffer(buffer: Float32Array[]) {
     source = buffer;
     playing = false;
+    regionStart = 0;
+    regionEnd = buffer[0]?.length ?? 0;
+    regionOk = regionEnd > 0;
   }
 
-  function start(offset: number, duration: number) {
-    if (source.length === 0) return false;
-    const length = source[0].length;
-    const from = Math.max(0, Math.min(length, Math.round(offset)));
-    const to =
-      duration > 0
-        ? Math.max(from, Math.min(length, from + Math.round(duration)))
-        : length;
-    if (to <= from) return false;
+  /**
+   * Push one block's worth of the four region controls into the engine.
+   *
+   * Seconds in, samples out. Six positional numbers rather than an object
+   * literal: this runs on the audio thread every block and must not allocate.
+   *
+   * Separate from `process` because these are *state the engine holds*, while
+   * `playbackRate` and `detune` are consumed inside the render loop.
+   */
+  function setControls(
+    startOffset: number,
+    endOffset: number,
+    reverse: number,
+    loop: number,
+  ) {
+    reversed = reverse > 0;
+    looping = loop > 0;
+    engine.setDirection(reversed ? -1 : 1);
+    engine.setLoop(looping);
 
-    engine.reset(source, from, to);
+    const length = source[0]?.length ?? 0;
+    if (length === 0) {
+      regionOk = false;
+      return;
+    }
+    const seconds = config.sampleRate;
+    const from = Math.max(
+      0,
+      Math.min(length, Math.round(startOffset * seconds)),
+    );
+    // 0 means "the end of the buffer" - the sentinel `duration` used to carry.
+    const to =
+      endOffset > 0
+        ? Math.max(0, Math.min(length, Math.round(endOffset * seconds)))
+        : length;
+
+    // An inverted region is held, not applied: a modulated region that
+    // momentarily crosses itself must not kill the note.
+    regionOk = to > from;
+    if (!regionOk) return;
+
+    regionStart = from;
+    regionEnd = to;
+    applyRunway(length);
+    engine.setRegion(regionStart, regionEnd);
+  }
+
+  /**
+   * A seamless loop seam needs one analysis frame of source past the loop point
+   * to crossfade with - measured, not assumed: half a frame still clicks. So
+   * looping clamps the far edge of the region inwards by a frame, on whichever
+   * side the playhead crosses.
+   *
+   * Only the "loop the whole buffer right to its last sample" case is clamped,
+   * and it loses up to `frameMs`. In the normal case - a loop inside a longer
+   * sample - nothing moves and the loop length is exact.
+   */
+  function applyRunway(length: number) {
+    if (!looping) return;
+    if (reversed) {
+      // Backwards, the runway lies *before* the region start.
+      const from = Math.max(regionStart, frameSamples);
+      if (from < regionEnd) regionStart = from;
+    } else {
+      const to = Math.min(regionEnd, length - frameSamples);
+      if (to > regionStart) regionEnd = to;
+    }
+  }
+
+  function start() {
+    if (source.length === 0 || !regionOk) return false;
+    if (regionEnd <= regionStart) return false;
+
+    engine.setDirection(reversed ? -1 : 1);
+    engine.setLoop(looping);
+    engine.reset(source, regionStart, regionEnd);
     fifoStart = 0;
     fifoFilled = 0;
     readPos = 0;
@@ -221,6 +312,7 @@ export function createFlexSource(config: FlexConfig) {
 
   return {
     setBuffer,
+    setControls,
     start,
     stop,
     process,

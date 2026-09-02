@@ -27,8 +27,6 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
   private running = true;
   private startFrame: number | null = null;
   private stopFrame: number | null = null;
-  private pendingOffset = 0;
-  private pendingDuration = 0;
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
@@ -55,8 +53,8 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
             0,
             Math.round((data.when ?? 0) * sampleRate),
           );
-          this.pendingOffset = Math.round((data.offset ?? 0) * sampleRate);
-          this.pendingDuration = Math.round((data.duration ?? 0) * sampleRate);
+          // The region is not carried here: it lives in `startOffset` and
+          // `endOffset`, which the node writes before it posts this.
           this.stopFrame = null;
           break;
         case "STOP":
@@ -97,11 +95,19 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
       return this.running;
     }
 
-    // Both params are k-rate, and honestly so - the engine consumes a rate
-    // change as a per-block step - so one read each per block is the whole
-    // story. An a-rate caller gets the value at the block boundary.
+    // Every param is k-rate, and honestly so - the engine consumes a rate or
+    // region change as a per-block step - so one read each per block is the
+    // whole story. An a-rate caller gets the value at the block boundary.
     const playbackRate = parameters.playbackRate[0];
     const cents = parameters.detune[0];
+    // Pushed before the start check, so a `start()` in this very block plays
+    // the region the params ask for rather than the previous one.
+    this.flex.setControls(
+      parameters.startOffset[0],
+      parameters.endOffset[0],
+      parameters.reverse[0],
+      parameters.loop[0],
+    );
 
     // Where in this block the scheduled edges fall, if they fall in it at all.
     const startAt = this.edgeInBlock(this.startFrame, count);
@@ -115,7 +121,7 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
       // A region with nothing in it - an offset past the end of the buffer, a
       // duration of zero - is over before it began. Say so, rather than leave
       // the main thread's `playing` latch set with no ENDED ever coming.
-      if (!this.flex.start(this.pendingOffset, this.pendingDuration)) {
+      if (!this.flex.start()) {
         ended = true;
       }
       this.startFrame = null;

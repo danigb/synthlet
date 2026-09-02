@@ -6,6 +6,7 @@ import {
   FlexAudioBufferSource,
   type FlexAudioBufferSourceWorkletNode,
 } from "synthlet";
+import { CheckboxParam } from "./components/CheckboxParam";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 
@@ -19,6 +20,9 @@ function FlexAudioBufferSourceExample() {
   const [source, setSource] = useState<FlexAudioBufferSourceWorkletNode | null>(
     null,
   );
+  // The clip's length, so the region sliders can be in seconds of *this* clip
+  // rather than of the parameter's arbitrary 0..3600 range.
+  const [duration, setDuration] = useState(0);
   const disposed = useRef(false);
 
   useEffect(() => {
@@ -35,6 +39,7 @@ function FlexAudioBufferSourceExample() {
         node.setBuffer(buffer);
         node.connect(ac.destination);
         node.onended = () => setStatus("ready");
+        setDuration(node.naturalDuration);
         setSource(node);
         setStatus("ready");
       })
@@ -66,8 +71,10 @@ function FlexAudioBufferSourceExample() {
         >
           {status === "playing" ? "Stop" : "Play"}
         </button>
+        <CheckboxParam name="Reverse" param={source.reverse} />
+        <CheckboxParam name="Loop" param={source.loop} />
         <span className="text-sm opacity-70">
-          Move the sliders while it plays: speed and pitch are independent.
+          Move everything while it plays: nothing here rewinds.
         </span>
       </div>
 
@@ -94,6 +101,30 @@ function FlexAudioBufferSourceExample() {
           param={source.detune}
         />
         <div className="text-sm opacity-70">duration unchanged</div>
+
+        <Slider
+          label="Start"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={0}
+          max={duration}
+          step={0.01}
+          units="s"
+          param={source.startOffset}
+        />
+        <div className="text-sm opacity-70">region start</div>
+
+        <Slider
+          label="End"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={0}
+          max={duration}
+          step={0.01}
+          units="s"
+          param={source.endOffset}
+        />
+        <div className="text-sm opacity-70">0 = end of clip</div>
       </div>
     </>
   );

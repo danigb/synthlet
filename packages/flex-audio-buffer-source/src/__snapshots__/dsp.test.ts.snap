@@ -1,5 +1,30 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
+exports[`createFlexSource loop renders a snapshot 1`] = `
+[
+  -0.8696,
+  -0.4145,
+  0.1981,
+  0.7355,
+  0.9931,
+  0.8731,
+  0.421,
+  -0.1912,
+  -0.7306,
+  -0.9922,
+  -0.8765,
+  -0.4275,
+  0.1842,
+  0.7257,
+  0.9913,
+  0.8799,
+  0.4339,
+  -0.1772,
+  -0.7208,
+  -0.9904,
+]
+`;
+
 exports[`createFlexSource renders a snapshot 1`] = `
 [
   0.0035,
