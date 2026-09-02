@@ -175,7 +175,7 @@ inferred. Nothing below derives from third-party source.
 | `@synthlet/clip-amp` | Original. `tanh` and hard-clip shapers |
 | `@synthlet/clock` | Original |
 | `@synthlet/euclid` | Original. Implements the Euclidean rhythm algorithm of Godfried Toussaint, *The Euclidean Algorithm Generates Traditional Musical Rhythms* (2005) |
-| `@synthlet/flex-audio-buffer-source` | Original, re-derived from published algorithm descriptions: J. Driedger and M. Müller, [*A Review of Time-Scale Modification of Music Signals*](https://doi.org/10.3390/app6020057), Applied Sciences 6(2):57, 2016, §4.1 (equations 6-11) and §7.2 (pitch-shifting as resampling plus TSM); W. Verhelst and M. Roelands, [*An Overlap-Add Technique Based on Waveform Similarity (WSOLA) for High Quality Time-Scale Modification of Speech*](https://doi.org/10.1109/ICASSP.1993.319366), Proc. ICASSP-93; M. Roelands and W. Verhelst, [*WSOLA for Time-Scale Modification of Speech: Structures and Evaluation*](https://doi.org/10.21437/Eurospeech.1993-59), Proc. EUROSPEECH'93; and J. O. Smith III, [*Digital Audio Resampling Home Page*](https://ccrma.stanford.edu/~jos/resample/) for the windowed-sinc pitch stage. Which published equation each step implements is recorded in the header of `src/wsola.ts`, along with the five things it does that the sources do not |
+| `@synthlet/flex-audio-buffer-source` | Original, re-derived from published algorithm descriptions: J. Driedger and M. Müller, [*A Review of Time-Scale Modification of Music Signals*](https://doi.org/10.3390/app6020057), Applied Sciences 6(2):57, 2016, §4.1 (equations 6-11) and §7.2 (pitch-shifting as resampling plus TSM); W. Verhelst and M. Roelands, [*An Overlap-Add Technique Based on Waveform Similarity (WSOLA) for High Quality Time-Scale Modification of Speech*](https://doi.org/10.1109/ICASSP.1993.319366), Proc. ICASSP-93; M. Roelands and W. Verhelst, [*WSOLA for Time-Scale Modification of Speech: Structures and Evaluation*](https://doi.org/10.21437/Eurospeech.1993-59), Proc. EUROSPEECH'93; and J. O. Smith III, [*Digital Audio Resampling Home Page*](https://ccrma.stanford.edu/~jos/resample/) for the windowed-sinc pitch stage. Which published equation each step implements is recorded in the header of `src/wsola.ts`, along with the seven things it does that the sources do not |
 | `@synthlet/granite` | Original granular engine |
 | `@synthlet/impulse` | Original |
 | `@synthlet/karplus-strong` | Original, from the published algorithm: Karplus & Strong, [*Digital Synthesis of Plucked String and Drum Timbres*](https://users.soe.ucsc.edu/~karplus/papers/digitar.pdf), CMJ 7(2), 1983 |
@@ -214,13 +214,13 @@ or from any other third-party time-stretch library, is present. SoundTouch
 (LGPL) and Rubber Band (GPL) were deliberately not read, and neither were the
 patents covering decimation-based SOLA search.
 
-Five parts of it are not in the sources at all, and are marked as such in the
+Seven parts of it are not in the sources at all, and are marked as such in the
 header of `src/wsola.ts` rather than being allowed to borrow the sources'
 authority: the normalised similarity measure (the papers use an unnormalised
 cross-correlation), normalisation by the running window sum rather than the
 constant of eq. 11, the rise-free first window, the coarse-to-fine decimated
-search, and the rule that ties in the search are broken towards the smallest
-shift. Each of those claims is measured, not inherited: `wsola.test.ts`
+search, the rule that ties in the search are broken towards the smallest
+shift, the loop seam, and reverse as a coordinate mirror. Each of those claims is measured, not inherited: `wsola.test.ts`
 asserts them against `src/wsola-oracle.ts`, an independently written
 brute-force full-rate implementation that exists only for the tests.
 

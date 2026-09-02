@@ -683,6 +683,37 @@ describe("createFlexSource", () => {
       expect(length - cycle).toBeGreaterThan(FRAME / 2);
     });
 
+    it("wraps rather than ending when endOffset sweeps in behind it", () => {
+      // The one-shot answer to this is to end (asserted above). Looping, the
+      // playhead is simply past the new edge, and the modulo wrap carries it
+      // back into the region however far past it has got.
+      const input = sine(60000, 220);
+      const flex = createFlexSource(config());
+      flex.setBuffer([input]);
+      flex.setControls(5000 / SAMPLE_RATE, 25000 / SAMPLE_RATE, 0, 1);
+      flex.start();
+
+      const out = [new Float32Array(128)];
+      const joined = new Float32Array(300 * 128);
+      let ended = -1;
+      for (let b = 0; b < 300; b++) {
+        // Pull the end in to 10000, well behind where the playhead has got.
+        if (b === 120) {
+          flex.setControls(5000 / SAMPLE_RATE, 10000 / SAMPLE_RATE, 0, 1);
+        }
+        if (flex.process(out, 0, 128, 1, 0) && ended < 0) ended = b;
+        joined.set(out[0], b * 128);
+      }
+
+      const after = joined.subarray(20000);
+      expect(ended).toBe(-1);
+      expect(flex.isPlaying()).toBe(true);
+      expect(rms(after)).toBeGreaterThan(0.5);
+      // ...and the smaller region's seam is still a seam, not a click.
+      expect(steps(after).largest).toBeLessThan(2 * THEORY);
+      expect(steps(after).over).toBe(0);
+    });
+
     it("composes with reverse", () => {
       // Mirrored space is still [start, end), so the same wrap serves both
       // directions - and the runway is taken from before `startOffset`.
