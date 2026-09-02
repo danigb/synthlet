@@ -1,0 +1,118 @@
+---
+title: Flex Audio Buffer Source
+description: A sample player with independent time and pitch
+---
+
+import FlexAudioBufferSourceExample from "../../../examples/FlexAudioBufferSourceExample";
+
+`@synthlet/flex-audio-buffer-source`
+
+Web Audio's `AudioBufferSourceNode` is a varispeed: `playbackRate` and `detune`
+both resample, so playing a clip at half speed also drops it an octave. This is
+the same API with time and pitch pulled apart — stretch a sample to a target
+duration at constant pitch, or repitch it at constant duration.
+
+It's backed by a WSOLA time-stretch engine, and both controls are real,
+automatable `AudioParam`s.
+
+```ts
+import {
+  FlexAudioBufferSource,
+  registerFlexAudioBufferSourceWorklet,
+} from "@synthlet/flex-audio-buffer-source";
+
+const ac = new AudioContext();
+await registerFlexAudioBufferSourceWorklet(ac);
+
+const bytes = await fetch("/loop.mp3").then((r) => r.arrayBuffer());
+const buffer = await ac.decodeAudioData(bytes);
+
+const src = FlexAudioBufferSource(ac, {
+  playbackRate: 0.5, // half speed, same pitch
+  detune: 300, // +3 semitones, same duration
+});
+src.setBuffer(buffer);
+src.connect(ac.destination);
+
+src.onended = () => console.log("done");
+src.start();
+```
+
+<FlexAudioBufferSourceExample />
+
+## Parameters
+
+- `playbackRate`: time-stretch ratio, pitch-preserving. Default 1, range
+  1/16 to 16.
+- `detune`: pitch shift in cents, duration-preserving. Default 0, range ±1200 —
+  which is the engine's ±12 semitone cap, enforced by the parameter's own range.
+
+Both are k-rate. WSOLA consumes a rate change when it starts its next analysis
+frame, so a per-sample rate has nothing it could mean; a ramp is a sequence of
+small per-block steps. Sample-accurate rate modulation is out of scope for this
+algorithm.
+
+## Scheduling
+
+`start`, `stop` and `onended` follow `AudioBufferSourceNode`, in seconds:
+
+```ts
+src.start(); // now
+src.start(ac.currentTime + 1); // in a second
+src.start(0, 2.5, 1.0); // now, from 2.5s in, for 1s
+src.stop(ac.currentTime + 4);
+```
+
+One deliberate difference: **this node is restartable**. By spec an
+`AudioBufferSourceNode` is spent after a single play, so replaying a sample
+means building a new node and re-uploading the buffer. Here a source that has
+ended or been stopped can just be started again. Starting one that is already
+playing still throws.
+
+Playback starts on the sample you asked for — no lookahead latency, no fade-in.
+Output sample 0 is the clip's sample 0.
+
+## Duration
+
+Duration can't be a coherent `AudioParam`: under modulation it is the integral
+of the rate, not a value. The modulatable primitive is `playbackRate`, and
+`setDuration` is a convenience over it:
+
+```ts
+src.naturalDuration; // 3.2 - the clip at playbackRate 1
+src.setDuration(4); // sets playbackRate to 3.2 / 4 = 0.8
+```
+
+To "modulate the duration", automate `playbackRate`.
+
+## Buffers
+
+`setBuffer` takes an `AudioBuffer`, or raw channel data:
+
+```ts
+src.setBuffer(audioBuffer);
+src.setBuffer({ channels: [left, right], sampleRate: 48000 });
+```
+
+A mismatched sample rate is resampled once, at load, rather than on every block.
+Your `AudioBuffer` is not modified or detached. A mono buffer fans out to every
+output channel; a stereo buffer stays panned, because the engine aligns on a
+mono mix and applies the same alignment to both channels.
+
+## Configuration
+
+Engine geometry is set at construction — these size buffers, so they can't
+change while it runs: `channelCount` (2), `frameMs` (30), `overlap` (0.5),
+`tolerance` (0.25) and `searchRate` (12000).
+
+`searchRate` is the interesting one: the waveform-similarity search runs on a
+decimated copy of the signal, so it aligns structure below half that rate, which
+is where the periodicity of real material lives.
+
+## Limits
+
+Looping isn't implemented yet — a clickless seam needs a mid-stream re-prime or
+a crossfade. Pitch shifting moves the spectral envelope with the pitch, so large
+shifts sound chipmunky; that is inherent to resampling-based pitch shifting.
+WSOLA is very good on monophonic and rhythmic material, and merely acceptable on
+stretched transients and dense polyphony.
