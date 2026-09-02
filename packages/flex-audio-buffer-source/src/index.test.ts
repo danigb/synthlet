@@ -220,6 +220,17 @@ describe("FlexAudioBufferSource", () => {
       expect(() => source.start()).not.toThrow();
     });
 
+    it("can be started again straight after stop()", () => {
+      // The guard must not wait on ENDED coming back from the audio thread:
+      // that is a render quantum away at best, and never arrives at all on a
+      // suspended context. The error message says to stop() and start again,
+      // so doing exactly that has to work.
+      const source = started();
+      source.start();
+      source.stop();
+      expect(() => source.start()).not.toThrow();
+    });
+
     it("calls onended when the processor reports it", () => {
       const source = started();
       const ended = jest.fn();

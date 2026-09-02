@@ -112,14 +112,20 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
 
     if (startAt !== null) {
       for (const channel of output) channel.fill(0, 0, startAt);
-      this.flex.start(this.pendingOffset, this.pendingDuration);
+      // A region with nothing in it - an offset past the end of the buffer, a
+      // duration of zero - is over before it began. Say so, rather than leave
+      // the main thread's `playing` latch set with no ENDED ever coming.
+      if (!this.flex.start(this.pendingOffset, this.pendingDuration)) {
+        ended = true;
+      }
       this.startFrame = null;
       at = startAt;
     }
 
     const until = stopAt !== null ? stopAt : count;
     if (until > at) {
-      ended = this.renderInto(output, at, until - at, playbackRate, cents);
+      ended =
+        this.renderInto(output, at, until - at, playbackRate, cents) || ended;
     }
     if (stopAt !== null) {
       const wasPlaying = this.flex.isPlaying();

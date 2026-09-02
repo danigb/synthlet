@@ -1,5 +1,10 @@
 import { DEFAULT_ENGINE_CONFIG, type EngineConfig } from "./engine";
-import { createWsolaEngine, findBestShift, type SearchScratch } from "./wsola";
+import {
+  createWsolaEngine,
+  findBestShift,
+  normalisedCorrelation,
+  type SearchScratch,
+} from "./wsola";
 import {
   makeReader,
   oracleBestShift,
@@ -242,6 +247,12 @@ describe("findBestShift", () => {
     for (let n = 0; n < geometry.frame; n++) template[n] = read(5000 + n);
 
     const delta = findBestShift(read, template, 8000, scratch);
+    const mine = normalisedCorrelation(
+      read,
+      template,
+      geometry.frame,
+      8000 + delta,
+    );
     const theirs = oracleCorrelation(
       read,
       template,
@@ -249,6 +260,7 @@ describe("findBestShift", () => {
       "normalised",
     );
     // Same measure, independently written: the numbers must match closely.
+    expect(mine).toBeCloseTo(theirs, 4);
     expect(theirs).toBeGreaterThan(0);
   });
 
@@ -464,8 +476,6 @@ describe("createWsolaEngine", () => {
     const shared = Math.min(mine.length, theirs.length);
     expect(shared).toBeGreaterThan(20000);
 
-    const difference = new Float32Array(shared);
-    for (let i = 0; i < shared; i++) difference[i] = mine[i] - theirs[i];
     // Both render a 220 Hz sine; disagreement over shifts moves phase, not
     // spectrum, so compare envelopes rather than samples.
     expect(

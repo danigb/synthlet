@@ -172,11 +172,14 @@ export function createFlexSource(config: FlexConfig) {
 
       for (let j = 0; j < chunk; j++) {
         const position = readPos + j * beta;
-        if (beta === 1) {
-          // Exact passthrough: at unity ratio and an integer position the
-          // kernel is a unit impulse, so skip it entirely rather than spend
-          // 33 taps proving it. `readPos` only ever advances by whole samples
-          // here, so the position is always integral.
+        // Exact passthrough: at unity ratio and an *integer* position the
+        // kernel is a unit impulse, so skip it entirely rather than spend 33
+        // taps proving it. The position is only integral if `detune` has been
+        // 0 for the whole playback - automating it back to zero after any
+        // other value leaves `readPos` fractional, and those samples fall
+        // through to the sinc path below, where beta = 1 is a constant
+        // fractional delay.
+        if (beta === 1 && Number.isInteger(position)) {
           const index = position - fifoStart;
           for (let c = 0; c < outputs.length; c++) {
             outputs[c][offset + at + j] =

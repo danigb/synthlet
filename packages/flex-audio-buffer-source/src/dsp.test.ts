@@ -342,6 +342,26 @@ describe("createFlexSource", () => {
     expect(rms(outRight)).toBe(0);
   });
 
+  it("survives detune being automated back to zero", () => {
+    // The resampler's unity-ratio short circuit is only exact at an integral
+    // read position, and any non-zero detune leaves `readPos` fractional.
+    // Without the guard on that, returning to detune 0 wrote NaN into every
+    // remaining sample of the playback - and NaN never washes out.
+    const input = sine(40000, 220);
+    const flex = createFlexSource(config());
+    flex.setBuffer([input]);
+    flex.start(0, 0);
+
+    const out = [new Float32Array(128)];
+    for (let b = 0; b < 5; b++) flex.process(out, 0, 128, 1, 700);
+    const shifted = rms(out[0]);
+
+    for (let b = 0; b < 20; b++) flex.process(out, 0, 128, 1, 0);
+    expect(Array.from(out[0]).every(Number.isFinite)).toBe(true);
+    // Still playing the sample, not silently dropped to zero.
+    expect(rms(out[0])).toBeGreaterThan(0.5 * shifted);
+  });
+
   it("allocates nothing after construction", () => {
     const input = sine(40000, 220);
     const flex = createFlexSource(config());
@@ -358,14 +378,21 @@ describe("createFlexSource", () => {
         return new target(...(args as [number]));
       },
     });
+    let finite = true;
     try {
       for (let i = 0; i < 150; i++) {
         flex.process(outputs, 0, 128, 0.8 + (i % 5) * 0.1, (i % 7) * 100);
+        for (const value of outputs[0]) {
+          if (!Number.isFinite(value)) finite = false;
+        }
       }
     } finally {
       (globalThis as any).Float32Array = before;
     }
     expect(allocations).toBe(0);
+    // The detune cycle above returns to 0 every seventh block. Asserted here
+    // as well as in its own test because this loop always walked that path.
+    expect(finite).toBe(true);
   });
 
   it("renders a snapshot", () => {

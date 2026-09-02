@@ -141,6 +141,12 @@ export const FlexAudioBufferSource = Object.assign(
     };
 
     node.stop = (when = 0) => {
+      // Release the guard here rather than waiting for ENDED to come back: the
+      // round trip is a render quantum at best and never happens at all on a
+      // suspended context, and `stop(); start()` is the retrigger idiom a
+      // restartable source exists to allow. A later START clears any stop
+      // still pending in the worklet, so this is safe for a scheduled stop too.
+      playing = false;
       node.port.postMessage({
         type: "STOP",
         when: when > 0 ? when : context.currentTime,

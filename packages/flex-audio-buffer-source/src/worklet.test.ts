@@ -168,6 +168,20 @@ describe("FlexAudioBufferSourceProcessor", () => {
     expect(messagesOfType(node, "ENDED")).toHaveLength(1);
   });
 
+  it("posts ENDED for a start with nothing to play", () => {
+    // An offset past the end of the buffer leaves the kernel refusing to
+    // start. Without an ENDED the main thread's `playing` latch never clears
+    // and every later start() throws for the life of the node.
+    const node = create();
+    send(node, { type: "SET_BUFFER", channels: [sine(4000, 300)] });
+    // One second into a clip that lasts 0.09 of one.
+    send(node, { type: "START", when: 0, offset: 1, duration: 0 });
+
+    const output = run(node, 4);
+    expect(messagesOfType(node, "ENDED")).toHaveLength(1);
+    expect(Array.from(output)).toEqual(new Array(output.length).fill(0));
+  });
+
   it("restarts after it has ended", () => {
     const input = sine(4000, 300);
     const node = create();
