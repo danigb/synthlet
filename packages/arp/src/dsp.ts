@@ -1,3 +1,5 @@
+import { createGateDetector } from "./_gate";
+
 /**
  * Scales encoded as 12-bit pitch-class masks: bit `i` set means pitch class
  * `i` (semitones above the root) belongs to the scale. Bit 0 is the root, so
@@ -43,7 +45,7 @@ export function createArpeggiator() {
 
   let scaleNotes = [0];
   let len = 1;
-  let active = false;
+  const detectGate = createGateDetector();
   let current = $note;
 
   return function update(
@@ -61,14 +63,7 @@ export function createArpeggiator() {
       len = scaleNotes.length;
     }
 
-    if (trigger === 1) {
-      if (!active) {
-        active = true;
-        current = nextRandom();
-      }
-    } else {
-      active = false;
-    }
+    if (detectGate(trigger) === true) current = nextRandom();
 
     const freq = 440 * Math.pow(2, (current - 69) / 12);
 

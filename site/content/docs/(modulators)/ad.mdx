@@ -1,14 +1,19 @@
 ---
 title: AD Envelope
-description: An Attack-Release exponential envelope generator
+description: An Attack-Decay exponential envelope generator
 package: ad
 ---
 
 import { AttackDecayExample } from "../../../examples/AttackDecayExample";
 
-This is a one-stage envelope generator useful to create percusive sounds.
+This is a two-stage envelope generator - attack, then decay straight back to
+zero - useful to create percussive sounds.
 
-Unlike ADSR, this envelope can finish before the gate is released.
+Unlike ADSR, this envelope has no sustain: it is fired and runs to completion,
+so it can finish before the trigger is released.
+
+Both stages are in seconds, the same as the ADSR: `attack` is the time to reach
+the peak, and `decay` the time to fall to silence (−60 dB).
 
 ```ts
 import { AdEnv, registerAdWorklet } from "synthlet";
@@ -17,8 +22,8 @@ const audioContext = new AudioContext();
 await registerAdWorklet(audioContext);
 
 const ad = AdEnv(audioContext, {
-  attack: 0.1,
-  decay: 0.1,
+  attack: 0.01,
+  decay: 0.3,
   gain: 1,
 });
 const osc = new OscillatorNode(audioContext);
@@ -33,8 +38,12 @@ ad.trigger.value = 1;
 
 ## Parameters
 
-- `attack`: The attack time in seconds. Default is 0.1.
-- `decay`: The decay time in seconds. Default is 0.1.
-- `trigger`: The envelope trigger. 1 means start. You need to move the trigger back to 1 to restart the envelope.
+- `attack`: The time to reach the peak, in seconds. Default is 0.01.
+- `decay`: The time to fall to silence (−60 dB), in seconds. Default is 0.1.
+- `trigger`: Fires the envelope on the rising edge, when it goes from 0 (or below) to a positive value. Move it back to 0 before firing it again. See [Gates and triggers](/docs/gates-and-triggers).
 - `offset`: The offset of the envelope. Default is 0.
 - `gain`: The gain of the envelope. Default is 1.
+
+`trigger` is `k-rate`, so it lands on the next 128-frame block boundary
+(~2.9 ms at 44.1 kHz). For sample-accurate firing you can opt into a
+per-sample read - see [Gates and triggers](/docs/gates-and-triggers#timing).

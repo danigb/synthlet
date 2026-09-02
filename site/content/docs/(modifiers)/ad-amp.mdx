@@ -12,6 +12,9 @@ input, multiplied by the envelope. It is the percussive counterpart of
 
 Use it to add percussive envelopes to synth voices.
 
+Both stages are in seconds, the same as the ADSR: `attack` is the time to reach
+the peak, and `decay` the time to fall to silence (−60 dB).
+
 ```ts
 import { AdAmp, OscillatorNode } from "synthlet";
 
@@ -36,9 +39,9 @@ vca.trigger.value = 0;
 
 Same as the [AD](/docs/modulators/ad) envelope:
 
-- `trigger`: The envelope trigger. 1 means start. You need to move the trigger back to 0 to be able to restart the envelope.
-- `attack`: The attack time in seconds. Default is 0.01.
-- `decay`: The decay time in seconds. Default is 0.1.
+- `trigger`: Fires the envelope on the rising edge, when it goes from 0 (or below) to a positive value. Move it back to 0 before firing it again. See [Gates and triggers](/docs/gates-and-triggers).
+- `attack`: The time to reach the peak, in seconds. Default is 0.01.
+- `decay`: The time to fall to silence (−60 dB), in seconds. Default is 0.1.
 - `offset`: Added to the output. Default is 0.
 - `gain`: Multiplies the output. Default is 1.
 

@@ -8,7 +8,8 @@ import { useSynth } from "./useSynth";
 function ExampleSynth(context: AudioContext) {
   const bpm = Param(context, { input: 60 });
   const clock = Clock(context, { bpm });
-  const clave = ClaveDrum(context, { trigger: clock });
+  // `clock` is the phase ramp and `clock.gate` the gate: a drum wants the gate.
+  const clave = ClaveDrum(context, { trigger: clock.gate });
   return Object.assign(clave, { bpm: bpm.input });
 }
 

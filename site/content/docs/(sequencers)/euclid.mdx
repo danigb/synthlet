@@ -33,5 +33,17 @@ clock.bpm.value = 150;
 
 #### Clock
 
-- `clock`: a clock the drives the rhythm
+- `clock`: a clock that drives the rhythm. This is the clock's **phase ramp** -
+  the `Clock` node itself, not `clock.gate` - because subdividing a clock means
+  multiplying its phase.
 - `subdivision`: the subdivision of the clock
+
+#### Output
+
+- `pulseWidth`: how much of each step a hit is high for, as a fraction of the
+  step. Default is `0.5`.
+
+Euclid's output is a [gate](/docs/gates-and-triggers): each hit is a pulse over
+the first `pulseWidth` of its step, so two adjacent hits are two triggers. (It
+used to hold the step's level until the next step, which merged them - a `4/4`
+pattern fired exactly once.)

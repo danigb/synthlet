@@ -1,17 +1,4 @@
-function createGateDetector() {
-  let current = false;
-  return (gate: number): boolean | undefined => {
-    if (current === false && gate >= 0.9) {
-      current = true;
-      return true;
-    }
-    if (current === true && gate < 0.1) {
-      current = false;
-      return false;
-    }
-    return undefined;
-  };
-}
+import { createGateDetector } from "./_gate";
 
 enum Stage {
   Zero,
@@ -22,13 +9,13 @@ enum Stage {
 }
 
 export type AdsrParamInputs = {
-  gate: number[];
-  attack: number[];
-  decay: number[];
-  sustain: number[];
-  release: number[];
-  offset: number[];
-  gain: number[];
+  gate: ArrayLike<number>;
+  attack: ArrayLike<number>;
+  decay: ArrayLike<number>;
+  sustain: ArrayLike<number>;
+  release: ArrayLike<number>;
+  offset: ArrayLike<number>;
+  gain: ArrayLike<number>;
 };
 
 /**
@@ -62,17 +49,40 @@ export function createAdsr(sampleRate: number) {
 
   _updateAdsr(0.01, 0.1, 0.5, 0.3);
 
+  // The stage machine advances once per sample; the level it lands on is then
+  // applied to every channel the block has, so stereo in stays stereo out.
   return function adsr(
-    input: Float32Array,
-    output: Float32Array,
+    inputs: Float32Array[],
+    outputs: Float32Array[],
     modifier: boolean,
     params: AdsrParamInputs,
   ) {
-    _readParams(params);
+    _updateAdsr(
+      params.attack[0],
+      params.decay[0],
+      params.sustain[0],
+      params.release[0],
+    );
+    const gate = params.gate;
     const offset = params.offset[0];
     const gain = params.gain[0];
+    const channels = outputs.length;
+    const length = outputs[0]?.length ?? 0;
 
-    for (let i = 0; i < output.length; i++) {
+    for (let i = 0; i < length; i++) {
+      // Read the gate per sample when it is a-rate. The descriptor still
+      // declares k-rate, so by default this is `gate[0]` for the whole block -
+      // identical to reading it once - but a caller who sets
+      // `gate.automationRate = "a-rate"` now gets the sample-accurate
+      // sequencing they asked for instead of one quantised to the 128-frame
+      // block boundary (up to 2.9 ms at 44.1 kHz).
+      const edge = detectGate(gate.length > 1 ? gate[i] : gate[0]);
+      if (edge === true) {
+        stage = Stage.Attack;
+      } else if (edge === false) {
+        stage = Stage.Release;
+      }
+
       switch (stage) {
         case Stage.Attack:
           current = attack.b + current * attack.c;
@@ -97,27 +107,16 @@ export function createAdsr(sampleRate: number) {
             current = 0.0;
             stage = Stage.Zero;
           }
+          break;
       }
-      const value = modifier ? input[i] * current : current;
-      output[i] = value * gain + offset;
+      for (let c = 0; c < channels; c++) {
+        // A channel the input doesn't have -- including an input that isn't
+        // connected at all -- is silence, not a crash.
+        const value = modifier ? (inputs[c]?.[i] ?? 0) * current : current;
+        outputs[c][i] = value * gain + offset;
+      }
     }
   };
-
-  function _readParams(params: AdsrParamInputs) {
-    _updateAdsr(
-      params.attack[0],
-      params.decay[0],
-      params.sustain[0],
-      params.release[0],
-    );
-
-    const gate = detectGate(params.gate[0]);
-    if (gate === true) {
-      stage = Stage.Attack;
-    } else if (gate === false) {
-      stage = Stage.Release;
-    }
-  }
 
   function _updateAdsr(
     _attack: number,

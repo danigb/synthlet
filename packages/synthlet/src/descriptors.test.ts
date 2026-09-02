@@ -69,6 +69,36 @@ describe("descriptors", () => {
     ]);
   });
 
+  // One gate/trigger contract means one shape for the param that carries it:
+  // if these drifted apart, the same signal would drive some modules and not
+  // others - which is exactly the bug the shared detector removed.
+  it("declares every trigger-like param the same way", () => {
+    const TRIGGERS: [string, string][] = [
+      ["AdAmp", "trigger"],
+      ["AdEnv", "trigger"],
+      ["AdsrAmp", "gate"],
+      ["AdsrEnv", "gate"],
+      ["Arp", "trigger"],
+      ["Impulse", "trigger"],
+      ["KarplusStrong", "trigger"],
+    ];
+
+    for (const [name, param] of TRIGGERS) {
+      const factory = (synthlet as any)[name] as Factory;
+      const descriptor = factory.descriptors.find((d) => d.name === param);
+      expect([name, descriptor]).toEqual([
+        name,
+        {
+          name: param,
+          defaultValue: 0,
+          minValue: 0,
+          maxValue: 1,
+          automationRate: "k-rate",
+        },
+      ]);
+    }
+  });
+
   it("keeps Svf's frequency at a-rate", () => {
     const aRate = synthlet.Svf.descriptors.filter(
       (d) => d.automationRate === "a-rate",

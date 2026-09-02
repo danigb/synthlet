@@ -6,9 +6,9 @@ export class AdsrProcessor extends AudioWorkletProcessor {
   r: boolean = true; // running;
   m: boolean;
 
-  constructor(options: any) {
+  constructor(options?: any) {
     super();
-    this.m = options.processorOptions.mode === "modulator";
+    this.m = options?.processorOptions?.mode === "modulator";
     this.p = createAdsr(sampleRate);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -20,9 +20,10 @@ export class AdsrProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
-    const input = this.m ? inputs[0][0] : undefined;
-    const output = outputs[0][0];
-    this.p(input!, output, this.m, params);
+    // A channel the input doesn't have reads as silence in the dsp, which
+    // covers both an unconnected input (no channels at all, which used to
+    // throw) and an output wider than the input.
+    this.p(inputs[0], outputs[0], this.m, params);
     return this.r;
   }
 

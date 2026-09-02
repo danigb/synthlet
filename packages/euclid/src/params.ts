@@ -38,4 +38,14 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 100,
     automationRate: "k-rate",
   },
+  {
+    // How much of each step a hit is high for, the same beat-fraction shape
+    // `Clock`'s pulseWidth has. It is what makes adjacent hits two triggers
+    // instead of one held level.
+    name: "pulseWidth",
+    defaultValue: 0.5,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
 ];
