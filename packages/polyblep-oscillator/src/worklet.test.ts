@@ -1,3 +1,12 @@
+// A byte-level regression net over the processor's plumbing, at
+// `sampleRate = 40` where it runs in microseconds.
+//
+// The snapshots assert *stability*, not correctness. Four of them ran on every
+// CI job for a year while the triangle was recorded at 1.6x full scale under
+// the name "square", and none of them noticed. What this package promises -
+// alias rejection, amplitude, totality over the declared parameter range,
+// block-size independence - is asserted numerically in `dsp.test.ts`.
+
 describe("ProcessorNode", () => {
   let Processor: any;
   const sampleRate = 40;
