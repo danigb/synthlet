@@ -1,38 +1,160 @@
 ---
 title: PolyBLEP Oscillator
-description: An oscillator module implemened using PolyBLEP algorithm
+description: A band-limited virtual-analog oscillator with pulse width, hard sync and through-zero FM
 ---
 
 import PolyblepExample from "../../../examples/PolyblepExample";
 
-This module implements a synth oscillator. It's very similar to the native OscillatorNode found in Web Audio API. The difference is the implementation and, therefore, the sound.
+`@synthlet/polyblep-oscillator`
 
-The oscillator is implemented using the PolyBLEP algorithm. This algorithm is used to generate band-limited waveforms.
+The same four waveforms as the native `OscillatorNode` — sine, triangle, sawtooth,
+square — from one discontinuity scheduler: each waveform is a naive function of the
+phase plus a list of where its edges and corners fall, and every one of those gets a
+polynomial band-limiting correction written into the samples around it.
+
+What it adds over the native node is five things that node cannot do at all:
+pulse-width modulation, a continuous triangle-to-saw morph, sub-sample hard sync,
+through-zero linear FM, and a per-instance initial phase. Every parameter but `type`
+is a real a-rate `AudioParam`, so all of it can be driven by another node at audio
+rate.
 
 ```ts
-import { PolyblepOscillator } from "synthlet";
+import {
+  PolyblepOscillator,
+  PolyblepOscillatorType,
+  registerPolyblepOscillatorWorklet,
+} from "synthlet";
 
-const osc = PolyblepOscillator(audioContext, {
-  type: PolyblepOscillatorType.Sawtooth;
+const ac = new AudioContext();
+await registerPolyblepOscillatorWorklet(ac);
+
+const osc = PolyblepOscillator(ac, {
+  type: PolyblepOscillatorType.Sawtooth,
   frequency: 440,
 });
+osc.connect(ac.destination);
 ```
+
+A worklet cannot fetch its own code, so it has to be installed on the context
+before anything is built from it. `registerAllWorklets(ac)` does the whole library
+at once if you would rather not name them one by one.
+
+## The example
+
+Two oscillators at the same pitch, taking the same waveform, the same frequency and
+the same modulation: this one and a native `OscillatorNode`. Each has its own
+spectrum analyser, and the switch chooses which one you hear — both keep drawing
+either way, because each analyser sits before its own mute.
+
+Sweep the frequency up into the top two octaves and watch the space between the
+harmonics. `Width` and `Sync` move only the PolyBLEP side; the native node has no
+equivalent for either.
 
 <PolyblepExample />
 
 ## Parameters
 
-- `type`: A number representing the waveform type. Default is 2 (saw). The available types are:
-- `frequency`: The frequency of the oscillator in Hz. Default is 440.
-- `detune`: The detune in cents. Default is 0. Range: [-1200, 1200] (±1 octave)
+- `type`: the waveform. Default 2 (`Sawtooth`). k-rate — but a change is scheduled
+  as a band-limited step, so switching mid-note does not click. In brightness order:
+  - `PolyblepOscillatorType.Sine` = 0
+  - `PolyblepOscillatorType.Triangle` = 1
+  - `PolyblepOscillatorType.Sawtooth` = 2
+  - `PolyblepOscillatorType.Square` = 3
+- `frequency`: Hz. Default 440, range [-20000, 20000]. **Bipolar** — see below.
+  a-rate.
+- `detune`: cents. Default 0, range [-1200, 1200] (±1 octave). Multiplies
+  `frequency`, so it inherits its sign. a-rate.
+- `width`: default 0.5, range [0, 1]. Pulse width on the square, peak position on
+  the triangle; the sine and the sawtooth ignore it. a-rate.
+- `sync`: default 0, range [0, 1]. A **rising edge** restarts the phase. a-rate.
 
-Oscillator types are, in brightness order:
+One more input is not an `AudioParam`:
 
-- `PolyblepOscillatorType.Sine` = 0
-- `PolyblepOscillatorType.Triangle` = 1
-- `PolyblepOscillatorType.Sawtooth` = 2
-- `PolyblepOscillatorType.Square` = 3
+- `phase`: the initial phase in `[0, 1)`, and where a `sync` edge restarts. A
+  **construction option**, because it is a one-time initial condition. A number is
+  taken modulo 1; `"random"` draws once per instance, which is what stops stacked
+  detuned oscillators combing through the attack.
+
+```ts
+const voices = [-7, 0, 7].map((detune) =>
+  PolyblepOscillator(ac, { frequency: 220, detune, phase: "random" }),
+);
+```
+
+## Width
+
+`width` means two related things. On the **square** it is the pulse width: 0.5 is a
+square wave, and towards either end a narrow pulse of one polarity or the other.
+That is the staple virtual-analog sound, and Web Audio has no equivalent —
+`OscillatorNode` offers four fixed shapes and a `setPeriodicWave` that cannot be
+swept.
+
+On the **triangle** it is the peak position: symmetric at 0.5, a rising ramp towards
+1 and a falling one towards 0. That is a continuous waveform morph, and it is why
+there is no separate "skewed sawtooth" — it is the triangle at `width → 1`.
+
+A pulse wave has a real DC component of `2 · width − 1`. That is signal, not an
+artefact: a 10% pulse sits at −0.8 and swings to +1, which is what makes pulse-width
+modulation move the way it does.
+
+## Hard sync
+
+A rising edge on `sync` — the transition from non-positive to positive, synthlet's
+one gate contract — restarts the phase. It is not an assignment: the reset is
+scheduled as a step _and_ a slope change at the interpolated crossing instant, so it
+is band-limited for all four waveforms, the triangle included.
+
+```ts
+const master = PolyblepOscillator(ac, { frequency: 110 });
+const slave = PolyblepOscillator(ac, { frequency: 660, sync: master });
+```
+
+The master's pitch is the note you hear; the slave's `frequency` sweeps the timbre.
+Holding `sync` positive fires once, not once per sample, and a falling edge fires
+nothing. Never drive it with `setTargetAtTime` — a signal that asymptotes towards
+zero never reaches it, so the gate would never re-arm.
+
+## Through-zero FM
+
+`frequency` is bipolar, and an `AudioParam` **sums** its inputs with its intrinsic
+value, so connecting a node to `frequency` is _linear_ FM by construction. When the
+sum goes below zero the phase runs backwards — band-limited going that way too —
+instead of clamping flat. A modulator that is half-wave rectified at the bottom is a
+different modulator, so clamping would not tame the sound, it would produce the wrong
+spectrum.
+
+`frequency = 0` holds: the phase freezes and the output holds a finite constant. It
+is a value you will hit whether or not you mean to, because connecting a node to an
+`AudioParam` writes 0 into it first — so put the base pitch back after connecting.
+
+For vibrato, use `detune` instead: it is in cents, so it is musically proportional.
+
+## Phase 0, polarity, and two samples of latency
+
+Three conventions worth knowing before patching:
+
+- **Phase 0 is the step** for the sawtooth and the square, and the triangle's
+  **minimum**. That is what lets one `width` parameter mean both pulse width and peak
+  position — in both families the second discontinuity sits at `width`.
+- **The square is `+1` for the first half of the cycle**, matching the Web Audio
+  spec. It used to be inverted, so a patch that mixes this with a native oscillator,
+  or feeds a rectifier or wave shaper, will sound different.
+- **The output is delayed by two samples**, about 45 µs at 44.1 kHz. The
+  band-limiting correction spans ±2 samples around a discontinuity, so it is written
+  into samples already computed but not yet emitted — which is what places it exactly
+  under fast modulation. It is constant, and it is the only latency in synthlet.
 
 ## References
 
-- [PolyBLEP by Tale](https://www.taletn.com/reaper/mono_synth/)
+The design follows the polynomial band-limiting literature. The quadratic PolyBLEP
+residual is Välimäki & Huovilainen, _Antialiasing Oscillators in Subtractive
+Synthesis_, IEEE Signal Process. Mag. 24(2), 2007; the 4-point B-spline order is
+Välimäki, Pekonen & Nam, JASA 131(1), 2012; BLAMP — correcting corners rather than
+steps — is Kleimola & Välimäki, IEEE Signal Process. Lett. 19(2), 2012 and Esqueda,
+Välimäki & Bilbao, _Rounding Corners with BLAMP_, DAFx-16, 2016; hard sync and its C¹
+caution for the triangle are Brandt, _Hard Sync Without Aliasing_, ICMC 2001.
+
+The residuals in the package were derived by integrating the cardinal B-spline, not
+transcribed from any table. Full attribution, including the one thing that does
+derive from third-party source, is in
+[THIRD-PARTY-LICENSES.md](https://github.com/danigb/synthlet/blob/main/THIRD-PARTY-LICENSES.md).

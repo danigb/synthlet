@@ -141,9 +141,46 @@ dedication). No notice is required; the credit is a courtesy.
 
 ### @synthlet/polyblep-oscillator
 
-The original 2-point PolyBLEP correction followed
-[sndkit](https://paulbatchelor.github.io/sndkit/blep/) by Paul Batchelor, under
-The Unlicense. No notice required.
+This package derives **structure** from one third-party source and **ideas** from
+five papers. The two are recorded separately because they carry different
+obligations: the first owes a notice, the second owes a citation.
+
+**What it cites.** The literature the design follows, and what each paper is
+responsible for:
+
+| What | Citation |
+| --- | --- |
+| The 2-point quadratic PolyBLEP residual | V. Välimäki and A. Huovilainen, *Antialiasing Oscillators in Subtractive Synthesis*, IEEE Signal Process. Mag. 24(2), pp. 116–125, 2007 |
+| The 4-point B-spline order, and the cost/benefit argument | V. Välimäki, J. Pekonen and J. Nam, *Perceptually Informed Synthesis of Bandlimited Classical Waveforms Using Integrated Polynomial Interpolation*, J. Acoust. Soc. Am. 131(1), pp. 974–986, 2012 (Tables VII–IX) |
+| BLAMP — correcting slope discontinuities | J. Kleimola and V. Välimäki, *Reducing Aliasing from Synthetic Audio Signals Using Polynomial Transition Regions*, IEEE Signal Process. Lett. 19(2), pp. 67–70, 2012; F. Esqueda, V. Välimäki and S. Bilbao, *Rounding Corners with BLAMP*, Proc. DAFx-16, pp. 121–128, 2016 |
+| The two rules that make polynomial hard sync work | Kleimola and Välimäki 2012, §IV |
+| The C¹ caution for a synced triangle, and MinBLEP | E. Brandt, *Hard Sync Without Aliasing*, Proc. ICMC, 2001 |
+
+**The residuals were derived, not transcribed.** `src/_blep.ts` obtains its BLEP
+and BLAMP residuals by integrating the centred cardinal B-spline once and twice,
+from the spline's definition; the derivation is in that file's header and
+`src/blep.test.ts` asserts its three characteristic properties (continuity at the
+segment joins, the value at the origin, and zero area). **No coefficient table
+was copied out of any paper.** Välimäki, Pekonen & Nam's own Tables VII–IX were
+deliberately not transcribed: an earlier attempt to implement them from a
+PDF→markdown conversion produced worse-than-naive aliasing, while the same
+framework reproduced a hand-derived residual to the decimal. The
+table above is therefore **intellectual credit, not the provenance of code** — the
+same standing as the `@synthlet/flex-audio-buffer-source` row under
+[Provenance of every other package](#provenance-of-every-other-package). Brandt
+2001 in particular contains no polynomial at all; it is a windowed-sinc table BLEP
+plus MinBLEP, and it is cited here for hard sync, not for the residual.
+
+**Retired: the sndkit credit.** This entry used to read, in full: "The PolyBLEP
+correction follows sndkit by Paul Batchelor, under The Unlicense. No notice
+required." The 2-point correction it described was deleted when the oscillator was
+rewritten on a discontinuity scheduler with 4-point B-spline residuals, so there is
+no longer any code the credit could attach to. sndkit is released under The
+Unlicense, a public domain dedication, so no notice was ever owed and none lapses
+with the removal.
+
+**What it derives from source** is below, and it is the only part of this entry
+that carries a licence obligation.
 
 The oscillator's **scheduling structure** derives from
 [stmlib / eurorack](https://github.com/pichenettes/eurorack) by Mutable
