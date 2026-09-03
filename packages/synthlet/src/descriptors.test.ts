@@ -28,6 +28,7 @@ const EXPECTED = [
   "Clock",
   "DattorroReverb",
   "Euclid",
+  "FlexAudioBufferSource",
   "Gain",
   "Granite",
   "Impulse",

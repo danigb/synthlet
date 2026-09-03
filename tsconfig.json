@@ -8,7 +8,21 @@
     "outDir": "./dist",
     "target": "esnext",
     "esModuleInterop": true,
-    "moduleResolution": "node"
+    "moduleResolution": "node",
+    // Every package compiles worklet code and main-thread code together, so
+    // both `@types/audioworklet` and `lib.dom.d.ts` are in scope at once.
+    // Those two are not meant to meet: the AudioWorklet global scope is a
+    // *different* environment, and its types redeclare DOM globals (`URL`,
+    // `AbortSignal`, `ReadableStreamBYOBReader`) with the narrower signatures
+    // that scope actually has. Checking them against each other reports five
+    // conflicts in `node_modules` and nothing about this repository's code.
+    //
+    // Resolving it properly means compiling the two halves separately - a
+    // worklet tsconfig with no DOM lib for `worklet.ts`/`dsp.ts`, a DOM one
+    // for `index.ts` - across all 23 packages, with the build scripts split to
+    // match. Until that is worth doing, skip the declaration check: with it
+    // on, `tsc --noEmit` reports zero errors over the whole monorepo.
+    "skipLibCheck": true
   },
   "include": ["packages/**/*.ts", "../../packages/**/*"],
   "exclude": ["node_modules", "**/dist/**/*"]
