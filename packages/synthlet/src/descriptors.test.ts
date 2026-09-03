@@ -107,15 +107,15 @@ describe("descriptors", () => {
     expect(aRate.map((d) => d.name)).toEqual(["frequency"]);
   });
 
-  it("keeps PolyblepOscillator's frequency and detune at a-rate", () => {
-    // Everything but `type` is a signal: audio-rate FM and sample-accurate
-    // pitch, instead of the 344.5 Hz control rate one value per render quantum
-    // gives. `type` selects a waveform, so it stays k-rate and its changes are
-    // scheduled as a step by the DSP.
+  it("keeps PolyblepOscillator's frequency, detune and width at a-rate", () => {
+    // Everything but `type` is a signal: audio-rate FM, sample-accurate pitch
+    // and pulse-width modulation, instead of the 344.5 Hz control rate one
+    // value per render quantum gives. `type` selects a waveform, so it stays
+    // k-rate and its changes are scheduled as a step by the DSP.
     const aRate = synthlet.PolyblepOscillator.descriptors.filter(
       (d) => d.automationRate === "a-rate",
     );
-    expect(aRate.map((d) => d.name)).toEqual(["frequency", "detune"]);
+    expect(aRate.map((d) => d.name)).toEqual(["frequency", "detune", "width"]);
   });
 });
 

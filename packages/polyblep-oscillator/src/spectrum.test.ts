@@ -89,8 +89,11 @@ const fourPointSawtooth = ({ f0, sampleRate }: RenderContext) => {
   const generate = createPolyblepOscillator(sampleRate);
   const frequency = new Float32Array([f0]);
   const detune = new Float32Array([0]);
+  // The sawtooth ignores `width`; it is passed because the signature requires
+  // it, not because this row depends on it.
+  const width = new Float32Array([0.5]);
   return (block: Float32Array) =>
-    generate(block, PolyblepOscillatorType.Sawtooth, frequency, detune);
+    generate(block, PolyblepOscillatorType.Sawtooth, frequency, detune, width);
 };
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
@@ -136,9 +139,9 @@ describe("the alias-SNR metric", () => {
 
   it("ignores a constant offset when asked to", () => {
     // Bin 0 is a noise bin, so a waveform with genuine DC reads far worse than
-    // it is. `removeDC` is what ticket 05's pulse wave will need, whose mean is
-    // `2 * width - 1` by construction; asserted here rather than shipped
-    // untested.
+    // it is. `removeDC` is what the pulse wave needs, whose mean is
+    // `2 * width - 1` by construction; every pulse row in `dsp.test.ts`'s
+    // `WIDTH_ALIAS_FLOORS` is measured through it.
     const f0 = 440;
     const clean = render(twoPointSawtooth, { f0, sampleRate: SAMPLE_RATE });
     const offset = clean.map((sample) => sample + 0.3);

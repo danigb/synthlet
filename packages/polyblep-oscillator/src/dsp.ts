@@ -33,7 +33,7 @@ import { blampResidual4, blepResidual4 } from "./_blep";
  * ## The phase convention
  *
  * Phase 0 is the step for the sawtooth and the square, and the triangle's
- * **minimum**. That is what will make `width` mean the same thing for both
+ * **minimum**. That is what makes `width` mean the same thing for both
  * families: the second discontinuity sits at `width`, and moving it turns the
  * square into a pulse and the triangle into a saw through the same parameter.
  *
@@ -56,10 +56,14 @@ export enum PolyblepOscillatorType {
 const TAU = Math.PI * 2;
 
 /**
- * Where the second discontinuity sits, in cycles. Fixed at half a cycle until
- * `width` becomes a parameter; named rather than inlined so that diff is small.
+ * The floor `width` is clamped to when the increment cannot supply one.
+ *
+ * `clampWidth`'s real bound is `2 * |inc|`, which is zero at `inc = 0` - and the
+ * triangle divides by `width` and by `1 - width`. A denominator that is a
+ * parameter needs a floor that does not depend on another parameter: the
+ * audit's Architecture Insight 3.
  */
-const WIDTH = 0.5;
+const MIN_WIDTH = 1e-3;
 
 /**
  * Stages caps the increment at 0.25 cycles/sample (`kMaxFrequency`,
@@ -76,19 +80,54 @@ const WIDTH = 0.5;
 const MAX_INC = 0.25;
 
 /**
+ * `width`, made safe for the sample about to be generated.
+ *
+ * `2 * |inc|` keeps the two discontinuities at least two samples apart, which
+ * is the 4-point kernel's support: any closer and the two corrections overlap.
+ * Stages spells the same bound `CONSTRAIN(pw, fabsf(frequency) * 2.0f, 1.0f -
+ * 2.0f * fabsf(frequency))` at `refs/eurorack/stages/oscillator.h:125,149`.
+ *
+ * It also bounds the triangle's corner, which is the less obvious half. At
+ * `w = 2|inc|` the per-sample corner `(2/w + 2/(1 - w)) * |inc|` is
+ * `1 + 2|inc|`, so it can never exceed 1.5 however low the frequency goes.
+ * Without the bound it grows without limit as `w -> 0` and a skewed triangle
+ * explodes.
+ *
+ * `Math.abs` rather than the raw increment because ticket 07 makes it negative.
+ * Comparisons rather than `Math.min`/`Math.max` for `increment()`'s reason:
+ * they resolve a NaN to the lower bound instead of propagating it through the
+ * pending ring, which would poison the node for good.
+ *
+ * `|inc| <= MAX_INC` is what keeps `low <= 1 - low`. At the maximum increment
+ * the interval degenerates to the single point 0.5; it never inverts.
+ */
+function clampWidth(requested: number, inc: number): number {
+  const margin = inc < 0 ? -2 * inc : 2 * inc;
+  const low = margin > MIN_WIDTH ? margin : MIN_WIDTH;
+  const high = 1 - low;
+  return requested > low ? (requested < high ? requested : high) : low;
+}
+
+/**
  * A waveform is a naive function plus where its discontinuities fall.
  *
- * `step*` is the signed jump in the naive function; `slope*` is the change in
- * its slope per *cycle*, which the scheduler multiplies by the increment to get
- * the per-sample change `blampResidual4` is defined against. A unit triangle
- * runs at `+/-4` per cycle, so its corners are `+8` and `-8`.
+ * `step*` is the signed jump in the naive function. `slope*` is the *sign* of
+ * the corner there - `+1`, `-1` or `0` - which the scheduler multiplies by the
+ * width-dependent magnitude `(2/w + 2/(1 - w)) * inc`, the per-sample slope
+ * change `blampResidual4` is defined against. That magnitude is `8 * inc` at
+ * `width = 0.5`, which is where ticket 04's `+/-8` came from: a symmetric unit
+ * triangle runs at `+/-4` per cycle.
+ *
+ * `naive` takes the width as well as the phase. The sine and the sawtooth
+ * ignore it; a "skewed sawtooth" is the triangle at `width -> 1`, so a second
+ * spelling of it would only be another branch.
  */
 type Waveform = {
-  naive: (phase: number) => number;
+  naive: (phase: number, width: number) => number;
   /** At phase 0. */
   step0: number;
   slope0: number;
-  /** At phase `WIDTH`. */
+  /** At phase `width`. */
   stepH: number;
   slopeH: number;
 };
@@ -103,14 +142,25 @@ const WAVEFORMS: readonly Waveform[] = [
     stepH: 0,
     slopeH: 0,
   },
-  // Triangle: minimum at phase 0, maximum at WIDTH. Corrected directly, with no
-  // integrator and no DC blocker - it peaks at 0.999 at 20 Hz.
+  // Triangle: minimum at phase 0, maximum at `width`. Corrected directly, with
+  // no integrator and no DC blocker - it peaks at 0.999 at 20 Hz.
+  //
+  // The falling branch is `1 - 2 * (phase - width) / (1 - width)` rearranged.
+  // The two are equal in exact arithmetic; this spelling is also equal *in
+  // binary floating point* to ticket 04's `3 - 4 * phase` when `width` is 0.5,
+  // because `x -> 2x` is exact, so `2 * fl(1.5 - 2p)` is `fl(3 - 4p)`. That is
+  // what makes "width 0.5 reproduces the symmetric triangle exactly" a claim
+  // about bits rather than about tolerances. The rising branch is exactly
+  // `4 * phase - 1` at 0.5 for the same reason.
   {
-    naive: (phase) => (phase < WIDTH ? 4 * phase - 1 : 3 - 4 * phase),
+    naive: (phase, width) =>
+      phase < width
+        ? (2 * phase) / width - 1
+        : (1 + width - 2 * phase) / (1 - width),
     step0: 0,
-    slope0: 8,
+    slope0: 1,
     stepH: 0,
-    slopeH: -8,
+    slopeH: -1,
   },
   // Sawtooth: one step of -2 as the phase wraps.
   {
@@ -120,9 +170,10 @@ const WAVEFORMS: readonly Waveform[] = [
     stepH: 0,
     slopeH: 0,
   },
-  // Square: +1 for the first half of the cycle, per the Web Audio spec.
+  // Square: +1 until `width`, per the Web Audio spec. A pulse wave, and its
+  // mean is `2 * width - 1` by construction - real DC, not a bug to filter out.
   {
-    naive: (phase) => (phase < WIDTH ? 1 : -1),
+    naive: (phase, width) => (phase < width ? 1 : -1),
     step0: 2,
     slope0: 0,
     stepH: -2,
@@ -147,8 +198,20 @@ export function createPolyblepOscillator(sampleRate: number) {
   let write = 0;
   let phase = 0;
 
-  /** `phase < WIDTH` on the previous sample: Stages' `high_`. */
+  /** `phase < width` on the previous sample: Stages' `high_`. */
   let high = true;
+
+  /**
+   * The clamped `width` in force on the previous sample.
+   *
+   * It is state for the same reason `prevWave` is. A crossing detected on
+   * sample `i` is the zero of `phase(t) - width(t)`, not of
+   * `phase(t) - width_i`: with `width` at a-rate the edge can be crossed
+   * because the *width* moved, and then the crossing belongs partly to the
+   * previous sample's width. `step` uses it to compute the closing speed the
+   * sub-sample age is measured against.
+   */
+  let width = 0.5;
 
   /**
    * The waveform in force on the previous sample. A crossing detected on sample
@@ -170,8 +233,8 @@ export function createPolyblepOscillator(sampleRate: number) {
   /**
    * Superpose one discontinuity's correction, `d` samples after it happened.
    *
-   * `d` is in `[0, 1)`, so `k + d` sweeps `[-2, -1)`, `[-1, 0)`, `[0, 1)` and
-   * `[1, 2)` - the 4-point support, and exactly the four live slots. Two
+   * `d` is in `[0, 1]`, so `k + d` sweeps `[-2, -1]`, `[-1, 0]`, `[0, 1]` and
+   * `[1, 2]` - the 4-point support, and exactly the four live slots. Two
    * discontinuities within two samples of each other simply add, so there is no
    * case analysis anywhere in this file.
    *
@@ -192,37 +255,73 @@ export function createPolyblepOscillator(sampleRate: number) {
   }
 
   /**
-   * The same, for a discontinuity the phase has just crossed: `overshoot` is
-   * how far past it the phase now sits, and `slopePerCycle` is the waveform's
-   * slope change per cycle rather than per sample.
+   * The same, for a discontinuity that has just been crossed. `overshoot` is
+   * how far past it the crossed quantity now sits and `rate` is how fast that
+   * quantity is closing, so `overshoot / rate` is the crossing's age in
+   * samples.
    *
-   * **The division here is the only one in the generator**, and it cannot
-   * divide by zero: it runs only from inside a crossing branch, and a crossing
-   * requires the phase to have moved, which requires a non-zero increment. A
-   * held `frequency = 0` never reaches it. (The file's two other divisions,
-   * `1 / sampleRate` and `cents / 1200`, are by constants.)
+   * For the wrap, both are about the phase alone and `rate` is the increment.
+   * For the edge at `width` the crossed quantity is `phase - width`, which
+   * moves at `inc - deltaWidth`: with the width held that is the increment to
+   * the bit, and with the width moving it is the difference between a
+   * correction placed where the edge really was and one placed by a divisor
+   * that is not the closing speed.
+   *
+   * **The division here is the only one in the generator** (the file's two
+   * others, `1 / sampleRate` and `cents / 1200`, are by constants), and the
+   * clamp is what makes it total. In every ordinary case the quotient is
+   * already in `[0, 1)` and the clamp is a no-op; it exists so that the one
+   * degenerate case a moving width can reach - a held `frequency = 0` sitting
+   * exactly on the width, `0 / 0` - resolves to 0 rather than writing a NaN
+   * into the pending ring, from which nothing recovers.
    */
   function addCrossing(
     overshoot: number,
-    inc: number,
+    rate: number,
     stepHeight: number,
-    slopePerCycle: number,
+    slopeChange: number,
   ) {
-    addDiscontinuity(overshoot / inc, stepHeight, slopePerCycle * inc);
+    const raw = overshoot / rate;
+    const d = raw > 0 ? (raw < 1 ? raw : 1) : 0;
+    addDiscontinuity(d, stepHeight, slopeChange);
   }
 
   /** One sample: advance, schedule, accumulate, emit `slot(i - 2)`. */
-  function step(inc: number, wave: Waveform): number {
+  function step(inc: number, wave: Waveform, requestedWidth: number): number {
     const previous = prevWave;
+    const previousWidth = width;
+    const w = clampWidth(requestedWidth, inc);
+    width = w;
     phase += inc;
 
-    // The discontinuity at WIDTH, tested before the wrap so `phase - WIDTH` is
-    // still measured in the same cycle. `MAX_INC` guarantees one sample cannot
-    // step over both this and the wrap, so at most one branch fires.
-    if (high !== phase < WIDTH) {
-      high = phase < WIDTH;
-      if (previous.stepH !== 0 || previous.slopeH !== 0)
-        addCrossing(phase - WIDTH, inc, previous.stepH, previous.slopeH);
+    // The triangle's corner, per sample: `8 * inc` at `w = 0.5`, exactly.
+    // Stages' `(slope_up + slope_down) * frequency`,
+    // `refs/eurorack/stages/oscillator.h:189,200`.
+    const corner = (2 / w + 2 / (1 - w)) * inc;
+
+    // The discontinuity at `width`, tested before the wrap so `phase - width`
+    // is still measured in the same cycle. `MAX_INC` and the width clamp
+    // together guarantee one sample cannot step over both this and the wrap.
+    //
+    // Stages' `high_ ^ (phase_ < pw)`
+    // (`refs/eurorack/stages/oscillator.h:187,217`): one test that fires both
+    // when the phase advances past the width and when the width retreats past
+    // the phase. In the second case the naive function goes *back* to its first
+    // branch, so the jump is the negative of the one going forwards - which
+    // ticket 04 never needed, because only the phase could move.
+    const g = phase - w;
+    const nowHigh = g < 0;
+    if (high !== nowHigh) {
+      high = nowHigh;
+      if (previous.stepH !== 0 || previous.slopeH !== 0) {
+        const direction = nowHigh ? -1 : 1;
+        addCrossing(
+          g,
+          inc - (w - previousWidth),
+          direction * previous.stepH,
+          direction * previous.slopeH * corner,
+        );
+      }
     }
 
     // The discontinuity at phase 0.
@@ -230,18 +329,18 @@ export function createPolyblepOscillator(sampleRate: number) {
       phase -= 1;
       high = true;
       if (previous.step0 !== 0 || previous.slope0 !== 0)
-        addCrossing(phase, inc, previous.step0, previous.slope0);
+        addCrossing(phase, inc, previous.step0, previous.slope0 * corner);
     }
 
     // A type change is a discontinuity too: `type` is k-rate, so it lands on a
     // block boundary as a step of the difference between the two waveforms at
     // this phase. Switching mid-note is click-free instead of a hard jump.
     if (wave !== previous) {
-      addDiscontinuity(0, wave.naive(phase) - previous.naive(phase), 0);
+      addDiscontinuity(0, wave.naive(phase, w) - previous.naive(phase, w), 0);
       prevWave = wave;
     }
 
-    pending[write] += wave.naive(phase);
+    pending[write] += wave.naive(phase, w);
 
     // `slot(i - 2)` is complete: everything whose support reaches it has been
     // written. Emit it and hand the freed slot forward as `slot(i + 2)`.
@@ -256,6 +355,7 @@ export function createPolyblepOscillator(sampleRate: number) {
     waveformType: number,
     frequency: Float32Array,
     detune: Float32Array,
+    widthParam: Float32Array,
   ) {
     // `type` is an AudioParam, so it arrives as a float. Round to the nearest
     // waveform and clamp; the comparisons resolve a NaN to 0 rather than
@@ -269,18 +369,26 @@ export function createPolyblepOscillator(sampleRate: number) {
     const length = output.length;
     const freqIsARate = frequency.length === length;
     const detuneIsARate = detune.length === length;
+    const widthIsARate = widthParam.length === length;
 
     if (!primed) {
       primed = true;
       prevWave = wave;
       const inc = increment(frequency[0], detune[0]);
+      // Seed the width too, or the first sample compares its edge against the
+      // 0.5 this closure was constructed with and schedules a crossing that
+      // never happened.
+      width = clampWidth(widthParam[0], inc);
       // Two samples of the ring are filled before the first is emitted, so the
       // first `process()` returns real output rather than two zeros. Starting
       // one increment behind puts sample `n` at phase `n * inc`, the convention
       // the harnesses and `phase` (ticket 06) both assume.
       phase = -inc;
-      step(inc, wave);
-      step(inc, wave);
+      // Stated rather than left at its initial `true`: `high` means
+      // `phase < width`, and ticket 07 makes `-inc` positive.
+      high = phase < width;
+      step(inc, wave, widthParam[0]);
+      step(inc, wave, widthParam[0]);
     }
 
     for (let i = 0; i < length; i++) {
@@ -290,6 +398,7 @@ export function createPolyblepOscillator(sampleRate: number) {
           detuneIsARate ? detune[i] : detune[0],
         ),
         wave,
+        widthIsARate ? widthParam[i] : widthParam[0],
       );
     }
   };

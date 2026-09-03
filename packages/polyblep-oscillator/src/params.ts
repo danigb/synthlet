@@ -33,4 +33,16 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1200,
     automationRate: "a-rate",
   },
+  // Pulse width on the square, peak position on the triangle; ignored by the
+  // sine and the sawtooth. The DSP clamps it away from 0 and 1 per sample, by
+  // `2 * |increment|`, so it cannot reach either end in the output even though
+  // the declared range includes them. That is the right trade: the declared
+  // range is the one a UI slider should offer, and the DSP is total across it.
+  {
+    name: "width",
+    defaultValue: 0.5,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "a-rate",
+  },
 ];

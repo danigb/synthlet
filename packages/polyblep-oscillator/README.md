@@ -25,14 +25,40 @@ accident of the implementation: it is what lets one `width` parameter mean pulse
 width on the square and peak position on the triangle, because in both families
 the second discontinuity sits at `width`.
 
-The square is `+1` for the first half of the cycle, matching the Web Audio
-spec's `OscillatorNode`. It used to be `-1`, so a patch that mixes this
-oscillator with a native one, or that feeds a rectifier or a wave shaper, will
-sound different.
+The square is `+1` until `width`, matching the Web Audio spec's
+`OscillatorNode`. It used to be `-1`, so a patch that mixes this oscillator with
+a native one, or that feeds a rectifier or a wave shaper, will sound different.
 
-`frequency` and `detune` are **a-rate**, so both take an audio-rate signal and
-are read per sample. `type` is k-rate; changing it mid-note is band-limited like
-any other discontinuity, so it does not click.
+`frequency`, `detune` and `width` are **a-rate**, so all three take an
+audio-rate signal and are read per sample. `type` is k-rate; changing it
+mid-note is band-limited like any other discontinuity, so it does not click.
+
+## Width
+
+`width` (0…1, default 0.5) means two related things, and the sine and the
+sawtooth ignore both:
+
+| `type`     | `width` is        | at 0.5               | towards 0 / 1                     |
+| ---------- | ----------------- | -------------------- | --------------------------------- |
+| `Triangle` | the peak position | a symmetric triangle | a rising or falling ramp          |
+| `Square`   | the pulse width   | a square wave        | a narrow pulse of either polarity |
+
+There is no separate "skewed sawtooth": it is the triangle at `width → 1`, so
+the morph is already reachable and a second spelling would only be another
+branch.
+
+**A pulse wave has a real DC component of `2 · width − 1`.** That is correct
+behaviour and not something to filter out — a 10% pulse sits at −0.8 and swings
+to +1, which is what makes pulse-width modulation move the way it does. If a
+patch needs it removed, remove it downstream.
+
+The DSP clamps `width` to `[2·|increment|, 1 − 2·|increment|]` every sample, so
+it never quite reaches 0 or 1. Two samples is the band-limiting kernel's
+support, and closer than that the two discontinuities' corrections overlap; on
+the triangle the same bound is what keeps the corner finite as the short ramp
+gets short. The declared range is still `0…1`, because that is the range a UI
+slider should offer, and the DSP is total across it. In practice the clamp only
+bites in the top octaves: at 440 Hz it allows a 2% pulse, at 4 kHz an 18% one.
 
 ## Latency
 

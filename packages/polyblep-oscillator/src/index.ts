@@ -12,6 +12,7 @@ export type PolyblepOscillatorInputs = {
   type?: ParamInput;
   frequency?: ParamInput;
   detune?: ParamInput;
+  width?: ParamInput;
 };
 
 /**
@@ -21,6 +22,7 @@ export type PolyblepOscillatorWorkletNode = AudioWorkletNode & {
   type: AudioParam;
   frequency: AudioParam;
   detune: AudioParam;
+  width: AudioParam;
   dispose(): void;
 };
 

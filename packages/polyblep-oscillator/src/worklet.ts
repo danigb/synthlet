@@ -20,9 +20,15 @@ export class PolyBLEProcessor extends AudioWorkletProcessor {
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     let output = outputs[0][0];
-    // `frequency` and `detune` are a-rate: pass the whole array through and let
-    // the DSP branch on its length.
-    this.g(output, params.type[0], params.frequency, params.detune);
+    // `frequency`, `detune` and `width` are a-rate: pass the whole array
+    // through and let the DSP branch on its length.
+    this.g(
+      output,
+      params.type[0],
+      params.frequency,
+      params.detune,
+      params.width,
+    );
     return this.r;
   }
 

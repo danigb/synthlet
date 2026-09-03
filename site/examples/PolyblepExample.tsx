@@ -56,6 +56,14 @@ function Example() {
           max={1000}
           param={synth.lfo.gain}
         />
+
+        <Slider
+          label="Width"
+          inputClassName="col-span-2"
+          min={0}
+          max={1}
+          param={synth.osc.width}
+        />
       </div>
       <div className="flex px-1 pt-2 mt-2 border-t border-fd-border gap-4">
         <Slider
