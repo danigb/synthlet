@@ -1,6 +1,7 @@
 // TODO: Add more waveforms: https://gist.github.com/danigb/c86f94ad5145f2367fb4880c227824ec
 
 import { blampResidual4, blepResidual4 } from "./_blep";
+import { createGateDetector } from "./_gate";
 
 /*
  * A band-limited oscillator built on one primitive.
@@ -44,6 +45,29 @@ import { blampResidual4, blepResidual4 } from "./_blep";
  * where a discontinuity will fall from the increment at the time it is
  * detected; under fast FM the increment has changed by the time the correction
  * lands, and it lands wrong. A scheduler that writes backwards cannot.
+ *
+ * ## Hard sync
+ *
+ * A rising edge on `sync` restarts the phase at `phaseStart`. That is a step
+ * *and* a slope change at a sub-sample instant, which is exactly one
+ * `addDiscontinuity` call - so the triangle, whose reset produces a corner as
+ * well as a jump, is the same line of code as the sawtooth rather than the
+ * separate piece of work Brandt's section 6.3 warns it would be.
+ *
+ * A sample that carries a reset is **two sub-advances**, not one: the phase
+ * runs to the reset instant, jumps, and runs on to the sample. Both halves are
+ * walked by `move`, so a wrap or a width edge on either side of the reset is
+ * corrected exactly once and at its own age.
+ *
+ * Advancing once and resetting afterwards - the obvious reading - is wrong in
+ * both directions at the same time. The pre-reset trajectory schedules
+ * crossings the reset pre-empted, and the post-reset one is never walked at
+ * all, so the crossings it really makes are never scheduled. Neither is exotic:
+ * at `phaseStart = 0` with a negative increment the restart wraps immediately,
+ * every time. Measured over 432 settings (4 master frequencies, 4 waveforms, 9
+ * slave frequencies, 3 widths), the single-advance version peaks at **2.6190**
+ * against **1.0037** for this one, and reaches 2.0000 with no negative
+ * frequency anywhere in the grid.
  */
 
 export enum PolyblepOscillatorType {
@@ -128,9 +152,17 @@ function clampWidth(requested: number, inc: number): number {
  * `naive` takes the width as well as the phase. The sine and the sawtooth
  * ignore it; a "skewed sawtooth" is the triangle at `width -> 1`, so a second
  * spelling of it would only be another branch.
+ *
+ * `slope` is `d naive / d phase`, which the *sync* reset needs and the two
+ * fixed discontinuities do not: a reset lands at an arbitrary pair of phases,
+ * so its corner is the difference of two slopes rather than one of the four
+ * signs above. The two spellings agree where they overlap - for the triangle
+ * `slope(0-) - slope(0+)` is `-(2/w + 2/(1-w))`, which is `slope0` times the
+ * magnitude `corner` carries - and `dsp.test.ts` asserts it.
  */
 type Waveform = {
   naive: (phase: number, width: number) => number;
+  slope: (phase: number, width: number) => number;
   /** At phase 0. */
   step0: number;
   slope0: number;
@@ -141,9 +173,12 @@ type Waveform = {
 
 /** Indexed by `PolyblepOscillatorType`, in brightness order. */
 const WAVEFORMS: readonly Waveform[] = [
-  // Sine: no discontinuity anywhere, so no correction and no kernel evaluation.
+  // Sine: no discontinuity anywhere, so no correction and no kernel evaluation
+  // - until a `sync` reset splices two arbitrary points of it together, which
+  // is a step and a corner like any other. That is what `slope` is for here.
   {
     naive: (phase) => Math.sin(TAU * phase),
+    slope: (phase) => TAU * Math.cos(TAU * phase),
     step0: 0,
     slope0: 0,
     stepH: 0,
@@ -164,6 +199,7 @@ const WAVEFORMS: readonly Waveform[] = [
       phase < width
         ? (2 * phase) / width - 1
         : (1 + width - 2 * phase) / (1 - width),
+    slope: (phase, width) => (phase < width ? 2 / width : -2 / (1 - width)),
     step0: 0,
     slope0: 1,
     stepH: 0,
@@ -172,6 +208,7 @@ const WAVEFORMS: readonly Waveform[] = [
   // Sawtooth: one step of -2 as the phase wraps.
   {
     naive: (phase) => 2 * phase - 1,
+    slope: () => 2,
     step0: -2,
     slope0: 0,
     stepH: 0,
@@ -181,6 +218,7 @@ const WAVEFORMS: readonly Waveform[] = [
   // mean is `2 * width - 1` by construction - real DC, not a bug to filter out.
   {
     naive: (phase, width) => (phase < width ? 1 : -1),
+    slope: () => 0,
     step0: 2,
     slope0: 0,
     stepH: -2,
@@ -190,8 +228,81 @@ const WAVEFORMS: readonly Waveform[] = [
 
 const LAST_TYPE = WAVEFORMS.length - 1;
 
-export function createPolyblepOscillator(sampleRate: number) {
+/**
+ * The initial phase, normalised into `[0, 1)`.
+ *
+ * `"random"` draws once, here, at construction - which is the whole point of
+ * the option. Three detuned `PolyblepOscillator`s are a supersaw, and built
+ * from the same factory they otherwise start phase-locked and comb for the
+ * first few hundred milliseconds until they have drifted apart.
+ *
+ * A number is taken modulo 1, so `1.25` and `-0.75` both mean 0.25. Anything
+ * that is neither - a NaN, an infinity, an absent option - is 0, the phase this
+ * package has always started at, so an unset `phase` changes nothing.
+ */
+function initialPhase(phase: number | "random" | undefined): number {
+  if (phase === "random") return Math.random();
+  const wrapped = typeof phase === "number" ? phase - Math.floor(phase) : 0;
+  // A comparison rather than `isFinite` for `increment()`'s reason: every
+  // comparison against a NaN is false, so a NaN falls through to 0 instead of
+  // seeding a phase from which nothing recovers.
+  return wrapped >= 0 && wrapped < 1 ? wrapped : 0;
+}
+
+/**
+ * How many samples ago the gate crossed zero, given the previous sample and
+ * this one - the age `addDiscontinuity` takes, in `[0, 1)`.
+ *
+ * `createGateDetector` says *whether* an edge happened; this is the fraction,
+ * and it is this package's arithmetic rather than the shared contract's. With
+ * `g- <= 0` and `g > 0` the crossing lies at `f = -g- / (g - g-)` of the way
+ * from `i-1` to `i`, so it happened `1 - f` samples before sample `i`.
+ *
+ * **The two guards.**
+ *
+ * The denominator is `>= g > 0` for every pair the detector reports, so it can
+ * only fail to be positive if one of the samples is a NaN - which reaches here,
+ * because a NaN is neither `> 0` nor `<= 0` and so leaves the detector's own
+ * state untouched until a real sample arrives. `rise > 0` is the test that
+ * catches it, and it resolves to `f = 1`: an age of 0, this sample.
+ *
+ * An age of **exactly 1** is the one value the residual's convention cannot
+ * express - it places the discontinuity on the previous sample, whose naive
+ * value is the one from *before* the jump, and ticket 07 measured +/-2.000 on a
+ * +/-1 waveform three ways when it was allowed through. It is not a knife edge
+ * here, it is the *common* case: a gate written with `setValueAtTime` steps
+ * `0 -> 1` between two samples, `f` is 0 and the age is 1. Reading it as 0 is
+ * also the right answer for that gate - the first sample at or after the
+ * scheduled time is sample `i`, not sample `i-1` - so the guard and the
+ * semantics agree. The test is on the age rather than on `f` because
+ * `1 - 1e-17` is 1 in binary floating point.
+ */
+function crossingAge(previous: number, gate: number): number {
+  const rise = gate - previous;
+  const raw = rise > 0 ? -previous / rise : 1;
+  const fraction = raw > 0 ? (raw < 1 ? raw : 1) : 0;
+  const age = 1 - fraction;
+  return age < 1 ? age : 0;
+}
+
+/** `step`'s "no reset in this sample": any negative number does. */
+const NO_RESET = -1;
+
+export function createPolyblepOscillator(
+  sampleRate: number,
+  startPhase?: number | "random",
+) {
   const ivsr = 1 / sampleRate;
+
+  /**
+   * Where the phase starts, and where a `sync` reset restarts it.
+   *
+   * One value, two jobs, because they are the same thing: a reset is a rising
+   * edge on `sync` and `phase` is where it resets to. Fixed at construction -
+   * an `AudioParam` would imply it meant something continuously, and it is a
+   * one-time initial condition.
+   */
+  const phaseStart = initialPhase(startPhase);
 
   /*
    * The pending output. Four slots in a ring, holding the samples whose
@@ -226,12 +337,25 @@ export function createPolyblepOscillator(sampleRate: number) {
    * takes effect at `i`, so the crossing belongs to the *previous* waveform.
    * Correcting it with the new waveform's step instead double-counts: measured,
    * a switch to a square landing on its own falling edge produced a jump of
-   * 1.833 on a signal whose largest step is 0.917.
+   * 1.833 on a signal whose largest step is 0.917. A `sync` reset is scheduled
+   * against the same reference, for the same reason.
    */
   let prevWave = WAVEFORMS[PolyblepOscillatorType.Sawtooth];
 
   /** Set on the first `generate`, when the real increment is finally known. */
   let primed = false;
+
+  /**
+   * The gate contract, `scripts/_gate.ts`: a reset is the transition from
+   * non-positive to positive, so holding `sync` high fires once rather than
+   * once per sample, and a falling edge fires nothing.
+   *
+   * `previousSync` is separate because the detector deliberately does not carry
+   * it: it answers *whether* an edge happened, and the sub-sample fraction is
+   * this package's own arithmetic. See `crossingAge`.
+   */
+  const detectSync = createGateDetector();
+  let previousSync = 0;
 
   // Param cache: `Math.pow` only when the cents value actually moves.
   let $cents = 0;
@@ -281,30 +405,45 @@ export function createPolyblepOscillator(sampleRate: number) {
    * degenerate case a moving width can reach - a held `frequency = 0` sitting
    * exactly on the width, `0 / 0` - resolves to 0 rather than writing a NaN
    * into the pending ring, from which nothing recovers.
+   *
+   * `notAfter` is the age of a `sync` reset scheduled later in this sample. A
+   * crossing *younger* than it is one the pre-reset phase would have made after
+   * the reset had already happened, so it did not happen at all and is dropped.
+   * It is 0 for every sample that carries no reset, where `d >= 0` always holds
+   * and the test is not reachable.
    */
   function addCrossing(
     overshoot: number,
     rate: number,
     stepHeight: number,
     slopeChange: number,
+    notAfter: number,
   ) {
     const raw = overshoot / rate;
     const d = raw > 0 ? (raw < 1 ? raw : 1) : 0;
-    addDiscontinuity(d, stepHeight, slopeChange);
+    if (d >= notAfter) addDiscontinuity(d, stepHeight, slopeChange);
   }
 
-  /** One sample: advance, schedule, accumulate, emit `slot(i - 2)`. */
-  function step(inc: number, wave: Waveform, requestedWidth: number): number {
-    const previous = prevWave;
-    const previousWidth = width;
-    const w = clampWidth(requestedWidth, inc);
-    width = w;
-    phase += inc;
-
-    // The triangle's corner, per sample: `8 * inc` at `w = 0.5`, exactly.
-    // Stages' `(slope_up + slope_down) * frequency`,
-    // `refs/eurorack/stages/oscillator.h:189,200`.
-    const corner = (2 / w + 2 / (1 - w)) * inc;
+  /**
+   * Advance the phase by `span` and schedule whatever it crossed on the way.
+   *
+   * `span` is a *fraction* of `inc` - the whole of it for an ordinary sample,
+   * and the two parts either side of a `sync` reset for a sample that carries
+   * one. `inc` stays the full increment because it is the *rate*: `overshoot /
+   * inc` is an age in samples however far this call moved the phase, so a
+   * crossing found in either half is already dated from sample `i` and needs no
+   * offset.
+   */
+  function move(
+    span: number,
+    inc: number,
+    previous: Waveform,
+    previousWidth: number,
+    w: number,
+    corner: number,
+    notAfter: number,
+  ) {
+    phase += span;
 
     // The discontinuity at `width`, tested before the wrap so `phase - width`
     // is still measured in the same cycle. `MAX_INC` and the width clamp
@@ -337,12 +476,16 @@ export function createPolyblepOscillator(sampleRate: number) {
         // written against `inc` rather than against `rate` so that it cannot
         // touch a non-negative increment - clamping an age of 1 or more to 1 is
         // ticket 05's reading, for a `width` that has retreated past the phase,
-        // and this ticket does not renegotiate it.
+        // and this ticket does not renegotiate it. It is written against `inc`
+        // rather than against `span` for a second reason once `span` can be a
+        // fraction: the age this guard rejects is 1, not `span / inc`, and in
+        // the post-reset half of a sample an age of 1 is unreachable.
         addCrossing(
           inc < 0 ? (g > rate ? g : 0) : g,
           rate,
           direction * previous.stepH,
           direction * previous.slopeH * corner,
+          notAfter,
         );
       }
     }
@@ -379,7 +522,13 @@ export function createPolyblepOscillator(sampleRate: number) {
       phase -= 1;
       high = true;
       if (previous.step0 !== 0 || previous.slope0 !== 0)
-        addCrossing(phase, inc, previous.step0, previous.slope0 * corner);
+        addCrossing(
+          phase,
+          inc,
+          previous.step0,
+          previous.slope0 * corner,
+          notAfter,
+        );
     } else if (phase < 0) {
       // `phase / inc` is the age, and it reaches exactly 1 when the phase was
       // sitting precisely on 0 before this sample. An age of 1 puts the
@@ -409,7 +558,90 @@ export function createPolyblepOscillator(sampleRate: number) {
       // always lands below it.
       high = false;
       if (previous.step0 !== 0 || previous.slope0 !== 0)
-        addCrossing(overshoot, inc, -previous.step0, -previous.slope0 * corner);
+        addCrossing(
+          overshoot,
+          inc,
+          -previous.step0,
+          -previous.slope0 * corner,
+          notAfter,
+        );
+    }
+  }
+
+  /**
+   * One sample: advance, schedule, accumulate, emit `slot(i - 2)`.
+   *
+   * `resetAge` is how many samples ago a `sync` edge restarted the phase, or
+   * `NO_RESET`. A sample that carries one is walked in two parts - up to the
+   * reset instant and on from it - which is what keeps a wrap or a width edge
+   * on either side of the reset corrected exactly once, at its own age.
+   */
+  function step(
+    inc: number,
+    wave: Waveform,
+    requestedWidth: number,
+    resetAge: number,
+  ): number {
+    const previous = prevWave;
+    const previousWidth = width;
+    const w = clampWidth(requestedWidth, inc);
+    width = w;
+
+    // The triangle's corner, per sample: `8 * inc` at `w = 0.5`, exactly.
+    // Stages' `(slope_up + slope_down) * frequency`,
+    // `refs/eurorack/stages/oscillator.h:189,200`.
+    const corner = (2 / w + 2 / (1 - w)) * inc;
+
+    // Part one: the phase this sample would have had with no reset in it. A
+    // crossing younger than the reset is one the reset pre-empted, so `move`
+    // drops it rather than correcting a jump that never happened.
+    move(
+      inc,
+      inc,
+      previous,
+      previousWidth,
+      w,
+      corner,
+      resetAge > 0 ? resetAge : 0,
+    );
+
+    if (resetAge >= 0) {
+      // Kleimola & Valimaki's two rules, in this architecture.
+      //
+      // **Rule 1, scale by the actual height.** Unlike the fixed jump of 2 in a
+      // plain saw, a reset's height varies with the master/slave ratio: it is
+      // whatever the naive function does between the phase the slave had
+      // reached and the phase it restarts at. The corner is the difference of
+      // the two slopes, which is zero for the sawtooth and the square, and is
+      // not for the triangle or the sine - Brandt's section 6.3 handled rather
+      // than avoided, and the same `addDiscontinuity` call either way.
+      //
+      // `previous`, not `wave`, for `prevWave`'s reason: the reset happened at
+      // `i - resetAge`, at or before a `type` change that takes effect at `i`.
+      // The type change is then scheduled below against the *post*-reset phase,
+      // so the two compose into one path rather than double-counting.
+      const raw = phase - resetAge * inc;
+      const from = raw < 0 ? raw + 1 : raw >= 1 ? raw - 1 : raw;
+      addDiscontinuity(
+        resetAge,
+        previous.naive(phaseStart, w) - previous.naive(from, w),
+        (previous.slope(phaseStart, w) - previous.slope(from, w)) * inc,
+      );
+
+      // **Rule 2, restart at the proportional sub-sample offset.** The phase
+      // restarts at `phaseStart` *at the reset instant*, not at sample `i`, so
+      // part two carries it the remaining `resetAge * inc` - forwards or, under
+      // a negative increment, backwards, which needs no special case because
+      // `move` already wraps both ways.
+      //
+      // `high` is restated from the restart phase rather than left as part one
+      // left it, so that a reset which jumps across the width edge is corrected
+      // once, by the step above, instead of also being reported as an edge
+      // crossing. `previousWidth` is `w` in part two for the same reason: the
+      // width does not move inside a sample twice.
+      phase = phaseStart;
+      high = phase < w;
+      move(resetAge * inc, inc, previous, w, w, corner, 0);
     }
 
     // A type change is a discontinuity too: `type` is k-rate, so it lands on a
@@ -436,6 +668,7 @@ export function createPolyblepOscillator(sampleRate: number) {
     frequency: Float32Array,
     detune: Float32Array,
     widthParam: Float32Array,
+    syncParam?: Float32Array,
   ) {
     // `type` is an AudioParam, so it arrives as a float. Round to the nearest
     // waveform and clamp; the comparisons resolve a NaN to 0 rather than
@@ -450,6 +683,12 @@ export function createPolyblepOscillator(sampleRate: number) {
     const freqIsARate = frequency.length === length;
     const detuneIsARate = detune.length === length;
     const widthIsARate = widthParam.length === length;
+    // `sync` is optional so that a caller with nothing to sync to - every test
+    // written before this ticket, and `spectrum.ts`'s harness - takes the same
+    // path it always did, to the bit. A connected but silent gate takes the
+    // other path and produces the same samples, which `dsp.test.ts` asserts.
+    const synced = syncParam !== undefined && syncParam.length > 0;
+    const syncIsARate = synced && syncParam.length === length;
 
     if (!primed) {
       primed = true;
@@ -461,17 +700,30 @@ export function createPolyblepOscillator(sampleRate: number) {
       width = clampWidth(widthParam[0], inc);
       // Two samples of the ring are filled before the first is emitted, so the
       // first `process()` returns real output rather than two zeros. Starting
-      // one increment behind puts sample `n` at phase `n * inc`, the convention
-      // the harnesses and `phase` (ticket 06) both assume.
-      phase = -inc;
-      // Stated rather than left at its initial `true`: `high` means
-      // `phase < width`, and ticket 07 makes `-inc` positive.
-      high = phase < width;
-      step(inc, wave, widthParam[0]);
-      step(inc, wave, widthParam[0]);
+      // one increment behind `phaseStart` puts sample `n` at phase
+      // `phaseStart + n * inc`, the convention the harnesses assume and the one
+      // `phase` is declared in.
+      phase = phaseStart - inc;
+      // Stated rather than left at its initial `true`, and stated at
+      // `phaseStart` rather than at the phase one increment behind it: the
+      // oscillator's history begins where `phase` says it does, so a
+      // `phaseStart` that happens to sit just past the width edge must not open
+      // with a crossing of an edge it never crossed. At `phaseStart = 0` the
+      // two spellings agree - the width clamp keeps `w` above `|inc|` - which
+      // is what makes this line free of charge for every existing render.
+      high = phaseStart < width;
+      step(inc, wave, widthParam[0], NO_RESET);
+      step(inc, wave, widthParam[0], NO_RESET);
     }
 
     for (let i = 0; i < length; i++) {
+      let resetAge = NO_RESET;
+      if (synced) {
+        const gate = syncIsARate ? syncParam[i] : syncParam[0];
+        if (detectSync(gate) === true)
+          resetAge = crossingAge(previousSync, gate);
+        previousSync = gate;
+      }
       output[i] = step(
         increment(
           freqIsARate ? frequency[i] : frequency[0],
@@ -479,6 +731,7 @@ export function createPolyblepOscillator(sampleRate: number) {
         ),
         wave,
         widthIsARate ? widthParam[i] : widthParam[0],
+        resetAge,
       );
     }
   };

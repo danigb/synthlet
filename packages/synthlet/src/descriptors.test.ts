@@ -70,21 +70,31 @@ describe("descriptors", () => {
     ]);
   });
 
-  // One gate/trigger contract means one shape for the param that carries it:
-  // if these drifted apart, the same signal would drive some modules and not
-  // others - which is exactly the bug the shared detector removed.
+  // One gate/trigger contract means one *shape* for the param that carries it:
+  // if the ranges drifted apart, the same signal would drive some modules and
+  // not others - which is exactly the bug the shared detector removed.
+  //
+  // The **rate** is not part of that contract, and each entry declares its own.
+  // Every module here but one only has to decide which 128-frame block a
+  // trigger fired in, and k-rate says so. `PolyblepOscillator.sync` has to
+  // decide where *inside a sample*: it is hard sync, the reset is placed at the
+  // interpolated crossing instant, and a value read once per quantum would
+  // quantise it to 2.9 ms at 44.1 kHz. That is a per-module decision about
+  // resolution, not a weakening of the shared shape - which is why the shape
+  // below is still asserted whole.
   it("declares every trigger-like param the same way", () => {
-    const TRIGGERS: [string, string][] = [
-      ["AdAmp", "trigger"],
-      ["AdEnv", "trigger"],
-      ["AdsrAmp", "gate"],
-      ["AdsrEnv", "gate"],
-      ["Arp", "trigger"],
-      ["Impulse", "trigger"],
-      ["KarplusStrong", "trigger"],
+    const TRIGGERS: [string, string, ParamDescriptor["automationRate"]][] = [
+      ["AdAmp", "trigger", "k-rate"],
+      ["AdEnv", "trigger", "k-rate"],
+      ["AdsrAmp", "gate", "k-rate"],
+      ["AdsrEnv", "gate", "k-rate"],
+      ["Arp", "trigger", "k-rate"],
+      ["Impulse", "trigger", "k-rate"],
+      ["KarplusStrong", "trigger", "k-rate"],
+      ["PolyblepOscillator", "sync", "a-rate"],
     ];
 
-    for (const [name, param] of TRIGGERS) {
+    for (const [name, param, automationRate] of TRIGGERS) {
       const factory = (synthlet as any)[name] as Factory;
       const descriptor = factory.descriptors.find((d) => d.name === param);
       expect([name, descriptor]).toEqual([
@@ -94,7 +104,7 @@ describe("descriptors", () => {
           defaultValue: 0,
           minValue: 0,
           maxValue: 1,
-          automationRate: "k-rate",
+          automationRate,
         },
       ]);
     }
@@ -107,15 +117,21 @@ describe("descriptors", () => {
     expect(aRate.map((d) => d.name)).toEqual(["frequency"]);
   });
 
-  it("keeps PolyblepOscillator's frequency, detune and width at a-rate", () => {
-    // Everything but `type` is a signal: audio-rate FM, sample-accurate pitch
-    // and pulse-width modulation, instead of the 344.5 Hz control rate one
-    // value per render quantum gives. `type` selects a waveform, so it stays
-    // k-rate and its changes are scheduled as a step by the DSP.
+  it("keeps PolyblepOscillator's frequency, detune, width and sync at a-rate", () => {
+    // Everything but `type` is a signal: audio-rate FM, sample-accurate pitch,
+    // pulse-width modulation and sub-sample hard sync, instead of the 344.5 Hz
+    // control rate one value per render quantum gives. `type` selects a
+    // waveform, so it stays k-rate and its changes are scheduled as a step by
+    // the DSP.
     const aRate = synthlet.PolyblepOscillator.descriptors.filter(
       (d) => d.automationRate === "a-rate",
     );
-    expect(aRate.map((d) => d.name)).toEqual(["frequency", "detune", "width"]);
+    expect(aRate.map((d) => d.name)).toEqual([
+      "frequency",
+      "detune",
+      "width",
+      "sync",
+    ]);
   });
 });
 

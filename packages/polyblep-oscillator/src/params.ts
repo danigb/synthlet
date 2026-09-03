@@ -54,4 +54,31 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "a-rate",
   },
+  // Hard sync. A rising edge restarts the phase at the `phase` construction
+  // option, band-limited through the same primitive as every other
+  // discontinuity, so the reset is a step and - on the triangle and the sine -
+  // a corner rather than a splice.
+  //
+  // The shape is the library's one gate contract, `scripts/_gate.ts`: a gate is
+  // on while the signal is positive and a trigger is the transition from
+  // non-positive to positive, so `{ 0, 0, 1 }` is the shape every trigger-like
+  // param in synthlet declares and `packages/synthlet/src/descriptors.test.ts`
+  // is what keeps them in step.
+  //
+  // **The rate is not part of that contract, and this one is a-rate.** Every
+  // other trigger in the library only has to decide *which block* it fired in;
+  // this one has to decide *where inside a sample*, because that is the whole
+  // point - a value read once per 128-frame quantum quantises the reset to
+  // 2.9 ms at 44.1 kHz, which is a sync an octave and a half flat of where it
+  // was asked for. Callers follow the same rule the contract asks of every gate
+  // line: `setValueAtTime` or `linearRampToValueAtTime`, never
+  // `setTargetAtTime`, because a signal that asymptotes towards zero never
+  // reaches it and the gate would never re-arm.
+  {
+    name: "sync",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "a-rate",
+  },
 ];

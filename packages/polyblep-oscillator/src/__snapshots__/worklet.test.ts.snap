@@ -226,5 +226,12 @@ exports[`ProcessorNode has parameter descriptors 1`] = `
     "minValue": 0,
     "name": "width",
   },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "sync",
+  },
 ]
 `;

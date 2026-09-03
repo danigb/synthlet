@@ -60,6 +60,11 @@ describe("the gate contract", () => {
       "euclid",
       "impulse",
       "karplus-strong",
+      // The oscillator consumes one: a rising edge on `sync` is a hard-sync
+      // reset, and it detects that edge with the shared detector rather than a
+      // second one of its own. The sub-sample fraction it needs afterwards is
+      // its own arithmetic and stays in `dsp.ts`.
+      "polyblep-oscillator",
     ]);
   });
 });

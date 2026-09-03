@@ -9,9 +9,14 @@
 // in `dsp.test.ts`.
 //
 // The parameters arrive here as plain arrays of length 1, which is what a
-// k-rate `AudioParam` delivers; `frequency`, `detune` and `width` are declared
-// a-rate, and the DSP branches on the array's length, so this exercises the
-// k-rate path. `dsp.test.ts` asserts the two agree.
+// k-rate `AudioParam` delivers; `frequency`, `detune`, `width` and `sync` are
+// declared a-rate, and the DSP branches on the array's length, so this
+// exercises the k-rate path. `dsp.test.ts` asserts the two agree.
+//
+// `sync: [0]` is passed everywhere below and every waveform snapshot is
+// unchanged by it, which is the plumbing half of `dsp.test.ts`'s
+// `is bit-identical with a silent gate`: a gate that never goes positive costs
+// nothing and changes nothing.
 
 describe("ProcessorNode", () => {
   let Processor: any;
@@ -49,6 +54,7 @@ describe("ProcessorNode", () => {
       frequency: [2],
       detune: [0],
       width: [0.5],
+      sync: [0],
     };
     processor.process(inputs, outputs, params);
     expect(outputs).toMatchSnapshot();
@@ -61,12 +67,12 @@ describe("ProcessorNode", () => {
     const processor = new Processor();
     const silent = render(
       processor,
-      { type: [1], frequency: [0], detune: [0], width: [0.5] },
+      { type: [1], frequency: [0], detune: [0], width: [0.5], sync: [0] },
       1024,
     );
     const after = render(
       processor,
-      { type: [1], frequency: [440], detune: [0], width: [0.5] },
+      { type: [1], frequency: [440], detune: [0], width: [0.5], sync: [0] },
       1024,
     );
 
@@ -80,7 +86,7 @@ describe("ProcessorNode", () => {
     const at = (type: number) =>
       render(
         new Processor(),
-        { type: [type], frequency: [2], detune: [0], width: [0.5] },
+        { type: [type], frequency: [2], detune: [0], width: [0.5], sync: [0] },
         sampleRate,
       );
 
@@ -102,7 +108,13 @@ describe("ProcessorNode", () => {
       for (const type of [0, 1, 2, 3]) {
         const output = render(
           new Processor(),
-          { type: [type], frequency: [20000], detune: [0], width: [0.5] },
+          {
+            type: [type],
+            frequency: [20000],
+            detune: [0],
+            width: [0.5],
+            sync: [0],
+          },
           64,
         );
         for (const sample of output) {

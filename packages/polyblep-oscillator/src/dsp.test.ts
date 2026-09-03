@@ -1,3 +1,4 @@
+import { blampResidual4, blepResidual4 } from "./_blep";
 import { createPolyblepOscillator, PolyblepOscillatorType } from "./dsp";
 import { PARAMS } from "./params";
 import { aliasSnr, peak, render, RenderContext } from "./spectrum";
@@ -1180,4 +1181,836 @@ it("does not double-correct a moving pulse edge", () => {
       }
 
   expect(problems).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// Hard sync, and the phase it resets to
+// ---------------------------------------------------------------------------
+
+/**
+ * What a render driven by a master oscillator's gate is allowed to reach.
+ *
+ * Measured worst 1.0037 over 432 settings - 4 master frequencies, 4 waveforms,
+ * 9 slave frequencies including negative ones, 3 widths - and 1.0027 over the
+ * 288-setting non-integer-master grid below. `1.05` is the ticket's number and
+ * there is 4.6% of headroom under it.
+ *
+ * The comparison worth recording is against the same file with the reset done
+ * in **one** advance instead of two, which is how the ticket's checklist reads
+ * if taken literally: that peaks at **2.6190** over the same grid, and at
+ * 2.0000 with no negative frequency in it at all. See `dsp.ts`'s header.
+ */
+const SYNC_PEAK_MAX = 1.05;
+
+/**
+ * What a reset arriving every few samples is allowed to reach. Measured worst
+ * **1.1667** (sawtooth, a reset every 5 samples, `f0 = -11025`, `width = 0.1`)
+ * over 672 settings, and 1.0875 for a gate driven by white noise.
+ *
+ * Ticket 05 needed `WIDTH_NOISE_MAX = 1.35` for the same shape of input,
+ * because a `width` flipping at Nyquist moves a +/-1 edge every sample and the
+ * flips bunch inside the kernel's +/-2-sample support. A *reset* cannot do
+ * that, and the reason is worth writing down: the faster resets arrive, the
+ * less the phase has moved between them, so the step height shrinks with the
+ * reset period. The corrections do bunch - they are what pushes 1.0000 to
+ * 1.1667 - but what bunches gets smaller as it gets more frequent.
+ */
+const FAST_SYNC_MAX = 1.25;
+
+/**
+ * Drive the generator with a `sync` gate, in render-quantum blocks.
+ *
+ * `spectrum.ts`'s `render` cannot do this: its generator closure takes a block
+ * and nothing else, and a gate is a second array that has to be sliced in step
+ * with it.
+ */
+const renderSynced = ({
+  type,
+  f0,
+  gate,
+  width = 0.5,
+  phase,
+  blockSize = 128,
+}: {
+  type: number;
+  f0: number;
+  gate: Float32Array;
+  width?: number;
+  phase?: number | "random";
+  blockSize?: number;
+}) => {
+  const generate = createPolyblepOscillator(SAMPLE_RATE, phase);
+  const signal = new Float32Array(gate.length);
+  const block = new Float32Array(blockSize);
+  const frequency = new Float32Array(blockSize).fill(f0);
+  const detune = new Float32Array(blockSize);
+  const pulseWidth = new Float32Array(blockSize).fill(width);
+  for (let at = 0; at < gate.length; at += blockSize) {
+    generate(
+      block,
+      type,
+      frequency,
+      detune,
+      pulseWidth,
+      gate.subarray(at, at + blockSize),
+    );
+    signal.set(block.subarray(0, Math.min(blockSize, gate.length - at)), at);
+  }
+  return signal;
+};
+
+/** A master sawtooth: one rising zero crossing per cycle, at a sub-sample instant. */
+const masterGate = (length: number, fm: number) => {
+  const gate = new Float32Array(length);
+  const inc = fm / SAMPLE_RATE;
+  let p = 0;
+  for (let i = 0; i < length; i++) {
+    p += inc;
+    if (p >= 1) p -= 1;
+    gate[i] = 2 * p - 1;
+  }
+  return gate;
+};
+
+/** A one-sample pulse every `period` samples: an exact integer-sample reset. */
+const pulseGate = (length: number, period: number) => {
+  const gate = new Float32Array(length);
+  for (let i = 0; i < length; i += period) gate[i] = 1;
+  return gate;
+};
+
+/**
+ * A gate that crosses zero `d` of the way *back* from sample `at`, by holding
+ * `-(1 - d)` and then `d`: the crossing lies at `1 - d` of the way from
+ * `at - 1` to `at`, so the reset is `d` samples old when sample `at` is
+ * computed. `d = 1` is the `0 -> 1` step a `setValueAtTime` gate makes, and the
+ * age it produces is the one the residual cannot express - see `crossingAge`.
+ */
+const rampGate = (length: number, at: number, d: number) => {
+  const gate = new Float32Array(length);
+  for (let i = 0; i < length; i++) gate[i] = i < at ? -(1 - d) : d;
+  return gate;
+};
+
+/**
+ * How many *runs* of consecutive large first differences a signal has - one
+ * band-limited step spans about four samples, so counting samples would count
+ * one discontinuity several times.
+ */
+const discontinuityRuns = (signal: Float32Array, threshold: number) => {
+  let runs = 0;
+  let inRun = false;
+  for (let i = 1; i < signal.length; i++) {
+    const large = Math.abs(signal[i] - signal[i - 1]) > threshold;
+    if (large && !inRun) runs++;
+    inRun = large;
+  }
+  return runs;
+};
+
+/** The naive sawtooth, for the sub-sample assertions. `2 * phase - 1`, wrapped. */
+const naiveSaw = (phase: number) => 2 * (phase - Math.floor(phase)) - 1;
+
+/** The 16 crossing fractions, and the age each one really produces. */
+const FRACTIONS = Array.from({ length: 16 }, (_, k) => {
+  const d = (k + 1) / 16;
+  // `d = 1` means `g- = 0`: the crossing interpolates to the previous sample,
+  // an age of exactly 1, which `crossingAge` reads as 0. It is in the sweep
+  // *because* it is the reachable degenerate case, not despite it.
+  return { d, age: d < 1 ? d : 0 };
+});
+
+it("resets the phase on a rising edge", () => {
+  // Kleimola & Valimaki's rule 2, as a number. The phase restarts at
+  // `phaseStart` *at the crossing instant*, so by the time sample `i` is
+  // emitted it has already run on `age * inc`; the emitted sample is that naive
+  // value plus the reset's own correction, `height * blepResidual4(age)`. Rule
+  // 1 is the `height` in that expression - the actual discontinuity at this
+  // reset, not the fixed jump of 2 a plain sawtooth wraps by.
+  //
+  // `at` is chosen so the slave sits near phase 0.5 when the reset arrives, a
+  // half cycle from its own wrap, so the reset is the only discontinuity inside
+  // the kernel's +/-2 samples and the identity is exact rather than
+  // approximate. Measured worst deviation 2.0e-3 at 440 Hz and 4.6e-3 at
+  // 1000 Hz, which is `Float32` epsilon plus what the far wrap still leaks.
+  //
+  // The gate rise at index `at` lands on the sample emitted at `at + 2`: the
+  // output lags the input by the two samples the 4-point kernel buys.
+  const problems: unknown[] = [];
+  for (const [f0, at] of [
+    [440, 348],
+    [1000, 100],
+  ] as const) {
+    const inc = f0 / SAMPLE_RATE;
+    for (const { d, age } of FRACTIONS) {
+      const signal = renderSynced({
+        type: TYPE_OF.sawtooth,
+        f0,
+        gate: rampGate(512, at, d),
+        phase: 0,
+      });
+      const from = (at + 2 - age) * inc;
+      const height = naiveSaw(age * inc) - naiveSaw(from);
+      const expected = naiveSaw(age * inc) + height * blepResidual4(age);
+      const measured = signal[at + 2];
+      if (Math.abs(measured - expected) > 0.01)
+        problems.push({ f0, d, measured, expected, height });
+    }
+  }
+  expect(problems).toEqual([]);
+});
+
+/**
+ * The naive functions and their phase derivatives, restated.
+ *
+ * `dsp.ts` does not export `WAVEFORMS`, and it should not: a test that borrowed
+ * the implementation's own table could not catch that table being wrong. These
+ * are the four shapes as the package documents them, written out again.
+ */
+type Shape = {
+  naive: (phase: number, width: number) => number;
+  slope: (phase: number, width: number) => number;
+};
+
+const SHAPES: Record<Waveform, Shape> = {
+  sine: {
+    naive: (phase: number) => Math.sin(2 * Math.PI * phase),
+    slope: (phase: number) => 2 * Math.PI * Math.cos(2 * Math.PI * phase),
+  },
+  triangle: {
+    naive: (phase: number, width: number) =>
+      phase < width
+        ? (2 * phase) / width - 1
+        : (1 + width - 2 * phase) / (1 - width),
+    slope: (phase: number, width: number) =>
+      phase < width ? 2 / width : -2 / (1 - width),
+  },
+  sawtooth: { naive: naiveSaw, slope: () => 2 },
+  square: {
+    naive: (phase: number, width: number) => (phase < width ? 1 : -1),
+    slope: () => 0,
+  },
+};
+
+it("emits a corner as well as a step where the waveform has one", () => {
+  // Success criterion 2, and Brandt's section 6.3 handled rather than avoided.
+  // A hard-synced triangle is not C1-continuous: the reset produces a *corner*
+  // as well as a step, so a band-limited step alone does not correct it. The
+  // audit read that as a reason to ship sync for the saw and square first;
+  // `addDiscontinuity` takes a step height and a slope change in the same call,
+  // so it is the same line of code and it ships here.
+  //
+  // The assertion is comparative, which is what makes it about the corner
+  // rather than about a tolerance: predict the sample two ways, with the BLAMP
+  // term and without it, and require the full prediction to be at least twice
+  // as close. Measured ratios 0.22 to 0.26 - the full prediction is four times
+  // closer - against a slope change of 0.36 to 0.88 per sample.
+  //
+  // The settings put the reset on the triangle's *falling* branch and restart
+  // it on the rising one, which is where the corner is largest; at `width` 0.5
+  // it is `8 * inc`, the same magnitude `corner` carries for the fixed
+  // discontinuities.
+  const problems: unknown[] = [];
+
+  for (const waveform of ["triangle", "sine"] as const)
+    for (const [f0, at, width] of [
+      [2000, 100, 0.5],
+      [4000, 50, 0.5],
+      [2000, 103, 0.25],
+    ] as const) {
+      const { naive, slope } = SHAPES[waveform];
+      const inc = f0 / SAMPLE_RATE;
+      let worstFull = 0;
+      let worstStepOnly = 0;
+      let largestCorner = 0;
+
+      for (const { d, age } of FRACTIONS) {
+        const signal = renderSynced({
+          type: TYPE_OF[waveform],
+          f0,
+          gate: rampGate(512, at, d),
+          width,
+          phase: 0,
+        });
+        const raw = (at + 2 - age) * inc;
+        const from = raw - Math.floor(raw);
+        const to = age * inc;
+        const height = naive(to, width) - naive(from, width);
+        const cornerChange = (slope(to, width) - slope(from, width)) * inc;
+        largestCorner = Math.max(largestCorner, Math.abs(cornerChange));
+
+        const stepOnly = naive(to, width) + height * blepResidual4(age);
+        const full = stepOnly + cornerChange * blampResidual4(age);
+        worstFull = Math.max(worstFull, Math.abs(signal[at + 2] - full));
+        worstStepOnly = Math.max(
+          worstStepOnly,
+          Math.abs(signal[at + 2] - stepOnly),
+        );
+      }
+
+      // The grid has to actually contain a corner, or the comparison is vacuous.
+      if (largestCorner < 0.3)
+        problems.push({ waveform, f0, width, largestCorner, at: "vacuous" });
+      if (worstFull > 0.5 * worstStepOnly)
+        problems.push({ waveform, f0, width, worstFull, worstStepOnly });
+    }
+
+  // ...and the sawtooth and the square have no corner to emit: their slope is
+  // the same on both sides of any reset, so the step alone is the whole of it.
+  for (const waveform of ["sawtooth", "square"] as const) {
+    const { naive, slope } = SHAPES[waveform];
+    const inc = 1000 / SAMPLE_RATE;
+    for (const { d, age } of FRACTIONS) {
+      const signal = renderSynced({
+        type: TYPE_OF[waveform],
+        f0: 1000,
+        gate: rampGate(512, 100, d),
+        phase: 0,
+      });
+      const raw = (102 - age) * inc;
+      const from = raw - Math.floor(raw);
+      const to = age * inc;
+      if (slope(to, 0.5) !== slope(from, 0.5))
+        problems.push({ waveform, at: "slope should be flat" });
+      const expected =
+        naive(to, 0.5) +
+        (naive(to, 0.5) - naive(from, 0.5)) * blepResidual4(age);
+      if (Math.abs(signal[102] - expected) > 0.01)
+        problems.push({ waveform, d, measured: signal[102], expected });
+    }
+  }
+
+  expect(problems).toEqual([]);
+});
+
+it("does not double-correct a type change that lands on a reset", () => {
+  // The stale-state hazard, for the third time in this file. `type` is k-rate,
+  // so it changes on a block boundary; a reset detected on that same sample
+  // happened at `i - age`, which is at or *before* the change. So the reset
+  // belongs to the previous waveform, and the type change is then scheduled
+  // against the post-reset phase - the two compose into one path.
+  //
+  // Correcting the reset with the *new* waveform instead counts the difference
+  // between the two shapes twice. Measured over the grid below: 1.0368 as
+  // written, and **2.0240** with `wave` in place of `prevWave` - which is
+  // ticket 04's 1.833 on a signal whose own edge is 0.917, in this ticket's
+  // clothes. `ONE_EDGE_MAX` is the bound because a reset is one band-limited
+  // step and a type change is another, and they are a sample apart at most.
+  const boundary = 256;
+  const problems: unknown[] = [];
+
+  for (const from of WAVEFORMS)
+    for (const to of WAVEFORMS) {
+      if (from === to) continue;
+      for (const f0 of [110, 440, 2000])
+        for (const { d } of FRACTIONS) {
+          const gate = rampGate(512, boundary, d);
+          const generate = createPolyblepOscillator(SAMPLE_RATE, 0);
+          const signal = new Float32Array(512);
+          const block = new Float32Array(128);
+          const frequency = new Float32Array(128).fill(f0);
+          const detune = new Float32Array(128);
+          const width = new Float32Array(128).fill(0.5);
+          for (let at = 0; at < 512; at += 128) {
+            generate(
+              block,
+              TYPE_OF[at < boundary ? from : to],
+              frequency,
+              detune,
+              width,
+              gate.subarray(at, at + 128),
+            );
+            signal.set(block, at);
+          }
+          const step = maxAbsoluteDifference(
+            signal.subarray(boundary, boundary + 8),
+          );
+          if (!signal.every(Number.isFinite) || step > ONE_EDGE_MAX)
+            problems.push({ from, to, f0, d, step });
+        }
+    }
+
+  expect(problems).toEqual([]);
+});
+
+it("is sub-sample accurate", () => {
+  // Two halves. The first is that the reset stays *bounded* wherever inside the
+  // sample it lands: a reset is one band-limited step and nothing else, so its
+  // largest first difference cannot exceed one edge - `ONE_EDGE_MAX`, which is
+  // `TYPE_SWITCH_MARGIN`'s 0.599 for a unit step doubled. Measured worst over
+  // the grid below: 1.1979, which is that bound reached rather than approached.
+  //
+  // The second is that it is genuinely sub-sample. Read the same sample against
+  // `blepResidual4(0)` instead of `blepResidual4(age)` - which is exactly what
+  // an integer-sample reset produces, the correction pinned to the sample
+  // boundary - and the error is not merely larger, it *grows monotonically with
+  // the fraction*: measured 0.039 at 1/16 rising to 0.403 at 15/16 at 440 Hz, a
+  // ratio of 10.3. That is the difference between placing a reset in time and
+  // rounding it to the nearest sample, and it is what a 16-position sweep is
+  // for.
+  const problems: unknown[] = [];
+
+  for (const waveform of WAVEFORMS)
+    for (const f0 of [110, 440, 1000, 2000, -440])
+      for (const width of [0.1, 0.5, 0.9])
+        for (const { d } of FRACTIONS) {
+          const signal = renderSynced({
+            type: TYPE_OF[waveform],
+            f0,
+            gate: rampGate(512, 300, d),
+            width,
+            phase: 0,
+          });
+          const step = maxAbsoluteDifference(signal.subarray(296, 310));
+          if (!signal.every(Number.isFinite) || step > ONE_EDGE_MAX)
+            problems.push({ waveform, f0, width, d, step, at: "bounded" });
+        }
+
+  for (const [f0, at] of [
+    [440, 348],
+    [1000, 100],
+  ] as const) {
+    const inc = f0 / SAMPLE_RATE;
+    const errors = FRACTIONS.map(({ d, age }) => {
+      const signal = renderSynced({
+        type: TYPE_OF.sawtooth,
+        f0,
+        gate: rampGate(512, at, d),
+        phase: 0,
+      });
+      const height = naiveSaw(age * inc) - naiveSaw((at + 2 - age) * inc);
+      // The integer reading: the same step height, placed at age 0.
+      const atBoundary = naiveSaw(0) + height * blepResidual4(0);
+      return Math.abs(signal[at + 2] - atBoundary);
+    });
+    // The last entry is `d = 1`, the age the DSP reads as 0 - which *is* the
+    // boundary reading, so its error is 0 by construction and is not part of
+    // the trend.
+    const trend = errors.slice(0, -1);
+    for (let i = 1; i < trend.length; i++)
+      if (trend[i] <= trend[i - 1])
+        problems.push({ f0, i, trend, at: "monotone" });
+    if (trend[trend.length - 1] < 5 * trend[0])
+      problems.push({ f0, first: trend[0], last: trend[trend.length - 1] });
+    if (errors[errors.length - 1] > 1e-6)
+      problems.push({ f0, boundary: errors[errors.length - 1] });
+  }
+
+  expect(problems).toEqual([]);
+});
+
+it("fires once while the gate is held", () => {
+  // `scripts/_gate.ts`'s contract: a trigger is the *transition* to positive,
+  // so holding the line high is one reset and not one per sample. Without it a
+  // held gate would freeze the phase at `phaseStart` and the oscillator would
+  // output a constant.
+  //
+  // 40 Hz over 512 samples is less than half a cycle, so the sawtooth has no
+  // wrap of its own in the render and every discontinuity in it belongs to the
+  // gate. `phase: 0.5` puts the restart half a cycle from where the phase has
+  // reached, which makes the one reset unmistakable - measured, a step of 0.72.
+  const gate = new Float32Array(512);
+  gate.fill(1, 256);
+  const signal = renderSynced({
+    type: TYPE_OF.sawtooth,
+    f0: 40,
+    gate,
+    phase: 0.5,
+  });
+
+  expect(discontinuityRuns(signal, 0.05)).toBe(1);
+  // ...and the phase keeps running afterwards rather than being pinned.
+  expect(signal[500] - signal[400]).toBeGreaterThan(0);
+});
+
+it("does not fire on a falling edge or on zero", () => {
+  // A gate that goes 1 -> 0 -> -1 produces no reset anywhere. The opening
+  // sample is a rising edge by the contract - `createGateDetector` starts
+  // closed, the same as AD, ADSR and Arp - but it is a *no-op* here, because
+  // the phase has advanced only the two priming samples from `phaseStart` and
+  // the step is `-4 * inc`, 0.0036 at 40 Hz. What the render does prove is that
+  // neither the fall to 0 nor the fall through it to -1 fires: by then the
+  // phase has run 170 samples from the restart, so a spurious reset would step
+  // the output by 0.3 and be plainly visible.
+  const falling = new Float32Array(512);
+  falling.fill(1, 0, 170);
+  falling.fill(0, 170, 340);
+  falling.fill(-1, 340);
+  const signal = renderSynced({
+    type: TYPE_OF.sawtooth,
+    f0: 40,
+    gate: falling,
+    phase: 0.5,
+  });
+  expect(discontinuityRuns(signal, 0.05)).toBe(0);
+
+  // ...and a gate that returns below zero and rises again *does* fire twice,
+  // which is what makes the first assertion about edges rather than about the
+  // detector being asleep.
+  const retrigger = new Float32Array(512);
+  retrigger.fill(1, 128, 200);
+  retrigger.fill(1, 320, 400);
+  expect(
+    discontinuityRuns(
+      renderSynced({
+        type: TYPE_OF.sawtooth,
+        f0: 40,
+        gate: retrigger,
+        phase: 0.5,
+      }),
+      0.05,
+    ),
+  ).toBe(2);
+});
+
+/**
+ * The hard-sync settings the alias comparison runs over: three master
+ * frequencies whose period is **not** a whole number of samples, and seven
+ * slave/master ratios.
+ *
+ * The non-integer master is not decoration, it is what makes the measurement
+ * possible at all. A signal that repeats in an exact integer number of samples
+ * folds every one of its aliases onto a multiple of `sampleRate / period` -
+ * which is precisely the harmonic grid `aliasSnr` counts as *signal*. Measured
+ * with a gate pulsing every 401 samples, a completely naive synced sawtooth
+ * reads **9.44 dB better** than the band-limited one. The metric is not wrong;
+ * it is blind to that input, and so is any other harmonic-grid metric.
+ */
+const SYNC_ALIAS_GRID = {
+  masters: [110.3, 73.42, 220.7],
+  ratios: [3.17, 4.31, 6.53, 8.11, 12.7, 17.3, 23.9],
+};
+
+/**
+ * The slave/master ratio above which the reset *dominates* the waveform, and
+ * the second comparison below becomes decisive.
+ *
+ * At a ratio of 3 the slave completes three cycles between resets, so the seam
+ * is a small part of what is being measured and correcting it moves the figure
+ * by hundredths of a dB. At 24 the waveform is nearly all seam.
+ */
+const SYNC_RESET_DOMINATES = 12;
+
+it("beats an uncorrected reset", () => {
+  // Two comparisons, because "uncorrected" has two honest readings and they
+  // measure different things.
+  //
+  // **Against a naive implementation** - one that assigns the phase at the
+  // sample the gate rose on and writes nothing at the seam. That is the whole
+  // of what this ticket adds, sub-sample placement and band limiting together,
+  // and the corrected render wins all 21 settings by **+0.94 dB to +23.82 dB**,
+  // the margin growing monotonically with the slave/master ratio.
+  //
+  // **Against the same phase trajectory with only the correction missing** -
+  // a fresh oscillator per segment, started at the *post-reset* phase, which
+  // `phase` makes expressible: identical timing, nothing written at the seam.
+  // This isolates the correction, and it is asserted only where the reset
+  // dominates, because that is where it is decisive: measured **+0.85 dB to
+  // +13.71 dB** at ratios of 12.7 and above, and +0.03 to +0.97 below them,
+  // which is positive but too fine to hold a regression net.
+  //
+  // No threshold is hardcoded. The assertion is that correcting is strictly
+  // better; the numbers above are the record of by how much.
+  const length = 32768;
+  const problems: unknown[] = [];
+
+  for (const fm of SYNC_ALIAS_GRID.masters)
+    for (const ratio of SYNC_ALIAS_GRID.ratios) {
+      const f0 = fm * ratio;
+      const inc = f0 / SAMPLE_RATE;
+      const gate = masterGate(length, fm);
+      const corrected = renderSynced({
+        type: TYPE_OF.sawtooth,
+        f0,
+        gate,
+        phase: 0,
+      });
+
+      // (a) The free-running sawtooth, re-indexed from each rising edge: every
+      //     segment keeps its own band-limited wraps, and the reset is raw and
+      //     pinned to the sample boundary.
+      const free = render(oscillator(TYPE_OF.sawtooth), {
+        f0,
+        sampleRate: SAMPLE_RATE,
+        length,
+        warmup: 0,
+      });
+      const naive = new Float32Array(length);
+
+      // (b) The same, but each segment starts at the post-reset phase, so the
+      //     restart keeps the sub-sample offset the corrected render gives it.
+      const placed = new Float32Array(length);
+      const segments: Array<{ from: number; phase: number }> = [
+        { from: 0, phase: 0 },
+      ];
+
+      let since = 0;
+      let open = false;
+      let previousGate = 0;
+      for (let i = 0; i < length; i++) {
+        const g = gate[i];
+        if (!open && g > 0) {
+          open = true;
+          since = 0;
+          // `crossingAge`, restated here rather than exported: a test that
+          // borrowed the implementation's arithmetic could not catch it being
+          // wrong.
+          const rise = g - previousGate;
+          const raw = rise > 0 ? -previousGate / rise : 1;
+          const fraction = raw > 0 ? (raw < 1 ? raw : 1) : 0;
+          const age = 1 - fraction;
+          const offset = (age < 1 ? age : 0) * inc;
+          // The reset lands on the sample emitted two later: the latency the
+          // 4-point kernel buys.
+          segments.push({ from: i + 2, phase: offset - Math.floor(offset) });
+        } else if (open && g <= 0) open = false;
+        previousGate = g;
+        naive[i] = free[since];
+        since++;
+      }
+
+      for (let s = 0; s < segments.length; s++) {
+        const { from, phase } = segments[s];
+        const to = s + 1 < segments.length ? segments[s + 1].from : length;
+        if (to <= from) continue;
+        const generate = createPolyblepOscillator(SAMPLE_RATE, phase);
+        const segment = new Float32Array(to - from);
+        generate(
+          segment,
+          TYPE_OF.sawtooth,
+          constant(f0),
+          constant(0),
+          constant(0.5),
+        );
+        placed.set(segment, from);
+      }
+
+      const correctedSnr = aliasSnr(corrected, fm, SAMPLE_RATE);
+      if (correctedSnr <= aliasSnr(naive, fm, SAMPLE_RATE))
+        problems.push({
+          fm,
+          ratio,
+          correctedSnr,
+          naive: aliasSnr(naive, fm, SAMPLE_RATE),
+          at: "naive",
+        });
+      if (
+        ratio >= SYNC_RESET_DOMINATES &&
+        correctedSnr <= aliasSnr(placed, fm, SAMPLE_RATE)
+      )
+        problems.push({
+          fm,
+          ratio,
+          correctedSnr,
+          placed: aliasSnr(placed, fm, SAMPLE_RATE),
+          at: "placement-matched",
+        });
+    }
+
+  expect(problems).toEqual([]);
+});
+
+it("syncs at a non-integer master period", () => {
+  // 333.7 Hz against 44100: a master period of 132.155 samples, so the crossing
+  // fraction is different on every cycle and never repeats. Every waveform,
+  // both signs of `frequency`, every width, four starting phases - 288 settings.
+  // Measured worst peak 1.0027, and nothing non-finite.
+  const gate = masterGate(4096, 333.7);
+  const problems: unknown[] = [];
+
+  for (const waveform of WAVEFORMS)
+    for (const f0 of [110, 440, 1000, 2000, 4000, -2000])
+      for (const width of [0.1, 0.5, 0.9])
+        for (const phase of [0, 0.25, 0.5, 0.9]) {
+          const signal = renderSynced({
+            type: TYPE_OF[waveform],
+            f0,
+            gate,
+            width,
+            phase,
+          });
+          if (!signal.every(Number.isFinite) || peak(signal) > SYNC_PEAK_MAX)
+            problems.push({
+              waveform,
+              f0,
+              width,
+              phase,
+              peak: peak(signal),
+              finite: signal.every(Number.isFinite),
+            });
+        }
+
+  expect(problems).toEqual([]);
+});
+
+it("stays bounded when the gate fires as fast as it can", () => {
+  // The hazard ticket 05 measured for `width`: corrections landing inside the
+  // kernel's +/-2-sample support and adding. A reset every sample is the worst
+  // a gate can do, and it is in the grid rather than excluded from it.
+  //
+  // Measured worst 1.1667 - a sawtooth reset every 5 samples at
+  // `frequency = -11025`, where the increment is pinned at `-MAX_INC` and the
+  // phase covers a cycle and a quarter between resets, which is where the step
+  // heights are largest while the resets are still close enough to overlap.
+  const problems: unknown[] = [];
+
+  for (const waveform of WAVEFORMS)
+    for (const period of [1, 2, 3, 5, 8, 16, 32])
+      for (const f0 of [0, 20, 440, 4000, 11025, 20000, -4000, -11025])
+        for (const width of [0.1, 0.5, 0.9]) {
+          const signal = renderSynced({
+            type: TYPE_OF[waveform],
+            f0,
+            gate: pulseGate(4096, period),
+            width,
+            phase: 0,
+          });
+          if (!signal.every(Number.isFinite) || peak(signal) > FAST_SYNC_MAX)
+            problems.push({
+              waveform,
+              f0,
+              period,
+              width,
+              peak: peak(signal),
+              finite: signal.every(Number.isFinite),
+            });
+        }
+
+  // ...and a gate that is white noise, so the edges arrive at every sub-sample
+  // fraction as well as at every rate. Measured worst 1.0875.
+  let seed = 7919;
+  const random = () =>
+    (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+
+  for (const waveform of WAVEFORMS)
+    for (const f0 of [0, 20, 440, 4000, 11025, -4000])
+      for (const width of [0.1, 0.5, 0.9]) {
+        const gate = new Float32Array(4096);
+        for (let i = 0; i < gate.length; i++) gate[i] = random() * 2 - 1;
+        const signal = renderSynced({
+          type: TYPE_OF[waveform],
+          f0,
+          gate,
+          width,
+          phase: 0,
+        });
+        if (!signal.every(Number.isFinite) || peak(signal) > FAST_SYNC_MAX)
+          problems.push({
+            waveform,
+            f0,
+            width,
+            peak: peak(signal),
+            at: "noise",
+          });
+      }
+
+  expect(problems).toEqual([]);
+});
+
+it("is total for any sync value", () => {
+  // `sync` is declared `0..1`, and like every other param on this node the DSP
+  // has to be total outside it too: `connectParams` writes `param.value = 0`
+  // and then sums whatever node is connected, so a bipolar audio-rate master -
+  // the intended input - spends half its time negative. A NaN reaches the gate
+  // detector without changing its state (a NaN is neither `> 0` nor `<= 0`),
+  // which is the case `crossingAge`'s `rise > 0` test exists for.
+  const sync = declared("sync");
+  const problems: unknown[] = [];
+
+  for (const waveform of WAVEFORMS)
+    for (const f0 of [-20000, 0, 20000])
+      for (const width of [0, 0.5, 1])
+        for (const value of [
+          -1,
+          sync.minValue,
+          0.5,
+          sync.maxValue,
+          NaN,
+          Infinity,
+        ]) {
+          const signal = renderSynced({
+            type: TYPE_OF[waveform],
+            f0,
+            gate: new Float32Array(2048).fill(value),
+            width,
+            phase: 0,
+          });
+          if (!signal.every(Number.isFinite) || peak(signal) > FAST_SYNC_MAX)
+            problems.push({ waveform, f0, width, value, peak: peak(signal) });
+        }
+
+  // ...and a NaN gate that later becomes a real rising edge still syncs.
+  const recovered = new Float32Array(512);
+  recovered.fill(NaN, 0, 100);
+  recovered.fill(1, 100);
+  const signal = renderSynced({
+    type: TYPE_OF.sawtooth,
+    f0: 440,
+    gate: recovered,
+    phase: 0,
+  });
+  expect(signal.every(Number.isFinite)).toBe(true);
+  expect(peak(signal)).toBeLessThanOrEqual(SYNC_PEAK_MAX);
+
+  expect(problems).toEqual([]);
+});
+
+it("is bit-identical with a silent gate", () => {
+  // `sync` is an optional argument so that every call site written before it
+  // existed takes the path it was measured on. A gate that is present but never
+  // positive has to take the other path and produce the same samples, or the
+  // fingerprint claim would only hold for callers who pass nothing.
+  for (const waveform of WAVEFORMS) {
+    const withGate = renderSynced({
+      type: TYPE_OF[waveform],
+      f0: 440,
+      gate: new Float32Array(1024),
+      width: 0.3,
+    });
+    const without = render(oscillator(TYPE_OF[waveform], 0.3), {
+      f0: 440,
+      sampleRate: SAMPLE_RATE,
+      length: 1024,
+      warmup: 0,
+    });
+    expect(Array.from(withGate)).toEqual(Array.from(without));
+  }
+});
+
+it("starts at the configured phase", () => {
+  // `output[0]` is the sample at `phaseStart` - the two priming steps are what
+  // buy that - so on a sawtooth it reads `2 * phase - 1` exactly. 20 Hz keeps
+  // the wrap 2205 samples away, so nothing is corrected anywhere near it.
+  const at = (phase: number | "random") => {
+    const generate = createPolyblepOscillator(SAMPLE_RATE, phase);
+    const block = new Float32Array(64);
+    generate(block, TYPE_OF.sawtooth, constant(20), constant(0), constant(0.5));
+    return (block[0] + 1) / 2;
+  };
+
+  expect(at(0)).toBe(0);
+  expect(at(0.25)).toBe(0.25);
+  expect(at(0.75)).toBe(0.75);
+  // A number is taken modulo 1, so a phase in turns can be handed over
+  // unnormalised - and the degenerate values resolve to 0, the phase this
+  // package has always started at, rather than poisoning the accumulator.
+  expect(at(1.25)).toBe(0.25);
+  expect(at(-0.25)).toBe(0.75);
+  expect(at(NaN)).toBe(0);
+  expect(at(Infinity)).toBe(0);
+
+  // `"random"` is `Math.random()` drawn once, at construction. Stubbing it is
+  // what makes that a fact rather than an inference from two samples differing.
+  const draw = jest.spyOn(Math, "random").mockReturnValue(0.375);
+  expect(at("random")).toBe(0.375);
+  draw.mockRestore();
+
+  // ...and unstubbed, two instances decorrelate, which is the whole point:
+  // three of these detuned into a supersaw no longer start phase-locked.
+  const instances = Array.from({ length: 8 }, () => at("random"));
+  expect(new Set(instances).size).toBeGreaterThan(1);
+  for (const phase of instances) {
+    expect(phase).toBeGreaterThanOrEqual(0);
+    expect(phase).toBeLessThan(1);
+  }
 });
