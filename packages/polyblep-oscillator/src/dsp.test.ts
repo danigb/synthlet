@@ -502,6 +502,279 @@ it("holds a constant at frequency 0", () => {
   expect(held).toEqual({ sine: 0, triangle: -1, sawtooth: -1, square: 1 });
 });
 
+/**
+ * The frequencies the mirror identities are asserted at, and why they stop
+ * below 11025.
+ *
+ * At `|f0| = sampleRate / 4` the increment is exactly +/-0.25 - `MAX_INC`, and a
+ * power of two - so the accumulated phase lands *exactly* on 0 and exactly on
+ * `width` every few samples. Those are the two measure-zero points where the
+ * naive function's own branch tests (`phase < width`, and the wrap's
+ * `phase >= 1`) put the boundary sample on one side going forwards and the
+ * other going backwards, so the two renders stop being reflections of each
+ * other: measured 2.0 there against 1e-12 everywhere else. Everything below is
+ * a frequency whose increment is not a dyadic rational, which is every
+ * frequency a musician will ever ask for.
+ */
+const MIRROR_HZ = [110, 440, 1000];
+
+/** The measured worst mirror error is 2.1e-13; the ticket asks for 1e-6. */
+const MIRROR_TOLERANCE = 1e-6;
+
+const mirrored = (waveform: Waveform, width = 0.5) =>
+  MIRROR_HZ.map((f0) => {
+    const options = { f0, sampleRate: SAMPLE_RATE, length: 4096 };
+    return {
+      f0,
+      forward: render(oscillator(TYPE_OF[waveform], width), options),
+      backward: render(oscillator(TYPE_OF[waveform], width), {
+        ...options,
+        f0: -f0,
+      }),
+    };
+  });
+
+it("mirrors the sine at a negative frequency", () => {
+  // A sine is odd, so reversing time negates it: `sin(2pi(1 - p))` is
+  // `-sin(2pi p)` exactly. It has no discontinuity for the scheduler to
+  // correct, which makes this the cleanest possible statement about the phase
+  // itself - it passes only if the backward wrap sends -0.01 to 0.99 rather
+  // than leaving it at -0.01, and it is insensitive to every correction sign in
+  // the file. Measured worst error 2.1e-13.
+  const problems: unknown[] = [];
+  for (const { f0, forward, backward } of mirrored("sine")) {
+    let worst = 0;
+    for (let i = 0; i < forward.length; i++)
+      worst = Math.max(worst, Math.abs(backward[i] + forward[i]));
+    if (worst > MIRROR_TOLERANCE) problems.push({ f0, worst });
+  }
+  expect(problems).toEqual([]);
+});
+
+it("mirrors the symmetric triangle at a negative frequency", () => {
+  // At `width = 0.5` the triangle is *even* about phase 0, so reversing time
+  // leaves it alone. That makes it the test for the corner's sign: phase 0 is
+  // the triangle's minimum, and a minimum in time stays a minimum however the
+  // phase reaches it, so the backward branch's `-slope0 * corner` has to come
+  // out with the *same* sign as the forward branch's `+slope0 * corner`. It
+  // does, because `corner` carries the sign of `inc`. Get that wrong and the
+  // corners are corrected the wrong way and this reads about 2.
+  //
+  // Measured error: exactly 0, not merely within tolerance. The naive function
+  // is even in binary floating point at `w = 0.5`, the crossing instants are
+  // the same set in both directions, and both corners keep their sign - so
+  // there is nothing left to round differently.
+  const problems: unknown[] = [];
+  for (const { f0, forward, backward } of mirrored("triangle")) {
+    let worst = 0;
+    for (let i = 0; i < forward.length; i++)
+      worst = Math.max(worst, Math.abs(backward[i] - forward[i]));
+    if (worst > MIRROR_TOLERANCE) problems.push({ f0, worst });
+  }
+  expect(problems).toEqual([]);
+});
+
+it("mirrors the sawtooth and the square at a negative frequency", () => {
+  // Both are odd about phase 0 at `width = 0.5` for the same reason the sine
+  // is, and unlike the sine both are *stepped*: this is the test that pins the
+  // backward wrap's step height to `-step0` rather than `+step0`. Measured
+  // worst 3.0e-8 for the sawtooth - `Float32` epsilon at the one sample whose
+  // phase lands nearest the wrap - and 3.3e-12 for the square.
+  const problems: unknown[] = [];
+  for (const waveform of ["sawtooth", "square"] as Waveform[])
+    for (const { f0, forward, backward } of mirrored(waveform)) {
+      let worst = 0;
+      for (let i = 0; i < forward.length; i++)
+        worst = Math.max(worst, Math.abs(backward[i] + forward[i]));
+      if (worst > MIRROR_TOLERANCE) problems.push({ waveform, f0, worst });
+    }
+  expect(problems).toEqual([]);
+});
+
+it("holds the alias floor at a negative frequency", () => {
+  // **This is the test that makes the two-sided wrap load-bearing.** Ticket 02
+  // found that reverting `phase -= Math.floor(phase)` to a one-sided
+  // `if (phase >= 1) phase -= 1` failed zero tests, because under a positive
+  // clamped increment the two forms agree for every reachable input, and
+  // predicted that the wrap "becomes independently load-bearing in ticket 07".
+  // It does, twice over:
+  //
+  // - Delete the `else if (phase < 0)` branch and the phase marches to -N
+  //   without ever wrapping. `2 * phase - 1` marches with it, and the peak
+  //   bound below fails by a factor of hundreds rather than by a hair.
+  // - Keep the wrap but drop the negated step height, and the wrap is no longer
+  //   band-limited: the alias floor fails by tens of dB.
+  //
+  // The floors and bounds are `ALIAS_FLOORS` and `PEAK_BOUNDS` themselves, at
+  // `|f0|`. Measured, a negative-frequency render reproduces the positive
+  // figures *to the decimal* in every cell of both tables, so reusing them is
+  // both the strongest available assertion and the one that cannot drift from
+  // what the positive side promises. `aliasSnr` needs a positive `f0`, which is
+  // right: a backward-running waveform's harmonics are at `|f0|`.
+  const problems: unknown[] = [];
+  const floorAt = (waveform: Waveform, f0: number) =>
+    ALIAS_FLOORS[waveform].find(([hz]) => hz === f0)![1];
+  const peakAt = (waveform: Waveform, f0: number) =>
+    PEAK_BOUNDS[waveform].find(([hz]) => hz === f0)!;
+
+  for (const waveform of ["sawtooth", "square"] as Waveform[])
+    for (const f0 of [440, 1000, 4000]) {
+      const signal = render(oscillator(TYPE_OF[waveform]), {
+        f0: -f0,
+        sampleRate: SAMPLE_RATE,
+      });
+      const snr = aliasSnr(signal, f0, SAMPLE_RATE);
+      const measured = peak(signal);
+      const [, min, max] = peakAt(waveform, f0);
+      if (snr <= floorAt(waveform, f0))
+        problems.push({ waveform, f0, snr, floor: floorAt(waveform, f0) });
+      if (measured < min || measured > max)
+        problems.push({ waveform, f0, peak: measured, min, max });
+    }
+
+  expect(problems).toEqual([]);
+});
+
+/**
+ * How much more a sweep's largest first difference may be than the same
+ * waveform's at a steady 2000 Hz.
+ *
+ * Measured, only the sawtooth exceeds its steady figure at all, by 0.0601
+ * (1.1674 against 1.1072) - the sweep visits every increment between +2000 and
+ * -2000 Hz and so visits edge placements a steady render never lands on. Every
+ * other waveform's sweep is at or below its own steady reference.
+ */
+const SWEEP_MARGIN = 0.1;
+
+it("survives a sweep through zero", () => {
+  // A full-length a-rate `frequency` array ramping linearly from +2000 to -2000
+  // across the block, so the phase decelerates, stops and reverses - and does
+  // it at a-rate, one value per sample, with no smoothing. Measured worst peak
+  // over this grid: 1.0000.
+  const length = 4096;
+  const problems: unknown[] = [];
+
+  for (const waveform of WAVEFORMS)
+    for (const width of [0.1, 0.5, 0.9]) {
+      const sweep = new Float32Array(length);
+      for (let i = 0; i < length; i++)
+        sweep[i] = 2000 - (4000 * i) / (length - 1);
+
+      const generate = createPolyblepOscillator(SAMPLE_RATE);
+      const block = new Float32Array(length);
+      generate(
+        block,
+        TYPE_OF[waveform],
+        sweep,
+        new Float32Array(length),
+        new Float32Array(length).fill(width),
+      );
+
+      const steady = render(oscillator(TYPE_OF[waveform], width), {
+        f0: 2000,
+        sampleRate: SAMPLE_RATE,
+        length,
+      });
+
+      if (!block.every(Number.isFinite) || peak(block) > 1.05)
+        problems.push({ waveform, width, peak: peak(block), at: "range" });
+      const step = maxAbsoluteDifference(block);
+      const reference = maxAbsoluteDifference(steady);
+      if (step > reference + SWEEP_MARGIN)
+        problems.push({ waveform, width, step, reference, at: "step" });
+    }
+
+  expect(problems).toEqual([]);
+});
+
+it("survives audio-rate FM through zero", () => {
+  // `200 + 3000 * sin(2pi * 220 * i / sampleRate)`: a 220 Hz modulator three
+  // times deeper than the carrier, so the frequency crosses zero twice per
+  // modulator cycle - 440 sign changes a second, each one a phase reversal
+  // inside a render quantum. This is the input the scheduler was designed for
+  // and the reason it writes corrections *backwards* rather than predicting
+  // where they will land: under FM this fast the increment has changed by the
+  // time a predicted correction arrives. Measured worst peak: 1.0000.
+  const length = 4096;
+  const problems: unknown[] = [];
+
+  const modulated = new Float32Array(length);
+  for (let i = 0; i < length; i++)
+    modulated[i] = 200 + 3000 * Math.sin((2 * Math.PI * 220 * i) / SAMPLE_RATE);
+
+  for (const waveform of WAVEFORMS)
+    for (const width of [0.1, 0.5]) {
+      const generate = createPolyblepOscillator(SAMPLE_RATE);
+      const block = new Float32Array(length);
+      generate(
+        block,
+        TYPE_OF[waveform],
+        modulated,
+        new Float32Array(length),
+        new Float32Array(length).fill(width),
+      );
+      if (!block.every(Number.isFinite) || peak(block) > 1.05)
+        problems.push({
+          waveform,
+          width,
+          peak: peak(block),
+          finite: block.every(Number.isFinite),
+        });
+    }
+
+  expect(problems).toEqual([]);
+});
+
+it("still holds at frequency 0", () => {
+  // The zero-hold behaviour is unchanged by the widened range - and `-0` is now
+  // a value the clamp can tell apart, since it has a negative branch. Both
+  // resolve to a `+0` increment, so both hold, and they hold the same constant
+  // as each other and as `holds a constant at frequency 0` above.
+  //
+  // This is also the state a modulated oscillator *starts* in: `connectParams`
+  // writes `param.value = 0` before connecting, so every oscillator whose
+  // frequency is a node sits here until the modulator's first sample arrives.
+  // That first sample may be negative, which is the path the backward wrap's
+  // degenerate-age guard exists for - so the recovery half below is not a
+  // formality.
+  const problems: unknown[] = [];
+  for (const zero of [0, -0])
+    for (const waveform of WAVEFORMS) {
+      const generate = createPolyblepOscillator(SAMPLE_RATE);
+      const block = new Float32Array(1024);
+      generate(
+        block,
+        TYPE_OF[waveform],
+        constant(zero),
+        constant(0),
+        constant(0.5),
+      );
+      if (
+        !block.every(Number.isFinite) ||
+        !block.every((sample) => sample === block[0])
+      )
+        problems.push({ waveform, zero: Object.is(zero, -0) ? "-0" : "0" });
+
+      // ...and it comes off the hold going backwards without a spike.
+      generate(
+        block,
+        TYPE_OF[waveform],
+        constant(-440),
+        constant(0),
+        constant(0.5),
+      );
+      if (!block.every(Number.isFinite) || peak(block) > PEAK_MAX)
+        problems.push({
+          waveform,
+          zero: Object.is(zero, -0) ? "-0" : "0",
+          at: "recovery",
+          peak: peak(block),
+        });
+    }
+
+  expect(problems).toEqual([]);
+});
+
 it("matches k-rate for a constant a-rate input", () => {
   // A length-1 array is what a k-rate `AudioParam` delivers and a length-128
   // one is what an a-rate one delivers. Holding the same value, the two must be

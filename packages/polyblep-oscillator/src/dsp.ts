@@ -76,6 +76,13 @@ const MIN_WIDTH = 1e-3;
  * top of a piano and above every frequency this package's tests measure, but
  * below the declared `frequency` maximum of 20000. That is deliberate, not an
  * oversight.
+ *
+ * The clamp is `[-MAX_INC, MAX_INC]`, symmetric about zero, because `frequency`
+ * is bipolar and a negative increment runs the phase backwards. Stages spells
+ * the same widening `CONSTRAIN(frequency, -kMaxFrequency, kMaxFrequency)` under
+ * its `through_zero_fm` flag, `refs/eurorack/stages/oscillator.h:123`; here it
+ * is unconditional, because there is no shape in this file that must not have
+ * it.
  */
 const MAX_INC = 0.25;
 
@@ -315,21 +322,94 @@ export function createPolyblepOscillator(sampleRate: number) {
       high = nowHigh;
       if (previous.stepH !== 0 || previous.slopeH !== 0) {
         const direction = nowHigh ? -1 : 1;
+        const rate = inc - (w - previousWidth);
+        // `g / rate` is the age, and a backward phase can push it to exactly 1:
+        // `nowHigh` is `g < 0`, a strict comparison, so a phase sitting
+        // precisely on the edge counts as low and the flip is noticed a sample
+        // late. Reachable across a whole octave, not at a knife edge - at
+        // `|inc| = MAX_INC` the width clamp pins `w` to 0.5 and the phase
+        // lattice is quarter-integers, so every `|frequency| >= sampleRate / 4`
+        // lands on it. Measured, the square then emitted 1.917.
+        //
+        // Reading such an age as 0 puts the correction on this sample, whose
+        // naive value is the post-jump one, which is the half of the kernel
+        // `blepResidual4(0)` is: see the backward wrap below. The guard is
+        // written against `inc` rather than against `rate` so that it cannot
+        // touch a non-negative increment - clamping an age of 1 or more to 1 is
+        // ticket 05's reading, for a `width` that has retreated past the phase,
+        // and this ticket does not renegotiate it.
         addCrossing(
-          g,
-          inc - (w - previousWidth),
+          inc < 0 ? (g > rate ? g : 0) : g,
+          rate,
           direction * previous.stepH,
           direction * previous.slopeH * corner,
         );
       }
     }
 
-    // The discontinuity at phase 0.
+    // The discontinuity at phase 0, crossed in whichever direction the phase
+    // happens to be travelling. `frequency` is bipolar, so `inc` can be
+    // negative and the phase runs backwards; a backward crossing is the same
+    // call to the same primitive with the signed quantities negated. There is
+    // no second code path, only a second branch.
+    //
+    // **The step height flips and the age does not.** Going forward the naive
+    // sawtooth falls by 2 at the wrap; going backward it rises by 2, so the
+    // height is `-step0`. The age is `overshoot / inc` either way: below zero
+    // both are negative and the quotient is the same `d` in `[0, 1)` the
+    // forward path produces.
+    //
+    // The corner flips for the same reason and arrives at the opposite place.
+    // `corner` carries the sign of `inc`, so `-slope0 * corner` is
+    // `+(2/w + 2/(1-w)) * |inc|` for a negative increment - the same sign the
+    // forward branch gives. That is right: phase 0 is the triangle's *minimum*,
+    // and a minimum in time stays a minimum however the phase reaches it.
+    //
+    // Wrapping both ways is also what makes this a wrap rather than a
+    // subtraction. It is `phase -= Math.floor(phase)` spelled as the two
+    // branches a crossing detector needs, and the second branch is the one that
+    // sends -0.01 to 0.99. Ticket 02 measured that the one-sided form passed
+    // every test it had and predicted this ticket would change that; deleting
+    // this branch now fails `holds the alias floor at a negative frequency` and
+    // `is finite over the whole declared range`.
+    //
+    // Stages spells the same pair at
+    // `refs/eurorack/stages/oscillator.h:159-164,204-211,233-239`.
     if (phase >= 1) {
       phase -= 1;
       high = true;
       if (previous.step0 !== 0 || previous.slope0 !== 0)
         addCrossing(phase, inc, previous.step0, previous.slope0 * corner);
+    } else if (phase < 0) {
+      // `phase / inc` is the age, and it reaches exactly 1 when the phase was
+      // sitting precisely on 0 before this sample. An age of 1 puts the
+      // discontinuity on the *previous* sample, whose naive value is the one
+      // from before the jump - the one arrangement the residual's convention
+      // cannot express, since `blepResidual4(0)` is the post-jump half of the
+      // kernel. Measured, it emits -2 on a signal bounded by 1.
+      //
+      // Reading it as 0 puts the same band-limited step on *this* sample, whose
+      // naive value is the post-jump one, and the crossing instant is genuinely
+      // ambiguous anyway: the phase had already reached the boundary and only
+      // this sample's increment tells us it left going backwards. It is the
+      // reachable case, not a curiosity - `connectParams` writes
+      // `frequency = 0` for every connected input, so an oscillator whose
+      // frequency is a modulator sits at phase 0 until the modulator's first
+      // sample arrives, and that sample may be negative. A cold start at a
+      // negative frequency reaches it too, on the second priming sample.
+      //
+      // A comparison rather than a division for `increment()`'s reason, and
+      // because it keeps the forward and backward ages on the same half-open
+      // `[0, 1)`: `phase > inc` is `phase / inc < 1` with both sides negative.
+      const overshoot = phase > inc ? phase : 0;
+      phase += 1;
+      // `|inc| <= MAX_INC` and `w <= 1 - 2|inc|` put the wrapped phase in
+      // `[1 - |inc|, 1)`, which is strictly above `w`: a backward wrap always
+      // lands on the far side of the width edge, exactly as a forward one
+      // always lands below it.
+      high = false;
+      if (previous.step0 !== 0 || previous.slope0 !== 0)
+        addCrossing(overshoot, inc, -previous.step0, -previous.slope0 * corner);
     }
 
     // A type change is a discontinuity too: `type` is k-rate, so it lands on a
@@ -409,9 +489,16 @@ export function createPolyblepOscillator(sampleRate: number) {
       detuneFactor = Math.pow(2, cents / 1200);
     }
     const raw = freq * detuneFactor * ivsr;
-    // Clamp to [0, MAX_INC]. Written as comparisons, not `Math.min`/`Math.max`,
-    // because they resolve a NaN to 0: `Math.min(0.25, Math.max(0, NaN))` is
-    // `NaN`, and one NaN increment would freeze the phase forever.
-    return raw > 0 ? (raw < MAX_INC ? raw : MAX_INC) : 0;
+    // Clamp to [-MAX_INC, MAX_INC], symmetric about zero because `frequency` is
+    // bipolar. Still written as comparisons, not `Math.min`/`Math.max`: every
+    // comparison against a NaN is false, so a NaN falls through both branches
+    // to the 0 that means hold, while `Math.min(0.25, Math.max(-0.25, NaN))` is
+    // `NaN` and one NaN increment would poison the pending ring for good. The
+    // same fall-through normalises `-0` to `+0`, so a negative zero frequency
+    // holds rather than seeding a negative zero phase, and it catches
+    // `-Infinity` at `-MAX_INC` the way it catches `+Infinity` at `MAX_INC`.
+    if (raw > 0) return raw < MAX_INC ? raw : MAX_INC;
+    if (raw < 0) return raw > -MAX_INC ? raw : -MAX_INC;
+    return 0;
   }
 }

@@ -12,16 +12,25 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 3,
     automationRate: "k-rate",
   },
-  // `minValue: 0` is a requirement, not a compromise. `connectParams` writes
-  // `param.value = 0` for every connected input (`_worklet.ts:73-76`), so a
-  // positive minimum makes Chrome clamp that write and log a "value outside
-  // nominal range" warning for every oscillator wired to a node, `MonoSynth`
-  // included. Zero frequency is defined as hold: the phase freezes and the
-  // output holds a finite constant.
+  // **Bipolar**, and that is the answer to the audit's Open Question 3 rather
+  // than a widening for its own sake. A negative frequency runs the phase
+  // backwards, so a modulator connected here is no longer half-wave rectified
+  // at the bottom - and rectifying it does not merely limit the sound, it
+  // produces a different, wrong spectrum, because a rectified modulator is not
+  // the modulator that was patched. `AudioParam` sums its inputs with the
+  // intrinsic value, so connecting a node here is *linear* FM by construction,
+  // which is the FM that has a through-zero behaviour worth having.
+  //
+  // What may not happen is a *positive* minimum. `connectParams` writes
+  // `param.value = 0` for every connected input (`_worklet.ts:73-76`), so one
+  // makes Chrome clamp that write and log a "value outside nominal range"
+  // warning for every oscillator wired to a node, `MonoSynth` included. Zero
+  // frequency is still defined as hold: the phase freezes and the output holds
+  // a finite constant.
   {
     name: "frequency",
     defaultValue: 440,
-    minValue: 0,
+    minValue: -20000,
     maxValue: 20000,
     automationRate: "a-rate",
   },

@@ -9,8 +9,16 @@ import { useSynth } from "./useSynth";
 function PolyblepSynth(ac: AudioContext) {
   const volume = Param.db(ac, -24);
 
+  // Through-zero FM: the LFO is connected to `frequency`, not to `detune`, so
+  // the AudioParam *sums* it with the base pitch. That is linear FM, and once
+  // the depth passes the base pitch the sum goes negative and the oscillator
+  // runs its phase backwards instead of clamping flat.
   const lfo = Lfo(ac, { frequency: 1, gain: 0 });
-  const osc = PolyblepOscillator(ac, { frequency: 440, detune: lfo });
+  const osc = PolyblepOscillator(ac, { frequency: lfo });
+  // `connectParams` writes 0 into every connected param, so the base pitch has
+  // to be put back - and it is what the Frequency slider reads its initial
+  // position from.
+  osc.frequency.value = 440;
   const out = Gain(ac, { gain: volume });
 
   osc.connect(out);
@@ -50,11 +58,21 @@ function Example() {
         />
 
         <Slider
-          label="Modulation"
+          label="FM depth"
           inputClassName="col-span-2"
           min={0}
-          max={1000}
+          max={3000}
+          units="Hz"
           param={synth.lfo.gain}
+        />
+
+        <Slider
+          label="FM rate"
+          inputClassName="col-span-2"
+          min={1}
+          max={1000}
+          units="Hz"
+          param={synth.lfo.frequency}
         />
 
         <Slider
