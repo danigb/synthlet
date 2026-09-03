@@ -71,3 +71,26 @@ describe.each(gatePackages)("%s", (pkg) => {
     ).toBe(gateSource);
   });
 });
+
+// The band-limiting kernels are copied the same way, but only into the packages
+// that correct a discontinuity. `lfo` and `wavetable-oscillator` are the
+// intended next consumers; each opts in by carrying the file, which is one `cp`
+// and one entry in the list below.
+const blepSource = readFileSync(join(root, "scripts/_blep.ts"), "utf8");
+const blepPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_blep.ts")),
+);
+
+describe("the band-limiting kernels", () => {
+  it("are shared by every package that corrects a discontinuity", () => {
+    expect(blepPackages).toEqual(["polyblep-oscillator"]);
+  });
+});
+
+describe.each(blepPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_blep.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_blep.ts"), "utf8"),
+    ).toBe(blepSource);
+  });
+});
