@@ -37,7 +37,7 @@ function Example() {
           name="Waveform"
           inputClassName="col-span-2"
           param={synth.osc.type}
-          valueNames={["Saw", "Square", "Triangle"]}
+          valueNames={["Sine", "Triangle", "Saw", "Square"]}
         />
 
         <Slider

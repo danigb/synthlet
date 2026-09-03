@@ -179,17 +179,19 @@ export type RenderOptions = RenderContext & {
  * `warmup` samples before capturing `length`.
  *
  * `createGenerator` is a factory rather than a generator because every
- * measurement needs its own phase accumulator, and because `createPolyblep`
- * takes the sample rate at construction - the same shape as the harnesses'
- * `GENS[name](f0)`.
+ * measurement needs its own phase accumulator and pending ring, and because
+ * `createPolyblepOscillator` takes the sample rate at construction - the same
+ * shape as the harnesses' `GENS[name](f0)`.
  *
- * The warm-up is not cosmetic. The triangle's integrator and DC blocker start
- * from rest and settle over the first few hundred samples: measured cold peak
- * at 1661 Hz is 1.777 over samples 0-1024 against a steady-state 0.966, which
- * is finding C3 of the audit. Ticket 04 deletes the integrator and the blocker
- * and the transient with them; until then, every steady-state figure in
- * `dsp.test.ts` is measured after this warm-up, and the tests that deliberately
- * look at a cold start pass `warmup: 0` and say so.
+ * The warm-up used to be load-bearing: the triangle's integrator and DC blocker
+ * started from rest and settled over the first few hundred samples, peaking at
+ * a measured 1.777 at 1661 Hz while they did, which was finding C3 of the
+ * audit. Ticket 04 deleted the integrator, the blocker and the transient with
+ * them - a cold render now peaks at exactly 1.000, the same bound a warm one
+ * holds to. What the warm-up buys today is comparability: it is what the audit
+ * and both harnesses in `thoughts/research/2026-09-03_polyblep-harness/`
+ * measured after, so every figure in `dsp.test.ts` is directly against theirs.
+ * The tests that deliberately look at a cold start pass `warmup: 0` and say so.
  */
 export function render(
   createGenerator: (context: RenderContext) => (block: Float32Array) => void,

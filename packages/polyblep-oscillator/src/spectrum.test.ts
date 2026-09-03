@@ -1,4 +1,4 @@
-import { createPolyblep, PolyblepOscillatorType } from "./dsp";
+import { createPolyblepOscillator, PolyblepOscillatorType } from "./dsp";
 import {
   aliasSnr,
   blackmanHarris,
@@ -12,14 +12,22 @@ import {
 //
 // `aliasSnr` is the audit's own metric, so its absolute values mean nothing
 // outside this repository - but they mean something precise inside it, and the
-// twelve numbers below are what pin them down. They are the audit's published
+// eighteen numbers below are what pin them down. They are the audit's published
 // sawtooth rows, reproduced to the decimal by both harnesses in
-// `thoughts/research/2026-09-03_polyblep-harness/` and, as the tests here
-// assert, by this port driving the real `createPolyblep` through a
+// `thoughts/research/2026-09-03_polyblep-harness/` and by this port driving a
 // `Float32Array` in 128-sample blocks.
 //
-// If either row drifts, the metric changed and every floor in `dsp.test.ts` is
+// If any row drifts, the metric changed and every floor in `dsp.test.ts` is
 // meaningless. Fix the metric; do not update these numbers.
+//
+// The first two generators are written out in full here rather than imported,
+// so that the calibration cannot move when the package's own DSP does. Ticket
+// 04 is why: it replaced the 2-point PolyBLEP with a discontinuity scheduler
+// and the 4-point kernels, and the row that used to be measured by driving
+// `dsp.ts` would have drifted by 10 dB through no fault of the metric. The
+// third row is the real oscillator, pinned two-sided against
+// `order-harness.js`'s 4-point figures - which turns this package's central
+// quality claim from a floor into an equality.
 
 const SAMPLE_RATE = 44100;
 const CALIBRATION_HZ = [110, 440, 1000, 2000, 4000, 8000];
@@ -27,8 +35,12 @@ const CALIBRATION_HZ = [110, 440, 1000, 2000, 4000, 8000];
 /** `2 * phase - 1`, no correction at all. `order-harness.js`, naive row. */
 const NAIVE_SAWTOOTH_DB = [30.2, 19.1, 15.6, 12.5, 9.1, 5.0];
 
-/** The shipped 2-point PolyBLEP. `order-harness.js`, `saw2` row. */
-const SHIPPED_SAWTOOTH_DB = [67.0, 35.4, 32.0, 29.5, 24.7, 18.3];
+/** 2-point PolyBLEP, the kernel the package shipped until ticket 04.
+ * `order-harness.js`, `saw2` row. */
+const TWO_POINT_SAWTOOTH_DB = [67.0, 35.4, 32.0, 29.5, 24.7, 18.3];
+
+/** The 4-point B-spline the package ships now. `order-harness.js`, `saw4` row. */
+const FOUR_POINT_SAWTOOTH_DB = [93.4, 45.5, 42.3, 40.1, 34.5, 26.8];
 
 const TOLERANCE_DB = 0.5;
 
@@ -44,10 +56,41 @@ const naiveSawtooth = ({ f0, sampleRate }: RenderContext) => {
   };
 };
 
-const shippedSawtooth = ({ f0, sampleRate }: RenderContext) => {
-  const generate = createPolyblep(sampleRate);
+/**
+ * `2 * phase - 1` with the 2-point residual subtracted, placed predictively
+ * from the increment - the whole of the oscillator as it stood before ticket
+ * 04, transcribed. The polynomial is `2 * blepResidual2`, the 2 being the
+ * sawtooth's own jump height.
+ */
+const twoPointSawtooth = ({ f0, sampleRate }: RenderContext) => {
+  const increment = f0 / sampleRate;
+  const polyblep = (phase: number) => {
+    if (phase < increment) {
+      const p = phase / increment;
+      return p + p - p * p - 1;
+    }
+    if (phase > 1 - increment) {
+      const p = (phase - 1) / increment;
+      return p + p + p * p + 1;
+    }
+    return 0;
+  };
+  let phase = 0;
+  return (block: Float32Array) => {
+    for (let i = 0; i < block.length; i++) {
+      block[i] = 2 * phase - 1 - polyblep(phase);
+      phase += increment;
+      phase -= Math.floor(phase);
+    }
+  };
+};
+
+const fourPointSawtooth = ({ f0, sampleRate }: RenderContext) => {
+  const generate = createPolyblepOscillator(sampleRate);
+  const frequency = new Float32Array([f0]);
+  const detune = new Float32Array([0]);
   return (block: Float32Array) =>
-    generate(block, PolyblepOscillatorType.Sawtooth, f0, 0);
+    generate(block, PolyblepOscillatorType.Sawtooth, frequency, detune);
 };
 
 const round1 = (value: number) => Math.round(value * 10) / 10;
@@ -83,8 +126,12 @@ describe("the alias-SNR metric", () => {
     expect(drift(naiveSawtooth, NAIVE_SAWTOOTH_DB)).toEqual([]);
   });
 
-  it("reproduces the shipped sawtooth", () => {
-    expect(drift(shippedSawtooth, SHIPPED_SAWTOOTH_DB)).toEqual([]);
+  it("reproduces the 2-point sawtooth", () => {
+    expect(drift(twoPointSawtooth, TWO_POINT_SAWTOOTH_DB)).toEqual([]);
+  });
+
+  it("reproduces the shipped 4-point sawtooth", () => {
+    expect(drift(fourPointSawtooth, FOUR_POINT_SAWTOOTH_DB)).toEqual([]);
   });
 
   it("ignores a constant offset when asked to", () => {
@@ -93,7 +140,7 @@ describe("the alias-SNR metric", () => {
     // `2 * width - 1` by construction; asserted here rather than shipped
     // untested.
     const f0 = 440;
-    const clean = render(shippedSawtooth, { f0, sampleRate: SAMPLE_RATE });
+    const clean = render(twoPointSawtooth, { f0, sampleRate: SAMPLE_RATE });
     const offset = clean.map((sample) => sample + 0.3);
 
     const reference = aliasSnr(clean, f0, SAMPLE_RATE);

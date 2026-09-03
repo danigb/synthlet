@@ -141,9 +141,38 @@ dedication). No notice is required; the credit is a courtesy.
 
 ### @synthlet/polyblep-oscillator
 
-The PolyBLEP correction follows
+The original 2-point PolyBLEP correction followed
 [sndkit](https://paulbatchelor.github.io/sndkit/blep/) by Paul Batchelor, under
 The Unlicense. No notice required.
+
+The oscillator's **scheduling structure** derives from
+[stmlib / eurorack](https://github.com/pichenettes/eurorack) by Mutable
+Instruments — specifically `stages/oscillator.h`, © 2017 Emilie Gillet, under
+the MIT licence. Notice required. See
+[stmlib / eurorack (MIT)](#stmlib--eurorack-mit) below.
+
+What was taken, and it is structure rather than mathematics:
+
+- the `this_sample` / `next_sample` scheme, in which a discontinuity detected on
+  one sample writes a correction into samples already computed but not yet
+  emitted, so the correction is placed from where the phase actually landed
+  rather than predicted from the increment. `src/dsp.ts` generalises the one
+  pending sample to a four-slot ring, because the 4-point kernel's support is
+  ±2 samples rather than ±1;
+- the `high_ ^ (phase_ < pw)` edge test for the discontinuity that does not sit
+  at the cycle boundary (`oscillator.h:187`, `:217`);
+- the `discontinuity = (slope_up + slope_down) * frequency` recipe for scaling a
+  corner correction by the slope change per sample (`oscillator.h:180-215`);
+- the increment cap `kMaxFrequency = 0.25f` (`oscillator.h:53`).
+
+What was **not** taken: the kernels. stmlib's `ThisBlepSample`,
+`NextBlepSample`, `ThisIntegratedBlepSample` and `NextIntegratedBlepSample` are
+not used and are not present. `src/_blep.ts` carries B-spline residuals derived
+by integration, from the definition of the cardinal B-spline — the derivation is
+in that file's header and `src/blep.test.ts` asserts its three characteristic
+properties. The choice is measured, not stylistic: at 2-point order stmlib's
+integrated kernel scores 3–7 dB better than the cubic B-spline, and at 4-point
+order the B-spline beats both by a further 10–20 dB.
 
 ### @synthlet/adsr
 
@@ -226,10 +255,15 @@ brute-force full-rate implementation that exists only for the tests.
 
 **Affirmative statement on the reading list.** The root README links a number of
 open-source synthesis projects — Surge, VCV Rack, the Synthesis ToolKit, stmlib,
-`timowest/analogue` and others. Those are reading and inspiration only. No code
-in this repository derives from any of them. This matters most for
-[`timowest/analogue`](https://github.com/timowest/analogue), which carries no
-licence at all: nothing was taken from it.
+`timowest/analogue` and others. **With one exception, recorded above**, those
+are reading and inspiration only, and no code in this repository derives from
+them. The exception is stmlib: `@synthlet/polyblep-oscillator` takes the
+scheduling structure of `stages/oscillator.h` and is listed under
+[Derivations](#synthletpolyblep-oscillator) with the MIT notice that
+requires.
+Nothing derives from Surge, VCV Rack or the Synthesis ToolKit. This matters most
+for [`timowest/analogue`](https://github.com/timowest/analogue), which carries
+no licence at all: nothing was taken from it.
 
 ---
 
@@ -291,6 +325,32 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+### stmlib / eurorack (MIT)
+
+Applies to `polyblep-oscillator`, whose discontinuity scheduler derives from
+`stages/oscillator.h`. Copyright 2017 Emilie Gillet
+(emilie.o.gillet@gmail.com).
+
+```
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 ```
 
 ### Common-DSP (MIT)

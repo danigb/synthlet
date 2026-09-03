@@ -22,15 +22,16 @@ const osc = PolyblepOscillator(audioContext, {
 
 ## Parameters
 
-- `type`: A number representing the waveform type. Default is 0 (saw). The available types are:
+- `type`: A number representing the waveform type. Default is 2 (saw). The available types are:
 - `frequency`: The frequency of the oscillator in Hz. Default is 440.
 - `detune`: The detune in cents. Default is 0. Range: [-1200, 1200] (±1 octave)
 
-Oscillator types are:
+Oscillator types are, in brightness order:
 
-- `PolybleopOscillatorType.Sawtooth` = 0
-- `PolybleopOscillatorType.Square` = 1
-- `PolybleopOscillatorType.Triangle` = 2
+- `PolyblepOscillatorType.Sine` = 0
+- `PolyblepOscillatorType.Triangle` = 1
+- `PolyblepOscillatorType.Sawtooth` = 2
+- `PolyblepOscillatorType.Square` = 3
 
 ## References
 

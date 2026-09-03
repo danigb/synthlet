@@ -5,7 +5,13 @@
 // CI job for a year while the triangle was recorded at 1.6x full scale under
 // the name "square", and none of them noticed. What this package promises -
 // alias rejection, amplitude, totality over the declared parameter range,
-// block-size independence - is asserted numerically in `dsp.test.ts`.
+// block-size independence, a click-free type change - is asserted numerically
+// in `dsp.test.ts`.
+//
+// The parameters arrive here as plain arrays of length 1, which is what a
+// k-rate `AudioParam` delivers; `frequency` and `detune` are declared a-rate,
+// and the DSP branches on the array's length, so this exercises the k-rate
+// path. `dsp.test.ts` asserts the two agree.
 
 describe("ProcessorNode", () => {
   let Processor: any;
@@ -27,33 +33,19 @@ describe("ProcessorNode", () => {
     expect(Processor.parameterDescriptors).toMatchSnapshot();
   });
 
-  it("generates a sawtooth", () => {
+  // `PolyblepOscillatorType`, in brightness order.
+  const WAVEFORMS = [
+    ["sine", 0],
+    ["triangle", 1],
+    ["sawtooth", 2],
+    ["square", 3],
+  ] as const;
+
+  it.each(WAVEFORMS)("generates a %s", (_name, type) => {
     const processor = new Processor();
     const { inputs, outputs } = createInputsOutputs({ length: sampleRate });
     const params = {
-      type: [0],
-      frequency: [2],
-      detune: [0],
-    };
-    processor.process(inputs, outputs, params);
-    expect(outputs).toMatchSnapshot();
-  });
-  it("generates a square", () => {
-    const processor = new Processor();
-    const { inputs, outputs } = createInputsOutputs({ length: sampleRate });
-    const params = {
-      type: [1],
-      frequency: [2],
-      detune: [0],
-    };
-    processor.process(inputs, outputs, params);
-    expect(outputs).toMatchSnapshot();
-  });
-  it("generates a triangle", () => {
-    const processor = new Processor();
-    const { inputs, outputs } = createInputsOutputs({ length: sampleRate });
-    const params = {
-      type: [2],
+      type: [type],
       frequency: [2],
       detune: [0],
     };
@@ -68,12 +60,12 @@ describe("ProcessorNode", () => {
     const processor = new Processor();
     const silent = render(
       processor,
-      { type: [2], frequency: [0], detune: [0] },
+      { type: [1], frequency: [0], detune: [0] },
       1024,
     );
     const after = render(
       processor,
-      { type: [2], frequency: [440], detune: [0] },
+      { type: [1], frequency: [440], detune: [0] },
       1024,
     );
 
@@ -93,6 +85,10 @@ describe("ProcessorNode", () => {
 
     expect(at(1.5)).toEqual(at(2));
     expect(at(1.4)).toEqual(at(1));
+    // ...and a value outside the enum clamps to an end of it rather than
+    // selecting `undefined`.
+    expect(at(9)).toEqual(at(3));
+    expect(at(-9)).toEqual(at(0));
   });
 
   it("wraps the phase at any increment", () => {
@@ -102,7 +98,7 @@ describe("ProcessorNode", () => {
     // @ts-ignore
     globalThis.sampleRate = 8000;
     try {
-      for (const type of [0, 1, 2]) {
+      for (const type of [0, 1, 2, 3]) {
         const output = render(
           new Processor(),
           { type: [type], frequency: [20000], detune: [0] },
