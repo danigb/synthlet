@@ -6,6 +6,7 @@ import {
   peak,
   peakFrequency,
 } from "./_spectrum";
+import { defaultWavetable } from "./wavetable-builder";
 import { WavetableOscillator } from "./wavetable-oscillator";
 
 /**
@@ -297,6 +298,79 @@ describe("aliasing", () => {
     const measured = aliasSnr(signal, 440, SAMPLE_RATE);
     expect(measured).toBeGreaterThan(91);
     expect(Math.abs(measured - 92.9)).toBeLessThan(0.15);
+  });
+});
+
+describe("the built-in table", () => {
+  // Ticket 04's generated set, measured with the same instrument and at the same
+  // pitches as the `aliasing` block above, one plane at a time so the number is
+  // the plane's and not the crossfade's.
+  //
+  // The row that matters to ticket 06 is the sawtooth: the built-in plane is the
+  // *same object* as this file's `sawTable` reference, to within 0.07 dB at
+  // every pitch. So the audit's reference column applies to the generated table
+  // unchanged, and 06 can raise these floors against the numbers it already has
+  // rather than re-characterising a new waveform. It also fixes the shape of the
+  // work: a mip level is `shapeHarmonics(shape, fewer)` through the same
+  // builder, no FFT and no filter design.
+  //
+  // THESE ARE NOT TARGETS either. The set is built at the table's full
+  // bandwidth, deliberately, because band-limiting it here would be right at one
+  // pitch and wrong at every other one.
+  const len = 256;
+  const planes: [string, number, number[]][] = [
+    ["sine", 0, [98.17, 91.09, 92.89, 92.64, 91.92, 91.06]],
+    ["triangle", 1, [92.49, 72.29, 60.92, 50.99, 40.45, 31.46]],
+    ["sawtooth", 2, [56.5, 32.25, 23.68, 18.24, 13.91, 10.38]],
+    ["square", 3, [58.11, 33.94, 25.38, 20.18, 15.54, 11.92]],
+  ];
+  const pitches = [110, 220, 440, 880, 1760, 3520];
+  const { data } = defaultWavetable(len);
+
+  it.each(planes)("the %s plane aliases as measured", (_name, index, dbs) => {
+    const plane = data.slice(index * len, (index + 1) * len);
+    pitches.forEach((f0, i) => {
+      const signal = render(plane, len, { frequency: f0 }, { warmup: WARMUP });
+      expect(Math.abs(aliasSnr(signal, f0, SAMPLE_RATE) - dbs[i])).toBeLessThan(
+        0.15,
+      );
+    });
+  });
+
+  it("is the audit's own sawtooth, so ticket 06 inherits its column", () => {
+    const generated = data.slice(2 * len, 3 * len);
+    const reference = sawTable(len);
+    for (const f0 of pitches) {
+      const a = aliasSnr(
+        render(generated, len, { frequency: f0 }, { warmup: WARMUP }),
+        f0,
+        SAMPLE_RATE,
+      );
+      const b = aliasSnr(
+        render(reference, len, { frequency: f0 }, { warmup: WARMUP }),
+        f0,
+        SAMPLE_RATE,
+      );
+      expect(Math.abs(a - b)).toBeLessThan(0.1);
+    }
+  });
+
+  it("plays every plane at the pitch it is asked for", () => {
+    for (let index = 0; index < 4; index++) {
+      const plane = data.slice(index * len, (index + 1) * len);
+      const measured = peakFrequency(
+        render(plane, len, { frequency: 440 }, { warmup: WARMUP }),
+        SAMPLE_RATE,
+      );
+      expect(centsFrom(measured, 440)).toBeLessThan(5);
+    }
+  });
+
+  it("is not silent in its first render quantum", () => {
+    // Success criterion 1, at the DSP boundary; `index.test.ts` asserts the same
+    // thing through the node, which is where the network would have been.
+    const signal = render(data, len, { frequency: 440 }, { length: 128 });
+    expect(peak(signal)).toBeGreaterThan(0.5);
   });
 });
 

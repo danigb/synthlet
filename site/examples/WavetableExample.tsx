@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import {
   AdsrAmp,
+  builtInHarmonics,
   Compound,
   fetchWavetableNames,
   Gain,
@@ -13,13 +14,18 @@ import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
+/** The table the oscillator generates for itself, and the initial selection. */
+const BUILT_IN = "Built-in";
+
 const WavetableSynth = (ac: AudioContext) => {
   const gate = Param(ac);
   const freq = Param(ac, { input: 440 });
   const volume = Param.db(ac, -24);
 
+  // No `loadWavetable` here: the oscillator ships with a built-in sine ->
+  // triangle -> sawtooth -> square table and is audible before anything is
+  // fetched. Picking a name from the dropdown replaces it.
   const osc = WavetableOscillator(ac, { frequency: freq });
-  osc.loadWavetable("ACCESS_V");
   const amp = AdsrAmp(ac, { gate });
   const out = Gain(ac, { gain: volume });
 
@@ -39,7 +45,7 @@ const WavetableSynth = (ac: AudioContext) => {
 
 function WavetableExample() {
   const [currentWavetableName, setCurrentWavetableName] =
-    useState<string>("ACCESS_V");
+    useState<string>(BUILT_IN);
   const [availableNames, setAvailableNames] = useState<string[]>([]);
 
   useEffect(() => {
@@ -60,10 +66,13 @@ function WavetableExample() {
           className="col-span-2 bg-zinc-900 p-1 rounded border-zinc-300"
           value={currentWavetableName}
           onChange={(event) => {
-            setCurrentWavetableName(event.target.value);
-            synth.osc.loadWavetable(event.target.value);
+            const name = event.target.value;
+            setCurrentWavetableName(name);
+            if (name === BUILT_IN) synth.osc.setHarmonics(builtInHarmonics());
+            else synth.osc.loadWavetable(name);
           }}
         >
+          <option key={BUILT_IN}>{BUILT_IN}</option>
           {availableNames.map((name) => (
             <option key={name}>{name}</option>
           ))}
