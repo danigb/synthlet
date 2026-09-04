@@ -8,8 +8,9 @@ import {
   Param,
   PolyblepOscillator,
 } from "synthlet";
+import { useState } from "react";
 import { ExamplePane } from "./components/ExamplePane";
-import { Selector, SelectorParam } from "./components/Selector";
+import { SelectorParam } from "./components/Selector";
 import { Slider } from "./components/Slider";
 import { Spectrum } from "./components/Spectrum";
 import { useSynth } from "./useSynth";
@@ -25,10 +26,20 @@ const WAVEFORM_NAMES = ["Sine", "Triangle", "Saw", "Square"];
 
 const BASE_FREQUENCY = 440;
 
+/** Slider positions the reset buttons return to. */
+const DEFAULT_FM_DEPTH = 0;
+const DEFAULT_FM_RATE = 1;
+const DEFAULT_VIBRATO = 0;
+const DEFAULT_WIDTH = 0.5;
+const DEFAULT_SYNC = 0;
+const DEFAULT_VOLUME_DB = -24;
+
 const POLY_COLOR = "#0ea5e9";
 const NATIVE_COLOR = "#f59e0b";
 
+/** Index into this is what `setAudible` takes; 0 is the PolyBLEP side. */
 const AUDIBLE = ["PolyBLEP", "OscillatorNode"] as const;
+const AUDIBLE_COLORS = [POLY_COLOR, NATIVE_COLOR];
 
 /**
  * Both arms get the same analyser settings, so the two pictures are the same
@@ -45,13 +56,13 @@ function createAnalyser(ac: AudioContext) {
 }
 
 function PolyblepSynth(ac: AudioContext) {
-  const volume = Param.db(ac, -24);
+  const volume = Param.db(ac, DEFAULT_VOLUME_DB);
 
   // Through-zero FM: the LFO is connected to `frequency`, not to `detune`, so
   // the AudioParam *sums* it with the base pitch. That is linear FM, and once
   // the depth passes the base pitch the sum goes negative and the oscillator
   // runs its phase backwards instead of clamping flat.
-  const fm = Lfo(ac, { frequency: 1, gain: 0 });
+  const fm = Lfo(ac, { frequency: DEFAULT_FM_RATE, gain: DEFAULT_FM_DEPTH });
 
   // Vibrato, for contrast: the same kind of node into `detune` instead, where
   // the units are cents and the effect is proportional. Having both on screen
@@ -59,7 +70,7 @@ function PolyblepSynth(ac: AudioContext) {
   // LFO shape doing two entirely different things depending on the inlet. The
   // rate is fixed at a musical 5.5 Hz; the FM arm keeps a rate slider because
   // sweeping *that* one into the audio range is the part worth hearing.
-  const vibrato = Lfo(ac, { frequency: 5.5, gain: 0 });
+  const vibrato = Lfo(ac, { frequency: 5.5, gain: DEFAULT_VIBRATO });
 
   // Hard sync: a second oscillator, patched into the first one's `sync`. Every
   // rising zero crossing of the master's sawtooth restarts the slave's phase
@@ -71,7 +82,7 @@ function PolyblepSynth(ac: AudioContext) {
   // be an edge. At frequency 0 the phase freezes and it holds a constant -1,
   // which never crosses zero, so the bottom of the Sync slider is sync *off*
   // and the example opens as a plain oscillator.
-  const master = PolyblepOscillator(ac, { frequency: 0 });
+  const master = PolyblepOscillator(ac, { frequency: DEFAULT_SYNC });
 
   const osc = PolyblepOscillator(ac, {
     frequency: fm,
@@ -100,10 +111,21 @@ function PolyblepSynth(ac: AudioContext) {
   const nativeAnalyser = createAnalyser(ac);
   const polyGain = Gain.val(ac, 1);
   const nativeGain = Gain.val(ac, 0);
-  const out = Gain(ac, { gain: volume });
+  const mix = Gain(ac, { gain: volume });
 
-  osc.connect(polyAnalyser).connect(polyGain).connect(out);
-  native.connect(nativeAnalyser).connect(nativeGain).connect(out);
+  // The mute gain, and the last node in the chain. It is deliberately *after*
+  // the volume gain and after both analysers: muting therefore never writes to
+  // the Volume slider's param - unmuting returns to whatever level was already
+  // dialled in - and the two spectra keep drawing while the page is silent, so
+  // a muted example is still a working demonstration.
+  //
+  // It starts at 0. An example that opens making a 440 Hz sawtooth at whatever
+  // the machine's volume happens to be is a rude way to arrive on a docs page.
+  const out = Gain.val(ac, 0);
+
+  osc.connect(polyAnalyser).connect(polyGain).connect(mix);
+  native.connect(nativeAnalyser).connect(nativeGain).connect(mix);
+  mix.connect(out);
 
   // Two controls have to reach both oscillators at once, and `Slider` and
   // `SelectorParam` are typed against `{ value: number }` rather than
@@ -128,10 +150,18 @@ function PolyblepSynth(ac: AudioContext) {
     },
   };
 
-  const setAudible = (which: string) => {
-    const poly = which === AUDIBLE[0];
+  const setAudible = (index: number) => {
+    const poly = index === 0;
     polyGain.gain.value = poly ? 1 : 0;
     nativeGain.gain.value = poly ? 0 : 1;
+  };
+
+  const setMuted = (muted: boolean) => {
+    out.gain.value = muted ? 0 : 1;
+    // Unmuting is a click, which is the user gesture the autoplay policy wants.
+    // The context is a module-level singleton shared by every example on the
+    // page, so it may well have been created while suspended.
+    if (!muted && ac.state === "suspended") void ac.resume();
   };
 
   return Compound({
@@ -145,6 +175,7 @@ function PolyblepSynth(ac: AudioContext) {
       volume,
       polyGain,
       nativeGain,
+      mix,
       // Raw `AnalyserNode`s have no `dispose`, so the cascade disconnects them;
       // the native oscillator keeps running once disconnected, so it is stopped
       // by hand. The audio context is a module-level singleton and outlives the
@@ -163,6 +194,7 @@ function PolyblepSynth(ac: AudioContext) {
       polyAnalyser,
       nativeAnalyser,
       setAudible,
+      setMuted,
       volume: volume.input,
     },
   });
@@ -170,6 +202,10 @@ function PolyblepSynth(ac: AudioContext) {
 
 function Example() {
   const synth = useSynth(PolyblepSynth);
+  // Both mirror node state the synth owns: the mute gain opens at 0, and the
+  // PolyBLEP arm is the one wired audible at construction.
+  const [muted, setMuted] = useState(true);
+  const [audible, setAudible] = useState(0);
   if (!synth) return null;
 
   return (
@@ -195,13 +231,21 @@ function Example() {
           valueNames={WAVEFORM_NAMES}
         />
 
-        <Selector
-          name="Audible"
-          selectClassName="col-span-3"
-          values={AUDIBLE}
-          initialValue={AUDIBLE[0]}
-          onChange={synth.setAudible}
-        />
+        <div>Audible</div>
+        <button
+          type="button"
+          className="col-span-2 border px-2 py-1 rounded bg-fd-secondary"
+          style={{ color: AUDIBLE_COLORS[audible] }}
+          title="Switch which oscillator you hear. Both keep drawing."
+          onClick={() => {
+            const next = audible === 0 ? 1 : 0;
+            setAudible(next);
+            synth.setAudible(next);
+          }}
+        >
+          {AUDIBLE[audible]}
+        </button>
+        <div />
 
         <Slider
           label="Frequency"
@@ -210,6 +254,7 @@ function Example() {
           max={8000}
           units="Hz"
           param={synth.pitch}
+          defaultValue={BASE_FREQUENCY}
         />
 
         <Slider
@@ -219,6 +264,7 @@ function Example() {
           max={3000}
           units="Hz"
           param={synth.fm.gain}
+          defaultValue={DEFAULT_FM_DEPTH}
         />
 
         <Slider
@@ -228,6 +274,7 @@ function Example() {
           max={1000}
           units="Hz"
           param={synth.fm.frequency}
+          defaultValue={DEFAULT_FM_RATE}
         />
 
         <Slider
@@ -237,6 +284,7 @@ function Example() {
           max={100}
           units="c"
           param={synth.vibrato.gain}
+          defaultValue={DEFAULT_VIBRATO}
         />
 
         <Slider
@@ -245,6 +293,7 @@ function Example() {
           min={0}
           max={1}
           param={synth.osc.width}
+          defaultValue={DEFAULT_WIDTH}
         />
 
         <Slider
@@ -254,6 +303,7 @@ function Example() {
           max={1000}
           units="Hz"
           param={synth.master.frequency}
+          defaultValue={DEFAULT_SYNC}
         />
       </div>
 
@@ -264,7 +314,24 @@ function Example() {
         two oscillators.
       </p>
 
-      <div className="flex px-1 pt-2 mt-2 border-t border-fd-border gap-4">
+      <div className="flex items-center px-1 pt-2 mt-2 border-t border-fd-border gap-4">
+        <button
+          type="button"
+          className="border px-2 py-1 rounded bg-fd-secondary text-nowrap"
+          aria-pressed={muted}
+          onClick={() => {
+            const next = !muted;
+            setMuted(next);
+            synth.setMuted(next);
+          }}
+        >
+          {muted ? "Unmute" : "Mute"}
+        </button>
+        {muted && (
+          <span className="text-xs text-nowrap" style={{ color: NATIVE_COLOR }}>
+            Unmute to hear
+          </span>
+        )}
         <Slider
           label="Volume"
           inputClassName="flex-grow"
@@ -272,6 +339,7 @@ function Example() {
           max={0}
           param={synth.volume}
           units="dB"
+          defaultValue={DEFAULT_VOLUME_DB}
         />
       </div>
     </>
