@@ -96,3 +96,28 @@ describe.each(delayPackages)("%s", (pkg) => {
     ).toBe(delaySource);
   });
 });
+
+// The measuring instrument is copied the same way, and is the only shared file
+// here that no shipped code imports: it exists so that two packages' alias-SNR
+// and spectrum numbers are comparable. `polyblep-oscillator` is the obvious
+// third consumer and deliberately does not carry a copy yet - it has no
+// spectrum test on this branch, and the opt-in rule above exists precisely so
+// that a package does not get a file nothing imports.
+const spectrumSource = readFileSync(join(root, "scripts/_spectrum.ts"), "utf8");
+const spectrumPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_spectrum.ts")),
+);
+
+describe("the measuring instrument", () => {
+  it("is shared by every package whose tests measure a spectrum", () => {
+    expect(spectrumPackages).toEqual(["digital-delay", "wavetable-oscillator"]);
+  });
+});
+
+describe.each(spectrumPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_spectrum.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_spectrum.ts"), "utf8"),
+    ).toBe(spectrumSource);
+  });
+});

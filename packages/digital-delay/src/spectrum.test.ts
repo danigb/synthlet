@@ -1,20 +1,28 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
+  aliasSnr,
   blackmanHarris,
   centroid,
   fft,
   fundamental,
   magnitudes,
   maxAbsoluteDifference,
+  peak,
+  peakFrequency,
   render,
   rt60,
-} from "./spectrum";
+} from "./_spectrum";
 
 // Calibration, not coverage. Every metric here is checked against a signal
 // whose answer is known analytically, so that a broken metric fails in this
 // file rather than silently passing - or silently failing - a feature test in
 // `dsp.test.ts`.
+//
+// The instrument is now shared (`scripts/_spectrum.ts`, copied here and into
+// `wavetable-oscillator`), so this file is the calibration for both packages:
+// every alias-SNR floor in `wavetable-oscillator/src/dsp.test.ts` is only worth
+// as much as the pins below.
 
 const SAMPLE_RATE = 44100;
 
@@ -151,6 +159,107 @@ describe("maxAbsoluteDifference", () => {
       ),
       6,
     );
+  });
+});
+
+describe("peak", () => {
+  it("is the largest absolute sample, sign-blind", () => {
+    expect(peak(sine(1024, 440))).toBeCloseTo(1, 6);
+    expect(
+      peak(Float64Array.from(sine(1024, 440), (v) => -0.3 * v)),
+    ).toBeCloseTo(0.3, 6);
+    expect(peak(new Float64Array(16))).toBe(0);
+  });
+});
+
+describe("peakFrequency", () => {
+  it.each([440, 1000, 5000])(
+    "recovers a %p Hz sine to within half a hertz",
+    (frequency) => {
+      expect(peakFrequency(sine(32768, frequency), SAMPLE_RATE)).toBeCloseTo(
+        frequency,
+        0,
+      );
+    },
+  );
+
+  it("resolves a frequency between two bins", () => {
+    // 32768 samples at 44.1 kHz is 1.346 Hz per bin, so 440.7 is two thirds of
+    // the way between bins. Without the parabolic fit this would read 440.0,
+    // and the pitch test in `wavetable-oscillator` - which asserts 5 cents,
+    // i.e. 1.27 Hz at 440 - would be measuring the bin grid.
+    expect(peakFrequency(sine(32768, 440.7), SAMPLE_RATE)).toBeCloseTo(
+      440.7,
+      1,
+    );
+  });
+});
+
+describe("aliasSnr", () => {
+  // A 440 Hz sine plus one interferer at 5000 Hz, which is not a harmonic of
+  // 440 (11 x 440 = 4840, 12 x 440 = 5280) and so lands squarely in the noise
+  // band. The answer is then -20 log10(amplitude), exactly.
+  it.each([
+    [0.1, 20],
+    [0.01, 40],
+    [0.001, 60],
+  ])("reads an interferer of %p as %p dB", (amplitude, expected) => {
+    const signal = Float64Array.from(
+      { length: 32768 },
+      (_, i) =>
+        Math.sin((2 * Math.PI * 440 * i) / SAMPLE_RATE) +
+        amplitude * Math.sin((2 * Math.PI * 5000 * i) / SAMPLE_RATE),
+    );
+    expect(aliasSnr(signal, 440, SAMPLE_RATE)).toBeCloseTo(expected, 1);
+  });
+
+  it("has headroom far above any floor a module test would set", () => {
+    // A whole number of cycles in the window, so there is no leakage and no
+    // noise: what is left is arithmetic. Any floor a module asserts is
+    // measuring the module, not the instrument.
+    const cycles = 327;
+    const frequency = (cycles * SAMPLE_RATE) / 32768;
+    expect(
+      aliasSnr(sine(32768, frequency), frequency, SAMPLE_RATE),
+    ).toBeGreaterThan(140);
+  });
+
+  it("ignores a constant offset when asked to", () => {
+    // Bin 0 is noise by the rule above, so a waveform with a legitimate DC
+    // component - a pulse wave, whose mean is 2 x width - 1 - reads far worse
+    // than it is without `removeDC`: 149 dB down to 5.7.
+    const cycles = 327;
+    const frequency = (cycles * SAMPLE_RATE) / 32768;
+    const clean = sine(32768, frequency);
+    const offset = Float64Array.from(clean, (value) => value + 0.3);
+
+    expect(aliasSnr(offset, frequency, SAMPLE_RATE)).toBeLessThan(10);
+    expect(
+      aliasSnr(offset, frequency, SAMPLE_RATE, { removeDC: true }),
+    ).toBeCloseTo(aliasSnr(clean, frequency, SAMPLE_RATE), 6);
+  });
+
+  it("costs 27 dB on a signal that has no DC to remove", () => {
+    // The mean it subtracts is the *unwindowed* mean, so a signal with no DC
+    // but a fractional number of cycles in the window - which is every musical
+    // pitch - has a small non-zero mean, and subtracting it plants a windowed
+    // constant at bin 0 that the metric then counts as noise. Measured: a
+    // 440 Hz sine reads 109.8 dB raw and 82.4 dB with `removeDC`.
+    //
+    // So `removeDC` is for waveforms whose DC is real. It is asserted here
+    // because the wavetable oscillator's tables are DC-free by construction and
+    // its floors would be 6.5 dB pessimistic at 110 Hz with it turned on.
+    const raw = aliasSnr(sine(32768, 440), 440, SAMPLE_RATE);
+    const removed = aliasSnr(sine(32768, 440), 440, SAMPLE_RATE, {
+      removeDC: true,
+    });
+    expect(raw).toBeGreaterThan(105);
+    expect(removed).toBeLessThan(raw - 20);
+  });
+
+  it("refuses a fundamental it cannot place harmonics from", () => {
+    expect(() => aliasSnr(sine(1024, 440), 0, SAMPLE_RATE)).toThrow();
+    expect(() => aliasSnr(sine(1024, 440), NaN, SAMPLE_RATE)).toThrow();
   });
 });
 
