@@ -54,26 +54,33 @@ export function Slider({
         }}
       />
       <div className={valueClassName}>
-        {transform(value).toFixed(2)}
-        {units}
-        {defaultValue !== undefined && (
-          <button
-            type="button"
-            aria-label={`Reset ${label} to default`}
-            title={`Reset to ${transform(defaultValue).toFixed(2)}${units ?? ""}`}
-            className={
-              "ml-1 px-1 align-middle rounded border border-fd-border text-[10px] leading-none " +
-              (value === defaultValue
-                ? "opacity-30"
-                : "opacity-60 hover:opacity-100")
-            }
-            onClick={() => {
-              setValue(defaultValue);
-              param.value = transform(defaultValue);
-            }}
-          >
-            ⟲
-          </button>
+        {defaultValue === undefined ? (
+          <>
+            {transform(value).toFixed(2)}
+            {units}
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-2">
+            <span>
+              {transform(value).toFixed(2)}
+              {units}
+            </span>
+            <button
+              type="button"
+              aria-label={`Reset ${label} to default`}
+              title={`Reset to ${transform(defaultValue).toFixed(2)}${units ?? ""}`}
+              className={
+                "border px-2 py-1 rounded bg-fd-secondary leading-none " +
+                (value === defaultValue ? "opacity-40" : "")
+              }
+              onClick={() => {
+                setValue(defaultValue);
+                param.value = transform(defaultValue);
+              }}
+            >
+              ⟲
+            </button>
+          </span>
         )}
       </div>
     </>
