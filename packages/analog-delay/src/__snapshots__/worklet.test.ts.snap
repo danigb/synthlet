@@ -1,0 +1,62 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`AnalogDelayProcessor has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.3,
+    "maxValue": 1.5,
+    "minValue": 0.02,
+    "name": "time",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.4,
+    "maxValue": 1.2,
+    "minValue": 0,
+    "name": "feedback",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.3,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "mix",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "taps",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.3,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "age",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.3,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "wobble",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "spread",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "mode",
+  },
+]
+`;

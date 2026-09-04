@@ -1,6 +1,7 @@
 import * as synthlet from "./index";
 import type { ParamDescriptor } from "./_worklet";
 import {
+  AnalogDelayMode,
   ArpScale,
   ClipType,
   LfoType,
@@ -21,6 +22,7 @@ const EXPECTED = [
   "AdEnv",
   "AdsrAmp",
   "AdsrEnv",
+  "AnalogDelay",
   "Arp",
   "BiquadFilter",
   "Chorus",
@@ -134,6 +136,12 @@ const members = (values: object) =>
 
 const ENUM_PARAMS = [
   {
+    name: "AnalogDelay.mode",
+    values: AnalogDelayMode,
+    factory: synthlet.AnalogDelay,
+    param: "mode",
+  },
+  {
     name: "Noise.type",
     values: NoiseType,
     factory: synthlet.Noise,
@@ -183,6 +191,7 @@ describe.each(ENUM_PARAMS)("$name", ({ values, factory, param }) => {
 // checked at build time; this is the cheap runtime half, and fails if a name
 // stops being exported at all.
 const ENUMS = {
+  AnalogDelayMode,
   ArpScale,
   ClipType,
   LfoType,
