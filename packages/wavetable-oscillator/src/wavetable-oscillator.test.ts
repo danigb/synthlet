@@ -18,7 +18,7 @@ describe("WavetableOscillator", () => {
     expect(output).toMatchSnapshot();
   });
 
-  it("renders two planes", () => {
+  it("renders three planes", () => {
     const osc = WavetableOscillator(10);
     osc.set(
       new Float32Array([

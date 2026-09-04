@@ -45,7 +45,7 @@ Float32Array [
 ]
 `;
 
-exports[`WavetableOscillator renders two planes 1`] = `
+exports[`WavetableOscillator renders three planes 1`] = `
 Float32Array [
   11,
   23,
@@ -60,9 +60,9 @@ Float32Array [
 ]
 `;
 
-exports[`WavetableOscillator renders two planes 2`] = `
+exports[`WavetableOscillator renders three planes 2`] = `
 Float32Array [
-  11,
+  111,
   123,
   135,
   147,
@@ -75,9 +75,9 @@ Float32Array [
 ]
 `;
 
-exports[`WavetableOscillator renders two planes 3`] = `
+exports[`WavetableOscillator renders three planes 3`] = `
 Float32Array [
-  111,
+  181,
   163,
   145,
   127,

@@ -7,7 +7,7 @@ type Inputs = {
 export function WavetableOscillator(sampleRate: number) {
   let $baseFrequency = 220;
   let $frequency = 440;
-  let $morphFrequency = 0.005;
+  let $morphFrequency = 0.05;
   let $wavetable = new Float32Array(0);
 
   let len = 0;
@@ -19,6 +19,18 @@ export function WavetableOscillator(sampleRate: number) {
   let morphPhase = Phasor(sampleRate);
   let morphChange = Trigger();
 
+  // `baseFrequency` has minValue 0, and _worklet.ts writes 0 into every connected
+  // param before its driver produces output, so the divisor is reachably zero. An
+  // unguarded ratio makes `inc` Infinity (or NaN for 0/0), `offset` follows it and
+  // never comes back. The comparison form resolves NaN to 0 instead of propagating.
+  // The ceiling is one table cycle every four output samples (sampleRate / 4), so
+  // it depends on `len` and set() has to recompute it after a table swap.
+  function updateInc() {
+    const raw = $frequency / $baseFrequency;
+    const max = len / 4;
+    inc = raw > 0 ? (raw < max ? raw : max) : 0;
+  }
+
   function read(inputs: Inputs) {
     if (
       inputs.frequency[0] !== $frequency ||
@@ -26,7 +38,7 @@ export function WavetableOscillator(sampleRate: number) {
     ) {
       $baseFrequency = inputs.baseFrequency[0];
       $frequency = inputs.frequency[0];
-      inc = $frequency / $baseFrequency;
+      updateInc();
     }
     $morphFrequency = inputs.morphFrequency[0];
   }
@@ -37,6 +49,13 @@ export function WavetableOscillator(sampleRate: number) {
     planes = Math.floor(wavetable.length / len);
     planeA = 0;
     planeB = (planeA + 1) % planes;
+    // Without this a swap mid-note keeps the old read position — out of range for a
+    // shorter table, so it reads undefined and emits NaN until it walks back — and
+    // the old morph phase, so the crossfade steps into the new plane pair.
+    offset = 0;
+    morphPhase.reset();
+    morphChange.reset();
+    updateInc();
   }
 
   function agen(output: Float32Array, inputs: Inputs) {
@@ -47,7 +66,14 @@ export function WavetableOscillator(sampleRate: number) {
 
     read(inputs);
     for (let i = 0; i < output.length; i++) {
-      let morph = morphPhase($morphFrequency);
+      const morph = morphPhase($morphFrequency);
+      // The phasor wraps on the same sample this writes, so the pair has to advance
+      // first: a morph of ~0 against the old pair is a one-sample jump back to
+      // planeA, and its size is |planeA - planeB| — a full-scale click.
+      if (morphChange(morph)) {
+        planeA = planeB;
+        planeB = (planeB + 1) % planes;
+      }
       const a = interpolateLinear2d($wavetable, len, planeA, offset);
       if (planeB !== planeA) {
         const b = interpolateLinear2d($wavetable, len, planeB, offset);
@@ -56,14 +82,9 @@ export function WavetableOscillator(sampleRate: number) {
         output[i] = a;
       }
       offset += inc;
-      if (offset >= len) offset -= len;
-      if (offset < 0) offset += len;
-
-      if (morphChange(morph)) {
-        // TODO: on plane change a click is audible (fix it)
-        planeA = planeB;
-        planeB = (planeB + 1) % planes;
-      }
+      // One step back into range whatever the overshoot; `len` is at least 1 here
+      // because agen() returns early on len === 0.
+      offset -= len * Math.floor(offset / len);
     }
   }
 
@@ -95,12 +116,16 @@ function Phasor(sampleRate: number) {
   let isr = 1 / sampleRate;
   let phase = 0;
 
-  return (frequency: number) => {
+  const phasor = (frequency: number) => {
     phase += frequency * isr;
     while (phase >= 1.0) phase -= 1.0;
     while (phase < 0.0) phase += 1.0;
     return phase;
   };
+  phasor.reset = () => {
+    phase = 0;
+  };
+  return phasor;
 }
 
 /**
@@ -111,7 +136,7 @@ function Trigger() {
   let prev = 0;
   let prevWasTrigger = false;
 
-  return function trigger(input: number) {
+  const detect = (input: number) => {
     const diff = Math.abs(input - prev);
     const trigger = diff > 0.5;
     prev = input;
@@ -123,4 +148,9 @@ function Trigger() {
       return trigger;
     }
   };
+  detect.reset = () => {
+    prev = 0;
+    prevWasTrigger = false;
+  };
+  return detect;
 }
