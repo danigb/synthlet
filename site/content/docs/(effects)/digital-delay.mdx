@@ -1,0 +1,85 @@
+---
+title: Digital Delay
+description: A stereo feedback delay whose loop filters, diffuses and saturates
+package: digital-delay
+---
+
+import DigitalDelayExample from "../../../examples/DigitalDelayExample";
+
+Web Audio has a `DelayNode`, so the delay line itself is solved. What it cannot
+do is put that line in a loop. The spec allows a cycle in the graph only if the
+cycle contains a `DelayNode`, and that node's effective delay is clamped to at
+least one render quantum — **128 samples, 2.90 ms at 44.1 kHz**. Below that
+floor nothing is expressible: no flanger, no comb resonance, no tight slapback.
+Above it, a hand-built `DelayNode → GainNode → DelayNode` loop still gives you a
+bare scalar in the feedback path — no filter, no saturation, no control over
+what happens when you move the delay time while audio is in the line.
+
+`DigitalDelay` is one worklet with one algorithm, eight continuous parameters
+and no modes. Every parameter is an `AudioParam`, so every one is a modulation
+destination.
+
+```ts
+import { DigitalDelay } from "synthlet";
+
+const delay = DigitalDelay(audioContext, {
+  time: 0.25, // seconds
+  feedback: 0.5,
+  mix: 0.3,
+  tone: -0.3, // darken each repeat
+  cross: 1, // ping-pong
+  diffuse: 0.4,
+});
+
+source.connect(delay).connect(audioContext.destination);
+```
+
+<DigitalDelayExample />
+
+## Parameters
+
+- `time`: delay time in seconds [0.0002, 2]. Changing it **preserves pitch**:
+  the read head hands over to a second head and crossfades rather than gliding
+- `feedback`: loop gain [0, 1.2]. Above 1 self-oscillates, bounded by the loop's
+  soft limiter rather than clipped
+- `mix`: dry/wet [0, 1]
+- `tone`: tilt on the **feedback path**, not the output [-1, 1]. Negative
+  darkens each repeat generation over generation, positive thins it, 0 is an
+  exact bypass
+- `mod`: depth of a 0.7 Hz, 3 ms excursion of the read pointer [0, 1] — vibrato,
+  chorus or flange depending on `time`
+- `spread`: L/R time offset as a ratio [0, 1]. 0 is mono-compatible, 1 makes the
+  right line twice the left
+- `cross`: feedback cross-feed [0, 1]. 0 is two independent lines, 1 is full
+  ping-pong, and the decay time is the same at every setting
+- `diffuse`: Schroeder allpasses in the loop [0, 1]. 0 is discrete repeats, 1 is
+  a wash
+
+One construction option, `maxTime` (default 2 s), sizes the buffers. It is not
+an `AudioParam` because it allocates.
+
+There is no tempo-sync parameter and no enum. `time` is a number in seconds:
+write `60 / bpm * 0.75` for a dotted eighth, or drive it from a node.
+
+## What it deliberately isn't
+
+"Digital" here means only "the one that isn't analog". This is a clean modern
+delay, not a model of a PCM42 or an SDE-3000. Its defining behaviour is that a
+`time` change preserves pitch. The other half — tape and bucket-brigade, where
+moving the knob bends pitch because time and bandwidth are physically coupled —
+is a different instrument with a different parameter surface, and is planned
+separately as `analog-delay`.
+
+## References
+
+- Schlecht & Habets, [_On Lossless Feedback Delay
+  Networks_](https://arxiv.org/abs/1606.07729), IEEE TSP 2017 — the rotation
+  feedback matrix, whose orthogonality is why `cross` does not change the decay
+- Dattorro, [_Effect Design Part 1: Reverberator and Other
+  Filters_](https://ccrma.stanford.edu/~dattorro/EffectDesignPart1.pdf), JAES
+  1997 — the allpass diffusion behind `diffuse`
+- Niemitalo, [_Polynomial Interpolators for High-Quality Resampling of
+  Oversampled Audio_](http://yehar.com/blog/wp-content/uploads/2009/08/deip.pdf),
+  2001 — the Hermite fractional read
+- Mutable Instruments Clouds — the feedback high-pass at `20 + 100·feedback²` Hz
+  and the cubic soft limiter

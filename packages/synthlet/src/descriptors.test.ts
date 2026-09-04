@@ -27,6 +27,7 @@ const EXPECTED = [
   "ClipAmp",
   "Clock",
   "DattorroReverb",
+  "DigitalDelay",
   "Euclid",
   "FlexAudioBufferSource",
   "Gain",

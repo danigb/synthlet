@@ -5,6 +5,7 @@ import { registerChorusWorklet } from "@synthlet/chorus";
 import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
+import { registerDigitalDelayWorklet } from "@synthlet/digital-delay";
 import { registerEuclidWorklet } from "@synthlet/euclid";
 import { registerFlexAudioBufferSourceWorklet } from "@synthlet/flex-audio-buffer-source";
 import { registerGraniteWorklet } from "@synthlet/granite";
@@ -28,6 +29,7 @@ export * from "@synthlet/chorus";
 export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
 export * from "@synthlet/dattorro-reverb";
+export * from "@synthlet/digital-delay";
 export * from "@synthlet/euclid";
 export * from "@synthlet/flex-audio-buffer-source";
 export * from "@synthlet/granite";
@@ -80,6 +82,7 @@ export function registerAllWorklets(
     registerClipAmpWorklet(context),
     registerClockWorklet(context),
     registerDattorroReverbWorklet(context),
+    registerDigitalDelayWorklet(context),
     registerEuclidWorklet(context),
     registerFlexAudioBufferSourceWorklet(context),
     registerGraniteWorklet(context),
