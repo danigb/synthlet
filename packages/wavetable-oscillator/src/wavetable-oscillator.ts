@@ -1,42 +1,47 @@
 type Inputs = {
-  baseFrequency: number[];
   frequency: number[];
   morphFrequency: number[];
 };
 
 export function WavetableOscillator(sampleRate: number) {
-  let $baseFrequency = 220;
   let $frequency = 440;
   let $morphFrequency = 0.05;
   let $wavetable = new Float32Array(0);
+
+  const isr = 1 / sampleRate;
 
   let len = 0;
   let planes = 0;
   let planeA = 0;
   let planeB = 0;
   let offset = 0;
-  let inc = 2;
+  let inc = 0;
   let morphPhase = Phasor(sampleRate);
   let morphChange = Trigger();
 
-  // `baseFrequency` has minValue 0, and _worklet.ts writes 0 into every connected
-  // param before its driver produces output, so the divisor is reachably zero. An
-  // unguarded ratio makes `inc` Infinity (or NaN for 0/0), `offset` follows it and
-  // never comes back. The comparison form resolves NaN to 0 instead of propagating.
-  // The ceiling is one table cycle every four output samples (sampleRate / 4), so
-  // it depends on `len` and set() has to recompute it after a table swap.
+  // `frequency` is Hz. One cycle of the table is `len` samples, so a cycle per
+  // second is `len` samples of read position per second of output: the increment
+  // is `frequency * len / sampleRate`. Both of those live in here — `sampleRate` is
+  // the worklet global, `len` arrives with the table — which is why there is no
+  // `baseFrequency` parameter for a caller to get wrong, and why set() has to call
+  // this too.
+  //
+  // The ceiling is Nyquist: one table cycle every two output samples. It clamps
+  // nothing inside `frequency`'s declared 0..20000 at any real sample rate, so
+  // "frequency is Hz" holds across the whole declared range — a lower ceiling
+  // silently mistunes the top of it. The comparison form is what resolves NaN to 0
+  // rather than letting it into `offset`, where it never comes back; the divide
+  // that used to make Infinity reachable went with the parameter. The `> 0` half
+  // freezes the phase on a negative frequency, matching minValue 0, and ticket 09's
+  // through-zero FM is what lifts it.
   function updateInc() {
-    const raw = $frequency / $baseFrequency;
-    const max = len / 4;
+    const raw = $frequency * len * isr;
+    const max = len / 2;
     inc = raw > 0 ? (raw < max ? raw : max) : 0;
   }
 
   function read(inputs: Inputs) {
-    if (
-      inputs.frequency[0] !== $frequency ||
-      inputs.baseFrequency[0] !== $baseFrequency
-    ) {
-      $baseFrequency = inputs.baseFrequency[0];
+    if (inputs.frequency[0] !== $frequency) {
       $frequency = inputs.frequency[0];
       updateInc();
     }

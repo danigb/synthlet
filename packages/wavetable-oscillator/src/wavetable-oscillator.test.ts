@@ -11,9 +11,10 @@ describe("WavetableOscillator", () => {
   it("renders a single plane", () => {
     const osc = WavetableOscillator(10);
     osc.set(new Float32Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), 10);
+    // sampleRate / len = 1 Hz is this table's natural pitch, so 0.5 Hz is half
+    // a table sample per output sample.
     const inputs = {
-      frequency: [110],
-      baseFrequency: [220],
+      frequency: [0.5],
       morphFrequency: [1],
     };
     const output = new Float32Array(10);
@@ -38,9 +39,9 @@ describe("WavetableOscillator", () => {
       ]),
       10,
     );
+    // Two cycles of a 1 Hz table per second: two table samples per output one.
     const inputs = {
-      frequency: [440],
-      baseFrequency: [220],
+      frequency: [2],
       morphFrequency: [1],
     };
     const output = new Float32Array(10);

@@ -33,10 +33,10 @@ describe("WavetableOscillatorWorkletNode", () => {
       data: { type: "WAVETABLE", wavetable, length: 10 },
     });
 
-    // frequency === baseFrequency is one table sample per output sample.
+    // sampleRate / len = 4 Hz is this table's natural pitch, so a frequency of
+    // 4 is one table sample per output sample.
     const params = {
       frequency: [4],
-      baseFrequency: [4],
       morphFrequency: [0],
     };
     expect(Array.from(runProcessMono(processor, 10, params))).toEqual(

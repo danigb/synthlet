@@ -1,14 +1,21 @@
+/**
+ * A wavetable: `data` holds one or more consecutive planes of `length` samples.
+ *
+ * The file's own sample rate is deliberately not here. A single-cycle table has
+ * no meaningful rate — `length` samples are one cycle whatever the header says —
+ * and the pitch comes from the *context* rate and `length`, both of which the
+ * worklet holds. Carrying it would invite the belief that the pitch depends on
+ * it, which is the bug this type used to help produce.
+ */
 export type Wavetable = {
   data: Float32Array;
   length: number;
-  sampleRate: number;
 };
 
 /**
  * A Wavetable loader compatible with wavedit-online wavetables.
  */
 export class WavetableLoader {
-  #sampleRate: number | undefined;
   #data: Float32Array | undefined;
   #loaded: Promise<Wavetable>;
 
@@ -40,14 +47,11 @@ export class WavetableLoader {
     const response = await fetch(this.url);
     if (!response.ok) throw new Error(`Failed to load ${this.url}`);
     const arrayBuffer = await response.arrayBuffer();
-    const result = WavetableLoader.decodeWavetable(arrayBuffer);
-    this.#sampleRate = result.sampleRate;
-    this.#data = result.data;
-    return {
-      data: this.#data,
-      length: this.wavetableLength,
-      sampleRate: this.#sampleRate,
-    };
+    // `decodeWavetable` still reports the header's sample rate — reporting it is a
+    // WAV decoder's job — but nothing downstream needs it. Ticket 08 rewrites the
+    // parsing around it.
+    this.#data = WavetableLoader.decodeWavetable(arrayBuffer).data;
+    return { data: this.#data, length: this.wavetableLength };
   }
 
   /**

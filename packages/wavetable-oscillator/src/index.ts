@@ -10,18 +10,16 @@ import { Wavetable, WavetableLoader } from "./wavetable-loader";
 export { Wavetable } from "./wavetable-loader";
 
 export type WavetableInputs = {
-  baseFrequency?: ParamInput;
   frequency?: ParamInput;
   morphFrequency?: ParamInput;
 };
 
 export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
-  baseFrequency: AudioParam;
   frequency: AudioParam;
   morphFrequency: AudioParam;
   loadWavetable(urlOrName: string): Promise<void>;
   fetchWavetableNames(): Promise<string[]>;
-  setWavetable(wavetable: { data: Float32Array; length: number }): void;
+  setWavetable(wavetable: Wavetable): void;
   dispose(): void;
 };
 

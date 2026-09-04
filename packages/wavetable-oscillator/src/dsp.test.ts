@@ -15,10 +15,13 @@ import { WavetableOscillator } from "./wavetable-oscillator";
  * They are not targets and several of them are bad: 22.2 dB of alias SNR at
  * 440 Hz is worse than a naive uncorrected sawtooth. They exist so that the
  * tickets that improve this package raise them and the diff shows by how much:
- * ticket 06 (mipmaps) owns the alias floors, ticket 05 (a morph position) owns
- * the `set()` step, ticket 03 (the pitch contract) owns the `it.failing` pitch
- * block. A floor is only useful if the number it came from is written next to
- * it, so each one carries its measurement.
+ * ticket 06 (mipmaps) owns the alias floors and ticket 05 (a morph position)
+ * owns the `set()` step. A floor is only useful if the number it came from is
+ * written next to it, so each one carries its measurement.
+ *
+ * The pitch block is the one that has already been collected: ticket 03 turned
+ * twelve `it.failing` cases on by making `frequency` mean Hz, and it is what a
+ * handover between tickets is supposed to look like.
  *
  * The instrument is `scripts/_spectrum.ts`, copied here; `aliasSnr` is the
  * audit's own metric and `digital-delay/src/spectrum.test.ts` is its
@@ -44,13 +47,11 @@ const FLOAT32_STEP = 1.1920929e-7;
 
 type Params = {
   frequency?: number;
-  baseFrequency?: number;
   morphFrequency?: number;
 };
 
 const inputsOf = (params: Params) => ({
   frequency: [params.frequency ?? 440],
-  baseFrequency: [params.baseFrequency ?? 220],
   // Off unless a test is about the morph: a running phasor would otherwise put
   // a crossfade in the middle of every spectrum measured here.
   morphFrequency: [params.morphFrequency ?? 0],
@@ -64,13 +65,19 @@ function render(
   table: Float32Array,
   len: number,
   params: Params,
-  options: { length?: number; block?: number; warmup?: number } = {},
+  options: {
+    length?: number;
+    block?: number;
+    warmup?: number;
+    sampleRate?: number;
+  } = {},
 ) {
   const length = options.length ?? ANALYSIS_LENGTH;
   const block = options.block ?? BLOCK;
   const warmup = options.warmup ?? 0;
+  const sampleRate = options.sampleRate ?? SAMPLE_RATE;
 
-  const osc = WavetableOscillator(SAMPLE_RATE);
+  const osc = WavetableOscillator(sampleRate);
   osc.set(table, len);
 
   const out = new Float32Array(warmup + length);
@@ -113,12 +120,9 @@ function sawTable(len: number) {
   return table;
 }
 
-/**
- * The `baseFrequency` at which `frequency` means Hz for a table of this length,
- * which is `sampleRate / len` and which nothing in the package computes. Ticket
- * 03 moves it inside the worklet and deletes the parameter.
- */
-const naturalFrequency = (len: number) => SAMPLE_RATE / len;
+/** Distance from `f0` in cents, the unit every pitch assertion here is in. */
+const centsFrom = (measured: number, f0: number) =>
+  Math.abs(1200 * Math.log2(measured / f0));
 
 // ---------------------------------------------------------------------------
 
@@ -141,7 +145,7 @@ describe("the morph", () => {
       const signal = render(
         constantPlanes(len, 1, -1, 0),
         len,
-        { frequency: 440, baseFrequency: 220, morphFrequency },
+        { frequency: 440, morphFrequency },
         { length: Math.round(SAMPLE_RATE * seconds) },
       );
 
@@ -170,54 +174,76 @@ describe("the morph", () => {
 });
 
 describe("the pitch", () => {
-  // ALL TWELVE OF THESE FAIL TODAY, which is what `it.failing` asserts. The
-  // output is `frequency / baseFrequency * sampleRate / len` Hz, so at the
-  // shipped default `baseFrequency` of 220 the error is a constant per table
-  // length and independent of the requested pitch: +776.6 cents at len 128,
-  // -423.4 at 256, -1623.4 at 512, -4023.4 at 2048.
+  // `frequency` is Hz, at every table length and every sample rate, because the
+  // worklet derives the increment from `sampleRate` and `len` instead of taking
+  // a `baseFrequency` divisor it had no way of defaulting correctly. Ticket 03
+  // deleted that parameter; before it, these twelve cases were `it.failing` and
+  // the error was a constant per table length and independent of the requested
+  // pitch: +776.6 cents at len 128, -423.4 at 256, -1623.4 at 512, -4023.4 at
+  // 2048, against a docs page that said "the frequency of the oscillator in Hz".
   //
-  // Driving the same twelve cases with `baseFrequency = sampleRate / len`
-  // instead reads within 0.7 cents at every one of them, so the DSP is right
-  // and the contract is wrong. Ticket 03 computes that divisor inside the
-  // worklet and deletes the parameter; turning this block on is then deleting
-  // the word `failing`, and until then the suite goes red the moment somebody
-  // fixes the pitch without noticing this file.
-  const cases = [128, 256, 512, 2048].flatMap((len) =>
-    [110, 440, 1760].map((f0) => [len, f0] as const),
+  // The tolerance is the ticket's 5 cents. The measured worst case over all 24
+  // rows is 0.705 cents, at 110 Hz - which is the instrument, not the
+  // oscillator: 32768 bins at 44.1 kHz is 1.35 Hz apart, and 1.35 Hz at 110 Hz
+  // is 21 cents before the parabolic refinement gets it down to 0.7.
+  const cases = [44100, 48000].flatMap((sampleRate) =>
+    [128, 256, 512, 2048].flatMap((len) =>
+      [110, 440, 1760].map((f0) => [sampleRate, len, f0] as const),
+    ),
   );
 
-  it.failing.each(cases)(
-    "plays the requested Hz from a %p-sample table at %p Hz",
-    (len, f0) => {
+  it.each(cases)(
+    "delivers the request at %p Hz, from a %p-sample table, asked for %p Hz",
+    (sampleRate, len, f0) => {
       const measured = peakFrequency(
         render(
           sineTable(len),
           len,
-          { frequency: f0, baseFrequency: 220 },
-          {
-            warmup: WARMUP,
-          },
+          { frequency: f0 },
+          { warmup: WARMUP, sampleRate },
         ),
-        SAMPLE_RATE,
+        sampleRate,
       );
-      expect(Math.abs(1200 * Math.log2(measured / f0))).toBeLessThan(5);
+      expect(centsFrom(measured, f0)).toBeLessThan(5);
     },
   );
 
-  it("is correct when the divisor is the one ticket 03 will derive", () => {
-    // The other half of the same statement, asserted rather than asserted-in-a
-    // -comment: nothing is wrong with the increment arithmetic.
-    for (const len of [128, 256, 512, 2048]) {
+  it("does not move when the table length does", () => {
+    // Success criterion 5, and the property the old contract could not have:
+    // `inc` grows with `len` now, exactly so that the pitch does not. The
+    // tolerance is a millionth of a Hz rather than the 5 cents above, because
+    // this is not a measurement of accuracy - it is the assertion that the four
+    // renders are the *same* signal at four resolutions. All four read
+    // 440.013937451017, differing only in the last two ulps of the FFT's
+    // parabolic refinement (1.2e-13 Hz, about 5e-16 cents).
+    const measured = [128, 256, 512, 2048].map((len) =>
+      peakFrequency(
+        render(sineTable(len), len, { frequency: 440 }, { warmup: WARMUP }),
+        SAMPLE_RATE,
+      ),
+    );
+    expect(Math.max(...measured) - Math.min(...measured)).toBeLessThan(1e-6);
+    expect(centsFrom(measured[0], 440)).toBeLessThan(5);
+  });
+
+  it("delivers the top of the declared range instead of clamping it", () => {
+    // The increment is ceilinged at Nyquist - one table cycle every two output
+    // samples - and not lower. Ticket 01's ceiling of len/4 was sampleRate/4 Hz
+    // under this formula, which would read 11025 Hz for every request above it:
+    // 20000 Hz would arrive 1031 cents flat. `frequency`'s maxValue is 20000, so
+    // a ceiling below Nyquist would put the bug this file exists to catch back
+    // into the top 44% of the declared range.
+    for (const sampleRate of [44100, 48000]) {
       const measured = peakFrequency(
         render(
-          sineTable(len),
-          len,
-          { frequency: 440, baseFrequency: naturalFrequency(len) },
-          { warmup: WARMUP },
+          sineTable(256),
+          256,
+          { frequency: 20000 },
+          { warmup: WARMUP, sampleRate },
         ),
-        SAMPLE_RATE,
+        sampleRate,
       );
-      expect(Math.abs(1200 * Math.log2(measured / 440))).toBeLessThan(5);
+      expect(centsFrom(measured, 20000)).toBeLessThan(5);
     }
   });
 });
@@ -244,12 +270,7 @@ describe("aliasing", () => {
     [1760, 12.4, 13.9],
     [3520, 8.9, 10.4],
   ])("stays above %p Hz's floor of %p dB", (f0, floorDb, auditDb) => {
-    const signal = render(
-      table,
-      len,
-      { frequency: f0, baseFrequency: naturalFrequency(len) },
-      { warmup: WARMUP },
-    );
+    const signal = render(table, len, { frequency: f0 }, { warmup: WARMUP });
     const measured = aliasSnr(signal, f0, SAMPLE_RATE);
 
     expect(measured).toBeGreaterThan(floorDb);
@@ -270,7 +291,7 @@ describe("aliasing", () => {
     const signal = render(
       sineTable(len),
       len,
-      { frequency: 440, baseFrequency: naturalFrequency(len) },
+      { frequency: 440 },
       { warmup: WARMUP },
     );
     const measured = aliasSnr(signal, 440, SAMPLE_RATE);
@@ -280,50 +301,70 @@ describe("aliasing", () => {
 });
 
 describe("totality", () => {
-  // Every value in the declared range of every parameter, against every table
-  // length the package can be handed. `baseFrequency` is a divisor with
-  // `minValue: 0`, and `_worklet.ts` writes 0 into every connected param before
-  // its driver produces output, so the degenerate rows are not hypothetical -
-  // they are what a modulated instance does on its first render quantum.
-  const bases = [0, 1e-9, 20, 220];
-  const frequencies = [0, 440, 20000];
+  // Every value in `frequency`'s declared range against every table length the
+  // package can be handed, plus the two that are outside it. There is no divisor
+  // any more - ticket 03 replaced `frequency / baseFrequency` with
+  // `frequency * len / sampleRate`, so `Infinity` is no longer reachable at all
+  // - and the clamp that survives is there for exactly these last two rows: a
+  // caller reaching the DSP unit directly with a negative or non-finite
+  // frequency. `-440` freezes the phase (matching `minValue: 0`; ticket 09's
+  // through-zero FM is what lifts it) and `NaN` resolves to a stopped
+  // oscillator rather than poisoning `offset`, which is absorbing.
+  const frequencies = [0, 1e-9, 440, 20000, -440, NaN];
   const lengths = [0, 1, 64, 2048];
 
-  const cases = bases.flatMap((base) =>
-    frequencies.flatMap((frequency) =>
-      lengths.map((len) => [base, frequency, len] as const),
-    ),
+  const cases = frequencies.flatMap((frequency) =>
+    lengths.map((len) => [frequency, len] as const),
   );
 
-  it.each(cases)(
-    "survives baseFrequency %p, frequency %p, len %p",
-    (baseFrequency, frequency, len) => {
-      const table = sineTable(Math.max(len, 1) * 3);
-      const osc = WavetableOscillator(SAMPLE_RATE);
-      osc.set(table, len);
+  it.each(cases)("survives frequency %p, len %p", (frequency, len) => {
+    const table = sineTable(Math.max(len, 1) * 3);
+    const osc = WavetableOscillator(SAMPLE_RATE);
+    osc.set(table, len);
 
-      const buffer = new Float32Array(BLOCK);
-      const inputs = inputsOf({
-        frequency,
-        baseFrequency,
-        morphFrequency: 0.05,
-      });
-      for (let block = 0; block < 2; block++) {
-        osc.agen(buffer, inputs);
-        for (const sample of buffer) {
-          expect(Number.isFinite(sample)).toBe(true);
-          expect(Math.abs(sample)).toBeLessThanOrEqual(1.05);
-        }
+    const buffer = new Float32Array(BLOCK);
+    const inputs = inputsOf({ frequency, morphFrequency: 0.05 });
+    for (let block = 0; block < 2; block++) {
+      osc.agen(buffer, inputs);
+      for (const sample of buffer) {
+        expect(Number.isFinite(sample)).toBe(true);
+        expect(Math.abs(sample)).toBeLessThanOrEqual(1.05);
       }
+    }
 
-      // And it recovers. Before ticket 01 clamped the divisor, `offset` became
-      // Infinity and stayed there: restoring a sane baseFrequency left the node
-      // producing NaN forever, which is a dead voice rather than a glitch.
-      osc.agen(buffer, inputsOf({ frequency: 440, baseFrequency: 220 }));
-      for (const sample of buffer) expect(Number.isFinite(sample)).toBe(true);
-      if (len > 0) expect(peak(buffer)).toBeGreaterThan(0);
-    },
-  );
+    // And it recovers. Before ticket 01 clamped the increment, `offset` became
+    // Infinity and stayed there: restoring a sane frequency left the node
+    // producing NaN forever, which is a dead voice rather than a glitch.
+    osc.agen(buffer, inputsOf({ frequency: 440 }));
+    for (const sample of buffer) expect(Number.isFinite(sample)).toBe(true);
+    if (len > 0) expect(peak(buffer)).toBeGreaterThan(0);
+  });
+
+  it("emits DC at frequency 0, not silence and not NaN", () => {
+    // Success criterion 3. A stopped oscillator holds its read position, so the
+    // output is the table's value there - a constant, and a constant the caller
+    // can predict. A phasor that froze at NaN or reset to zero output would both
+    // be a click on the way in and on the way out.
+    const len = 64;
+    const table = sineTable(len);
+    const signal = render(table, len, { frequency: 0 }, { length: 256 });
+    for (const sample of signal) expect(sample).toBe(table[0]);
+  });
+
+  it("emits exact silence at len 0", () => {
+    // The other half of criterion 3: `agen()` returns early rather than dividing
+    // by a zero length, which is what makes the floor-based wrap in the sample
+    // loop safe.
+    const signal = render(
+      new Float32Array(0),
+      0,
+      { frequency: 440 },
+      {
+        length: 256,
+      },
+    );
+    for (const sample of signal) expect(sample).toBe(0);
+  });
 });
 
 describe("set()", () => {
@@ -333,7 +374,7 @@ describe("set()", () => {
     // first twelve samples were NaN and a fifth of the block was wrong.
     const osc = WavetableOscillator(SAMPLE_RATE);
     const buffer = new Float32Array(64);
-    const inputs = inputsOf({ frequency: 440, baseFrequency: 220 });
+    const inputs = inputsOf({ frequency: 440 });
 
     osc.set(sineTable(2048 * 2), 2048);
     osc.agen(buffer, inputs);
@@ -350,7 +391,7 @@ describe("set()", () => {
     const play = () => {
       const osc = WavetableOscillator(SAMPLE_RATE);
       const buffer = new Float32Array(128);
-      const inputs = inputsOf({ frequency: 440, baseFrequency: 220 });
+      const inputs = inputsOf({ frequency: 440 });
       osc.set(sineTable(2048 * 2), 2048);
       osc.agen(buffer, inputs);
       osc.set(sineTable(64 * 3), 64);
@@ -366,9 +407,11 @@ describe("set()", () => {
 
     // The step across the swap is still whatever the new table holds at offset
     // 0 - resetting the read position makes it *knowable*, not small. Measured
-    // 0.3797 for these tables. **Ticket 05's crossfade is what bounds it**, and
-    // when it lands this number should drop by an order of magnitude.
-    expect(Math.abs(afterA[0] - beforeA)).toBeLessThan(0.4);
+    // 0.744097 for these tables; it read 0.3797 before ticket 03, purely because
+    // the increment changed and so the 2048-sample table is left mid-cycle
+    // somewhere else. **Ticket 05's crossfade is what bounds it**, and when it
+    // lands this number should drop by an order of magnitude.
+    expect(Math.abs(afterA[0] - beforeA)).toBeLessThan(0.8);
   });
 });
 
@@ -378,7 +421,7 @@ describe("the render loop", () => {
     // and the tests above use several sizes. If a state update ever moves out
     // of the sample loop into `agen`, this is what catches it.
     const table = sineTable(256 * 3);
-    const params = { frequency: 440, baseFrequency: 220, morphFrequency: 0.05 };
+    const params = { frequency: 440, morphFrequency: 0.05 };
     const eightBlocks = render(table, 256, params, {
       length: 1024,
       block: 128,
