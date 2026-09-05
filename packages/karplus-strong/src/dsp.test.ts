@@ -86,6 +86,7 @@ function pluck(
   stiffness = 0,
   detune = 0.5,
   polarization = 0,
+  tension = 0,
 ) {
   const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
   const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
@@ -106,6 +107,7 @@ function pluck(
       stiffness,
       detune,
       polarization,
+      tension,
     );
     output.set(block.subarray(0, Math.min(BLOCK, output.length - n)), n);
   }
@@ -1445,12 +1447,20 @@ describe("createKS stretch", () => {
     // The third partial of a 1760 Hz string, where the damping filter's loss
     // dominates: measured 1128 dB/s unstretched, against the 60 dB/s that
     // `decay = 1` alone imposes.
+    // Seeded, and it has to be: `stretch` is a coin flip per sample, so the
+    // decay rate it produces is a random variable on top of the burst's own.
+    // Averaging eight plucks was not enough - the monotonicity step from S = 4
+    // to S = 8 failed about one run in thirty, because those two means are
+    // within the mean's own scatter. Eight fixed seeds keep the same eight
+    // draws and make the verdict reproducible.
     const rate = (stretch: number) => {
       let total = 0;
-      const PLUCKS = 8;
-      for (let i = 0; i < PLUCKS; i++) {
-        const signal = pluck(1760, 1, 0.3, 0.5, 0.5, 1, 0.13, 0, stretch, 1);
-        total += bandDecayRate(signal, 5280, 400, 0.005, 0.05) / PLUCKS;
+      const SEEDS = [1, 2, 3, 4, 5, 6, 7, 8];
+      for (const seed of SEEDS) {
+        const signal = withSeededNoise(seed, () =>
+          pluck(1760, 1, 0.3, 0.5, 0.5, 1, 0.13, 0, stretch, 1),
+        );
+        total += bandDecayRate(signal, 5280, 400, 0.005, 0.05) / SEEDS.length;
       }
       return total;
     };
@@ -2569,5 +2579,271 @@ describe("createKS polarization", () => {
       expect([polarization, nonFinite]).toEqual([polarization, 0]);
       expect(lastSecond).toBeLessThanOrEqual(firstSecond);
     }
+  }, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// Tension modulation. A hard pluck stretches the string, which raises its
+// tension, which raises its pitch - and it all slides back down as the
+// vibration decays.
+//
+// Two papers converge on the implementation, and that convergence is the
+// ticket. Avanzini, Marogna and Bank 2012: "the short-time average of the
+// tension variation, which is responsible for pitch glides, is approximately
+// proportional to the system energy." Jarvelainen and Valimaki 2001, describing
+// how they built the stimuli for their listening test: "The pitch contour
+// decreased exponentially with time from the highest value towards the steady
+// state fundamental frequency. The time constant of the frequency descent was
+// 50% of the overall time constant of amplitude decay."
+//
+// A descent whose time constant is half the amplitude's is a descent
+// proportional to amplitude *squared*, which is energy. The same statement,
+// derived twice.
+// ---------------------------------------------------------------------------
+
+/** The four fundamentals Jarvelainen and Valimaki measured, and what they found. */
+const GLIDE_PITCHES = [116.5, 196, 349.23, 659.26];
+const GLIDE_THRESHOLDS = [3.1, 4.4, 5.4, 11.7]; // Hz, section 3.1
+
+/**
+ * The extent of the initial pitch glide in Hz: the pitch of a short window at
+ * the attack minus the settled pitch of a long window in the tail.
+ *
+ * Measured at `decay` 5, where the pitch time constant this module produces is
+ * `decay/(2*ln 1000)` = 0.36 s - within a hair of the 0.39 s their own stimuli
+ * used - so a 2048-point window at the attack averages over 46 ms of a 0.36 s
+ * exponential and reads 94% of the peak rather than 74%. It still reads low, by
+ * that 6% and by whatever the estimator loses to a peak that is moving while it
+ * is being measured; the numbers below are the measured ones, not the modelled.
+ *
+ * `brightness` 1 and no comb, so every partial survives to be measured and none
+ * of the spectrum has a notch in it.
+ */
+const GLIDE_PLUCKS = 6;
+function glideExtent(frequency: number, tension: number, level = 1) {
+  let total = 0;
+  // Seeded, and averaged: the burst is a random draw, so both the energy that
+  // drives the glide and the spectral estimate of a peak that is moving while
+  // it is measured are random variables. Six fixed seeds keep the verdict
+  // deterministic and the numbers in the comments reproducible.
+  for (let i = 0; i < GLIDE_PLUCKS; i++) {
+    const signal = withSeededNoise(i + 1, () =>
+      pluck(frequency, 5, 4, 1, level, 1, 0, 0, 1, 1, 0, 0.5, 0, tension),
+    );
+    const attack = spectralFundamental(signal, frequency, 0, 2048);
+    const settled = spectralFundamental(
+      signal,
+      frequency,
+      Math.round(2.5 * SAMPLE_RATE),
+      SPECTRAL_WINDOW,
+    );
+    total += attack - settled;
+  }
+  return total / GLIDE_PLUCKS;
+}
+
+describe("createKS tension", () => {
+  it("costs the default path nothing: tension 0 is the string", () => {
+    // Not "sounds the same" - the same samples. The burst's energy is not even
+    // accumulated while this is 0, and the read is the constant-delay one.
+    const before = withSeededNoise(13, () => pluck(440, 1, 0.2));
+    const after = withSeededNoise(13, () =>
+      pluck(440, 1, 0.2, 0.5, 0.5, 0.5, 0.13, 0, 1, 1, 0, 0.5, 0, 0),
+    );
+    expect(Array.from(after)).toEqual(Array.from(before));
+  });
+
+  // Jarvelainen and Valimaki section 3.1: "The mean thresholds were 3.1 Hz,
+  // 4.4 Hz, 5.4 Hz, and 11.7 Hz" at the four fundamentals below. The checklist
+  // asks for mid-range to land "on the order of" those at a full-level pluck
+  // and for the top of the range to "clearly exceed" them. Measured:
+  //
+  //   tension 0.5:  2.89 / 5.57 / 8.92 / 15.68 Hz  (0.93 / 1.27 / 1.65 / 1.34x)
+  //   tension 1:    6.03 / 10.47 / 19.09 / 31.60 Hz  (1.94 / 2.38 / 3.53 / 2.70x)
+  it("glides by about what the detection thresholds are, at mid-range", () => {
+    GLIDE_PITCHES.forEach((frequency, i) => {
+      const ratio = glideExtent(frequency, 0.5) / GLIDE_THRESHOLDS[i];
+      expect([frequency, ratio > 0.5 && ratio < 2]).toEqual([frequency, true]);
+    });
+  }, 120_000);
+
+  it("glides unmistakably past them at the top of the range", () => {
+    GLIDE_PITCHES.forEach((frequency, i) => {
+      const ratio = glideExtent(frequency, 1) / GLIDE_THRESHOLDS[i];
+      expect([frequency, ratio > 1.5]).toEqual([frequency, true]);
+    });
+  }, 120_000);
+
+  // Success criterion 2. Their Fig. 1 is a recorded electric guitar tone whose
+  // fundamental "decreases exponentially with time from 499 to 496 Hz, giving a
+  // glide extent of approximately 3 Hz" - which is what a physically-scaled
+  // glide looks like, and it sits at a tenth of this knob. Measured 2.75 Hz.
+  it("puts the recorded guitar of their Fig. 1 at a tenth of the range", () => {
+    const measured = glideExtent(499, 0.1);
+    expect(measured).toBeGreaterThan(1.5);
+    expect(measured).toBeLessThan(4.5);
+  }, 60_000);
+
+  // Success criterion 1, and the entire physical point: the glide is driven by
+  // the energy the pluck put in, which is `level^2`. Measured 0.93 / 2.63 /
+  // 5.29 / 8.92 Hz at levels 0.25 / 0.5 / 0.75 / 1 - monotone, and a factor of
+  // 9.5 across the range. Not the full 16 that `level^2` alone would give,
+  // because a bigger glide smears the moving peak the estimator is reading.
+  it("glides less on a soft pluck than on a hard one", () => {
+    const measured = [0.25, 0.5, 0.75, 1].map((level) =>
+      glideExtent(349.23, 0.5, level),
+    );
+    for (let i = 1; i < measured.length; i++) {
+      expect([i, measured[i] > measured[i - 1]]).toEqual([i, true]);
+    }
+    expect(measured[3] / measured[0]).toBeGreaterThan(4);
+  }, 120_000);
+
+  // The contour, against the rule section 2.1 states: the pitch descent's time
+  // constant is half the amplitude decay's. That falls out of the energy model
+  // rather than being tuned in - energy is amplitude squared - so this is the
+  // assertion that the two papers really do describe the same curve. Measured
+  // excess 21.3 / 15.7 / 11.5 / 6.6 / 2.6 Hz at 0 / 0.1 / 0.2 / 0.4 / 0.8 s
+  // against a model of 20.8 / 15.8 / 12.0 / 6.9 / 2.3 - worst error 13%.
+  it("descends exponentially with half the amplitude decay's time constant", () => {
+    const DECAY = 5;
+    const frequency = 349.23;
+    const tau = DECAY / Math.log(1000) / 2; // "50% of the overall time constant"
+    const peak = frequency * (Math.pow(2, 1 / 12) - 1); // `tension` 1, full level
+    const signal = withSeededNoise(1, () =>
+      pluck(frequency, DECAY, 5, 1, 1, 1, 0, 0, 1, 1, 0, 0.5, 0, 1),
+    );
+    const settled = spectralFundamental(
+      signal,
+      frequency,
+      Math.round(3.5 * SAMPLE_RATE),
+      SPECTRAL_WINDOW,
+    );
+    for (const at of [0, 0.1, 0.2, 0.4, 0.8]) {
+      const excess =
+        spectralFundamental(
+          signal,
+          frequency,
+          Math.round(at * SAMPLE_RATE),
+          2048,
+        ) - settled;
+      const model = peak * Math.exp(-at / tau);
+      expect([at, Math.abs(excess / model - 1) < 0.25]).toEqual([at, true]);
+    }
+  }, 60_000);
+
+  // Ticket 02's pitch assertion, re-derived rather than deleted, which is what
+  // success criterion 5 asks for: with `tension` up the pitch is a glide, so
+  // "the pitch" is the settled pitch of the tail. The energy decays to zero and
+  // the modulation factor with it, so the string ends up exactly where
+  // `frequency` asked - measured within 0.41 cents at every pitch and tension.
+  it.each([110, 440, 1760])(
+    "settles on %p Hz within 5 cents at every tension",
+    (frequency) => {
+      for (const tension of [0, 0.5, 1]) {
+        const signal = withSeededNoise(1, () =>
+          pluck(frequency, 3, 2.5, 1, 1, 1, 0, 0, 1, 1, 0, 0.5, 0, tension),
+        );
+        const settled = spectralFundamental(
+          signal,
+          frequency,
+          Math.round(1.5 * SAMPLE_RATE),
+          SPECTRAL_WINDOW,
+        );
+        expect([tension, Math.abs(cents(settled, frequency)) < 5]).toEqual([
+          tension,
+          true,
+        ]);
+      }
+    },
+  );
+
+  // Success criterion 4. The energy is open loop - it is seeded by the pluck and
+  // decays with `rho`, and the loop's own signal never enters it - so there is
+  // no path by which the delay drives its own modulation, which is the failure
+  // Pakarinen et al. 2005 section 7 report for models where "the TMDF mechanism
+  // continuously feeds energy to the string". The modulation factor is in (0, 1]
+  // by construction and the result is clamped to the same range every other read
+  // is, so this is bounded by construction and the render is the proof.
+  it("stays bounded over 60 seconds at maximum tension, at every corner", () => {
+    for (const frequency of [20, 110, 440, 5000]) {
+      const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+      const block = new Float32Array(BLOCK);
+      let firstSecond = 0;
+      let lastSecond = 0;
+      let nonFinite = 0;
+      const total = SAMPLE_RATE * 60;
+
+      for (let n = 0; n < total; n += BLOCK) {
+        // Every loop parameter at a corner at once: no damping tilt, maximum
+        // stretch, the drum's sign flips, full dispersion, both polarizations.
+        ks(
+          block,
+          n === 0 ? 1 : 0,
+          frequency,
+          5,
+          0,
+          1,
+          1,
+          0,
+          0,
+          20,
+          0,
+          1,
+          1,
+          1,
+          1,
+        );
+        for (const sample of block) {
+          if (!Number.isFinite(sample)) nonFinite++;
+          else if (n < SAMPLE_RATE) {
+            if (Math.abs(sample) > firstSecond) firstSecond = Math.abs(sample);
+          } else if (n >= total - SAMPLE_RATE) {
+            if (Math.abs(sample) > lastSecond) lastSecond = Math.abs(sample);
+          }
+        }
+      }
+
+      expect([frequency, nonFinite]).toEqual([frequency, 0]);
+      expect(lastSecond).toBeLessThanOrEqual(firstSecond);
+    }
+  }, 240_000);
+
+  // Seeded, because the quantity is the peak of a noise burst and so is a
+  // random variable - the same reason the two sweeps above it are.
+  it("stays finite and in scale across the corners of the range", () => {
+    let peak = 0;
+    let nonFinite = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      withSeededNoise(seed, () => {
+        for (const frequency of [20, 110, 440, 1760, 5000]) {
+          for (const tension of [0, 0.5, 1]) {
+            for (const level of [0.5, 1]) {
+              for (const sample of pluck(
+                frequency,
+                1,
+                0.3,
+                0.5,
+                level,
+                1,
+                0.13,
+                0,
+                1,
+                1,
+                0,
+                0.5,
+                0,
+                tension,
+              )) {
+                if (!Number.isFinite(sample)) nonFinite++;
+                else if (Math.abs(sample) > peak) peak = Math.abs(sample);
+              }
+            }
+          }
+        }
+      });
+    }
+    expect(nonFinite).toBe(0);
+    expect(peak).toBeLessThan(3);
   }, 120_000);
 });

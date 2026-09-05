@@ -384,6 +384,36 @@ export function createString(sampleRate: number, minFrequency: number) {
   let levelState = 0;
   let levelDirect = 1; // L * L0(L), the panned-in dry path
   let levelMix = 0; // 1 - L, the panned-in filtered path
+  // Tension modulation: the pluck stretches the string, the tension rises, the
+  // pitch rises with it, and it all slides back down as the vibration decays.
+  //
+  // Avanzini, Marogna and Bank 2012 - "the short-time average of the tension
+  // variation, which is responsible for pitch glides, is approximately
+  // proportional to the system energy" - and their section V-B's *energy
+  // storage model* is what makes it cost one multiply here rather than the
+  // elongation sum Tolonen et al. 2000 need, which is "hundreds of addition and
+  // multiplication operations per sampling interval" and gets worse as the
+  // pitch falls:
+  //
+  //   "if an initial displacement and/or velocity distribution is given (e.g., a
+  //   triangle-shaped initial displacement for an ideally plucked string), then
+  //   dE[n] = 0; the initial value E[0] is set to the energy of the initial
+  //   state of the system, and the discrete-time energy E[n] decays
+  //   exponentially from the initial value."
+  //
+  // Which is this package exactly: the excitation is a burst summed in at the
+  // pluck, not a continuous driver. So `energy` is seeded from the burst and
+  // then decays, and it is **open loop** - the loop's own signal never enters
+  // it. That is the stability argument. The delay cannot be driven by the delay,
+  // there is no path by which the modulation feeds energy into the string (which
+  // is what limits Pakarinen et al. 2005's model, section 7), and no gain term
+  // is needed anywhere - ticket 06's rejected `gc = 1 - x` compensation multiply
+  // stays rejected.
+  let tensioning = false;
+  let tensionAmount = 0;
+  let energy = 0; // E[n], the mean square of the burst decaying
+  let energyDecay = 0; // lambda, from the loop's own dissipation
+
   let envelope = 0;
   let ringing = false;
 
@@ -422,6 +452,22 @@ export function createString(sampleRate: number, minFrequency: number) {
       dispersing = design.phaseDelay > 0;
       phaseDelayCompensation = DAMPING_PHASE_DELAY + design.phaseDelay;
       minLoopLength = INTERPOLATOR_REACH + 1 + phaseDelayCompensation;
+    },
+
+    /**
+     * How far the pluck's own energy shortens the loop, and how fast that
+     * shortening decays.
+     *
+     * `decayPerSample` is passed in rather than derived here so that two
+     * polarizations share one trajectory: tension is a property of the string,
+     * not of a plane of vibration, and the second loop's `rho` is three times
+     * slower by design. Letting each derive its own would model two tensions in
+     * one string and let the two planes drift apart as the note rings.
+     */
+    setTension(amount: number, decayPerSample: number) {
+      tensioning = amount > 0;
+      tensionAmount = tensioning ? Math.min(amount, 1) : 0;
+      energyDecay = decayPerSample;
     },
 
     /**
@@ -569,6 +615,23 @@ export function createString(sampleRate: number, minFrequency: number) {
         }
       }
 
+      // `E[0]`, the energy the pluck put in - the burst's **mean square**, read
+      // off the samples `pluck` has just written, so it is what actually goes
+      // into the loop rather than what was asked for. Mean rather than sum on
+      // purpose: the sum grows with the burst length, so a 20 Hz note would get
+      // a hundred times a 5 kHz note's "energy" and `tension` would mean
+      // something different at every pitch. The mean square is `level^2/3` for
+      // the noise burst at every pitch, which keeps the knob pitch-independent
+      // and the glide proportional to `level^2` - a soft pluck gliding less than
+      // a hard one being the entire physical point.
+      if (tensioning && burstLength > 0) {
+        let squares = 0;
+        for (let i = 0; i < burstLength; i++) squares += noise[i] * noise[i];
+        energy = squares / burstLength;
+      } else {
+        energy = 0;
+      }
+
       // A comb of less than one sample is not a bypass, it is silence:
       // `1 - z^0 = 0`. `floor(beta*P)` reaches 0 at the top of the range for
       // any beta below about 0.11, so this guard is required - and it makes
@@ -668,7 +731,38 @@ export function createString(sampleRate: number, minFrequency: number) {
         // current frequency, so the loop's loss per second follows the pitch:
         // a slid note measures within 1.2 dB of the same note held still.
 
-        let readIndex = writeIndex - (delay - phaseDelayCompensation);
+        // Tension modulation, applied to the *read* rather than to `delay`.
+        // `delay` keeps meaning "the loop length this sample was asked for" -
+        // it is what `setDelay` clamps, what the block interpolates towards and
+        // what `pluck` derives the burst length from - so nothing downstream of
+        // it has to be re-derived.
+        //
+        // The factor is in (0, 1] by construction and the result is clamped
+        // again, so the modulated read is bounded whatever `tension` is asked
+        // for. Avanzini et al.'s energy decays with the system's own
+        // dissipation, which here is `rho`: amplitude falls as `rho^(1/P)` per
+        // sample and energy, being amplitude squared, as `rho^(2/P)`. That is
+        // also Jarvelainen and Valimaki 2001's own stimulus rule - "the time
+        // constant of the frequency descent was 50% of the overall time constant
+        // of amplitude decay" - so the contour matches their Fig. 2 by
+        // construction rather than by tuning. Two papers, one number.
+        let effective = delay;
+        if (energy > TENSION_FLOOR) {
+          energy *= energyDecay;
+          effective = delay * (1 - tensionAmount * energy);
+          if (effective < minLoopLength) effective = minLoopLength;
+        } else if (energy !== 0) {
+          // Below the floor the glide is over, and stopping here is worth a
+          // branch: a modulated delay changes its fractional part every sample,
+          // so the five-tap Lagrange kernel is recomputed every sample instead
+          // of never - measured, that is 27 of the 47 ns a tension-enabled
+          // sample costs, and it would otherwise go on for the whole note for a
+          // pitch shift of a thousandth of a cent. `TENSION_FLOOR` is reached at
+          // about three quarters of `decay`.
+          energy = 0;
+        }
+
+        let readIndex = writeIndex - (effective - phaseDelayCompensation);
         if (readIndex < 0) readIndex += capacity;
         // Round, not floor: the kernel is accurate for a delay within half a
         // sample of the centre of its five taps.
@@ -847,6 +941,34 @@ const POLARIZATION_TIME_CONSTANT = 3;
 // ticket 09's stiffness taper - no paper in this corpus prescribes one.
 const MAX_DETUNE_CENTS = 10;
 
+// How far `tension` may shorten the loop, per unit of burst energy. The factor
+// of 3 turns the noise burst's mean square (`level^2/3`) back into `level^2`,
+// so `tension` 1 on a full-scale pluck is exactly one semitone of initial
+// sharpening.
+//
+// The **mapping is ours and unsourced** - the papers give thresholds, not knob
+// tapers - but every point on it is checkable against a measured number.
+// Jarvelainen and Valimaki 2001 measured detection thresholds of 3.1 / 4.4 /
+// 5.4 / 11.7 Hz at 116.5 / 196 / 349.23 / 659.26 Hz; this taper puts a
+// full-level pluck at
+//
+//   tension 0.1 -> 10 cents: 0.7 / 1.1 / 2.0 / 3.8 Hz, under every threshold,
+//                  and the recorded electric guitar of their Fig. 1 (499 ->
+//                  496 Hz, "approximately 3 Hz") sits here
+//   tension 0.5 -> 49 cents: 3.4 / 5.7 / 10.1 / 19.0 Hz, over every threshold
+//   tension 1   -> 100 cents: 6.9 / 11.6 / 20.7 / 39.1 Hz, 2.2 to 3.3x them
+//
+// so the knob spans inaudible to unmistakable, which is what a parameter whose
+// physical setting sits near the detection threshold has to do to be worth
+// having.
+const TENSION_GAIN = 3 * (1 - Math.pow(2, -1 / 12));
+
+// The energy below which the glide is declared over. `TENSION_GAIN` is 0.168,
+// so this is a pitch shift of 1.7e-6 - about a thousandth of a cent - and
+// stopping there hands the loop back its constant-delay fast path for the rest
+// of the note. See the comment at the modulation itself for what that is worth.
+const TENSION_FLOOR = 1e-5;
+
 /** One voice: a string, the gate contract, and the parameter mapping. */
 export function createKS(sampleRate: number, minFrequency: number) {
   const targetAmplitude = 0.001; // Amplitude decays to 0.1% of initial value
@@ -893,6 +1015,8 @@ export function createKS(sampleRate: number, minFrequency: number) {
     // string and costs exactly what one string cost.
     detune = 0.5,
     polarization = 0,
+    // And this one drives the loop length from the pluck's own energy.
+    tension = 0,
   ) => {
     // Smith 3.3: the loop filter is applied once per period, so -60 dB in
     // `decay` seconds needs `rho^(f0*decay) = 0.001`. Pitch-independent by
@@ -928,6 +1052,17 @@ export function createKS(sampleRate: number, minFrequency: number) {
         : 0; // a non-positive decay would invert the exponent and grow the loop
     string.setDamping(rho, brightness, stretch, blend);
 
+    // Avanzini et al.'s `lambda`, "determined by the system dissipation": `rho`
+    // is the loop's gain once per period, so amplitude falls as `rho^(1/P)` per
+    // sample and energy, being its square, as `rho^(2/P)`. Computed once here
+    // and handed to both polarizations, so the pair shares one tension.
+    const tensionAmount = tension > 0 ? Math.min(tension, 1) * TENSION_GAIN : 0;
+    const energyDecay =
+      tensionAmount > 0 && rho > 0
+        ? Math.pow(rho, (2 * firstFrequency) / sampleRate)
+        : 0;
+    string.setTension(tensionAmount, energyDecay);
+
     // The second polarization: quieter by `polarization`, slower by
     // `POLARIZATION_TIME_CONSTANT`, and sharp by `detune`. Sharp rather than
     // flat so its loop is the *shorter* of the two, which is what lets one
@@ -957,6 +1092,7 @@ export function createKS(sampleRate: number, minFrequency: number) {
         stretch,
         blend,
       );
+      second.setTension(tensionAmount, energyDecay);
       if (mix === undefined || mix.length < length) {
         mix = new Float32Array(length);
       }

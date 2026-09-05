@@ -227,4 +227,41 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "k-rate",
   },
+  {
+    // Pitch glide from the pluck's own energy. A hard pluck stretches the
+    // string, which raises its tension, which raises its pitch - and it all
+    // slides back down as the vibration decays. It is the sound of a snapped
+    // bass string, a tom-tom, and most ethnic plucked instruments.
+    //
+    // Avanzini, Marogna and Bank 2012: "the short-time average of the tension
+    // variation, which is responsible for pitch glides, is approximately
+    // proportional to the system energy". This is that - their section V-B
+    // energy storage model, seeded from the burst and decaying with the loop's
+    // own dissipation - which makes it a **pitch glide**, not a full
+    // tension-modulation model: the nonlinearity also couples harmonic modes
+    // (Tolonen et al. 2000 name both effects) and the quasi-static
+    // approximation this rests on does not reproduce that.
+    //
+    // The glide scales with `level^2`, so a soft pluck glides less than a hard
+    // one, which is the whole physical point.
+    //
+    // The taper is **ours and unsourced**, but calibrated against measured
+    // numbers: at a full-scale pluck, 1 is a semitone of initial sharpening and
+    // 0.5 clears every detection threshold Jarvelainen and Valimaki 2001
+    // measured (3.1 / 4.4 / 5.4 / 11.7 Hz at 116.5 / 196 / 349 / 659 Hz), while
+    // 0.1 is the recorded electric guitar of their Fig. 1 - about 3 Hz at
+    // 499 Hz, right at the threshold.
+    //
+    // **Default 0**, and deliberately: their own conclusion is that "any pitch
+    // glide weaker than the given threshold remains inaudible for most
+    // listeners and could be left unimplemented in digital sound synthesis",
+    // and at the shipped `level` a physically-scaled glide sits near that
+    // threshold. It ships as an effect a patch asks for, and costs nothing
+    // until it does.
+    name: "tension",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
 ];

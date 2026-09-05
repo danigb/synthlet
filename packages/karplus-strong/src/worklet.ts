@@ -47,6 +47,7 @@ export class KsProcessor extends AudioWorkletProcessor {
       params.stiffness[0],
       params.detune[0],
       params.polarization[0],
+      params.tension[0],
     );
 
     return this.r;
