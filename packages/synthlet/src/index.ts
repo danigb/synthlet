@@ -1,10 +1,12 @@
 import { registerAdWorklet } from "@synthlet/ad";
+import { registerAnalogDelayWorklet } from "@synthlet/analog-delay";
 import { registerAdsrWorklet } from "@synthlet/adsr";
 import { registerArpWorklet } from "@synthlet/arp";
 import { registerChorusWorklet } from "@synthlet/chorus";
 import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
+import { registerDigitalDelayWorklet } from "@synthlet/digital-delay";
 import { registerEuclidWorklet } from "@synthlet/euclid";
 import { registerFlexAudioBufferSourceWorklet } from "@synthlet/flex-audio-buffer-source";
 import { registerGraniteWorklet } from "@synthlet/granite";
@@ -22,12 +24,14 @@ import { registerVirtualAnalogFilterWorklet } from "@synthlet/virtual-analog-fil
 import { registerWavetableOscillatorWorklet } from "@synthlet/wavetable-oscillator";
 
 export * from "@synthlet/ad";
+export * from "@synthlet/analog-delay";
 export * from "@synthlet/adsr";
 export * from "@synthlet/arp";
 export * from "@synthlet/chorus";
 export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
 export * from "@synthlet/dattorro-reverb";
+export * from "@synthlet/digital-delay";
 export * from "@synthlet/euclid";
 export * from "@synthlet/flex-audio-buffer-source";
 export * from "@synthlet/granite";
@@ -46,6 +50,7 @@ export * from "@synthlet/wavetable-oscillator";
 
 // tsup's dts bundler drops enums from the `export *` re-exports above, so the
 // umbrella names them: without this they exist at runtime but not in the types.
+export { AnalogDelayMode } from "@synthlet/analog-delay";
 export { ArpScale } from "@synthlet/arp";
 export { ClipType } from "@synthlet/clip-amp";
 export { LfoType } from "@synthlet/lfo";
@@ -75,11 +80,13 @@ export function registerAllWorklets(
   return Promise.all([
     registerAdsrWorklet(context),
     registerAdWorklet(context),
+    registerAnalogDelayWorklet(context),
     registerArpWorklet(context),
     registerChorusWorklet(context),
     registerClipAmpWorklet(context),
     registerClockWorklet(context),
     registerDattorroReverbWorklet(context),
+    registerDigitalDelayWorklet(context),
     registerEuclidWorklet(context),
     registerFlexAudioBufferSourceWorklet(context),
     registerGraniteWorklet(context),

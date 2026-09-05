@@ -1,0 +1,48 @@
+{
+  "name": "@synthlet/analog-delay",
+  "version": "0.0.0",
+  "description": "A glide-based tape and bucket-brigade echo with multi-tap heads and a single wear control, as an audio worklet",
+  "keywords": [
+    "analog",
+    "bbd",
+    "bucket-brigade",
+    "delay",
+    "echo",
+    "modular",
+    "synthesis",
+    "synthlet",
+    "tape"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/analog-delay"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/analog-delay",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "author": "danigb@gmail.com",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.13",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1"
+  },
+  "jest": {
+    "preset": "ts-jest",
+    "testEnvironment": "node"
+  },
+  "scripts": {
+    "worklet": "esbuild src/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/processor.ts",
+    "lib": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
+    "build": "npm run worklet && npm run lib",
+    "test": "jest"
+  }
+}
