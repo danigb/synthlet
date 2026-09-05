@@ -11,12 +11,25 @@ import {
   defaultWavetable,
   mipmapWavetable,
 } from "./wavetable-builder";
+import { ConditionOptions, conditionWavetable } from "./wavetable-conditioner";
 import { Wavetable, WavetableLoader } from "./wavetable-loader";
 
 export { Wavetable } from "./wavetable-loader";
+// Conditioning is main-thread too, and shares the builder's canonical phase.
+export {
+  alignPhases,
+  conditionWavetable,
+  normalizeRms,
+  removeDc,
+} from "./wavetable-conditioner";
+export type {
+  ConditionedWavetable,
+  ConditionOptions,
+} from "./wavetable-conditioner";
 // The builder is main-thread and usable standalone: `worklet.ts` never imports
 // it, so it cannot reach the inlined `processor.ts` payload.
 export {
+  analyzeHarmonics,
   BUILT_IN_SHAPES,
   buildPlane,
   buildWavetable,
@@ -29,8 +42,9 @@ export {
   mipmapWavetable,
   normalizePeak,
   shapeHarmonics,
+  trigTable,
 } from "./wavetable-builder";
-export type { BuiltInShape } from "./wavetable-builder";
+export type { BuiltInShape, TrigTable } from "./wavetable-builder";
 
 export type WavetableInputs = {
   frequency?: ParamInput;
@@ -51,15 +65,24 @@ export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
    * over 64 samples rather than stepped.
    */
   morph: AudioParam;
-  loadWavetable(urlOrName: string): Promise<void>;
+  loadWavetable(urlOrName: string, options?: ConditionOptions): Promise<void>;
   fetchWavetableNames(): Promise<string[]>;
   /**
    * Play a wavetable. If it does not already carry a mipmap pyramid — anything
-   * `buildWavetable` produced does, anything decoded from samples does not —
-   * one is built here, on the main thread, before the table is transferred to
-   * the worklet. That is where all the band-limiting in this package lives.
+   * `buildWavetable` produced does, anything decoded from samples does not — it
+   * is **conditioned** and then a pyramid is built for it, both here on the main
+   * thread, before the table is transferred to the worklet. That is where all
+   * the band-limiting in this package lives.
+   *
+   * Conditioning removes each plane's DC, rewrites every harmonic to the same
+   * canonical phase the generated tables use, and matches the planes' loudness,
+   * so a morph across an imported table changes timbre and not level and does
+   * not dip where two planes disagree. It is measurable on the real wavedit
+   * catalogue: `SYNLP10` loses 5.7 dB on an average crossfade without it. Each
+   * step can be switched off on its own — see `ConditionOptions` — because each
+   * is a judgement about someone else's data.
    */
-  setWavetable(wavetable: Wavetable): void;
+  setWavetable(wavetable: Wavetable, options?: ConditionOptions): void;
   /**
    * Build a wavetable from one harmonic magnitude spectrum per plane and play
    * it. `setHarmonics([[1], [1, 0.5, 0.25]])` morphs a sine into a
@@ -90,15 +113,24 @@ export const WavetableOscillator = createWorkletConstructor<
     numberOfOutputs: 1,
   }),
   postCreate(node) {
-    node.setWavetable = (wavetable) => {
-      // Band-limiting is built here, on the main thread, at load — never in the
-      // worklet and never in the published payload. A table that already carries
-      // a pyramid (everything `buildWavetable` makes) is passed straight
-      // through; anything that arrived as samples is analysed and truncated.
+    node.setWavetable = (wavetable, options) => {
+      // Conditioning and band-limiting both happen here, on the main thread, at
+      // load — never in the worklet and never in the published payload.
+      //
+      // `levels > 1` is one test doing two jobs, and that is the point: a table
+      // that carries a pyramid came from `buildWavetable`, which is canonical,
+      // DC-free and peak-normalized by construction, so it needs neither step
+      // and is passed straight through. Anything else arrived as samples from
+      // someone else, and gets both.
+      //
+      // Conditioning runs *first*. `mipmapWavetable` resynthesises every level
+      // from the base plane's own harmonics, so a phase rewrite or a gain
+      // applied after it would have to be applied identically to all eight
+      // levels instead of once to the plane they all come from.
       const pyramid =
         wavetable.levels && wavetable.levels > 1
           ? wavetable
-          : mipmapWavetable(wavetable);
+          : mipmapWavetable(conditionWavetable(wavetable, options));
       // A copy, then a transfer — `flex-audio-buffer-source/src/index.ts:145-153`'s
       // idiom. The copy is not ceremony: `defaultWavetable` memoizes one instance
       // and shares it between every node, and transferring that buffer would
@@ -120,9 +152,9 @@ export const WavetableOscillator = createWorkletConstructor<
       node.setWavetable(buildWavetable(planes, length));
     };
     node.fetchWavetableNames = fetchWavetableNames;
-    node.loadWavetable = (urlOrName) =>
+    node.loadWavetable = (urlOrName, options) =>
       loadWavetable(urlOrName).then((wavetable) => {
-        node.setWavetable(wavetable);
+        node.setWavetable(wavetable, options);
       });
     // Sound on construction. Until this line the node was silent until a fetch
     // against a third party's GitHub Pages mirror resolved — the only generator
@@ -134,6 +166,12 @@ export const WavetableOscillator = createWorkletConstructor<
   },
 });
 
+/**
+ * Fetch and decode a wavetable, **as it is on disk**. Conditioning belongs to
+ * playback rather than to decoding, so it happens in `setWavetable`; a caller who
+ * wants a conditioned table without a node calls `conditionWavetable` on the
+ * result.
+ */
 export function loadWavetable(
   nameOrUrl: string,
   wavetableLength = 256,

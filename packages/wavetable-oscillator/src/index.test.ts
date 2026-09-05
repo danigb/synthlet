@@ -1,6 +1,6 @@
 import { peak, peakFrequency } from "./_spectrum";
 import { buildPlane, WavetableOscillator } from "./index";
-import { normalizePeak } from "./wavetable-builder";
+import { defaultWavetable, normalizePeak } from "./wavetable-builder";
 import { WavetableOscillator as WavetableOscillatorUnit } from "./wavetable-oscillator";
 
 /**
@@ -177,6 +177,69 @@ describe("WavetableOscillator", () => {
     // A 64-sample table holds 32 harmonics, so its pyramid is six levels deep.
     expect(levels).toBe(6);
     expect(wavetable.length).toBe(6 * 64);
+  });
+
+  it("conditions a table that arrived as samples", () => {
+    // Two planes of the same spectrum in opposite phase: the audit's null, and
+    // the exact thing a wavedit table does at a smaller angle. `setWavetable`
+    // removes the DC, rewrites both planes to canonical phase and matches their
+    // loudness before the pyramid is built, so the crossfade at the midpoint is
+    // a spectral interpolation rather than a cancellation.
+    const node = created(WavetableOscillator(context));
+    const length = 256;
+    const a = buildPlane([1, 0.5, 0.25], length);
+    const data = new Float32Array(2 * length);
+    for (let k = 0; k < length; k++) {
+      data[k] = a[k] + 0.4; // a DC offset, and 180 degrees of disagreement
+      data[length + k] = -a[k] - 0.4;
+    }
+    (node as any).setWavetable({ data, length });
+
+    const { wavetable, levels } = wavetableMessages(node)[1];
+    expect(levels).toBe(8);
+    const first = wavetable.subarray(0, length);
+    const second = wavetable.subarray(length, 2 * length);
+
+    // Canonical phase puts sample 0 at exactly zero, and both planes at the
+    // same phase makes them identical here - so the midpoint does not null.
+    expect(first[0]).toBe(0);
+    expect(second[0]).toBe(0);
+    let worst = 0;
+    for (let k = 0; k < length; k++) {
+      worst = Math.max(worst, Math.abs(first[k] - second[k]));
+    }
+    expect(worst).toBeLessThan(1e-6);
+    expect(peak(first)).toBeGreaterThan(0.5);
+  });
+
+  it("passes the conditioning options through", () => {
+    const node = created(WavetableOscillator(context));
+    const length = 256;
+    const data = new Float32Array(length).fill(0.5);
+    for (let k = 0; k < length; k++) {
+      data[k] += Math.sin((2 * Math.PI * k) / length + 1);
+    }
+    (node as any).setWavetable({ data, length }, { removeDc: false });
+
+    // Phase alignment removes DC on its own, so switching only `removeDc` off
+    // is not observable; switching the alignment off leaves both in place.
+    (node as any).setWavetable({ data, length }, { alignPhases: false });
+    const untouched = wavetableMessages(node)[2].wavetable;
+    expect(untouched[0]).not.toBe(0);
+
+    const aligned = wavetableMessages(node)[1].wavetable;
+    expect(aligned[0]).toBe(0);
+  });
+
+  it("leaves a generated table alone", () => {
+    // A table that carries a pyramid came from `buildWavetable`, which is
+    // canonical, DC-free and peak-normalized by construction: nothing to
+    // condition, and re-conditioning it would replace its peak normalization
+    // with an RMS match it never asked for.
+    const node = created(WavetableOscillator(context));
+    const built = defaultWavetable();
+    const posted = wavetableMessages(node)[0].wavetable;
+    expect(Array.from(posted)).toEqual(Array.from(built.data));
   });
 
   it("is a no-input source with one output", () => {

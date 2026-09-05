@@ -65,7 +65,7 @@ export function canonicalPhase(harmonic: number) {
  * so on. Note the difference from Web Audio's `PeriodicWave`, whose index 0 is
  * DC: there is no DC term here at all, deliberately — an offset in a plane
  * thumps when a morph crosses it, and removing it from imported tables is what
- * ticket 07 exists to do.
+ * `wavetable-conditioner.ts` exists to do.
  *
  * Entries are **magnitudes**: a negative one is read through `Math.abs`. A sign
  * is a phase, phase is this module's guarantee rather than the caller's, and
@@ -125,8 +125,13 @@ export function buildPlane(
  *
  * Peak, not RMS, and per plane: it is the cheap guarantee that a generated table
  * cannot clip. Loudness — matching planes to each other so a morph changes
- * timbre and not level — is ticket 07, and it is RMS-based and switchable
- * because it is a judgement about someone's data rather than a fact about it.
+ * timbre and not level — is `wavetable-conditioner.ts`'s `normalizeRms`, which is
+ * RMS-based, switchable and applied to a table *as a set* because it is a
+ * judgement about someone's data rather than a fact about it. The two do not
+ * compose: peak-1.0 planes with different crest factors are RMS-matched only by
+ * changing their relative levels. A generated table gets this rule and an
+ * imported one gets that one; `setWavetable` picks by whether a pyramid is
+ * present.
  */
 export function normalizePeak(plane: Float32Array) {
   let peak = 0;
@@ -246,22 +251,85 @@ export function buildWavetable(
 }
 
 /**
+ * `cos(2πj/length)` and `sin(2πj/length)` for every `j`.
+ *
+ * A harmonic analysis over exactly one period only ever needs the angle
+ * `2π·h·k/length`, and `h·k` reaches this table modulo `length`, so these two
+ * arrays are the whole transform's trigonometry: no transcendental call in any
+ * inner loop, at any harmonic count. Built once and passed to every plane of a
+ * table — `mipmapWavetable` and `wavetable-conditioner.ts` both do that.
+ */
+export function trigTable(length: number) {
+  const cos = new Float64Array(length);
+  const sin = new Float64Array(length);
+  for (let j = 0; j < length; j++) {
+    cos[j] = Math.cos((2 * Math.PI * j) / length);
+    sin[j] = Math.sin((2 * Math.PI * j) / length);
+  }
+  return { cos, sin };
+}
+
+export type TrigTable = ReturnType<typeof trigTable>;
+
+/**
+ * The harmonic content of one plane: `a[h]` and `b[h]` are the cosine and sine
+ * amplitudes of harmonic `h`, so
+ *
+ *     plane[k] ≈ Σ_h  a[h]·cos(2π·h·k/L) + b[h]·sin(2π·h·k/L)
+ *
+ * with the 2/N scaling that makes them the harmonic's own amplitude rather than
+ * a transform-convention multiple of it. `h = 0` is not computed: a DC term in a
+ * plane thumps when the morph crosses it and nothing in this package wants one.
+ *
+ * The direct form, not `_spectrum.ts`'s FFT — that file is test-only by the rule
+ * in `scripts/copy_files.sh`, and `index.ts` imports this module. It costs
+ * `count · length` multiply-adds off `trig`, which at the default 256-sample
+ * plane is 33 k for a full analysis, once, on the main thread at load.
+ *
+ * This is the one forward transform in the package. `mipmapWavetable` uses it to
+ * drop harmonics; `wavetable-conditioner.ts`'s `alignPhases` uses it to rewrite
+ * their phases. Adding a second one would be how the two quietly disagree.
+ */
+export function analyzeHarmonics(
+  plane: ArrayLike<number>,
+  count = Math.floor(plane.length / 2),
+  trig: TrigTable = trigTable(plane.length),
+) {
+  const length = plane.length;
+  const { cos, sin } = trig;
+  const a = new Float64Array(count + 1);
+  const b = new Float64Array(count + 1);
+  for (let h = 1; h <= count; h++) {
+    let re = 0;
+    let im = 0;
+    for (let k = 0; k < length; k++) {
+      const j = (h * k) % length;
+      const x = plane[k];
+      re += x * cos[j];
+      im += x * sin[j];
+    }
+    a[h] = (2 * re) / length;
+    b[h] = (2 * im) / length;
+  }
+  return { a, b };
+}
+
+/**
  * The pyramid for a table that arrived as **samples** rather than as harmonics —
  * `loadWavetable`'s WAV planes, or anything a caller hands `setWavetable`.
  *
  * One harmonic analysis per plane, then one additive resynthesis per level from
  * the retained harmonics, each at the phase it was measured at. Preserving the
  * measured phase rather than rewriting it to canonical is deliberate: a phase
- * rewrite changes the plane's shape and is ticket 07's decision to make on
- * imported data, and this function's whole job is to remove bandwidth and
- * nothing else. Level 0 is the original samples, byte for byte.
+ * rewrite changes the plane's shape, it is `conditionWavetable`'s decision to
+ * make on imported data and it runs *before* this function, and this one's whole
+ * job is to remove bandwidth and nothing else. Level 0 is the original samples, byte for byte.
  *
- * The transform is a direct one, not `_spectrum.ts`'s FFT: that file is
- * test-only by the rule in `scripts/copy_files.sh`, and importing it here would
- * put a 32768-point FFT into the published bundle. Sine and cosine come out of
- * one `length`-entry table indexed by `(h * k) % length`, so a plane costs about
- * `length²/2` multiply-adds with no transcendental call in the loop — 33 k for a
- * 256-sample plane, once, on the main thread.
+ * The transform is `analyzeHarmonics`, the package's one forward transform, and
+ * not `_spectrum.ts`'s FFT: that file is test-only by the rule in
+ * `scripts/copy_files.sh`, and importing it here would put a 32768-point FFT into
+ * the published bundle. A plane costs about `length²/2` multiply-adds off one
+ * shared trig table — 33 k for a 256-sample plane, once, on the main thread.
  *
  * A table too short to analyse comes back unchanged with `levels: 1`, which the
  * oscillator reads as "no pyramid" and plays exactly as it does today.
@@ -276,41 +344,26 @@ export function mipmapWavetable(wavetable: Wavetable): Wavetable {
     return { data, length, levels: 1 };
   }
 
-  // cos(2πj/length) and sin(2πj/length) for every j: `h * k` only ever reaches
-  // the table modulo `length`, so this is the whole transform's trig.
-  const cos = new Float64Array(length);
-  const sin = new Float64Array(length);
-  for (let j = 0; j < length; j++) {
-    cos[j] = Math.cos((2 * Math.PI * j) / length);
-    sin[j] = Math.sin((2 * Math.PI * j) / length);
-  }
+  const trig = trigTable(length);
+  const { cos, sin } = trig;
 
   // Level 1 is the widest level that is ever *synthesised* — level 0 is the
   // samples themselves — so nothing above its harmonic count is worth analysing.
   const top = mipHarmonics(length, 1);
-  const a = new Float64Array(top + 1);
-  const b = new Float64Array(top + 1);
   const out = new Float32Array(levels * planes * length);
   out.set(data.subarray(0, planes * length), 0);
 
   for (let p = 0; p < planes; p++) {
     const at = p * length;
-    // Analysis. The 2/N scaling makes `a`/`b` the harmonic's own amplitude, so a
-    // resynthesis over every harmonic reproduces the plane (up to the DC and the
-    // Nyquist term, which no level carries — a DC offset in a plane thumps when a
-    // morph crosses it, and ticket 07 is what strips it deliberately).
-    for (let h = 1; h <= top; h++) {
-      let re = 0;
-      let im = 0;
-      for (let k = 0; k < length; k++) {
-        const j = (h * k) % length;
-        const x = data[at + k];
-        re += x * cos[j];
-        im += x * sin[j];
-      }
-      a[h] = (2 * re) / length;
-      b[h] = (2 * im) / length;
-    }
+    // Analysis. A resynthesis over every harmonic reproduces the plane, up to
+    // the DC and the Nyquist term, which no level carries — a DC offset in a
+    // plane thumps when a morph crosses it, and `wavetable-conditioner.ts` is
+    // what strips it deliberately.
+    const { a, b } = analyzeHarmonics(
+      data.subarray(at, at + length),
+      top,
+      trig,
+    );
     // Synthesis, one level at a time. Harmonics are dropped, never reshaped:
     // this is a brick wall in the harmonic domain, which is the exact analogue
     // of the generated path's truncation.
@@ -417,8 +470,8 @@ export function defaultWavetable(length = DEFAULT_WAVETABLE_LENGTH) {
 
 /**
  * A power of two, at least 2. The reader's wrap is cheapest on one, and both
- * ticket 06's mipmaps and ticket 07's phase alignment take a radix-2 FFT of a
- * plane, which has no other length.
+ * the mipmap pyramid halves a harmonic count per level down to exactly one,
+ * which only lands from a power of two.
  */
 function assertLength(length: number) {
   if (

@@ -61,6 +61,14 @@ function WavetableExample() {
   const [currentWavetableName, setCurrentWavetableName] =
     useState<string>(BUILT_IN);
   const [availableNames, setAvailableNames] = useState<string[]>([]);
+  // Loudness normalization is the one conditioning step that is a product
+  // decision rather than a fact about the data - an artist may have shaped a
+  // level ramp across the planes on purpose - so it has a switch, and this is
+  // it. Sweep the morph across a real table with it off and the knob is a
+  // volume control: the sampled catalogue spans 9 to 29 dB across its planes.
+  // It only applies to fetched tables; the built-in one is generated at
+  // canonical phase and peak-normalized already.
+  const [normalize, setNormalize] = useState(true);
 
   useEffect(() => {
     fetchWavetableNames().then((names) => {
@@ -83,7 +91,7 @@ function WavetableExample() {
             const name = event.target.value;
             setCurrentWavetableName(name);
             if (name === BUILT_IN) synth.osc.setHarmonics(builtInHarmonics());
-            else synth.osc.loadWavetable(name);
+            else synth.osc.loadWavetable(name, { normalize });
           }}
         >
           <option key={BUILT_IN}>{BUILT_IN}</option>
@@ -91,7 +99,23 @@ function WavetableExample() {
             <option key={name}>{name}</option>
           ))}
         </select>
-        <div></div>
+        <label className="text-sm self-center">
+          Normalize
+          <input
+            className="ml-2"
+            type="checkbox"
+            checked={normalize}
+            onChange={(event) => {
+              const on = event.target.checked;
+              setNormalize(on);
+              if (currentWavetableName !== BUILT_IN) {
+                synth.osc.loadWavetable(currentWavetableName, {
+                  normalize: on,
+                });
+              }
+            }}
+          />
+        </label>
 
         <Slider
           label="Morph"

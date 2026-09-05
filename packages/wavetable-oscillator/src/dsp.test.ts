@@ -927,4 +927,23 @@ describe("the bundle", () => {
       expect(processor).not.toContain(name);
     }
   });
+
+  it("does not contain the main-thread table machinery", () => {
+    // `wavetable-builder.ts` and `wavetable-conditioner.ts` are load-time work:
+    // `index.ts` imports them, `worklet.ts` does not, and esbuild only walks
+    // into `worklet.ts`. Every table transform in this package - the additive
+    // build, the mipmap pyramid, the DC/phase/loudness conditioning - therefore
+    // runs once on the main thread and reaches the worklet as samples.
+    const processor = readFileSync(join(__dirname, "processor.ts"), "utf8");
+    for (const name of [
+      "alignPhases",
+      "analyzeHarmonics",
+      "buildPlane",
+      "conditionWavetable",
+      "mipmapWavetable",
+      "normalizeRms",
+    ]) {
+      expect(processor).not.toContain(name);
+    }
+  });
 });
