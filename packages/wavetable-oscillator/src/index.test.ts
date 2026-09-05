@@ -1,6 +1,7 @@
 import { peak, peakFrequency } from "./_spectrum";
-import { buildPlane, WavetableOscillator } from "./index";
+import { buildPlane, WAVEDIT_BASE_URL, WavetableOscillator } from "./index";
 import { defaultWavetable, normalizePeak } from "./wavetable-builder";
+import type { WavetableCatalog } from "./wavetable-loader";
 import { WavetableOscillator as WavetableOscillatorUnit } from "./wavetable-oscillator";
 
 /**
@@ -240,6 +241,57 @@ describe("WavetableOscillator", () => {
     const built = defaultWavetable();
     const posted = wavetableMessages(node)[0].wavetable;
     expect(Array.from(posted)).toEqual(Array.from(built.data));
+  });
+
+  it("defaults to the wavedit mirror, and takes a catalog at construction", () => {
+    // `docs/vision.md`'s cross-tier rule is that every URL is overridable and
+    // self-hostable. The default is a third party's GitHub Pages site, which is
+    // exactly why the option has to exist - and no fetch happens either way
+    // until someone asks for one, which is what `fetchCalls` pins.
+    const standard = created(WavetableOscillator(context)) as any;
+    expect(standard.catalog.url("synlp10")).toBe(
+      `${WAVEDIT_BASE_URL}/SYNLP10.WAV`,
+    );
+
+    const hosted = created(
+      WavetableOscillator(context, { catalog: "/wavetables" }),
+    ) as any;
+    expect(hosted.catalog.url("synlp10")).toBe("/wavetables/SYNLP10.WAV");
+    expect(fetchCalls).toBe(0);
+  });
+
+  it("loads through the node's catalog, and rejects rather than throwing", async () => {
+    // Two things at once, because they are the same promise: the catalog is
+    // what resolves the name, and the failure comes back to the caller instead
+    // of becoming an unhandled rejection in the console.
+    const asked: string[] = [];
+    const catalog: WavetableCatalog = {
+      url(name) {
+        asked.push(name);
+        return `bundled://${name}`;
+      },
+      names: async () => ["ONE"],
+    };
+    const node = WavetableOscillator(context, { catalog }) as any;
+
+    await expect(node.loadWavetable("ONE")).rejects.toThrow(
+      "fetch is not available",
+    );
+    expect(asked).toEqual(["ONE"]);
+    expect(await node.fetchWavetableNames()).toEqual(["ONE"]);
+
+    // The node kept playing what it had: one table posted, at construction.
+    expect(wavetableMessages(created(node))).toHaveLength(1);
+  });
+
+  it("keeps the descriptors on the factory", () => {
+    // The factory is wrapped by hand now, for `catalog` - `postCreate` cannot
+    // see the construction inputs. `synthlet/src/descriptors.test.ts` reads
+    // this property, so the wrapper has to carry it.
+    expect(WavetableOscillator.descriptors.map((d) => d.name)).toEqual([
+      "frequency",
+      "morph",
+    ]);
   });
 
   it("is a no-input source with one output", () => {

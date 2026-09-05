@@ -69,12 +69,21 @@ function WavetableExample() {
   // It only applies to fetched tables; the built-in one is generated at
   // canonical phase and peak-normalized already.
   const [normalize, setNormalize] = useState(true);
+  // The tables come from a third party's GitHub Pages mirror, so failing to
+  // reach one is ordinary rather than exceptional. `loadWavetable` returns a
+  // promise that rejects with a message naming what went wrong; before, all
+  // three call sites here were fire-and-forget and a failure was an unhandled
+  // rejection in the console and silence in the UI. Nothing is lost when it
+  // happens: the oscillator keeps playing the table it already has.
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchWavetableNames().then((names) => {
-      names.sort();
-      setAvailableNames(names);
-    });
+    fetchWavetableNames()
+      .then((names) => {
+        names.sort();
+        setAvailableNames(names);
+      })
+      .catch((failure: Error) => setError(failure.message));
   }, []);
   const synth = useSynth(WavetableSynth);
 
@@ -88,10 +97,18 @@ function WavetableExample() {
           className="col-span-2 bg-zinc-900 p-1 rounded border-zinc-300"
           value={currentWavetableName}
           onChange={(event) => {
+            const previous = currentWavetableName;
             const name = event.target.value;
+            setError(null);
             setCurrentWavetableName(name);
             if (name === BUILT_IN) synth.osc.setHarmonics(builtInHarmonics());
-            else synth.osc.loadWavetable(name, { normalize });
+            else {
+              synth.osc.loadWavetable(name, { normalize }).catch((failure) => {
+                // Back to the name of the table still playing, and say why.
+                setCurrentWavetableName(previous);
+                setError(failure.message);
+              });
+            }
           }}
         >
           <option key={BUILT_IN}>{BUILT_IN}</option>
@@ -109,13 +126,17 @@ function WavetableExample() {
               const on = event.target.checked;
               setNormalize(on);
               if (currentWavetableName !== BUILT_IN) {
-                synth.osc.loadWavetable(currentWavetableName, {
-                  normalize: on,
-                });
+                synth.osc
+                  .loadWavetable(currentWavetableName, { normalize: on })
+                  .catch((failure) => setError(failure.message));
               }
             }}
           />
         </label>
+
+        {error && (
+          <div className="col-span-4 text-sm text-red-400">{error}</div>
+        )}
 
         <Slider
           label="Morph"
