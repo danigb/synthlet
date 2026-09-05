@@ -1,4 +1,4 @@
-import { createKS } from "./dsp";
+import { createKS, createString } from "./dsp";
 import { PARAMS } from "./params";
 
 // The first tests this package has had. A pluck fills the delay line with
@@ -377,5 +377,117 @@ describe("createKS amplitude", () => {
     }
     expect(nonFinite).toBe(0);
     expect(peak).toBeLessThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The structure ticket 03 introduced. These say nothing about the sound - the
+// six measurements above are what says the sound did not change - and
+// everything about the shape: an excitation that is a signal, a trigger that
+// is read per sample, and a loop that is a closure.
+// ---------------------------------------------------------------------------
+
+describe("createKS excitation", () => {
+  // The rewrite replaced a fill of the whole delay line with a burst of `P`
+  // samples summed into the loop input. At 441 Hz the delay is exactly 100
+  // samples, so the interpolator is the identity and the two forms reduce to
+  // the same statement: *one period of full-scale uniform noise, recirculating
+  // at the loop gain*. Both halves of it are asserted here.
+  const FREQUENCY = 441; // 44100 / 441 = 100 samples, exactly
+  const PERIOD = 100;
+  const DECAY = 1;
+  const LOOP_GAIN = Math.pow(0.001, 1 / (0.1 * DECAY * SAMPLE_RATE));
+
+  it("excites one period with full-scale noise, as the whole-buffer fill did", () => {
+    const signal = pluck(FREQUENCY, DECAY, 0.05);
+    const burst = signal.subarray(0, PERIOD);
+
+    let peak = 0;
+    let sumOfSquares = 0;
+    for (const sample of burst) {
+      if (Math.abs(sample) > peak) peak = Math.abs(sample);
+      sumOfSquares += sample * sample;
+    }
+    const rms = Math.sqrt(sumOfSquares / PERIOD);
+
+    expect(peak).toBeLessThanOrEqual(1);
+    expect(peak).toBeGreaterThan(0.9); // 100 draws; missing the top decile is a 1e-5 event
+    // Uniform on [-1, 1) has an RMS of 1/sqrt(3); 100 samples put it within
+    // about 7% of that, so 15% is a loose test of "still full scale".
+    expect(rms).toBeGreaterThan(0.85 / Math.sqrt(3));
+    expect(rms).toBeLessThan(1.15 / Math.sqrt(3));
+  });
+
+  it("then recirculates that period at the loop gain, and nothing else", () => {
+    const signal = pluck(FREQUENCY, DECAY, 0.05);
+    let worst = 0;
+    // Three periods past the burst: if any excitation leaked in after the
+    // first `P` samples, or the loop wrote anything but `gain * y`, this is
+    // where it shows.
+    for (let i = PERIOD; i < 4 * PERIOD; i++) {
+      const difference = Math.abs(signal[i] - LOOP_GAIN * signal[i - PERIOD]);
+      if (difference > worst) worst = difference;
+    }
+    expect(worst).toBeLessThan(1e-6); // Float32 storage, not algorithm
+  });
+});
+
+describe("createKS trigger timing", () => {
+  // The descriptor is still k-rate, so this is what every existing caller
+  // gets: one value for the block, and the pluck lands on its first sample.
+  it.each([1, new Float32Array([1])])(
+    "plucks on the first sample of the block when the trigger is k-rate (%p)",
+    (trigger) => {
+      const output = new Float32Array(BLOCK);
+      createKS(SAMPLE_RATE, MIN_FREQUENCY)(output, trigger, 440, 1);
+      expect(output[0]).not.toBe(0);
+    },
+  );
+
+  // And this is what a caller who sets `trigger.automationRate = "a-rate"`
+  // gets: the pluck starts where it was scheduled, not up to 2.9 ms later.
+  it("starts a pluck mid-block when the trigger is a-rate", () => {
+    const AT = 64;
+    const trigger = new Float32Array(BLOCK);
+    trigger.fill(1, AT);
+    const output = new Float32Array(BLOCK);
+    createKS(SAMPLE_RATE, MIN_FREQUENCY)(output, trigger, 440, 1);
+
+    expect(Array.from(output.subarray(0, AT))).toEqual(
+      Array.from(new Float32Array(AT)),
+    );
+    expect(output.subarray(AT).some((v) => v !== 0)).toBe(true);
+  });
+});
+
+describe("createString instances", () => {
+  // Ticket 10 needs two of these summed, one per polarization. Nothing here
+  // ships that; this only asserts the closure holds no shared state, which is
+  // the property that makes it possible.
+  const render = (frequency: number, seconds: number) => {
+    const string = createString(SAMPLE_RATE, MIN_FREQUENCY);
+    string.setLoopGain(Math.pow(0.001, 1 / (0.1 * 1 * SAMPLE_RATE)));
+    string.setDelay(SAMPLE_RATE / frequency);
+    string.pluck();
+    const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
+    for (let n = 0; n < output.length; n += BLOCK) {
+      string.process(output, n, Math.min(n + BLOCK, output.length));
+    }
+    return output;
+  };
+
+  it("runs two independent strings that can be summed", () => {
+    const low = render(220, 0.3);
+    const high = render(330, 0.3);
+
+    const sum = new Float32Array(low.length);
+    for (let i = 0; i < sum.length; i++) sum[i] = low[i] + high[i];
+
+    expect(sum.every(Number.isFinite)).toBe(true);
+    expect(Math.max(...Array.from(sum, Math.abs))).toBeLessThanOrEqual(2);
+    // Each still plays its own note, which is the actual claim: neither
+    // instance touched the other's delay line.
+    expect(Math.abs(cents(fundamental(low, 220), 220))).toBeLessThan(5);
+    expect(Math.abs(cents(fundamental(high, 330), 330))).toBeLessThan(5);
   });
 });

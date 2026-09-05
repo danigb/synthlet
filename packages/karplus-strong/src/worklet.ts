@@ -26,7 +26,13 @@ export class KsProcessor extends AudioWorkletProcessor {
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     const output = outputs[0][0];
-    this.g(output, params.trigger[0], params.frequency[0], params.decay[0]);
+    // The trigger goes down whole rather than as `[0]`, so it can be read per
+    // sample. The descriptor stays `k-rate`, so by default that array has
+    // length 1 and the read is one value for the block - identical to before,
+    // and free. A caller who sets `trigger.automationRate = "a-rate"` gets the
+    // sample-accurate pluck they asked for instead of one quantised to the
+    // 128-frame render quantum (2.9 ms at 44.1 kHz).
+    this.g(output, params.trigger, params.frequency[0], params.decay[0]);
 
     return this.r;
   }
