@@ -264,4 +264,30 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "k-rate",
   },
+  {
+    // The other hand. 0 leaves the string ringing for as long as `decay` says;
+    // 1 mutes it in 50 milliseconds, which is a hand landing on the strings.
+    //
+    // It works by **raising the loop's loss**, not by pulling down the output -
+    // Laurson et al. 2001 keep the loop-filter coefficients time-varying
+    // precisely because "they must be changed, for example, during attenuation
+    // or re-plucking of the string". That distinction is audible: muting through
+    // the loop is the same mechanism as decaying, so a damped string still loses
+    // its high partials first and dies dark, where an output gain would take
+    // every frequency down together and sound like a fader.
+    //
+    // The knob is geometric in the decay time - `decay^(1-damp) * 0.05^damp` -
+    // so with `decay` at 1 second the quarter points are 0.47, 0.22 and 0.11 s.
+    // It can only shorten: a damper cannot make a string ring longer.
+    //
+    // With `damp`, a re-pluck that adds to a ringing string, and an a-rate
+    // `frequency` that moves without a trigger, the gesture vocabulary of a
+    // plucked-string controller is complete: pluck, damp, re-pluck, slide,
+    // legato.
+    name: "damp",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
 ];

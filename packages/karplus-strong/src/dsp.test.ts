@@ -1744,21 +1744,29 @@ function partialSeries(
   count: number,
   size = SPECTRAL_WINDOW,
   polarization = 0,
+  seed = 11,
 ) {
-  const signal = pluck(
-    frequency,
-    3,
-    0.02 + (size + BLOCK) / SAMPLE_RATE,
-    1,
-    1,
-    1,
-    0,
-    0,
-    1,
-    1,
-    stiffness,
-    0, // `detune` 0: one pitch, so a partial is one line rather than two
-    polarization,
+  // Seeded. Every partial's location is a spectral peak of a noise-excited
+  // signal, so it jitters by a fraction of a bin from draw to draw: unseeded,
+  // the harmonic baseline below put the 13th partial past its 2 cent bound
+  // about one run in fifty. The seed fixes the draw, not the physics - the
+  // dispersion this measures is deterministic given the excitation.
+  const signal = withSeededNoise(seed, () =>
+    pluck(
+      frequency,
+      3,
+      0.02 + (size + BLOCK) / SAMPLE_RATE,
+      1,
+      1,
+      1,
+      0,
+      0,
+      1,
+      1,
+      stiffness,
+      0, // `detune` 0: one pitch, so a partial is one line rather than two
+      polarization,
+    ),
   );
   const start = Math.round(0.02 * SAMPLE_RATE);
   const re = new Float64Array(size);
@@ -2845,5 +2853,445 @@ describe("createKS tension", () => {
     }
     expect(nonFinite).toBe(0);
     expect(peak).toBeLessThan(3);
+  }, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// The gesture vocabulary: damp, re-pluck without erasing, legato.
+//
+// Laurson, Erkut, Valimaki and Kuuskankare 2001 keep the loop-filter
+// coefficients time-varying for exactly these two reasons: "they must be
+// changed, for example, during attenuation or re-plucking of the string". This
+// group is the assertion that both work, and the folder README's exit criterion
+// - "the string can be damped and re-plucked without being erased" - is the
+// pair of tests at the top of it.
+// ---------------------------------------------------------------------------
+
+type Gesture = {
+  trigger?: number;
+  frequency?: number;
+  decay?: number;
+  brightness?: number;
+  level?: number;
+  dynamics?: number;
+  position?: number;
+  polarization?: number;
+  tension?: number;
+  damp?: number;
+};
+
+/**
+ * Renders `seconds`, asking `at` for the parameter values at the start of each
+ * block - which is how a player's hands reach a k-rate worklet. `pluck` above
+ * holds one trigger for a whole render and cannot express a gesture; this can.
+ */
+function perform(seconds: number, at: (second: number) => Gesture) {
+  const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+  const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
+  const block = new Float32Array(BLOCK);
+  for (let n = 0; n < output.length; n += BLOCK) {
+    const p = at(n / SAMPLE_RATE);
+    ks(
+      block,
+      p.trigger ?? 0,
+      p.frequency ?? 440,
+      p.decay ?? 1,
+      p.brightness ?? 0.5,
+      p.level ?? 0.5,
+      p.dynamics ?? 0.5,
+      p.position ?? 0.13,
+      0,
+      1,
+      1,
+      0,
+      0.5,
+      p.polarization ?? 0,
+      p.tension ?? 0,
+      p.damp ?? 0,
+    );
+    output.set(block.subarray(0, Math.min(BLOCK, output.length - n)), n);
+  }
+  return output;
+}
+
+/** The 5 ms envelope `dsp.ts` stops on, as a whole signal. */
+function envelopeOf(signal: Float32Array) {
+  const envelope = new Float64Array(signal.length);
+  let level = 0;
+  for (let i = 0; i < signal.length; i++) {
+    level += ENVELOPE_COEFFICIENT * (Math.abs(signal[i]) - level);
+    envelope[i] = level;
+  }
+  return envelope;
+}
+
+/** Energy in `[low, high)` of one window, for the band comparison below. */
+function bandEnergy(
+  signal: Float32Array,
+  start: number,
+  size: number,
+  low: number,
+  high: number,
+) {
+  const energy = spectrum(signal, start, size);
+  let total = 0;
+  for (let k = 1; k < size / 2; k++) {
+    const frequency = (k * SAMPLE_RATE) / size;
+    if (frequency >= low && frequency < high) total += energy[k];
+  }
+  return total;
+}
+
+const DAMP_MUTE_TIME = 0.05; // `dsp.ts`, and the number the comment documents
+
+describe("createKS as an instrument", () => {
+  // The folder README's exit criterion, first half. A pluck used to begin with
+  // `line.fill(0)` and a reset of every filter state, which is the one thing a
+  // real string never does: a string already ringing when you pluck it again
+  // keeps its energy and gets more added.
+  //
+  // Two assertions, because "adds" and "does not erase" are different claims.
+  it("adds a re-pluck to a ringing string instead of resetting it", () => {
+    let quiet = 0;
+    let loud = 0;
+    const PLUCKS = 8;
+    for (let seed = 1; seed <= PLUCKS; seed++) {
+      const plain = withSeededNoise(seed, () =>
+        perform(0.6, (t) => ({
+          trigger: t < 0.01 ? 1 : 0,
+          decay: 3,
+          level: 1,
+          dynamics: 1,
+        })),
+      );
+      const again = withSeededNoise(seed, () =>
+        perform(0.6, (t) => ({
+          trigger: t < 0.01 || (t >= 0.3 && t < 0.31) ? 1 : 0,
+          decay: 3,
+          level: 1,
+          dynamics: 1,
+        })),
+      );
+      const at = Math.round(0.35 * SAMPLE_RATE);
+      quiet += (20 * Math.log10(envelopeOf(plain)[at])) / PLUCKS;
+      loud += (20 * Math.log10(envelopeOf(again)[at])) / PLUCKS;
+
+      // And nothing before the re-pluck moved. An erase would have zeroed the
+      // line, so this is the assertion that the memset is gone rather than
+      // merely masked by the new burst.
+      const before = Math.round(0.3 * SAMPLE_RATE) - 100;
+      expect(Array.from(again.subarray(before, before + 64))).toEqual(
+        Array.from(plain.subarray(before, before + 64)),
+      );
+    }
+    // Measured -25.2 dBFS against -13.9: 11.3 dB of energy added, where an
+    // erase-and-refill would have landed at the same level as the first pluck.
+    expect(loud - quiet).toBeGreaterThan(6);
+  }, 60_000);
+
+  // The sharpest form of the same claim: a re-pluck whose burst is *silent* is
+  // a no-op. If `pluck` still cleared the line this would stop the note dead;
+  // instead the ringing string carries on to the sample, -24.89 dBFS either way.
+  it("leaves a ringing string untouched when the re-pluck is silent", () => {
+    const plain = withSeededNoise(1, () =>
+      perform(0.6, (t) => ({
+        trigger: t < 0.01 ? 1 : 0,
+        decay: 3,
+        level: 1,
+        dynamics: 1,
+      })),
+    );
+    const silent = withSeededNoise(1, () =>
+      perform(0.6, (t) => ({
+        trigger: t < 0.01 || (t >= 0.3 && t < 0.31) ? 1 : 0,
+        decay: 3,
+        level: t >= 0.3 ? 0 : 1,
+        dynamics: 1,
+      })),
+    );
+    const at = Math.round(0.4 * SAMPLE_RATE);
+    expect(20 * Math.log10(envelopeOf(silent)[at])).toBeCloseTo(
+      20 * Math.log10(envelopeOf(plain)[at]),
+      1,
+    );
+  });
+
+  // The other half of the exit criterion. `damp` raises the loop's loss towards
+  // a 50 ms decay time, so a note that was going to ring for three seconds is
+  // gone in a twentieth of one. Measured 53.4 / 47.0 / 47.5 ms to -60 dBFS.
+  it.each([110, 440, 1760])(
+    "mutes a ringing %p Hz note inside the documented time",
+    (frequency) => {
+      let total = 0;
+      const PLUCKS = 8;
+      for (let seed = 1; seed <= PLUCKS; seed++) {
+        const signal = withSeededNoise(seed, () =>
+          perform(1.2, (t) => ({
+            trigger: t < 0.01 ? 1 : 0,
+            frequency,
+            decay: 3,
+            brightness: 1,
+            level: 1,
+            dynamics: 1,
+            damp: t >= 0.5 ? 1 : 0,
+          })),
+        );
+        const envelope = envelopeOf(signal);
+        const from = Math.round(0.5 * SAMPLE_RATE);
+        let muted = Infinity;
+        for (let i = from; i < envelope.length; i++) {
+          if (envelope[i] < 1e-3) {
+            muted = (i - from) / SAMPLE_RATE;
+            break;
+          }
+        }
+        total += muted / PLUCKS;
+      }
+      // The 110 Hz case runs a little over because the loss is applied once per
+      // period and one period there is 9 ms of the 50.
+      expect(total).toBeLessThan(1.3 * DAMP_MUTE_TIME);
+      expect(total).toBeGreaterThan(0.5 * DAMP_MUTE_TIME);
+    },
+    60_000,
+  );
+
+  // The knob is geometric in the decay time - `decay^(1-damp) * 0.05^damp` -
+  // because adding loss linearly would put the whole mute in the bottom fifth of
+  // the range. Measured t60 after engaging: 0.955 / 0.436 / 0.191 / 0.080 /
+  // 0.039 s against a model of 1.000 / 0.473 / 0.224 / 0.106 / 0.050. It reads
+  // consistently short because the envelope follower's own 5 ms time constant
+  // cannot track a 39 ms t60, which is why the tolerance is 25% rather than 5%.
+  it("shortens the decay geometrically across its range", () => {
+    const measured = [0, 0.25, 0.5, 0.75, 1].map((damp) => {
+      let total = 0;
+      const PLUCKS = 8;
+      for (let seed = 1; seed <= PLUCKS; seed++) {
+        const signal = withSeededNoise(seed, () =>
+          perform(4, (t) => ({
+            trigger: t < 0.01 ? 1 : 0,
+            decay: 1,
+            brightness: 1,
+            level: 1,
+            dynamics: 1,
+            damp: t >= 0.5 ? damp : 0,
+          })),
+        );
+        const envelope = envelopeOf(signal);
+        const from = Math.round(0.55 * SAMPLE_RATE);
+        const reference = envelope[from];
+        let fell = Infinity;
+        for (let i = from; i < envelope.length; i++) {
+          if (envelope[i] < reference / 1000) {
+            fell = (i - from) / SAMPLE_RATE;
+            break;
+          }
+        }
+        total += fell / PLUCKS;
+      }
+      return total;
+    });
+    for (let i = 1; i < measured.length; i++) {
+      expect([i, measured[i] < measured[i - 1]]).toEqual([i, true]);
+    }
+    [0, 0.25, 0.5, 0.75, 1].forEach((damp, i) => {
+      const model = Math.pow(DAMP_MUTE_TIME, damp); // decay = 1 s
+      expect([damp, Math.abs(measured[i] / model - 1) < 0.25]).toEqual([
+        damp,
+        true,
+      ]);
+    });
+  }, 120_000);
+
+  // The reason `damp` scales the loop gain rather than the output. Muting
+  // through the loop is the same mechanism as decaying, so the string keeps its
+  // own spectral tilt on the way down and dies dark; an output gain would take
+  // every band down by exactly the same number of dB, by construction.
+  //
+  // Measured 30 ms into a mute at the shipped brightness: the 3-10 kHz band
+  // loses 46.2 dB where 300-1500 Hz loses 42.5.
+  it("keeps losing its high partials first while it mutes", () => {
+    let high = 0;
+    let low = 0;
+    const PLUCKS = 8;
+    for (let seed = 1; seed <= PLUCKS; seed++) {
+      const signal = withSeededNoise(seed, () =>
+        perform(1.2, (t) => ({
+          trigger: t < 0.01 ? 1 : 0,
+          decay: 3,
+          level: 1,
+          dynamics: 1,
+          position: 0,
+          damp: t >= 0.5 ? 1 : 0,
+        })),
+      );
+      const before = Math.round(0.49 * SAMPLE_RATE);
+      const after = Math.round(0.53 * SAMPLE_RATE);
+      high +=
+        energyDb(
+          bandEnergy(signal, after, 1024, 3000, 10000),
+          bandEnergy(signal, before, 1024, 3000, 10000),
+        ) / PLUCKS;
+      low +=
+        energyDb(
+          bandEnergy(signal, after, 1024, 300, 1500),
+          bandEnergy(signal, before, 1024, 300, 1500),
+        ) / PLUCKS;
+    }
+    expect(high).toBeLessThan(low - 2);
+  }, 60_000);
+
+  // Legato: the pitch changes without a new excitation. Ticket 06 made
+  // `frequency` drive the loop length every block whether or not there is a
+  // trigger; what this ticket had to remove was the delay *snap* inside `pluck`,
+  // which would have stepped the read index under a ringing string. Measured
+  // 220.10 Hz before and 329.84 after.
+  it("changes pitch without a trigger, and without a click", () => {
+    const signal = withSeededNoise(1, () =>
+      perform(0.8, (t) => ({
+        trigger: t < 0.01 ? 1 : 0,
+        frequency: t < 0.3 ? 220 : 330,
+        decay: 3,
+        level: 1,
+        dynamics: 1,
+      })),
+    );
+    const WINDOW = 4096;
+    expect(
+      Math.abs(
+        cents(
+          spectralFundamental(
+            signal,
+            220,
+            Math.round(0.15 * SAMPLE_RATE),
+            WINDOW,
+          ),
+          220,
+        ),
+      ),
+    ).toBeLessThan(10);
+    expect(
+      Math.abs(
+        cents(
+          spectralFundamental(
+            signal,
+            330,
+            Math.round(0.5 * SAMPLE_RATE),
+            WINDOW,
+          ),
+          330,
+        ),
+      ),
+    ).toBeLessThan(10);
+
+    // And no step at the block boundaries, which is where a snapped delay would
+    // put one - the same measurement ticket 06's slide assertions use. Measured
+    // 0.967 against a bound of 1.5.
+    let atBoundary = 0;
+    let between = 0;
+    let boundaries = 0;
+    let interior = 0;
+    for (
+      let i = Math.round(0.05 * SAMPLE_RATE);
+      i < Math.round(0.75 * SAMPLE_RATE);
+      i++
+    ) {
+      const step = Math.abs(signal[i] - signal[i - 1]);
+      if (i % BLOCK === 0) {
+        atBoundary += step;
+        boundaries++;
+      } else {
+        between += step;
+        interior++;
+      }
+    }
+    expect(atBoundary / boundaries / (between / interior)).toBeLessThan(1.5);
+  });
+
+  // Success criterion 4, with the two things this ticket changed around it: the
+  // pluck lands mid-block onto a string that is already ringing and being
+  // damped, and it still lands where it was scheduled rather than at the block
+  // boundary.
+  it("still starts an a-rate pluck mid-block onto a damped, ringing string", () => {
+    const AT = 64;
+    // Two identical strings, driven identically under the same seed: plucked,
+    // then rung on for twenty blocks with the mute engaged. On the last block
+    // one of them gets a rising edge at sample 64 and the other does not.
+    const drive = (replucked: boolean) =>
+      withSeededNoise(1, () => {
+        const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+        const block = new Float32Array(BLOCK);
+        const trigger = new Float32Array(BLOCK);
+        const render = (damp: number) =>
+          ks(
+            block,
+            trigger,
+            440,
+            3,
+            0.5,
+            1,
+            1,
+            0.13,
+            0,
+            1,
+            1,
+            0,
+            0.5,
+            0,
+            0,
+            damp,
+          );
+        trigger.fill(1);
+        render(0); // the first pluck
+        trigger.fill(0);
+        for (let n = 0; n < 20; n++) render(1); // ringing, and being damped
+        if (replucked) trigger.fill(1, AT);
+        render(1);
+        return Float32Array.from(block);
+      });
+
+    const quiet = drive(false);
+    const again = drive(true);
+    // Identical up to the scheduled sample - the pluck did not get quantised to
+    // the block boundary, and it did not erase what was already ringing.
+    expect(Array.from(again.subarray(0, AT))).toEqual(
+      Array.from(quiet.subarray(0, AT)),
+    );
+    // And different from it onwards, which is the pluck landing.
+    expect(Array.from(again.subarray(AT))).not.toEqual(
+      Array.from(quiet.subarray(AT)),
+    );
+  });
+
+  it("stays finite and in scale with every gesture at once", () => {
+    let peak = 0;
+    let nonFinite = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      withSeededNoise(seed, () => {
+        for (const frequency of [20, 110, 440, 5000]) {
+          for (const damp of [0, 0.5, 1]) {
+            const signal = perform(0.4, (t) => ({
+              // Re-plucked every 50 ms, damped throughout, both polarizations,
+              // full tension - a gesture nobody would play, held for 0.4 s.
+              trigger: Math.floor(t / 0.05) % 2 === 0 ? 1 : 0,
+              frequency,
+              decay: 5,
+              level: 1,
+              dynamics: 1,
+              polarization: 1,
+              tension: 1,
+              damp,
+            }));
+            for (const sample of signal) {
+              if (!Number.isFinite(sample)) nonFinite++;
+              else if (Math.abs(sample) > peak) peak = Math.abs(sample);
+            }
+          }
+        }
+      });
+    }
+    expect(nonFinite).toBe(0);
+    // A re-pluck adds to what is there, so the bound is above the single-pluck
+    // one: `level` 1 into the comb (peak gain 2) on top of a ringing string.
+    expect(peak).toBeLessThan(4);
   }, 120_000);
 });

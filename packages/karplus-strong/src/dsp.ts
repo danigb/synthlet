@@ -300,7 +300,12 @@ export function createString(sampleRate: number, minFrequency: number) {
   // is what makes high partials die before low ones. Its phase delay is
   // `DAMPING_PHASE_DELAY`, one sample at every frequency, and that is why
   // `brightness` can change the tone without detuning the string.
+  // `rho` is ramped across the block towards `rhoTarget`, in the same shape
+  // `delay` uses, because `damp` moves it by a factor of twenty in one block
+  // when a mute engages. With any setting held still the increment is zero and
+  // every sample sees the same value it did before this existed.
   let rho = 0;
+  let rhoTarget = 0;
   let h0 = 1;
   let h1 = 0;
   let x1 = 0; // x[n-1]
@@ -478,7 +483,7 @@ export function createString(sampleRate: number, minFrequency: number) {
      * every B, so brightness moves the rolloff and never the decay time.
      */
     setDamping(gain: number, brightness: number, stretch = 1, blend = 1) {
-      rho = gain;
+      rhoTarget = gain;
       h0 = (1 + brightness) / 2;
       h1 = (1 - brightness) / 4;
       // `1/S` and `b` as 32-bit fractions, compared against a uniform draw
@@ -492,6 +497,32 @@ export function createString(sampleRate: number, minFrequency: number) {
       blending = blend < 1;
       blendThreshold = blending ? (4294967296 * Math.max(blend, 0)) >>> 0 : 0;
       probabilistic = stretching || blending;
+    },
+
+    /**
+     * Returns the string to rest: the delay line, every filter state in the
+     * loop, the excitation chain and the envelope.
+     *
+     * This is the half of the old `pluck` that a pluck should never have been
+     * doing. It is called from the auto-stop, where the string really has fallen
+     * silent, so a note starts from rest unless it is deliberately plucked onto
+     * a ringing one.
+     */
+    silence() {
+      line.fill(0);
+      x1 = 0;
+      x2 = 0;
+      dx1 = 0;
+      dx2 = 0;
+      dy1 = 0;
+      dy2 = 0;
+      pickState = 0;
+      levelState = 0;
+      excitationIndex = 0;
+      excitationLength = 0;
+      energy = 0;
+      envelope = 0;
+      ringing = false;
     },
 
     /**
@@ -550,14 +581,23 @@ export function createString(sampleRate: number, minFrequency: number) {
       pickAngle = 0,
       draws?: ArrayLike<number>,
     ) {
-      line.fill(0);
-      x1 = 0;
-      x2 = 0;
-      dx1 = 0;
-      dx2 = 0;
-      dy1 = 0;
-      dy2 = 0;
-      delay = delayTarget; // a new note starts in tune, it does not glide into it
+      // **It does not erase the string.** A real string that is already ringing
+      // when you pluck it again keeps its energy and gets more added, and this
+      // used to be a `line.fill(0)` plus a reset of every filter state - the one
+      // thing a string never does. Laurson et al. 2001 treat the loop
+      // coefficients as time-varying precisely so that the loop survives this:
+      // "they must be changed, for example, during attenuation or re-plucking of
+      // the string". Clearing the string is a separate gesture, `silence()`, and
+      // it happens where a string really does fall silent - the auto-stop.
+      //
+      // The snap is conditional for the same reason. Starting a *new* note in
+      // tune rather than gliding into it means `delay` has to jump to its
+      // target, but doing that under a signal that is still there steps the read
+      // index and clicks. So a fresh note snaps and a re-pluck lets the block's
+      // own interpolation carry the pitch across, which is the legato gesture
+      // and the click-free version of the same thing.
+      if (!ringing) delay = delayTarget;
+      rho = rhoTarget; // and with its own loss, not the previous note's
 
       // Zero-mean, and that is a fix rather than a nicety. The damping filter's
       // taps sum to exactly 1 at every brightness, so a DC offset in the
@@ -568,8 +608,13 @@ export function createString(sampleRate: number, minFrequency: number) {
       // of it that residue. The comb below has a zero at DC and would remove it
       // too, but `position = 0` is a supported setting, so this is what carries
       // the property.
+      // From the *shorter* of the two, so a re-pluck onto a string whose pitch
+      // is about to rise cannot write a burst longer than the loop it is heading
+      // for. Identical for a fresh pluck, where the two are equal.
       burstLength = Math.floor(
-        delay - phaseDelayCompensation - INTERPOLATOR_REACH,
+        Math.min(delay, delayTarget) -
+          phaseDelayCompensation -
+          INTERPOLATOR_REACH,
       );
       // A blended loop is loaded with a *constant*, which is Karplus and
       // Strong's own Fig. 4: "the initial wavetable can be filled with a
@@ -627,7 +672,20 @@ export function createString(sampleRate: number, minFrequency: number) {
       if (tensioning && burstLength > 0) {
         let squares = 0;
         for (let i = 0; i < burstLength; i++) squares += noise[i] * noise[i];
-        energy = squares / burstLength;
+        // `+=`, not `=`. This is Avanzini et al.'s `dE[n]` - the general form of
+        // their energy storage model is `E[n] = dE[n] + lambda*E[n-1]`, and
+        // ticket 11 only ever needed the `dE = 0` case because the only
+        // excitation was the first pluck. A re-pluck onto a ringing string is
+        // exactly a nonzero `dE`: "the amount of energy dE[n] injected into the
+        // system equals the energy loss of the excitation".
+        //
+        // Clamped, because a fast retrigger would otherwise stack energy without
+        // bound and drive `1 - tension*gain*E` negative. The delay is clamped
+        // downstream so nothing could diverge, but the string would slam to its
+        // highest pitch, which is not a gesture. One is three full-level plucks'
+        // worth and caps the sharpening at about three semitones.
+        energy += squares / burstLength;
+        if (energy > TENSION_MAX_ENERGY) energy = TENSION_MAX_ENERGY;
       } else {
         energy = 0;
       }
@@ -703,6 +761,7 @@ export function createString(sampleRate: number, minFrequency: number) {
         delays === undefined && to > from
           ? (delayTarget - delay) / (to - from)
           : 0;
+      const rhoIncrement = to > from ? (rhoTarget - rho) / (to - from) : 0;
 
       for (let i = from; i < to; i++) {
         // The loop length this sample wants to be. Everything that moves the
@@ -844,6 +903,7 @@ export function createString(sampleRate: number, minFrequency: number) {
         // the whole decay and `decay` would stop being a time in seconds.
         // Outside, `decay` is the ceiling and `stretch` lengthens only what
         // the damping filter shortens, which is the high partials.
+        rho += rhoIncrement;
         let feedback = sign * rho * filtered;
         x2 = x1;
         x1 = sample;
@@ -878,7 +938,9 @@ export function createString(sampleRate: number, minFrequency: number) {
         // Stop playing once the envelope - not one sample - is inaudible
         envelope += envelopeCoefficient * (Math.abs(sample) - envelope);
         if (envelope < stopThreshold) {
-          ringing = false;
+          // The string really has fallen silent, so it goes back to rest - which
+          // is where the reset half of the old `pluck` lives now.
+          this.silence();
           output.fill(0, i + 1, to);
           return;
         }
@@ -961,6 +1023,20 @@ const MAX_DETUNE_CENTS = 10;
 // so the knob spans inaudible to unmistakable, which is what a parameter whose
 // physical setting sits near the detection threshold has to do to be worth
 // having.
+// The decay time `damp` at 1 asks for - the left hand landing on the strings.
+// The ticket asks for a target "in the tens of milliseconds" and for the number
+// to be stated: 50 ms, which is a t60, so a note at the shipped level is under
+// -60 dBFS well inside it.
+//
+// `damp` reaches it *geometrically* - `decay^(1-damp) * DAMP_MUTE_TIME^damp` -
+// rather than by adding loss linearly. Adding loss linearly is the physical
+// model but it makes a useless knob: with `decay` at 1 s it mutes in 0.34 s by
+// `damp` 0.1 and everything above 0.2 is the same mute. Geometric gives 1 ->
+// 0.47 -> 0.22 -> 0.11 -> 0.05 s across the knob, which is even in the units the
+// number is in - the same argument `decay`'s own range rests on. And it only
+// ever shortens: a damper cannot make a string ring longer.
+const DAMP_MUTE_TIME = 0.05;
+
 const TENSION_GAIN = 3 * (1 - Math.pow(2, -1 / 12));
 
 // The energy below which the glide is declared over. `TENSION_GAIN` is 0.168,
@@ -968,6 +1044,12 @@ const TENSION_GAIN = 3 * (1 - Math.pow(2, -1 / 12));
 // stopping there hands the loop back its constant-delay fast path for the rest
 // of the note. See the comment at the modulation itself for what that is worth.
 const TENSION_FLOOR = 1e-5;
+
+// The ceiling on accumulated energy, for the case ticket 12 introduced: a
+// re-pluck adds `dE` rather than replacing it, so a fast retrigger could stack
+// energy without bound. One is three full-level plucks' worth - a single one is
+// `level^2/3` - and caps the sharpening at about three semitones.
+const TENSION_MAX_ENERGY = 1;
 
 /** One voice: a string, the gate contract, and the parameter mapping. */
 export function createKS(sampleRate: number, minFrequency: number) {
@@ -1015,8 +1097,10 @@ export function createKS(sampleRate: number, minFrequency: number) {
     // string and costs exactly what one string cost.
     detune = 0.5,
     polarization = 0,
-    // And this one drives the loop length from the pluck's own energy.
+    // And these two drive the loop length from the pluck's own energy, and the
+    // loop's loss from the player's other hand.
     tension = 0,
+    damp = 0,
   ) => {
     // Smith 3.3: the loop filter is applied once per period, so -60 dB in
     // `decay` seconds needs `rho^(f0*decay) = 0.001`. Pitch-independent by
@@ -1045,11 +1129,26 @@ export function createKS(sampleRate: number, minFrequency: number) {
     // towards it across the block.
     string.setDelay(sampleRate / firstFrequency);
 
-    const periods = firstFrequency * decay;
-    const rho =
-      periods > 0
+    // `damp` is the loop-gain override the papers describe, not an output
+    // envelope - Laurson et al. 2001 keep the loop coefficients time-varying
+    // because "they must be changed, for example, during attenuation or
+    // re-plucking of the string". Muting through the loop is the same mechanism
+    // as decaying, only faster, which is why a damped string still loses its
+    // high partials first; an output gain would take every frequency down
+    // together and sound like a fader, not like a hand.
+    const damping = damp > 0 ? Math.min(damp, 1) : 0;
+    const muted = (seconds: number) =>
+      damping > 0 && seconds > DAMP_MUTE_TIME
+        ? seconds * Math.pow(DAMP_MUTE_TIME / seconds, damping)
+        : seconds;
+    // Smith 3.3, applied to whatever decay time is left after damping.
+    const loopGain = (seconds: number) => {
+      const periods = firstFrequency * muted(seconds);
+      return periods > 0
         ? Math.min(Math.pow(targetAmplitude, 1 / periods), maxLoopGain)
         : 0; // a non-positive decay would invert the exponent and grow the loop
+    };
+    const rho = loopGain(decay);
     string.setDamping(rho, brightness, stretch, blend);
 
     // Avanzini et al.'s `lambda`, "determined by the system dissipation": `rho`
@@ -1084,10 +1183,12 @@ export function createKS(sampleRate: number, minFrequency: number) {
       }
       second.setDispersion(stiffness, detuned);
       second.setDelay(sampleRate / detuned);
+      // A hand lands on the string, not on one plane of it, so the second
+      // polarization is damped too - and expressing both as *times* is what
+      // makes that come out right: at `damp` 1 both mute in `DAMP_MUTE_TIME`,
+      // and at `damp` 0 this is `3*decay`, which is `rho^(1/3)` exactly.
       second.setDamping(
-        rho > 0
-          ? Math.min(Math.pow(rho, 1 / POLARIZATION_TIME_CONSTANT), maxLoopGain)
-          : 0,
+        loopGain(POLARIZATION_TIME_CONSTANT * decay),
         brightness,
         stretch,
         blend,
