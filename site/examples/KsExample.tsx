@@ -44,6 +44,14 @@ function Example() {
         inputClassName="col-span-2"
         param={synth.ks.decay}
         min={0.01}
+        max={5}
+        units="s"
+      />
+      <Slider
+        label="Brightness"
+        inputClassName="col-span-2"
+        param={synth.ks.brightness}
+        min={0}
         max={1}
       />
       <div className="col-span-4">

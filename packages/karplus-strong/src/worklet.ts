@@ -32,7 +32,13 @@ export class KsProcessor extends AudioWorkletProcessor {
     // and free. A caller who sets `trigger.automationRate = "a-rate"` gets the
     // sample-accurate pluck they asked for instead of one quantised to the
     // 128-frame render quantum (2.9 ms at 44.1 kHz).
-    this.g(output, params.trigger, params.frequency[0], params.decay[0]);
+    this.g(
+      output,
+      params.trigger,
+      params.frequency[0],
+      params.decay[0],
+      params.brightness[0],
+    );
 
     return this.r;
   }

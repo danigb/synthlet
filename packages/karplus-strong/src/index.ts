@@ -15,12 +15,14 @@ export type KarplusStrongInputs = {
   trigger: ParamInput;
   frequency: ParamInput;
   decay: ParamInput;
+  brightness: ParamInput;
 };
 
 export type KarplusStrongWorkletNode = AudioWorkletNode & {
   trigger: AudioParam;
   frequency: AudioParam;
   decay: AudioParam;
+  brightness: AudioParam;
   dispose(): void;
 };
 

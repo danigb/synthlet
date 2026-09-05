@@ -67,12 +67,17 @@ const BLOCK = 128;
 const MIN_FREQUENCY = PARAMS.find((p) => p.name === "frequency")!.minValue;
 
 /** Plucks once and renders `seconds` of output, block by block, as a graph would. */
-function pluck(frequency: number, decay: number, seconds: number) {
+function pluck(
+  frequency: number,
+  decay: number,
+  seconds: number,
+  brightness = 0.5,
+) {
   const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
   const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
   const block = new Float32Array(BLOCK);
   for (let n = 0; n < output.length; n += BLOCK) {
-    ks(block, 1, frequency, decay);
+    ks(block, 1, frequency, decay, brightness);
     output.set(block.subarray(0, Math.min(BLOCK, output.length - n)), n);
   }
   return output;
@@ -164,6 +169,25 @@ function t60(signal: Float32Array) {
 }
 
 /**
+ * `t60` averaged over enough plucks for the estimate to be stable.
+ *
+ * The excitation is a fresh noise burst every time, and what the follower ends
+ * up timing is the burst's slowest-decaying component, whose level is a random
+ * draw: at 1760 Hz, where the burst is 24 samples long, one pluck reads
+ * anywhere between 0.61 and 1.02 of the requested time, and at 110 Hz, where
+ * it is 400, between 0.80 and 0.88. The decay time is a property of the string
+ * rather than of one draw, so the assertions below average it.
+ */
+const T60_PLUCKS = 32;
+function averageT60(frequency: number, decay: number, brightness = 0.5) {
+  let total = 0;
+  for (let i = 0; i < T60_PLUCKS; i++) {
+    total += t60(pluck(frequency, decay, Math.max(3, 3 * decay), brightness));
+  }
+  return total / T60_PLUCKS;
+}
+
+/**
  * Fundamental in Hz by normalised autocorrelation, taking the *shortest* local
  * peak within 5% of the best rather than the best - the audit's own guard
  * against reading an octave low on a comb signal - then refining it with a
@@ -221,8 +245,8 @@ const energyDb = (after: number, before: number) =>
   10 * Math.log10(Math.max(after, 1e-30) / Math.max(before, 1e-30));
 
 /** The brightness figure both groups below assert on: 5 ms to 250 ms, in dB. */
-function brightnessChangeDb(frequency: number) {
-  const signal = pluck(frequency, 1, 0.4);
+function brightnessChangeDb(frequency: number, brightness = 0.5) {
+  const signal = pluck(frequency, 1, 0.4, brightness);
   return energyDb(highBandRatio(signal, 0.25), highBandRatio(signal, 0.005));
 }
 
@@ -260,13 +284,25 @@ describe("createKS decay", () => {
   // 196.0, 350.8 and 662.6 Hz). So this band is the exact width of the audible
   // one, and anything outside it is a defect a listener would report.
   //
-  // Fails today at all three pitches, by construction: `decay` is a count of
-  // periods, not a time, so one knob position gives 40 s at 110 Hz and 2.3 s at
-  // 1760 Hz. Ticket 04 makes it seconds.
-  it.failing.each([110, 440, 1760])(
-    "decays in 75-140%% of the requested time at %p Hz (fixed by ticket 04)",
+  // It used to fail at all three pitches, by construction: `decay` was a count
+  // of periods, not a time, so one knob position gave 40 s at 110 Hz and 2.3 s
+  // at 1760 Hz. `rho = 0.001^(1/(f0*t60))` is applied once per period, which
+  // makes the same number mean the same seconds at every pitch.
+  //
+  // What the follower times is the loop's slowest component, which is DC: the
+  // damping filter's taps sum to 1 at every brightness, so a DC offset in the
+  // burst decays at exactly `rho` and outlives every partial. At 110 Hz the
+  // fundamental decays at `rho` too and the two agree. At 1760 Hz they do not:
+  // `rho*(h0 + 2*h1*cos(w0))` is 0.992 rather than 1 there, so the *tone* is
+  // gone in 0.33 s at the default brightness while this measurement, which
+  // ends up timing the residue, reads 0.89. That is inherent to Smith's
+  // uncompensated `rho` - compensating it would put the loop gain above 1 at
+  // DC - and it is the honest reading of "the same knob at every pitch": the
+  // 15x spread is gone, a 3x one between tone and residue is not.
+  it.each([110, 440, 1760])(
+    "decays in 75-140%% of the requested time at %p Hz",
     (frequency) => {
-      const measured = t60(pluck(frequency, 1, 3));
+      const measured = averageT60(frequency, 1);
       expect(measured).toBeGreaterThanOrEqual(0.75);
       expect(measured).toBeLessThanOrEqual(1.4);
     },
@@ -286,12 +322,13 @@ describe("createKS brightness", () => {
     },
   );
 
-  // The near-integer delays, where `frac` is 0.000 and 0.008 and the
-  // interpolator therefore damps nothing. 441.0 Hz measures -0.0 dB and
+  // The near-integer delays, where `frac` is 0.000 and 0.008 so the
+  // interpolator damps nothing at all. 441.0 Hz used to measure -0.0 dB and
   // 436.6 Hz -2.7 dB: a permanent bright buzz, one semitone from a pitch that
-  // behaves. Ticket 04 puts a real filter in the loop.
-  it.failing.each([441.0, 436.6])(
-    "loses 20 dB of its band above 5 kHz at the near-integer delay %p Hz (fixed by ticket 04)",
+  // behaved. They pass now for the same reason every other pitch does - there
+  // is a filter in the loop, and it does not depend on the tuning.
+  it.each([441.0, 436.6])(
+    "loses 20 dB of its band above 5 kHz at the near-integer delay %p Hz",
     (frequency) => {
       expect(brightnessChangeDb(frequency)).toBeLessThanOrEqual(-20);
     },
@@ -388,19 +425,25 @@ describe("createKS amplitude", () => {
 // ---------------------------------------------------------------------------
 
 describe("createKS excitation", () => {
-  // The rewrite replaced a fill of the whole delay line with a burst of `P`
-  // samples summed into the loop input. At 441 Hz the delay is exactly 100
-  // samples, so the interpolator is the identity and the two forms reduce to
-  // the same statement: *one period of full-scale uniform noise, recirculating
-  // at the loop gain*. Both halves of it are asserted here.
+  // The excitation is a burst summed into the loop input rather than a fill of
+  // the whole delay line. At 441 Hz the round trip is exactly 100 samples, so
+  // the interpolator is the identity and what the loop does can be written
+  // down exactly: one period of full-scale noise, then that period cycling
+  // through the damping filter and nothing else.
   const FREQUENCY = 441; // 44100 / 441 = 100 samples, exactly
   const PERIOD = 100;
+  // One of those samples is the damping filter's phase delay, so the read
+  // distance - and the burst - is one shorter than the period.
+  const BURST = PERIOD - 1;
   const DECAY = 1;
-  const LOOP_GAIN = Math.pow(0.001, 1 / (0.1 * DECAY * SAMPLE_RATE));
+  const BRIGHTNESS = 0.5;
+  const RHO = Math.pow(0.001, 1 / (FREQUENCY * DECAY));
+  const H0 = (1 + BRIGHTNESS) / 2;
+  const H1 = (1 - BRIGHTNESS) / 4;
 
-  it("excites one period with full-scale noise, as the whole-buffer fill did", () => {
+  it("excites one period with full-scale noise", () => {
     const signal = pluck(FREQUENCY, DECAY, 0.05);
-    const burst = signal.subarray(0, PERIOD);
+    const burst = signal.subarray(0, BURST);
 
     let peak = 0;
     let sumOfSquares = 0;
@@ -408,24 +451,31 @@ describe("createKS excitation", () => {
       if (Math.abs(sample) > peak) peak = Math.abs(sample);
       sumOfSquares += sample * sample;
     }
-    const rms = Math.sqrt(sumOfSquares / PERIOD);
+    const rms = Math.sqrt(sumOfSquares / BURST);
 
     expect(peak).toBeLessThanOrEqual(1);
-    expect(peak).toBeGreaterThan(0.9); // 100 draws; missing the top decile is a 1e-5 event
-    // Uniform on [-1, 1) has an RMS of 1/sqrt(3); 100 samples put it within
+    expect(peak).toBeGreaterThan(0.9); // 99 draws; missing the top decile is a 1e-5 event
+    // Uniform on [-1, 1) has an RMS of 1/sqrt(3); 99 samples put it within
     // about 7% of that, so 15% is a loose test of "still full scale".
     expect(rms).toBeGreaterThan(0.85 / Math.sqrt(3));
     expect(rms).toBeLessThan(1.15 / Math.sqrt(3));
   });
 
-  it("then recirculates that period at the loop gain, and nothing else", () => {
+  it("then recirculates it through the damping filter, and nothing else", () => {
     const signal = pluck(FREQUENCY, DECAY, 0.05);
     let worst = 0;
-    // Three periods past the burst: if any excitation leaked in after the
-    // first `P` samples, or the loop wrote anything but `gain * y`, this is
-    // where it shows.
-    for (let i = PERIOD; i < 4 * PERIOD; i++) {
-      const difference = Math.abs(signal[i] - LOOP_GAIN * signal[i - PERIOD]);
+    // The whole loop in one line: a round trip of `PERIOD` samples, of which
+    // the filter is one, and `rho*(h0*x' + h1*(x + x''))` around it. If any
+    // excitation leaked in after the burst, if the delay compensation were
+    // missing, or if the filter's coefficients were anything else, the
+    // residual here would be of order the signal rather than of order a
+    // Float32 rounding.
+    for (let i = PERIOD + 1; i < 5 * PERIOD; i++) {
+      const expected =
+        RHO *
+        (H0 * signal[i - PERIOD] +
+          H1 * (signal[i - PERIOD + 1] + signal[i - PERIOD - 1]));
+      const difference = Math.abs(signal[i] - expected);
       if (difference > worst) worst = difference;
     }
     expect(worst).toBeLessThan(1e-6); // Float32 storage, not algorithm
@@ -466,7 +516,7 @@ describe("createString instances", () => {
   // the property that makes it possible.
   const render = (frequency: number, seconds: number) => {
     const string = createString(SAMPLE_RATE, MIN_FREQUENCY);
-    string.setLoopGain(Math.pow(0.001, 1 / (0.1 * 1 * SAMPLE_RATE)));
+    string.setDamping(Math.pow(0.001, 1 / (frequency * 1)), 0.5);
     string.setDelay(SAMPLE_RATE / frequency);
     string.pluck();
     const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
@@ -490,4 +540,102 @@ describe("createString instances", () => {
     expect(Math.abs(cents(fundamental(low, 220), 220))).toBeLessThan(5);
     expect(Math.abs(cents(fundamental(high, 330), 330))).toBeLessThan(5);
   });
+});
+
+// ---------------------------------------------------------------------------
+// The loop filter ticket 04 put in, and the two properties it was chosen for.
+// Smith gives two damping filters; this package runs the two-zero one because
+// its impulse response is symmetric about n = 1, so its phase delay is exactly
+// one sample at every frequency and its DC gain is `rho` for every brightness.
+// Those are not decorative facts - they are what lets `brightness` be a timbre
+// knob rather than a knob that also detunes the string and shortens the note.
+// ---------------------------------------------------------------------------
+
+describe("createKS brightness as a knob", () => {
+  const BRIGHTNESSES = [0, 0.5, 1];
+
+  // "Tuning invariance for the price of one additional multiply per sample" -
+  // Smith 3.4, which is the entire reason this filter was chosen over the
+  // one-zero EKS original, whose phase delay moves with its coefficient.
+  it.each([110, 440, 1760])(
+    "does not detune the string as it sweeps, at %p Hz",
+    (frequency) => {
+      const seconds = Math.max(
+        0.3,
+        (12 * SAMPLE_RATE) / frequency / SAMPLE_RATE,
+      );
+      const measured = BRIGHTNESSES.map((brightness) =>
+        cents(
+          fundamental(pluck(frequency, 1, seconds, brightness), frequency),
+          frequency,
+        ),
+      );
+      expect(Math.max(...measured) - Math.min(...measured)).toBeLessThan(2);
+    },
+  );
+
+  // DC gain is `h0 + 2*h1 = 1` for every B, so the fundamental's decay is
+  // `rho`'s business and brightness cannot lengthen or shorten the note.
+  it("does not change the decay time as it sweeps", () => {
+    const measured = BRIGHTNESSES.map((brightness) =>
+      averageT60(440, 1, brightness),
+    );
+    const spread = Math.max(...measured) / Math.min(...measured);
+    expect(spread).toBeLessThan(1.1);
+  });
+
+  // And the thing it is for: more brightness, more high band left at 250 ms.
+  it("damps the high band monotonically less as it rises", () => {
+    const measured = BRIGHTNESSES.map((brightness) =>
+      brightnessChangeDb(440, brightness),
+    );
+    expect(measured[0]).toBeLessThan(measured[1]);
+    expect(measured[1]).toBeLessThan(measured[2]);
+  });
+});
+
+describe("createKS stability", () => {
+  // The loop filter's taps sum to 1 for every brightness, so the loop is a
+  // contraction whenever `rho < 1` - and `rho` is clamped below 1 for every
+  // declared parameter combination, including the ones a caller reaches by
+  // automating two params to their limits at once.
+  it("never grows over a 60 second render at the corners of the ranges", () => {
+    const CORNERS: [number, number, number][] = [];
+    for (const frequency of [20, 440, 20000]) {
+      for (const decay of [0.01, 5]) {
+        for (const brightness of [0, 1]) {
+          CORNERS.push([frequency, decay, brightness]);
+        }
+      }
+    }
+
+    for (const [frequency, decay, brightness] of CORNERS) {
+      const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+      const block = new Float32Array(BLOCK);
+      let firstSecond = 0;
+      let lastSecond = 0;
+      let nonFinite = 0;
+      const total = SAMPLE_RATE * 60;
+
+      for (let n = 0; n < total; n += BLOCK) {
+        ks(block, 1, frequency, decay, brightness);
+        for (const sample of block) {
+          if (!Number.isFinite(sample)) nonFinite++;
+          else if (n < SAMPLE_RATE) {
+            if (Math.abs(sample) > firstSecond) firstSecond = Math.abs(sample);
+          } else if (n >= total - SAMPLE_RATE) {
+            if (Math.abs(sample) > lastSecond) lastSecond = Math.abs(sample);
+          }
+        }
+      }
+
+      expect([frequency, decay, brightness, nonFinite]).toEqual([
+        frequency,
+        decay,
+        brightness,
+        0,
+      ]);
+      expect(lastSecond).toBeLessThanOrEqual(firstSecond);
+    }
+  }, 120_000);
 });

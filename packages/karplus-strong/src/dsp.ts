@@ -7,10 +7,11 @@ import { createGateDetector } from "./_gate";
 //   stringloop = (+ : fdelay4(Pmax, P-2)) ~ (loopfilter);
 //   process = filtered_excitation : stringloop : ...
 //
-// - and this file is that shape and nothing more. There are no filters in the
-// loop yet and the excitation is still an unshaped full-scale burst, so it
-// sounds exactly like the 81-line comb it replaces. Every later ticket fills
-// in one block and carries one measurement.
+// - and this file is that shape. `Hloss` is Smith's EKS two-zero damping
+// filter; `Hdisp` is not written yet and `Hfd` is still the two-point linear
+// read the fractional delay started as. The excitation is an unshaped
+// full-scale burst. Every later ticket fills in one block and carries one
+// measurement.
 //
 // Deliberately not built on `scripts/_delay.ts`, synthlet's shared circular
 // buffer: its fractional reads are linear and Hermite, and the read this
@@ -51,24 +52,55 @@ export function createString(sampleRate: number, minFrequency: number) {
   let delayTarget = maxDelay; // where it is heading, reached over a block
   // Every filter in the loop is paid for out of the loop length or the string
   // detunes - Smith's `P - 2` is one sample for the damping FIR and one for
-  // the interpolator. This loop has no filters yet, so it is 0; the
-  // bookkeeping is written here once, not re-derived by each ticket that adds
-  // one.
-  const phaseDelayCompensation = 0;
-  let loopGain = 0;
+  // the interpolator. The damping filter below is the first half of that; the
+  // interpolator's share is still unaccounted for, which is the defect ticket
+  // 05 measures. The bookkeeping is written here once, not re-derived by each
+  // ticket that adds a filter.
+  const DAMPING_PHASE_DELAY = 1;
+  const phaseDelayCompensation = DAMPING_PHASE_DELAY;
+
+  // Smith's EKS two-zero damping filter, `rho * (h0*x' + h1*(x + x''))`, and
+  // the one thing that makes this Karplus-Strong rather than a leaky comb: it
+  // is what makes high partials die before low ones. Its impulse response is
+  // symmetric about n = 1, so its phase delay is exactly one sample at every
+  // frequency - which is why `brightness` can change the tone without
+  // detuning the string, and why the sample it costs can be subtracted from
+  // the loop length once rather than tracked per pitch.
+  let rho = 0;
+  let h0 = 1;
+  let h1 = 0;
+  let x1 = 0; // x[n-1]
+  let x2 = 0; // x[n-2]
+
   let burst = 0; // excitation samples still to be summed in
   let envelope = 0;
   let ringing = false;
 
   return {
-    /** The loop's target length in samples; reached over the block, snapped by a pluck. */
+    /**
+     * The loop's target length in samples; reached over the block, snapped by
+     * a pluck. The floor is what the filter chain costs plus one, because the
+     * read distance is the length *minus* that and a distance below 1 reads
+     * the slot about to be written.
+     */
     setDelay(samples: number) {
-      delayTarget = Math.min(Math.max(samples, 1), maxDelay);
+      delayTarget = Math.min(
+        Math.max(samples, 1 + phaseDelayCompensation),
+        maxDelay,
+      );
     },
 
-    /** The whole loss chain, for now: one scalar applied once per trip round the loop. */
-    setLoopGain(gain: number) {
-      loopGain = gain;
+    /**
+     * The loss chain: `gain` is the once-per-period loop gain and
+     * `brightness` splits it across frequency. B = 1 gives `[0, 1, 0]`, a bare
+     * one-sample delay damped only by `gain`; B = 0 gives `[1/4, 1/2, 1/4]`,
+     * the raised cosine with a zero at Nyquist. DC gain is `h0 + 2*h1 = 1` for
+     * every B, so brightness moves the rolloff and never the decay time.
+     */
+    setDamping(gain: number, brightness: number) {
+      rho = gain;
+      h0 = (1 + brightness) / 2;
+      h1 = (1 - brightness) / 4;
     },
 
     /**
@@ -78,15 +110,18 @@ export function createString(sampleRate: number, minFrequency: number) {
      * excitation - as a signal, which is what lets a later ticket filter,
      * position and level it.
      *
-     * `P` is `floor(delay)`, not `ceil`: the interpolator's second tap sits
-     * one sample *newer* than its first, so the loop starts feeding itself at
-     * `floor(delay)` - where the old fill also stopped reading pure noise, and
-     * past which a summed burst sample would push the output beyond full scale.
+     * `P` is `floor(read distance)`: the interpolator's second tap sits one
+     * sample *newer* than its first and the damping filter reads `x[n]`
+     * directly, so the shortest path round the loop closes there - and past
+     * that point a summed burst sample would push the output beyond full
+     * scale.
      */
     pluck() {
       line.fill(0);
+      x1 = 0;
+      x2 = 0;
       delay = delayTarget; // a new note starts in tune, it does not glide into it
-      burst = Math.floor(delay);
+      burst = Math.floor(delay - phaseDelayCompensation);
       // The burst is full scale, so the follower starts there rather than at
       // zero - a zeroed envelope is below the threshold and would stop the
       // note on its first sample.
@@ -122,7 +157,11 @@ export function createString(sampleRate: number, minFrequency: number) {
         }
         output[i] = sample;
 
-        const feedback = loopGain * sample;
+        // The loop filter. `h0 + 2*h1` is 1 for every brightness, so this is a
+        // contraction whenever `rho < 1` and the loop cannot grow.
+        const feedback = rho * (h0 * x1 + h1 * (sample + x2));
+        x2 = x1;
+        x1 = sample;
         line[writeIndex] = feedback;
         if (writeIndex < GUARD) line[writeIndex + capacity] = feedback;
         writeIndex = writeIndex + 1 === capacity ? 0 : writeIndex + 1;
@@ -142,6 +181,10 @@ export function createString(sampleRate: number, minFrequency: number) {
 /** One voice: a string, the gate contract, and the parameter mapping. */
 export function createKS(sampleRate: number, minFrequency: number) {
   const targetAmplitude = 0.001; // Amplitude decays to 0.1% of initial value
+  // A ceiling on the loop gain, so that no parameter combination can hold the
+  // loop at unity. Its knee is 690775 periods; the declared ranges reach
+  // 20 kHz x 5 s = 100000, so it never binds on a real setting.
+  const maxLoopGain = 0.99999;
   const string = createString(sampleRate, minFrequency);
   const detectGate = createGateDetector();
 
@@ -150,12 +193,21 @@ export function createKS(sampleRate: number, minFrequency: number) {
     trigger: number | ArrayLike<number>,
     frequency: number,
     decay: number,
+    // `params.ts` declares the same default; a four-argument call is the
+    // shipped sound rather than an arbitrary one.
+    brightness = 0.5,
   ) => {
-    // Unchanged by the rewrite, defect included: the gain is applied once per
-    // trip round the loop, so `decay` is a count of periods rather than a time
-    // and one knob position rings for 40 s at 110 Hz and 2 s at 1760 Hz.
-    const decayTimeInSamples = 0.1 * decay * sampleRate;
-    string.setLoopGain(Math.pow(targetAmplitude, 1 / decayTimeInSamples));
+    // Smith 3.3: the loop filter is applied once per period, so -60 dB in
+    // `decay` seconds needs `rho^(f0*decay) = 0.001`. Pitch-independent by
+    // construction - which is the whole fix for a knob that used to be a count
+    // of periods and so rang 15x longer at 110 Hz than at 1760 Hz.
+    const periods = frequency * decay;
+    string.setDamping(
+      periods > 0
+        ? Math.min(Math.pow(targetAmplitude, 1 / periods), maxLoopGain)
+        : 0, // a non-positive decay would invert the exponent and grow the loop
+      brightness,
+    );
 
     const length = output.length;
     let start = 0;
