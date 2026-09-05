@@ -6,19 +6,17 @@ import {
   peak,
   peakFrequency,
 } from "./_spectrum";
-import { defaultWavetable } from "./wavetable-builder";
+import { defaultWavetable, mipmapWavetable } from "./wavetable-builder";
 import { WavetableOscillator } from "./wavetable-oscillator";
 
 /**
  * What this oscillator promises, as numbers.
  *
- * **Every floor here is set against the code as it stands today, on purpose.**
- * They are not targets and several of them are bad: 22.2 dB of alias SNR at
- * 440 Hz is worse than a naive uncorrected sawtooth. They exist so that the
- * tickets that improve this package raise them and the diff shows by how much:
- * ticket 06 (mipmaps) owns the alias floors and ticket 05 (a morph position)
- * owns the `set()` step. A floor is only useful if the number it came from is
- * written next to it, so each one carries its measurement.
+ * **Every floor here is set against what the code measures, and carries the
+ * measurement next to it**, so that the ticket which improves a number raises
+ * the floor and the diff is the evidence. Ticket 05 took the `set()` step from
+ * 0.7707 to 0.0114 and ticket 06 took the alias SNR at 440 Hz from 23.7 dB to
+ * 57.4 dB; both floors moved with them.
  *
  * The pitch block is the one that has already been collected: ticket 03 turned
  * twelve `it.failing` cases on by making `frequency` mean Hz, and it is what a
@@ -26,10 +24,10 @@ import { WavetableOscillator } from "./wavetable-oscillator";
  *
  * The instrument is `scripts/_spectrum.ts`, copied here; `aliasSnr` is the
  * audit's own metric and `digital-delay/src/spectrum.test.ts` is its
- * calibration. Every alias figure below reproduces the audit
+ * calibration. The un-mipmapped alias figures reproduce the audit
  * (`thoughts/research/2026-09-03_18-14-54_wavetable-oscillator-audit.md`
- * section 4) to within 0.1 dB, which is what makes them comparable to its
- * band-limited reference column.
+ * section 4) to within 0.1 dB and are kept as a calibration row, which is what
+ * makes the mipmapped ones comparable to its band-limited reference column.
  */
 
 const SAMPLE_RATE = 44100;
@@ -77,6 +75,13 @@ function render(
     block?: number;
     warmup?: number;
     sampleRate?: number;
+    /**
+     * How many mipmap levels `table` carries, level-major. Left at 1 the table
+     * is a plain set of planes and the oscillator reads level 0 alone, which is
+     * bit for bit what it did before ticket 06 - which is what lets the audit's
+     * un-mipmapped column below stay in this file as a calibration row.
+     */
+    levels?: number;
   } = {},
 ) {
   const length = options.length ?? ANALYSIS_LENGTH;
@@ -85,7 +90,7 @@ function render(
   const sampleRate = options.sampleRate ?? SAMPLE_RATE;
 
   const osc = WavetableOscillator(sampleRate);
-  osc.set(table, len);
+  osc.set(table, len, options.levels ?? 1);
 
   const out = new Float32Array(warmup + length);
   const buffer = new Float32Array(block);
@@ -213,18 +218,25 @@ describe("the morph", () => {
   it("sits still at a chosen plane of the built-in table", () => {
     // The same property against ticket 04's generated set, which is four planes
     // of real waveforms rather than constants, read at a moving offset.
+    //
+    // At 80 Hz, because the table now carries a mipmap pyramid: `inc` is 0.464,
+    // below the 0.5 where the level axis starts moving, so the read is level 0
+    // with a zero fraction and is comparable sample for sample with the single
+    // plane sliced out of it. At 440 Hz the morphed read would be a crossfade of
+    // levels 2 and 3 and the single-plane one would be full bandwidth, and the
+    // test would be measuring the mipmap rather than the morph.
     const len = 256;
-    const { data } = defaultWavetable(len);
+    const { data, levels } = defaultWavetable(len);
 
     for (let k = 0; k < 4; k++) {
       const plane = data.slice(k * len, (k + 1) * len);
       const morphed = render(
         data,
         len,
-        { frequency: 440, morph: k / 3 },
-        { length: 1024 },
+        { frequency: 80, morph: k / 3 },
+        { length: 1024, levels },
       );
-      const alone = render(plane, len, { frequency: 440 }, { length: 1024 });
+      const alone = render(plane, len, { frequency: 80 }, { length: 1024 });
       expect(Array.from(morphed)).toEqual(Array.from(alone));
     }
   });
@@ -496,34 +508,127 @@ describe("the pitch", () => {
 
 describe("aliasing", () => {
   // A 256-sample table holding a full-bandwidth saw, played at its natural
-  // pitch multiplied up. There is no band-limiting anywhere in this package, so
-  // every harmonic above Nyquist folds back, and it costs 25-65 dB against the
-  // same table with its harmonics truncated (the audit's reference column:
-  // 56.6 / 39.2 / 48.5 / 57.5 / 66.8 / 75.1 dB).
+  // pitch multiplied up, with the mipmap pyramid ticket 06 built for it.
   //
-  // THESE FLOORS ARE NOT A TARGET. They are 1.5 dB below what the code does
-  // today, so that ticket 06's mipmaps raise them by 20-40 dB and the diff is
-  // the evidence. Reading 22.2 dB at 440 Hz as acceptable would be reading this
-  // file backwards: it is worse than an uncorrected naive sawtooth.
+  // The floors are 1.5 dB below what the code measures, and the third column is
+  // the measurement itself, pinned to 0.15 dB. Against the audit's own columns:
+  //
+  //   f0     shipped before   this        audit's band-limited   audit's
+  //                           ticket      reference (ideal)      1 mipmap/octave
+  //   110    56.50            59.26       56.6                   -
+  //   220    32.32            48.39       39.2                   44.5
+  //   440    23.71            57.40       48.5                   53.6
+  //   880    18.26            66.14       57.5                   62.4
+  //   1760   13.92            74.49       66.8                   71.7
+  //   3520   10.39            82.13       75.1                   79.6
+  //
+  // Above the reference column at every pitch, because the crossfade forces the
+  // pyramid to be conservative: the level in use is band-limited between one and
+  // zero octaves below Nyquist rather than exactly at it, so some harmonics the
+  // reference keeps are gone. That is the trade the crossfade buys, and the row
+  // below - the same table with no pyramid - is what it is bought against.
   const len = 256;
-  const table = sawTable(len);
+  const raw = sawTable(len);
+  // Through the *imported* path: `sawTable` is samples, not a spectrum, so this
+  // block exercises the analysis-and-truncate half of the ticket. The generated
+  // half measures 48.21 / 57.38 / 66.13 / 74.49 / 82.13 on the same waveform,
+  // pinned in `describe("the built-in table")` below.
+  const pyramid = mipmapWavetable({ data: raw, length: len });
 
   it.each([
-    [110, 55.1, 56.5],
-    [220, 30.8, 32.3],
-    [440, 22.2, 23.7],
-    [880, 16.8, 18.3],
-    [1760, 12.4, 13.9],
-    [3520, 8.9, 10.4],
-  ])("stays above %p Hz's floor of %p dB", (f0, floorDb, auditDb) => {
-    const signal = render(table, len, { frequency: f0 }, { warmup: WARMUP });
+    [110, 57.7, 59.26],
+    [220, 46.9, 48.39],
+    [440, 55.9, 57.4],
+    [880, 64.6, 66.14],
+    [1760, 73.0, 74.49],
+    [3520, 80.6, 82.13],
+  ])("stays above %p Hz's floor of %p dB", (f0, floorDb, measuredDb) => {
+    const signal = render(
+      pyramid.data,
+      len,
+      { frequency: f0 },
+      { warmup: WARMUP, levels: pyramid.levels },
+    );
     const measured = aliasSnr(signal, f0, SAMPLE_RATE);
 
     expect(measured).toBeGreaterThan(floorDb);
-    // And the third column is the audit's own published figure. This half is
-    // the pin: if the instrument or the harness drifts, the floors above stop
-    // meaning what the audit measured and ticket 06 has nothing to compare to.
-    expect(Math.abs(measured - auditDb)).toBeLessThan(0.15);
+    expect(Math.abs(measured - measuredDb)).toBeLessThan(0.15);
+  });
+
+  it.each([
+    [110, 56.5],
+    [220, 32.3],
+    [440, 23.7],
+    [880, 18.3],
+    [1760, 13.9],
+    [3520, 10.4],
+  ])(
+    "is the audit's own %p Hz figure with no pyramid: %p dB",
+    (f0, auditDb) => {
+      // The calibration row, kept from ticket 02. The same table played with
+      // `levels: 1` is the code as it was before ticket 06 - every harmonic above
+      // Nyquist folding back - and it still reproduces the audit's published
+      // column to 0.15 dB. If the instrument or the harness ever drifts, this is
+      // what says so, and it is what makes the floors above comparable to
+      // anything the audit wrote down.
+      const measured = aliasSnr(
+        render(raw, len, { frequency: f0 }, { warmup: WARMUP }),
+        f0,
+        SAMPLE_RATE,
+      );
+      expect(Math.abs(measured - auditDb)).toBeLessThan(0.15);
+    },
+  );
+
+  it("does not step across an octave boundary", () => {
+    // Success criterion 2, and the half of the ticket the audit never mentioned:
+    // PowerWave (Trausmuth & Huovilainen, DAFx-05 §2.3) crossfades mip levels
+    // exactly as it crossfades wavetable positions, and without it a pitch sweep
+    // steps its harmonic content audibly at every octave.
+    //
+    // 61 renders from 300 to 700 Hz - across `inc = 2` at 344.5 Hz and `inc = 4`
+    // at 689.1 Hz, two level crossovers - measuring RMS and alias SNR at each.
+    // Both move smoothly. The largest single step in RMS is 0.175 % and it is
+    // not at a crossover - the largest step at one is 0.086 %, half of it - and
+    // the alias SNR stays above 53.79 dB everywhere, its worst point being
+    // 308.6 Hz rather than a boundary.
+    const steps = 60;
+    const rms = (signal: ArrayLike<number>) => {
+      let sum = 0;
+      for (let i = 0; i < signal.length; i++) sum += signal[i] * signal[i];
+      return Math.sqrt(sum / signal.length);
+    };
+
+    const levelOf = (f0: number) =>
+      Math.floor(Math.log2((f0 * len) / SAMPLE_RATE)) + 1;
+    const points = Array.from({ length: steps + 1 }, (_, k) => {
+      const f0 = 300 * Math.pow(700 / 300, k / steps);
+      const signal = render(
+        pyramid.data,
+        len,
+        { frequency: f0 },
+        { warmup: WARMUP, length: 16384, levels: pyramid.levels },
+      );
+      return { f0, rms: rms(signal), snr: aliasSnr(signal, f0, SAMPLE_RATE) };
+    });
+
+    // Two crossings, or the sweep does not test what it says it does.
+    expect(new Set(points.map((p) => levelOf(p.f0))).size).toBe(3);
+
+    let worst = 0;
+    let worstAtCrossover = 0;
+    for (let i = 1; i < points.length; i++) {
+      const step = Math.abs(points[i].rms - points[i - 1].rms) / points[i].rms;
+      worst = Math.max(worst, step);
+      if (levelOf(points[i].f0) !== levelOf(points[i - 1].f0)) {
+        worstAtCrossover = Math.max(worstAtCrossover, step);
+      }
+      expect(points[i].snr).toBeGreaterThan(53);
+    }
+    // A step at a crossover is no larger than the largest step away from one:
+    // the level axis is doing nothing the pitch sweep was not already doing.
+    expect(worstAtCrossover).toBeLessThanOrEqual(worst);
+    expect(worst).toBeLessThan(0.01);
   });
 
   it("is the dominant error by 69 dB, which closes the cubic question", () => {
@@ -551,17 +656,15 @@ describe("the built-in table", () => {
   // pitches as the `aliasing` block above, one plane at a time so the number is
   // the plane's and not the crossfade's.
   //
-  // The row that matters to ticket 06 is the sawtooth: the built-in plane is the
-  // *same object* as this file's `sawTable` reference, to within 0.07 dB at
-  // every pitch. So the audit's reference column applies to the generated table
-  // unchanged, and 06 can raise these floors against the numbers it already has
-  // rather than re-characterising a new waveform. It also fixes the shape of the
-  // work: a mip level is `shapeHarmonics(shape, fewer)` through the same
-  // builder, no FFT and no filter design.
+  // These are level 0 of each plane's pyramid, read on its own with `levels: 1`,
+  // so they are the *unfiltered* figures and they have not moved: level 0 is the
+  // full-bandwidth plane it always was, and the band-limiting is a level the
+  // oscillator selects rather than a change to the data. The sawtooth row is the
+  // *same object* as this file's `sawTable` reference to within 0.07 dB at every
+  // pitch, which is what let ticket 06 raise the floors above against the audit's
+  // own column rather than re-characterising a new waveform.
   //
-  // THESE ARE NOT TARGETS either. The set is built at the table's full
-  // bandwidth, deliberately, because band-limiting it here would be right at one
-  // pitch and wrong at every other one.
+  // What the pyramid does with them is the row below.
   const len = 256;
   const planes: [string, number, number[]][] = [
     ["sine", 0, [98.17, 91.09, 92.89, 92.64, 91.92, 91.06]],
@@ -598,6 +701,28 @@ describe("the built-in table", () => {
       );
       expect(Math.abs(a - b)).toBeLessThan(0.1);
     }
+  });
+
+  it("band-limits the generated sawtooth as the imported one", () => {
+    // Success criterion 3 measured where criterion 4 is measured, on the same
+    // waveform: the generated path truncates the harmonic series and the
+    // imported path truncates an analysis of the samples, and at the morph
+    // position that selects the sawtooth plane they agree to 0.2 dB - the
+    // residue being that the built-in plane is one of four being crossfaded
+    // rather than a table of its own.
+    const measured = [48.21, 57.38, 66.13, 74.49, 82.13];
+    const { data, levels } = defaultWavetable(len);
+    [220, 440, 880, 1760, 3520].forEach((f0, i) => {
+      const signal = render(
+        data,
+        len,
+        { frequency: f0, morph: 2 / 3 },
+        { warmup: WARMUP, levels },
+      );
+      expect(
+        Math.abs(aliasSnr(signal, f0, SAMPLE_RATE) - measured[i]),
+      ).toBeLessThan(0.15);
+    });
   });
 
   it("plays every plane at the pitch it is asked for", () => {

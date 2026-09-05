@@ -6,6 +6,9 @@ import {
   canonicalPhase,
   DEFAULT_WAVETABLE_LENGTH,
   defaultWavetable,
+  mipHarmonics,
+  mipLevelCount,
+  mipmapWavetable,
   normalizePeak,
   shapeHarmonics,
 } from "./wavetable-builder";
@@ -187,11 +190,14 @@ describe("buildPlane", () => {
 describe("buildWavetable", () => {
   it("packs planes in the layout the reader indexes", () => {
     // `interpolateLinear2d` reads `buffer[plane * len + index]` and `set()`
-    // counts planes as `data.length / len`, so the packing is not a choice.
+    // counts planes as `data.length / (len * levels)`, so the packing is not a
+    // choice. Level-major, and level 0 first: `data.subarray(p*len, (p+1)*len)`
+    // is still plane `p` at full bandwidth.
     const spectra = [[1], [1, 0.5], [1, 0.5, 0.25]];
-    const { data, length } = buildWavetable(spectra, 64);
+    const { data, length, levels } = buildWavetable(spectra, 64);
     expect(length).toBe(64);
-    expect(data.length).toBe(3 * 64);
+    expect(levels).toBe(mipLevelCount(64));
+    expect(data.length).toBe(levels! * 3 * 64);
 
     for (let p = 0; p < spectra.length; p++) {
       const expected = buildPlane(spectra[p], 64);
@@ -202,13 +208,66 @@ describe("buildWavetable", () => {
     }
   });
 
-  it("normalizes every plane to peak 1", () => {
-    const { data, length } = buildWavetable(builtInHarmonics(LEN), LEN);
-    for (let p = 0; p * length < data.length; p++) {
-      const peak = Math.max(
-        ...Array.from(data.subarray(p * length, (p + 1) * length), Math.abs),
-      );
+  it("normalizes every plane's whole pyramid to peak 1", () => {
+    // One gain per plane, over every level of it: a level scaled to its own peak
+    // would change loudness at each octave crossover, and a plane whose levels
+    // are scaled independently cannot be crossfaded with anything.
+    const { data, length, levels } = buildWavetable(builtInHarmonics(LEN), LEN);
+    const planes = data.length / (levels! * length);
+    for (let p = 0; p < planes; p++) {
+      let peak = 0;
+      for (let i = 0; i < levels!; i++) {
+        const at = (i * planes + p) * length;
+        for (let k = 0; k < length; k++) {
+          peak = Math.max(peak, Math.abs(data[at + k]));
+        }
+      }
       expect(peak).toBeCloseTo(1, 6);
+    }
+  });
+
+  it("scales a plane's levels by one gain, and it is level 0's", () => {
+    // Ticket 04 kept `normalizePeak` out of `buildPlane` for exactly this. The
+    // sawtooth's levels all sit under level 0's peak, so its gain is level 0's
+    // untrimmed and every level is the raw truncation times that number.
+    const spectrum = shapeHarmonics("sawtooth", LEN / 2);
+    const { data, length, levels } = buildWavetable([spectrum], LEN);
+    const base = buildPlane(spectrum, LEN);
+    const gain = normalizePeak(base);
+
+    for (let i = 0; i < levels!; i++) {
+      const expected = buildPlane(spectrum, LEN, mipHarmonics(LEN, i));
+      for (let k = 0; k < length; k++) {
+        expect(data[i * length + k]).toBeCloseTo(expected[k] * gain, 6);
+      }
+    }
+  });
+
+  it("trims the whole pyramid when band-limiting overshoots", () => {
+    // Band-limiting a square *raises* its peak: one sine carries 4/pi of the
+    // square's height, so the top of its pyramid overshoots level 0 by 8.0 %.
+    // `normalizePeak`'s promise is that a generated table cannot clip, so the
+    // trim applies to the plane as a whole - level 0 ends at 0.926 rather than
+    // 1, and no crossover changes loudness.
+    const spectrum = shapeHarmonics("square", LEN / 2);
+    const { data, length, levels } = buildWavetable([spectrum], LEN);
+
+    const peakOf = (i: number) => {
+      let peak = 0;
+      for (let k = 0; k < length; k++) {
+        peak = Math.max(peak, Math.abs(data[i * length + k]));
+      }
+      return peak;
+    };
+    expect(peakOf(0)).toBeCloseTo(0.926, 3);
+    expect(peakOf(levels! - 1)).toBeCloseTo(1, 6);
+
+    // And the shape is untouched: every level is still the same multiple of its
+    // own raw truncation.
+    const ratio = (i: number) =>
+      data[i * length + 1] / buildPlane(spectrum, LEN, mipHarmonics(LEN, i))[1];
+    for (let i = 1; i < levels!; i++) {
+      expect(ratio(i)).toBeCloseTo(ratio(0), 6);
     }
   });
 
@@ -304,7 +363,8 @@ describe("the built-in table", () => {
     // cached. `postMessage` structured-clones, so sharing is safe.
     expect(defaultWavetable()).toBe(defaultWavetable(256));
     expect(defaultWavetable(512)).not.toBe(defaultWavetable(256));
-    expect(defaultWavetable().data.length).toBe(4 * 256);
+    expect(defaultWavetable().data.length).toBe(8 * 4 * 256);
+    expect(defaultWavetable().levels).toBe(8);
     expect(defaultWavetable().length).toBe(256);
   });
 
@@ -315,10 +375,133 @@ describe("the built-in table", () => {
   });
 
   it("is a truncation away from a mipmap level", () => {
-    // Ticket 06 gets a band-limited level by evaluating the same rule over fewer
-    // harmonics, with no FFT and no filter design. This is that property.
+    // A band-limited level is the same rule evaluated over fewer harmonics, with
+    // no transform and no filter design. This is that property.
     const full = shapeHarmonics("sawtooth", 128);
     const truncated = shapeHarmonics("sawtooth", 16);
     expect(Array.from(truncated)).toEqual(Array.from(full.subarray(0, 16)));
+  });
+});
+
+describe("the mipmap pyramid", () => {
+  // One level per octave, each holding half the harmonics of the one below it,
+  // all at the base plane length. Holding the length rather than decimating is
+  // Trausmuth & Huovilainen DAFx-05 §2.3's "two to four times longer tables than
+  // dictated by Nyquist criteria", and it is what keeps `interpolateLinear2d`
+  // identical at every level.
+
+  it("halves the harmonic count per level, down to one", () => {
+    expect(
+      Array.from({ length: mipLevelCount(256) }, (_, i) =>
+        mipHarmonics(256, i),
+      ),
+    ).toEqual([128, 64, 32, 16, 8, 4, 2, 1]);
+    expect(mipLevelCount(64)).toBe(6);
+    expect(mipLevelCount(2048)).toBe(11);
+    // The floor is one harmonic - a sine - because the increment's own ceiling
+    // is one table cycle every two output samples, so no level above it is
+    // reachable.
+    expect(mipHarmonics(256, 99)).toBe(1);
+  });
+
+  it("holds only the harmonics its level admits", () => {
+    const { data, length, levels } = buildWavetable(
+      [shapeHarmonics("sawtooth", LEN / 2)],
+      LEN,
+    );
+    for (let i = 0; i < levels!; i++) {
+      const kept = mipHarmonics(LEN, i);
+      const magnitudes = harmonicMagnitudes(
+        data.subarray(i * length, (i + 1) * length),
+      );
+      // Harmonic LEN/2 is at Nyquist and sine phase makes it identically zero,
+      // so level 0's highest *audible* harmonic is the one below its limit.
+      expect(magnitudes[Math.min(kept, LEN / 2 - 1)]).toBeGreaterThan(1e-3);
+      if (kept + 1 < magnitudes.length) {
+        expect(magnitudes[kept + 1]).toBeLessThan(1e-6);
+      }
+    }
+  });
+
+  it("costs one base table per level, and a 64-plane one stays under a megabyte", () => {
+    // Success criterion 6, and the audit's own budget: 0.56 MB for 64 planes of
+    // 256 samples at Float32. Load-time heap, not published bytes - the payload
+    // is a few hundred bytes of harmonic rules either way.
+    const planes = Array.from({ length: 64 }, () =>
+      shapeHarmonics("sawtooth", 128),
+    );
+    const { data, levels } = buildWavetable(planes, 256);
+    expect(levels).toBe(8);
+    expect(data.length).toBe(8 * 64 * 256);
+    expect(data.byteLength).toBe(524288);
+    expect(data.byteLength).toBeLessThan(1024 * 1024);
+  });
+
+  it("builds the same pyramid from samples as from harmonics", () => {
+    // Success criteria 3 and 4 against each other. The generated path truncates
+    // the harmonic series; the imported path analyses the samples and truncates
+    // that. On a table whose samples came from the same series they have to
+    // agree, and they do to float32 precision.
+    const spectrum = shapeHarmonics("sawtooth", LEN / 2);
+    const built = buildWavetable([spectrum], LEN);
+    const analysed = mipmapWavetable({
+      data: built.data.subarray(0, LEN).slice(),
+      length: LEN,
+    });
+
+    expect(analysed.levels).toBe(built.levels);
+    expect(analysed.data.length).toBe(built.data.length);
+    let worst = 0;
+    for (let k = 0; k < built.data.length; k++) {
+      worst = Math.max(worst, Math.abs(analysed.data[k] - built.data[k]));
+    }
+    expect(worst).toBeLessThan(1e-5);
+  });
+
+  it("leaves level 0 of an imported table exactly as it arrived", () => {
+    // The imported path removes bandwidth and nothing else. DC, phase and
+    // loudness are ticket 07's, deliberately: rewriting an imported plane's
+    // phases changes its shape, and that is a decision about someone's data.
+    const length = 64;
+    const source = Float32Array.from({ length: length * 3 }, (_, i) =>
+      Math.sin((2 * Math.PI * 7 * i) / length),
+    );
+    const { data, levels } = mipmapWavetable({ data: source, length });
+    expect(levels).toBe(mipLevelCount(length));
+    expect(Array.from(data.subarray(0, length * 3))).toEqual(
+      Array.from(source),
+    );
+  });
+
+  it("drops an imported harmonic the level cannot hold", () => {
+    // A single harmonic 7 in a 64-sample table: levels holding 32, 16 and 8
+    // harmonics keep it, the ones holding 4, 2 and 1 do not.
+    const length = 64;
+    const source = Float32Array.from({ length }, (_, i) =>
+      Math.sin((2 * Math.PI * 7 * i) / length),
+    );
+    const { data, levels } = mipmapWavetable({ data: source, length });
+    for (let i = 0; i < levels!; i++) {
+      const level = data.subarray(i * length, (i + 1) * length);
+      let peak = 0;
+      for (const value of level) peak = Math.max(peak, Math.abs(value));
+      if (mipHarmonics(length, i) >= 7) expect(peak).toBeCloseTo(1, 5);
+      else expect(peak).toBeLessThan(1e-6);
+    }
+  });
+
+  it("returns a table it cannot mipmap unchanged", () => {
+    // A two-sample table has one level and nothing to truncate; a table that
+    // already carries a pyramid is passed straight through rather than analysed
+    // twice.
+    const flat = mipmapWavetable({
+      data: new Float32Array([1, -1]),
+      length: 2,
+    });
+    expect(flat.levels).toBe(1);
+    expect(Array.from(flat.data)).toEqual([1, -1]);
+
+    const built = buildWavetable([[1]], 64);
+    expect(mipmapWavetable(built)).toBe(built);
   });
 });

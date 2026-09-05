@@ -57,12 +57,12 @@ const wavetableMessages = (node: AudioWorkletNodeMock) =>
 
 /** Renders `length` samples from a posted table through the DSP unit. */
 function render(
-  message: { wavetable: Float32Array; length: number },
+  message: { wavetable: Float32Array; length: number; levels?: number },
   frequency: number,
   length: number,
 ) {
   const osc = WavetableOscillatorUnit(SAMPLE_RATE);
-  osc.set(message.wavetable, message.length);
+  osc.set(message.wavetable, message.length, message.levels);
   const out = new Float32Array(length);
   const block = new Float32Array(128);
   const inputs = { frequency: [frequency], morph: [0] };
@@ -100,8 +100,28 @@ describe("WavetableOscillator", () => {
 
     expect(messages).toHaveLength(1);
     expect(messages[0].length).toBe(256);
-    expect(messages[0].wavetable.length).toBe(4 * 256);
+    // Four planes, eight mip levels, level-major: the band-limiting is built
+    // here at load, on the main thread, and never in the worklet.
+    expect(messages[0].levels).toBe(8);
+    expect(messages[0].wavetable.length).toBe(8 * 4 * 256);
     expect(fetchCalls).toBe(0);
+  });
+
+  it("transfers the table rather than cloning it", () => {
+    // `flex-audio-buffer-source/src/index.ts:145-153`'s idiom: 32 KB for the
+    // built-in set and 512 KB for a 64-plane one is past the point where a
+    // structured clone per node is free. The copy before the transfer is not
+    // ceremony - `defaultWavetable` memoizes one instance and shares it, and
+    // transferring that buffer would leave the next node with an empty table.
+    const node = created(WavetableOscillator(context));
+    const [message, transfer] = node.port.postMessage.mock.calls[0];
+    expect(transfer).toEqual([message.wavetable.buffer]);
+
+    const second = created(WavetableOscillator(context));
+    const other = second.port.postMessage.mock.calls[0][0];
+    expect(other.wavetable.length).toBe(8 * 4 * 256);
+    expect(other.wavetable).not.toBe(message.wavetable);
+    expect(peak(other.wavetable)).toBeCloseTo(1, 6);
   });
 
   it("makes a sound in its first render quantum", () => {
@@ -137,9 +157,10 @@ describe("WavetableOscillator", () => {
     const messages = wavetableMessages(node);
     expect(messages).toHaveLength(2);
 
-    const { wavetable, length } = messages[1];
+    const { wavetable, length, levels } = messages[1];
     expect(length).toBe(256);
-    expect(wavetable.length).toBe(2 * 256);
+    expect(levels).toBe(8);
+    expect(wavetable.length).toBe(8 * 2 * 256);
 
     const sine = buildPlane([1], 256);
     normalizePeak(sine);
@@ -151,9 +172,11 @@ describe("WavetableOscillator", () => {
     const node = created(WavetableOscillator(context));
     (node as any).setHarmonics([[1, 0.5]], 64);
 
-    const { wavetable, length } = wavetableMessages(node)[1];
+    const { wavetable, length, levels } = wavetableMessages(node)[1];
     expect(length).toBe(64);
-    expect(wavetable.length).toBe(64);
+    // A 64-sample table holds 32 harmonics, so its pyramid is six levels deep.
+    expect(levels).toBe(6);
+    expect(wavetable.length).toBe(6 * 64);
   });
 
   it("is a no-input source with one output", () => {

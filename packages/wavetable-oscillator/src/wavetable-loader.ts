@@ -10,6 +10,17 @@
 export type Wavetable = {
   data: Float32Array;
   length: number;
+  /**
+   * How many mipmap levels `data` holds, packed level-major:
+   * `data[(level * planes + plane) * length + index]`. Level `i` is the same
+   * planes band-limited to `length/2 / 2^i` harmonics, and the oscillator
+   * crossfades the two nearest levels — see `wavetable-builder.ts`.
+   *
+   * Absent or 1 means "no pyramid": a plain table of consecutive planes, which
+   * the oscillator plays from level 0 alone. `setWavetable` builds the pyramid
+   * for anything that arrives that way, so a caller never has to.
+   */
+  levels?: number;
 };
 
 /**

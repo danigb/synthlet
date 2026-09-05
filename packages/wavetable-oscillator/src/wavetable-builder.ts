@@ -75,7 +75,11 @@ export function canonicalPhase(harmonic: number) {
  * mipmap level (ticket 06) can be scaled by its base level's gain instead of its
  * own.
  */
-export function buildPlane(harmonics: ArrayLike<number>, length: number) {
+export function buildPlane(
+  harmonics: ArrayLike<number>,
+  length: number,
+  count = harmonics.length,
+) {
   assertLength(length);
   // Harmonic `h` needs `h` cycles in `length` samples, so `h > length / 2` is
   // above the table's own Nyquist and folds back into a lower harmonic — an
@@ -88,9 +92,13 @@ export function buildPlane(harmonics: ArrayLike<number>, length: number) {
       }`,
     );
   }
+  // A mip level is a prefix of the same series — ticket 06 sums the first `count`
+  // of them and nothing else. Taking it as an argument rather than making the
+  // caller slice keeps a level free of a copy per level per plane.
+  if (count > harmonics.length) count = harmonics.length;
 
   const plane = new Float32Array(length);
-  for (let i = 0; i < harmonics.length; i++) {
+  for (let i = 0; i < count; i++) {
     const value = harmonics[i];
     // One NaN spreads across every sample of the plane, and a NaN that reaches
     // the read offset never comes back - the failure ticket 01 spent its budget
@@ -134,11 +142,67 @@ export function normalizePeak(plane: Float32Array) {
 }
 
 /**
- * A multi-plane wavetable from one harmonic spectrum per plane, packed into the
- * `plane * length + index` layout `interpolateLinear2d` already reads and
- * `set()` already counts planes from.
+ * The mipmap pyramid.
  *
- * Every plane is built at canonical phase and normalized to peak 1.0.
+ * Level `i` holds `length/2 / 2^i` harmonics — one octave of bandwidth per
+ * level — at the **full base length**, which is where Trausmuth & Huovilainen's
+ * (DAFx-05 §2.3) "two to four times longer tables than dictated by Nyquist
+ * criteria" comes from: the level is not shortened as harmonics leave it, so at
+ * the pitches it is used for it carries 2× to 8× the samples per period Nyquist
+ * would require, and `interpolateLinear2d`'s indexing is identical at every
+ * level.
+ *
+ * The oscillator selects with `x = log2(inc)` — the pitch in octaves above the
+ * table's natural frequency — and crossfades levels `floor(x) + 1` and
+ * `floor(x) + 2`. The `+1` is not an off-by-one: a linear crossfade of two
+ * levels does not produce a level with an intermediate harmonic limit, it
+ * produces the *lower* level's harmonic content with its top octave scaled by
+ * `1 − frac`. So the lower member of the pair has to be below Nyquist on its
+ * own. Selecting `floor(x)` instead measures 30.9 dB of alias SNR at 440 Hz
+ * against this scheme's 57.4 dB; the plan has the table.
+ */
+export function mipHarmonics(length: number, level: number) {
+  return Math.max(1, Math.floor(length / 2 / Math.pow(2, level)));
+}
+
+/**
+ * How many levels a `length`-sample table's pyramid holds: down to a single
+ * harmonic, which is 8 levels at the default 256 and is PowerWave §2.3's "limit
+ * on minimum and maximum table size" in harmonic-count units. One harmonic is
+ * the floor because a sine is the most a table can carry at the top of the
+ * increment's own range (`inc = length / 2`, one table cycle every two output
+ * samples), and no level above that is reachable.
+ *
+ * The pyramid therefore costs `levels ×` the base table: 32 KB for the built-in
+ * four-plane 256-sample set, 512 KB for a 64-plane one. Load-time heap, not
+ * published bytes — the payload is a few hundred bytes of harmonic rules.
+ */
+export function mipLevelCount(length: number) {
+  return Math.floor(Math.log2(length / 2)) + 1;
+}
+
+/**
+ * A multi-plane wavetable from one harmonic spectrum per plane, with a mipmap
+ * pyramid, packed level-major:
+ *
+ *     data[(level * planes + plane) * length + index]
+ *
+ * so the plane index `interpolateLinear2d` already takes is `level * planes + p`
+ * and the reader needs no second dimension. Level 0 sits at the head of the
+ * array, so `data.slice(p * length, (p + 1) * length)` is still plane `p` at
+ * full bandwidth.
+ *
+ * Every plane is built at canonical phase, and **one gain scales the whole of a
+ * plane's pyramid**: level 0's, from `normalizePeak` — which is the whole reason
+ * `normalizePeak` is separate from `buildPlane` — trimmed only if a level above
+ * it overshoots 1. A level normalized to its own peak would change loudness at
+ * every octave crossover, and the plane could not be crossfaded with anything.
+ *
+ * The trim is not hypothetical: band-limiting a square *raises* its peak. One
+ * sine carries 4/π of the square's height, so the top of the built-in square's
+ * pyramid overshoots level 0 by 8.0 %, and `normalizePeak`'s promise is that a
+ * generated table cannot clip. The trim keeps that promise for the pyramid, at
+ * the cost of level 0 peaking at 0.926 rather than 1 on that one plane.
  */
 export function buildWavetable(
   planes: ArrayLike<number>[],
@@ -149,13 +213,121 @@ export function buildWavetable(
     throw Error("A wavetable needs at least one plane of harmonics");
   }
 
-  const data = new Float32Array(planes.length * length);
+  const levels = mipLevelCount(length);
+  const data = new Float32Array(levels * planes.length * length);
+  const at = (level: number, plane: number) =>
+    (level * planes.length + plane) * length;
+
   for (let p = 0; p < planes.length; p++) {
-    const plane = buildPlane(planes[p], length);
-    normalizePeak(plane);
-    data.set(plane, p * length);
+    const base = buildPlane(planes[p], length);
+    const gain = normalizePeak(base);
+    data.set(base, at(0, p));
+
+    let peak = 1;
+    for (let i = 1; i < levels; i++) {
+      const plane = buildPlane(planes[p], length, mipHarmonics(length, i));
+      for (let k = 0; k < length; k++) {
+        const value = (plane[k] *= gain);
+        const size = value < 0 ? -value : value;
+        if (size > peak) peak = size;
+      }
+      data.set(plane, at(i, p));
+    }
+
+    if (peak > 1) {
+      const trim = 1 / peak;
+      for (let i = 0; i < levels; i++) {
+        const from = at(i, p);
+        for (let k = 0; k < length; k++) data[from + k] *= trim;
+      }
+    }
   }
-  return { data, length };
+  return { data, length, levels };
+}
+
+/**
+ * The pyramid for a table that arrived as **samples** rather than as harmonics —
+ * `loadWavetable`'s WAV planes, or anything a caller hands `setWavetable`.
+ *
+ * One harmonic analysis per plane, then one additive resynthesis per level from
+ * the retained harmonics, each at the phase it was measured at. Preserving the
+ * measured phase rather than rewriting it to canonical is deliberate: a phase
+ * rewrite changes the plane's shape and is ticket 07's decision to make on
+ * imported data, and this function's whole job is to remove bandwidth and
+ * nothing else. Level 0 is the original samples, byte for byte.
+ *
+ * The transform is a direct one, not `_spectrum.ts`'s FFT: that file is
+ * test-only by the rule in `scripts/copy_files.sh`, and importing it here would
+ * put a 32768-point FFT into the published bundle. Sine and cosine come out of
+ * one `length`-entry table indexed by `(h * k) % length`, so a plane costs about
+ * `length²/2` multiply-adds with no transcendental call in the loop — 33 k for a
+ * 256-sample plane, once, on the main thread.
+ *
+ * A table too short to analyse comes back unchanged with `levels: 1`, which the
+ * oscillator reads as "no pyramid" and plays exactly as it does today.
+ */
+export function mipmapWavetable(wavetable: Wavetable): Wavetable {
+  const { data, length } = wavetable;
+  if (wavetable.levels && wavetable.levels > 1) return wavetable;
+
+  const planes = Math.floor(data.length / length);
+  const levels = mipLevelCount(length);
+  if (!(length >= 2) || planes < 1 || levels < 2) {
+    return { data, length, levels: 1 };
+  }
+
+  // cos(2πj/length) and sin(2πj/length) for every j: `h * k` only ever reaches
+  // the table modulo `length`, so this is the whole transform's trig.
+  const cos = new Float64Array(length);
+  const sin = new Float64Array(length);
+  for (let j = 0; j < length; j++) {
+    cos[j] = Math.cos((2 * Math.PI * j) / length);
+    sin[j] = Math.sin((2 * Math.PI * j) / length);
+  }
+
+  // Level 1 is the widest level that is ever *synthesised* — level 0 is the
+  // samples themselves — so nothing above its harmonic count is worth analysing.
+  const top = mipHarmonics(length, 1);
+  const a = new Float64Array(top + 1);
+  const b = new Float64Array(top + 1);
+  const out = new Float32Array(levels * planes * length);
+  out.set(data.subarray(0, planes * length), 0);
+
+  for (let p = 0; p < planes; p++) {
+    const at = p * length;
+    // Analysis. The 2/N scaling makes `a`/`b` the harmonic's own amplitude, so a
+    // resynthesis over every harmonic reproduces the plane (up to the DC and the
+    // Nyquist term, which no level carries — a DC offset in a plane thumps when a
+    // morph crosses it, and ticket 07 is what strips it deliberately).
+    for (let h = 1; h <= top; h++) {
+      let re = 0;
+      let im = 0;
+      for (let k = 0; k < length; k++) {
+        const j = (h * k) % length;
+        const x = data[at + k];
+        re += x * cos[j];
+        im += x * sin[j];
+      }
+      a[h] = (2 * re) / length;
+      b[h] = (2 * im) / length;
+    }
+    // Synthesis, one level at a time. Harmonics are dropped, never reshaped:
+    // this is a brick wall in the harmonic domain, which is the exact analogue
+    // of the generated path's truncation.
+    for (let i = 1; i < levels; i++) {
+      const kept = mipHarmonics(length, i);
+      const to = (i * planes + p) * length;
+      for (let k = 0; k < length; k++) {
+        let y = 0;
+        for (let h = 1; h <= kept; h++) {
+          const j = (h * k) % length;
+          y += a[h] * cos[j] + b[h] * sin[j];
+        }
+        out[to + k] = y;
+      }
+    }
+  }
+  return { data: out, length, levels };
 }
 
 /** The shapes of the built-in table, in the order they morph. */
@@ -211,12 +383,10 @@ export function shapeHarmonics(shape: BuiltInShape, count: number) {
  * The built-in set as harmonic spectra, at the full bandwidth a `length`-sample
  * table can hold.
  *
- * Full bandwidth is the deliberate pre-mipmap state. There is no band-limiting
- * anywhere in this package yet, so the sawtooth plane measures the audit's own
- * alias figures — 23.7 dB at 440 Hz — and ticket 06 is what raises them, by
- * truncating this same series per octave. Truncating here instead would be a
- * filter design taken in the wrong ticket, and it would be wrong at every pitch
- * but one.
+ * Full bandwidth is level 0 of the pyramid, and it is right there and only
+ * there: `buildWavetable` truncates this same series per octave for the levels
+ * above it, and the oscillator picks the level from the pitch. Truncating *here*
+ * would be a filter design fixed at one pitch and wrong at every other one.
  */
 export function builtInHarmonics(length = DEFAULT_WAVETABLE_LENGTH) {
   assertLength(length);
@@ -232,9 +402,9 @@ const DEFAULTS = new Map<number, Wavetable>();
  * party's GitHub Pages mirror.
  *
  * Memoized per length: `postCreate` runs once per node and the default size is
- * 131 072 sine evaluations, which is a per-voice cost in a polyphonic patch
- * otherwise. `postMessage` structured-clones the array, so the shared instance
- * cannot be mutated from a worklet.
+ * 131 072 sine evaluations for level 0 and as many again for the seven levels
+ * above it, which is a per-voice cost in a polyphonic patch otherwise. The
+ * memoized instance is shared, so `setWavetable` copies before it transfers.
  */
 export function defaultWavetable(length = DEFAULT_WAVETABLE_LENGTH) {
   let wavetable = DEFAULTS.get(length);

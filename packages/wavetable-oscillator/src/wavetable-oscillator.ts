@@ -20,6 +20,9 @@ export function WavetableOscillator(sampleRate: number) {
   // comparison against NaN is false, so the jump detector below cannot fire on
   // the first sample of the first block.
   let $morph = NaN;
+  // The previous continuous mip level, `level + levelFrac`, and NaN until there
+  // is one, for the same reason.
+  let $level = NaN;
   let $wavetable = new Float32Array(0);
 
   const isr = 1 / sampleRate;
@@ -28,6 +31,14 @@ export function WavetableOscillator(sampleRate: number) {
   let planes = 0;
   let offset = 0;
   let inc = 0;
+
+  // The mipmap axis. `levels` is how many the loaded table carries — 1 means no
+  // pyramid, which is what a table set directly rather than through the builder
+  // has — `level` is the brighter member of the pair being read and `levelFrac`
+  // the mix toward `level + 1`.
+  let levels = 1;
+  let level = 0;
+  let levelFrac = 0;
 
   // The declick. `last` is the sample that was emitted, `held` the value a ramp
   // starts from, `ramp` how many samples of it are left. Instance state, not
@@ -56,12 +67,68 @@ export function WavetableOscillator(sampleRate: number) {
     const raw = $frequency * len * isr;
     const max = len / 2;
     inc = raw > 0 ? (raw < max ? raw : max) : 0;
+    updateLevel();
   }
 
   /** Start a ramp from whatever was last emitted onto whatever comes next. */
   function declick() {
     held = last;
     ramp = DECLICK;
+  }
+
+  // The mip level from the increment.
+  //
+  // `inc` is the read speed in table samples per output sample, so it is also
+  // the pitch in units of the table's natural frequency (`sampleRate / len`),
+  // and `log2(inc)` is the octave above that pitch. That is the mipmap axis:
+  // level `i` holds `len/2 / 2^i` harmonics, which is exactly Nyquist at
+  // `log2(inc) === i`.
+  //
+  // The pair is `floor(x) + 1` and `floor(x) + 2`, not `floor(x)` and
+  // `floor(x) + 1`. A linear crossfade of two levels does not produce a level
+  // with an intermediate harmonic limit — it produces the *lower* level's
+  // harmonic content with its top octave scaled by `1 - levelFrac` — so the
+  // lower member of the pair has to be below Nyquist on its own or the fading
+  // half aliases for most of the octave. Measured at 440 Hz on a 256-sample
+  // sawtooth: 30.9 dB of alias SNR selecting `floor(x)`, 57.4 dB selecting
+  // `floor(x) + 1`.
+  //
+  // Both clamps kill the fraction, so the top of the pyramid and everything
+  // below the table's natural pitch are one read rather than two. `Math.log2(0)`
+  // is -Infinity, which the `>= 0` comparison resolves the way updateInc()'s
+  // resolves NaN.
+  function updateLevel() {
+    const x = Math.log2(inc);
+    const i = Math.floor(x) + 1;
+    let next: number;
+    if (!(i >= 0)) {
+      level = 0;
+      levelFrac = 0;
+      next = 0;
+    } else if (i >= levels - 1) {
+      level = levels - 1;
+      levelFrac = 0;
+      next = level;
+    } else {
+      level = i;
+      levelFrac = x - Math.floor(x);
+      next = i + levelFrac;
+    }
+    // Half a level per sample is the level axis's Nyquist rate, the same
+    // derivation as the morph's `0.5 / (planes - 1)` and in the same units: below
+    // it the two-level read represents the movement and passes it through, above
+    // it the pitch is skipping bands rather than crossing them. A mip level
+    // coming into use is a table coming into use — Mohr 2005 §1 — and on a plane
+    // whose energy sits above a level's limit the step across one is full scale.
+    //
+    // `frequency` is k-rate, so the level moves only at block boundaries and this
+    // reads as: a pitch jump of more than half an octave inside one render
+    // quantum is ramped. A ±1 semitone vibrato is 0.083 of a level and a
+    // one-second portamento across an octave is 0.003 of one per block; both pass
+    // through untouched. Ticket 09's a-rate frequency applies the same rule per
+    // sample with no change of form.
+    if (Math.abs(next - $level) > 0.5) declick();
+    $level = next;
   }
 
   function read(inputs: Inputs) {
@@ -71,11 +138,20 @@ export function WavetableOscillator(sampleRate: number) {
     }
   }
 
-  function set(wavetable: Float32Array, length: number) {
+  function set(wavetable: Float32Array, length: number, mipLevels = 1) {
     const had = len;
     $wavetable = wavetable;
     len = Math.min(length, wavetable.length);
-    planes = Math.floor(wavetable.length / len);
+    // A pyramid is `mipLevels` copies of the whole plane set, level-major, so a
+    // plane is `level * planes + p` and the reader needs no second dimension. A
+    // count that does not divide the data is not a pyramid — fall back to one
+    // level rather than reading a plane that is not there.
+    levels = Math.max(1, Math.floor(mipLevels) || 1);
+    planes = Math.floor(wavetable.length / (len * levels));
+    if (planes < 1) {
+      levels = 1;
+      planes = Math.floor(wavetable.length / len);
+    }
     // The read position survives a table of the same length, so a swap mid-note
     // keeps its place in the cycle and the ramp below has less to bridge. A
     // different length makes it meaningless, and out of range for a shorter
@@ -92,6 +168,13 @@ export function WavetableOscillator(sampleRate: number) {
     // own that.
     if (had !== 0) declick();
     updateInc();
+    // Same rule as the fade above, on the level axis: on the *first* table there
+    // is nothing to fade from, so the level the default frequency happens to
+    // select must not count as a jump when the caller's first real frequency
+    // arrives. NaN is the same guard `$morph` uses, and it costs one missed
+    // declick — the first frequency change of a node's life, which is the caller
+    // choosing a pitch rather than a note leaping away from one.
+    if (had === 0) $level = NaN;
   }
 
   // The morph position as a plane pair and a mix, which is the whole of Serra,
@@ -106,15 +189,37 @@ export function WavetableOscillator(sampleRate: number) {
   // `m` arrives clamped to 0..1, so `p0` is in range without a second clamp, and
   // `planes === 1` collapses to `pos === 0` and a single read.
   //
-  // Ticket 06's mip level is a third interpolation axis inside this function,
-  // which is why it is a function and not four lines inlined in the loop.
+  // `pf === 0` is both the sparse read and the end-of-axis guard: `pos` is at
+  // most `planes - 1`, so `floor(pos) === planes - 1` can only happen when `pos`
+  // is exactly that, and then there is nothing to interpolate toward.
+  function readLevel(l: number, p0: number, pf: number) {
+    const p = l * planes + p0;
+    const y0 = interpolateLinear2d($wavetable, len, p, offset);
+    if (pf === 0) return y0;
+    const y1 = interpolateLinear2d($wavetable, len, p + 1, offset);
+    return y0 + (y1 - y0) * pf;
+  }
+
+  // Phase x plane x mip level, Trausmuth & Huovilainen's PowerWave (DAFx-05
+  // §2.3) three axes: "for one sample both nearest mip tables will be evaluated
+  // and the real waveform value is fit according to the frequency settings of
+  // the oscillator... the final value is a linear interpolation between the two
+  // mip table values". Without that last crossfade a pitch sweep steps its
+  // harmonic content at every octave boundary, which is the artifact that paper
+  // was written to remove from the PPG Wave.
+  //
+  // Four table reads in the general case, and Shan et al. 2022 §5.4's cost
+  // argument is that what matters is tables read per sample, not tables held:
+  // two planes x two mip levels is the budget, and both axes go sparse the
+  // moment their fraction is zero.
   function readPlanes(m: number) {
     const pos = m * (planes - 1);
     const p0 = Math.floor(pos);
-    const y0 = interpolateLinear2d($wavetable, len, p0, offset);
-    if (p0 >= planes - 1) return y0;
-    const y1 = interpolateLinear2d($wavetable, len, p0 + 1, offset);
-    return y0 + (y1 - y0) * (pos - p0);
+    const pf = pos - p0;
+    const y0 = readLevel(level, p0, pf);
+    if (levelFrac === 0) return y0;
+    const y1 = readLevel(level + 1, p0, pf);
+    return y0 + (y1 - y0) * levelFrac;
   }
 
   function agen(output: Float32Array, inputs: Inputs) {

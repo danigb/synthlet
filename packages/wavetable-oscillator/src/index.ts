@@ -9,6 +9,7 @@ import {
   buildWavetable,
   DEFAULT_WAVETABLE_LENGTH,
   defaultWavetable,
+  mipmapWavetable,
 } from "./wavetable-builder";
 import { Wavetable, WavetableLoader } from "./wavetable-loader";
 
@@ -23,6 +24,9 @@ export {
   canonicalPhase,
   DEFAULT_WAVETABLE_LENGTH,
   defaultWavetable,
+  mipHarmonics,
+  mipLevelCount,
+  mipmapWavetable,
   normalizePeak,
   shapeHarmonics,
 } from "./wavetable-builder";
@@ -49,6 +53,12 @@ export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
   morph: AudioParam;
   loadWavetable(urlOrName: string): Promise<void>;
   fetchWavetableNames(): Promise<string[]>;
+  /**
+   * Play a wavetable. If it does not already carry a mipmap pyramid — anything
+   * `buildWavetable` produced does, anything decoded from samples does not —
+   * one is built here, on the main thread, before the table is transferred to
+   * the worklet. That is where all the band-limiting in this package lives.
+   */
   setWavetable(wavetable: Wavetable): void;
   /**
    * Build a wavetable from one harmonic magnitude spectrum per plane and play
@@ -81,11 +91,30 @@ export const WavetableOscillator = createWorkletConstructor<
   }),
   postCreate(node) {
     node.setWavetable = (wavetable) => {
-      node.port.postMessage({
-        type: "WAVETABLE",
-        wavetable: wavetable.data,
-        length: wavetable.length,
-      });
+      // Band-limiting is built here, on the main thread, at load — never in the
+      // worklet and never in the published payload. A table that already carries
+      // a pyramid (everything `buildWavetable` makes) is passed straight
+      // through; anything that arrived as samples is analysed and truncated.
+      const pyramid =
+        wavetable.levels && wavetable.levels > 1
+          ? wavetable
+          : mipmapWavetable(wavetable);
+      // A copy, then a transfer — `flex-audio-buffer-source/src/index.ts:145-153`'s
+      // idiom. The copy is not ceremony: `defaultWavetable` memoizes one instance
+      // and shares it between every node, and transferring that buffer would
+      // detach it and leave the second node with an empty table. At 32 KB for the
+      // built-in set and 512 KB for a 64-plane one, the transfer is what keeps
+      // this off the structured-clone path.
+      const data = pyramid.data.slice();
+      node.port.postMessage(
+        {
+          type: "WAVETABLE",
+          wavetable: data,
+          length: pyramid.length,
+          levels: pyramid.levels,
+        },
+        [data.buffer],
+      );
     };
     node.setHarmonics = (planes, length = DEFAULT_WAVETABLE_LENGTH) => {
       node.setWavetable(buildWavetable(planes, length));

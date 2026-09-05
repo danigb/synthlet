@@ -16,7 +16,11 @@ export class WavetableOscillatorWorkletProcessor extends AudioWorkletProcessor {
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "WAVETABLE":
-          this.u.set(event.data.wavetable, event.data.length);
+          this.u.set(
+            event.data.wavetable,
+            event.data.length,
+            event.data.levels,
+          );
           break;
         case "DISPOSE":
           this.r = false;
