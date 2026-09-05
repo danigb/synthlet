@@ -35,7 +35,7 @@ export class KsProcessor extends AudioWorkletProcessor {
     this.g(
       output,
       params.trigger,
-      params.frequency[0],
+      params.frequency,
       params.decay[0],
       params.brightness[0],
     );

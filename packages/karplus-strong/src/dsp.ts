@@ -167,19 +167,57 @@ export function createString(sampleRate: number, minFrequency: number) {
       ringing = true;
     },
 
-    /** Renders `[from, to)` of one block. */
-    process(output: Float32Array, from: number, to: number) {
+    /**
+     * Renders `[from, to)` of one block. `delays`, when given, is the loop
+     * length this string should have at each sample of the block, in samples,
+     * indexed absolutely; without it the block interpolates towards whatever
+     * `setDelay` last asked for.
+     */
+    process(
+      output: Float32Array,
+      from: number,
+      to: number,
+      delays?: ArrayLike<number>,
+    ) {
       if (!ringing) {
         output.fill(0, from, to);
         return;
       }
-      // Per-block parameter interpolation, (target - current)/blockSize.
-      // Nothing moves the target mid-note yet, so this is exactly 0 and the
-      // delay is bit-for-bit constant while the string rings.
-      const increment = to > from ? (delayTarget - delay) / (to - from) : 0;
+      // Per-block parameter interpolation, (target - current)/blockSize: a
+      // k-rate parameter steps once per 128 frames, and stepping a delay
+      // length by a whole block's worth of change is a click.
+      const increment =
+        delays === undefined && to > from
+          ? (delayTarget - delay) / (to - from)
+          : 0;
 
       for (let i = from; i < to; i++) {
-        delay += increment;
+        // The loop length this sample wants to be. Everything that moves the
+        // pitch of a ringing string goes through here - a-rate `frequency`
+        // today, and the tension term ticket 11 adds - and it is clamped per
+        // sample rather than per block, because a modulation source can ask
+        // for anything.
+        const wanted = delays === undefined ? delay + increment : delays[i];
+        delay =
+          wanted < MIN_LOOP_LENGTH
+            ? MIN_LOOP_LENGTH
+            : wanted > maxDelay
+              ? maxDelay
+              : wanted;
+        // Pakarinen, Puputti and Valimaki 2008 compensate a moving read
+        // pointer with one multiply, `pc(n) = (1 - x)*p(n)` for a delay-line
+        // variation of `x` samples per time step, because "if the DWG string
+        // is suddenly shortened to half of its original length ... 50 percent
+        // of the signal energy is lost". It is deliberately not here, and the
+        // reason is measured rather than argued - see the plan for ticket 06.
+        // In their structure the multiply corrects a signal read out of the
+        // line; inside a feedback loop it compounds once per round trip, which
+        // makes it diverge to NaN on a fast modulation and over-damp a
+        // downward slide by 6.6 dB when clamped to stop that. What keeps a
+        // slide at the right level here is that `rho` is derived from the
+        // current frequency, so the loop's loss per second follows the pitch:
+        // a slid note measures within 1.2 dB of the same note held still.
+
         let readIndex = writeIndex - (delay - phaseDelayCompensation);
         if (readIndex < 0) readIndex += capacity;
         // Round, not floor: the kernel is accurate for a delay within half a
@@ -249,11 +287,14 @@ export function createKS(sampleRate: number, minFrequency: number) {
   const maxLoopGain = 0.99999;
   const string = createString(sampleRate, minFrequency);
   const detectGate = createGateDetector();
+  // Scratch for the per-sample loop length when `frequency` is a-rate.
+  // Allocated once and grown only if a host ever renders a longer block.
+  let delays = new Float64Array(128);
 
   return (
     output: Float32Array,
     trigger: number | ArrayLike<number>,
-    frequency: number,
+    frequency: number | ArrayLike<number>,
     decay: number,
     // `params.ts` declares the same default; a four-argument call is the
     // shipped sound rather than an arbitrary one.
@@ -263,7 +304,27 @@ export function createKS(sampleRate: number, minFrequency: number) {
     // `decay` seconds needs `rho^(f0*decay) = 0.001`. Pitch-independent by
     // construction - which is the whole fix for a knob that used to be a count
     // of periods and so rang 15x longer at 110 Hz than at 1760 Hz.
-    const periods = frequency * decay;
+    const length = output.length;
+    // a-rate `frequency` is read per sample, in the same defensive form as the
+    // trigger: the descriptor declares a-rate, but a host that has nothing
+    // connected still hands over a single value, and then this is one read for
+    // the whole block. An `Lfo` patched in gives vibrato and a `Param` ramp
+    // gives portamento, which is why there is no glide parameter here.
+    const perSample = typeof frequency !== "number" && frequency.length > 1;
+    const firstFrequency =
+      typeof frequency === "number" ? frequency : frequency[0];
+
+    if (perSample) {
+      const values = frequency as ArrayLike<number>;
+      if (delays.length < length) delays = new Float64Array(length);
+      for (let i = 0; i < length; i++) delays[i] = sampleRate / values[i];
+    }
+    // The loop length is set every block, not only on a rising edge, so the
+    // pitch of a ringing string follows the parameter. `process` interpolates
+    // towards it across the block.
+    string.setDelay(sampleRate / firstFrequency);
+
+    const periods = firstFrequency * decay;
     string.setDamping(
       periods > 0
         ? Math.min(Math.pow(targetAmplitude, 1 / periods), maxLoopGain)
@@ -271,8 +332,11 @@ export function createKS(sampleRate: number, minFrequency: number) {
       brightness,
     );
 
-    const length = output.length;
     let start = 0;
+    const render = (a: number, b: number) =>
+      perSample
+        ? string.process(output, a, b, delays)
+        : string.process(output, a, b);
 
     // The rising edge is the whole anti-double-trigger rule: re-plucking needs
     // the trigger to return to <= 0 first, which is a genuine retrigger.
@@ -280,7 +344,6 @@ export function createKS(sampleRate: number, minFrequency: number) {
       // k-rate: one value for the block, tested once - what it cost before.
       const value = typeof trigger === "number" ? trigger : trigger[0];
       if (detectGate(value) === true) {
-        string.setDelay(sampleRate / frequency);
         string.pluck();
       }
     } else {
@@ -289,14 +352,16 @@ export function createKS(sampleRate: number, minFrequency: number) {
       // quantised to the render quantum (2.9 ms at 44.1 kHz).
       for (let i = 0; i < length; i++) {
         if (detectGate(trigger[i]) === true) {
-          if (i > start) string.process(output, start, i);
-          string.setDelay(sampleRate / frequency);
+          if (i > start) render(start, i);
+          // A pluck starts in tune at whatever the pitch is *now*, rather than
+          // gliding into it from the previous note.
+          string.setDelay(perSample ? delays[i] : sampleRate / firstFrequency);
           string.pluck();
           start = i;
         }
       }
     }
 
-    string.process(output, start, length);
+    render(start, length);
   };
 }

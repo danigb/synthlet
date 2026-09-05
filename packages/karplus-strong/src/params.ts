@@ -17,11 +17,15 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // 2.1 cents out at 5000 Hz, 8.3 at 5500 and 21 at 6000. 5 kHz is the
     // highest round number that holds inside the 5 cent tolerance every time.
     // The old 20000 was 2.2 samples of delay, which is not a string.
+    // a-rate, so the pitch can move while the string rings: an `Lfo` into it
+    // is vibrato, a `Param` ramp is portamento, and neither needs a parameter
+    // of its own here. A host with nothing connected still hands the processor
+    // one value per block, which costs exactly what k-rate did.
     name: "frequency",
     defaultValue: 440,
     minValue: 20,
     maxValue: 5000,
-    automationRate: "k-rate",
+    automationRate: "a-rate",
   },
   {
     // Seconds: the time the string takes to fall 60 dB, at every pitch. It

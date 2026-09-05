@@ -248,26 +248,28 @@ function fundamental(signal: Float32Array, frequency: number) {
  * autocorrelation reports at 440 Hz is its own resolution, not the string's.
  */
 const SPECTRAL_WINDOW = 16384;
-function spectralFundamental(signal: Float32Array, expected: number) {
-  const start = Math.round(0.02 * SAMPLE_RATE);
-  const re = new Float64Array(SPECTRAL_WINDOW);
-  const im = new Float64Array(SPECTRAL_WINDOW);
-  for (let i = 0; i < SPECTRAL_WINDOW; i++) {
-    const hann =
-      0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (SPECTRAL_WINDOW - 1));
+function spectralFundamental(
+  signal: Float32Array,
+  expected: number,
+  // A shorter window, placed anywhere, is how the pitch of a *moving* string
+  // gets measured: 4096 points is 93 ms, over which a one-octave-per-second
+  // slide moves 111 cents, and the peak of that chirp sits at its mean.
+  start = Math.round(0.02 * SAMPLE_RATE),
+  size = SPECTRAL_WINDOW,
+) {
+  const re = new Float64Array(size);
+  const im = new Float64Array(size);
+  for (let i = 0; i < size; i++) {
+    const hann = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (size - 1));
     re[i] = (signal[start + i] ?? 0) * hann;
   }
   fft(re, im);
 
-  const bin = (frequency: number) =>
-    (frequency * SPECTRAL_WINDOW) / SAMPLE_RATE;
+  const bin = (frequency: number) => (frequency * size) / SAMPLE_RATE;
   const magnitude = (k: number) =>
     Math.sqrt(re[k] * re[k] + im[k] * im[k]) + 1e-30;
   const lowest = Math.max(1, Math.floor(bin(expected * 0.75)));
-  const highest = Math.min(
-    SPECTRAL_WINDOW / 2 - 2,
-    Math.ceil(bin(expected * 1.3)),
-  );
+  const highest = Math.min(size / 2 - 2, Math.ceil(bin(expected * 1.3)));
 
   let peak = lowest;
   for (let k = lowest; k <= highest; k++) {
@@ -279,7 +281,7 @@ function spectralFundamental(signal: Float32Array, expected: number) {
   const denominator = a - 2 * b + c;
   const refined =
     denominator !== 0 ? peak + (0.5 * (a - c)) / denominator : peak;
-  return (refined * SAMPLE_RATE) / SPECTRAL_WINDOW;
+  return (refined * SAMPLE_RATE) / size;
 }
 
 /**
@@ -756,5 +758,178 @@ describe("createKS at the top of its range", () => {
     }
     expect(peak).toBeLessThanOrEqual(1);
     expect(peak).toBeGreaterThan(0.25); // a burst this short still excites it
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The pitch moving while the string rings. `frequency` is a-rate, so an `Lfo`
+// patched into it is vibrato and a `Param` ramp is portamento; there is no
+// glide parameter, and these are the assertions that say the machinery under
+// that claim works. Ticket 11 drives the same per-sample delay from the loop's
+// own energy.
+// ---------------------------------------------------------------------------
+
+/** Renders one pluck while `frequencyAt` moves the pitch, sample by sample. */
+function slide(
+  frequencyAt: (sample: number) => number,
+  seconds: number,
+  decay = 1,
+) {
+  const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+  const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
+  const block = new Float32Array(BLOCK);
+  const frequency = new Float32Array(BLOCK);
+  for (let n = 0; n < output.length; n += BLOCK) {
+    for (let i = 0; i < BLOCK; i++) frequency[i] = frequencyAt(n + i);
+    ks(block, 1, frequency, decay);
+    output.set(block.subarray(0, Math.min(BLOCK, output.length - n)), n);
+  }
+  return output;
+}
+
+/** Mean power over `[from, to)` seconds - steadier than an instantaneous envelope. */
+function power(signal: Float32Array, from: number, to: number) {
+  const first = Math.round(from * SAMPLE_RATE);
+  const last = Math.round(to * SAMPLE_RATE);
+  let total = 0;
+  for (let i = first; i < last; i++) total += signal[i] * signal[i];
+  return total / (last - first);
+}
+
+const OCTAVE_IN_HALF_A_SECOND = 0.5 * SAMPLE_RATE;
+const rampUp = (sample: number) =>
+  220 * Math.pow(2, Math.min(1, sample / OCTAVE_IN_HALF_A_SECOND));
+const rampDown = (sample: number) =>
+  440 * Math.pow(2, -Math.min(1, sample / OCTAVE_IN_HALF_A_SECOND));
+const vibrato = (sample: number) =>
+  440 *
+  Math.pow(2, (50 / 1200) * Math.sin((2 * Math.PI * 5 * sample) / SAMPLE_RATE));
+
+describe("createKS with a moving pitch", () => {
+  it("tracks a one-octave slide within 10 cents", () => {
+    const WINDOW = 4096;
+    const glide = (sample: number) =>
+      220 * Math.pow(2, Math.min(1, sample / SAMPLE_RATE)); // an octave in 1 s
+    const signal = slide(glide, 1.3, 3);
+
+    let worst = 0;
+    for (let point = 0; point < 10; point++) {
+      const start = Math.round((0.05 + point * 0.09) * SAMPLE_RATE);
+      // The window spans a range of pitches, so the request it is compared
+      // against is the mean over the same window.
+      let requested = 0;
+      for (let i = 0; i < WINDOW; i++) requested += glide(start + i);
+      requested /= WINDOW;
+
+      const error = Math.abs(
+        cents(spectralFundamental(signal, requested, start, WINDOW), requested),
+      );
+      if (error > worst) worst = error;
+    }
+    expect(worst).toBeLessThan(10);
+  });
+
+  it("turns a 5 Hz modulation into symmetric vibrato", () => {
+    const WINDOW = 2048;
+    const signal = slide(vibrato, 1, 3);
+    const measured: number[] = [];
+    for (let point = 0; point < 20; point++) {
+      const start = Math.round(0.05 * SAMPLE_RATE) + point * 1024;
+      measured.push(
+        cents(spectralFundamental(signal, 440, start, WINDOW), 440),
+      );
+    }
+    const highest = Math.max(...measured);
+    const lowest = Math.min(...measured);
+    // A 50 cent modulation, and the estimator sees nearly all of it.
+    expect(highest).toBeGreaterThan(40);
+    expect(lowest).toBeLessThan(-40);
+    // Symmetric: a vibrato that bends further one way than the other would be
+    // a delay that is not linear in what it was asked for.
+    expect(Math.abs(highest + lowest)).toBeLessThan(10);
+  });
+
+  it("neither gains nor loses more than 3 dB over a slide", () => {
+    // The energy-compensation criterion. There is no compensation multiply -
+    // measured against this assertion, Pakarinen et al.'s belongs on an output
+    // tap rather than inside a feedback loop, and see the plan for ticket 06 -
+    // so what keeps this true is that `rho` follows the current frequency.
+    //
+    // Averaged over 12 seeded renders: a slid string and a held one are
+    // genuinely different signals, so one render of each differs by up to 5 dB
+    // even with the same excitation.
+    const SEEDS = 12;
+    let up = 0;
+    let down = 0;
+    for (let seed = 1; seed <= SEEDS; seed++) {
+      const measure = (at: (sample: number) => number) =>
+        withSeededNoise(seed, () => power(slide(at, 0.6), 0.45, 0.55));
+      up += 10 * Math.log10(measure(rampUp) / measure(() => 440));
+      down += 10 * Math.log10(measure(rampDown) / measure(() => 220));
+    }
+    expect(Math.abs(up / SEEDS)).toBeLessThan(3);
+    expect(Math.abs(down / SEEDS)).toBeLessThan(3);
+  });
+
+  it("does not step at block boundaries", () => {
+    // A delay length stepped once per block rather than smoothed would put a
+    // discontinuity every 128 samples and nowhere else, so this compares the
+    // mean sample-to-sample difference at the boundaries with the one between
+    // them. A held note is the control.
+    const boundaryRatio = (at: (sample: number) => number) => {
+      const signal = slide(at, 0.6);
+      let atBoundary = 0;
+      let between = 0;
+      let boundaries = 0;
+      let interior = 0;
+      for (let i = Math.round(0.05 * SAMPLE_RATE); i < signal.length; i++) {
+        const step = Math.abs(signal[i] - signal[i - 1]);
+        if (i % BLOCK === 0) {
+          atBoundary += step;
+          boundaries++;
+        } else {
+          between += step;
+          interior++;
+        }
+      }
+      return atBoundary / boundaries / (between / interior);
+    };
+
+    expect(boundaryRatio(() => 330)).toBeLessThan(1.5); // control
+    expect(boundaryRatio(rampUp)).toBeLessThan(1.5);
+    expect(boundaryRatio(rampDown)).toBeLessThan(1.5);
+    expect(boundaryRatio(vibrato)).toBeLessThan(1.5);
+  });
+
+  it("reads a constant a-rate frequency as the k-rate scalar", () => {
+    const held = slide(() => 330, 0.2);
+    let peak = 0;
+    for (const sample of held)
+      if (Math.abs(sample) > peak) peak = Math.abs(sample);
+    expect(peak).toBeGreaterThan(0.5);
+    expect(Math.abs(cents(spectralFundamental(held, 330), 330))).toBeLessThan(
+      5,
+    );
+  });
+
+  it("stays finite under a modulation no player could make", () => {
+    // 20 Hz to 5 kHz and back every 10 ms, which is the whole declared range
+    // 100 times a second. The clamp is per sample and the loop filter is a
+    // contraction, so this has to stay bounded even though it is nonsense.
+    const period = 0.01 * SAMPLE_RATE;
+    const signal = slide(
+      (sample) =>
+        20 *
+        Math.pow(250, 0.5 - 0.5 * Math.cos((2 * Math.PI * sample) / period)),
+      1,
+    );
+    let peak = 0;
+    let nonFinite = 0;
+    for (const sample of signal) {
+      if (!Number.isFinite(sample)) nonFinite++;
+      else if (Math.abs(sample) > peak) peak = Math.abs(sample);
+    }
+    expect(nonFinite).toBe(0);
+    expect(peak).toBeLessThan(8);
   });
 });
