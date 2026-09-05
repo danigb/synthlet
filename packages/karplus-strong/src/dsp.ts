@@ -8,15 +8,220 @@ import { createGateDetector } from "./_gate";
 //   process = filtered_excitation : stringloop : ...
 //
 // - and this file is that shape. `Hloss` is Smith's EKS two-zero damping
-// filter; `Hfd` is a fourth-order Lagrange read; `Hdisp` is not written yet.
-// The excitation is Smith's three-filter chain, outside the loop. Every later
-// ticket fills in one block and carries one measurement.
+// filter; `Hfd` is a fourth-order Lagrange read; `Hdisp` is Rauhala and
+// Valimaki's tunable Thiran allpass. The excitation is Smith's three-filter
+// chain, outside the loop. Every ticket filled in one block and carried one
+// measurement.
 //
 // Deliberately not built on `scripts/_delay.ts`, synthlet's shared circular
 // buffer: its fractional reads are linear and Hermite, and the read this
 // package needs next is fourth-order Lagrange (Hermite is not in the paper
 // corpus this package is implemented from). Consolidating the two is a
 // repo-wide decision; this is written as if it were going to move.
+
+// ---------------------------------------------------------------------------
+// The loop's phase-delay budget.
+//
+// Every filter in the loop is paid for out of the loop length or the string
+// detunes - Smith's `P - 2` is one sample for the damping FIR and one for the
+// interpolator. The bookkeeping is written here once, not re-derived by each
+// ticket that adds a filter, and it is now in three parts: two constants and
+// one term that moves with pitch.
+// ---------------------------------------------------------------------------
+
+// Smith's EKS two-zero damping filter. Its impulse response is symmetric about
+// n = 1, so its phase delay is exactly one sample at every frequency - which is
+// why `brightness` can change the tone without detuning the string, and why the
+// sample it costs can be subtracted from the loop length once rather than
+// tracked per pitch.
+const DAMPING_PHASE_DELAY = 1;
+
+// The fourth-order Lagrange kernel is exact for a delay in [1.5, 2.5] samples
+// measured from its newest tap, so the integer split rounds rather than floors
+// and the read reaches 2.5 samples *newer* than its nominal position in the
+// worst case. That reach costs no phase delay - the five taps implement a delay
+// of exactly `readDistance` - but it does set the shortest loop the string can
+// hold, and so the highest note it can play.
+const INTERPOLATOR_REACH = 2.5;
+
+// The shortest loop with no dispersion in it: the read's newest tap has to be a
+// sample that has already been written, and the damping filter's sample comes
+// out of the same budget. `params.ts` declares a `frequency.maxValue` this
+// clamp can honour, and the dispersion cascade below is only allowed to engage
+// while it still leaves this much loop behind.
+const MIN_LOOP_BASE = INTERPOLATOR_REACH + 1 + DAMPING_PHASE_DELAY; // 4.5
+
+// ---------------------------------------------------------------------------
+// `Hdisp`: dispersion.
+//
+// Real strings are stiff. The bending term in the restoring force makes high
+// partials travel faster, so partial `k` sits at `k*f0*sqrt(1 + B*k^2)` rather
+// than at `k*f0` - `B` being the inharmonicity coefficient. That stretch is
+// most of what separates a piano or a clavinet from a synthetic comb, and a
+// pure delay line cannot produce any of it.
+//
+// The filter is Rauhala and Valimaki 2006, "Tunable Dispersion Filter Design
+// for Piano Synthesis", SPL 13(5), section II: a cascade of second-order Thiran
+// allpass sections whose coefficients come from `f0` and `B` in closed form,
+// which is the only design in the corpus that a k-rate knob can drive - the
+// alternatives need either a high-order optimisation or a redesign per note.
+// Its equations are typeset images in that PDF and are in no text extraction of
+// it; these were read off the rendered pages.
+//
+//   (1) a_k = (-1)^k (N choose k) prod_{n=0..N} (D-N+n)/(D-N+k+n)
+//   (3) I_key(f) = log_{2^(1/12)}( f * 2^(1/12) / 27.5 )
+//   (5) k_d(B) = exp( k1*(ln B)^2 + k2*ln B + k3 )
+//   (6) C_d(B) = exp( C1*ln B + C2 )
+//   (7) D(I_key, B) = exp( C_d(B) - I_key*k_d(B) )
+//   (8) A(z) = ( (a2 + a1 z^-1 + z^-2) / (1 + a1 z^-1 + a2 z^-2) )^M
+//
+// with (1) at N = 2 - section II-D-1 says to derive the second-order case from
+// it - giving `a1 = -2(D-2)/(D+1)` and `a2 = (D-2)(D-1)/((D+1)(D+2))`.
+// Implemented against the paper's own Fig. 2 cases it reproduces their D values
+// to within 5%, which is the least-squares fit's own residual.
+//
+// **Unity magnitude at every frequency**, so this block cannot change any
+// partial's decay time: `Hloss` keeps sole ownership of that. What it changes
+// is *where the partials are*, which is why it is not ticket 08's `stretch` and
+// `stretch` is not it - that lengthens high-partial decay, this moves partial
+// frequencies. Both ship.
+const THIRAN_ORDER = 2; // N in (1)
+
+// M in (8), and it is a measurement rather than a preference. The
+// parameterization is fitted *per cascade length*: Table I has a column for
+// M = 4 and one for M = 1, and no other, so an intermediate M is an unfitted
+// design - two sections reusing the M = 4 column deliver half its dispersion
+// delay and, by the paper's own criterion (II-B: consecutive partials within
+// 0.5% of `k*f0*sqrt(1+Bk^2)`), 13 correct partials at 110 Hz and B = 1e-4
+// against 37 for four sections and 21 for one.
+//
+// Four sections fit the bass best but `D` from (7) falls with pitch and
+// saturates at N - the paper says so, "the values ... saturate at high
+// frequencies toward two, which corresponds to the order N = 2" - and at D = 2
+// the section is exactly `z^-2`, no dispersion at all. Measured, four sections
+// stop dispersing at 569 Hz for a quarter of the knob and 1542 Hz at its top,
+// where one section runs to 1275 Hz and 2795 Hz; and four sections need 4*D
+// samples of loop, which at 1760 Hz is more than the whole 25-sample period.
+//
+// The paper switches cascades by key number (M = 4 for keys 1-44, M = 1 for
+// 45-88). Not done here: at that boundary, 349 Hz, the two designs' dispersion
+// delay is 17.6 samples against 7.5, and `frequency` is a-rate in this package
+// precisely so notes can slide. A 2.3x step in timbre when a slide crosses F4
+// is worse than a looser fit in the bass.
+const DISPERSION_SECTIONS = 1;
+
+// Table I, column `A_disp2` (N = 2, M = 1).
+const DISPERSION_K1 = -0.002658;
+const DISPERSION_K2 = -0.014811;
+const DISPERSION_K3 = -2.9018;
+const DISPERSION_C1 = 0.071089;
+const DISPERSION_C2 = 2.1074;
+
+// The `stiffness -> B` taper is **ours, and unsourced**. No paper in this
+// corpus prescribes a knob mapping; the filter above is Rauhala and Valimaki's,
+// this is a product decision, and it is written down here rather than dressed
+// up with a citation.
+//
+// The *endpoints* do have a source: section II-B searched `B = r*10^k` for
+// k = -5, -4, -3, so this two-decade span sits inside the range the paper
+// explored for piano inharmonicity. The exponential *between* them is the
+// product decision, chosen because inharmonicity in cents is very nearly linear
+// in B, so a geometric taper gives even steps: the 16th partial of a 110 Hz
+// string is 8.1 cents sharp at a quarter travel, 19.6 at half, 44.0 at three
+// quarters and 91.8 at the top.
+//
+// The top is deliberately past a real string - a piano bass string is around
+// B = 2e-4 - but not past the design: at B = 1e-2 the cascade puts the 8th
+// partial 796 cents sharp where the physics wants 428, so 1e-3 is the last
+// decade where it still tracks the curve it is fitted to.
+//
+// No audibility threshold is quoted for any of this. Jarvelainen, Valimaki and
+// Karjalainen measured one (ARLO 2(3), 2001) and that paper is in the reading
+// list's "Not obtained" section. What their companion studies do say is that
+// thresholds vary strongly with f0, so a fixed taper is perceptually uneven
+// across the keyboard - a comment, not a claim.
+const DISPERSION_MIN_B = 1e-5;
+const DISPERSION_MAX_B = 1e-3;
+
+/** Nothing in the loop: `stiffness` at 0, or a loop too short to hold a section. */
+const NO_DISPERSION = { a1: 0, a2: 0, phaseDelay: 0 };
+
+/**
+ * One second-order Thiran allpass section for a string of `delay` samples at
+ * `frequency`, from Rauhala and Valimaki's (1) and (3)-(7) above, plus the
+ * cascade's phase delay at the fundamental - which the loop has to lose, or
+ * `stiffness` detunes the string.
+ *
+ * Exported for `dsp.test.ts` only; `index.ts` does not re-export it, so it is
+ * not public API.
+ *
+ * `D` is clamped at both ends and for different reasons.
+ *
+ * - **Below, at N.** A second-order Thiran allpass is stable only for
+ *   `D > N - 1`, and at `D = 1` exactly `a1 = 1` and `a2 = 0` - a pole on the
+ *   unit circle, and an unstable filter inside a feedback loop is unbounded.
+ *   Below `D = N` it is also wrong-signed: the phase delay would rise with
+ *   frequency and flatten the partials rather than sharpen them. `D = N` is
+ *   where the parameterization saturates anyway, and there the section is
+ *   exactly `z^-2` - a pure two-sample delay that the compensation absorbs.
+ * - **Above, at what the loop can spare.** `M * phaseDelay` comes out of the
+ *   loop length, so it cannot exceed `delay - MIN_LOOP_BASE` or the burst has
+ *   no room and the string cannot hold its pitch. Swept over the declared
+ *   ranges at 1% steps this clamp never binds - the taper's top asks for 195.7
+ *   samples at 20 Hz where 2200 are available, and by the time the loop is
+ *   short enough to matter `D` has already saturated to 2 - so it ships as a
+ *   guard rather than as a mechanism.
+ *
+ * The phase delay is exact rather than the paper's own shortcut. Section
+ * II-D-2 says `D` itself, the phase delay at dc, is "a satisfactory
+ * approximation" for the phase delay at f0, and it is: the worst gap over the
+ * declared grid is 0.026 samples, which is 0.067 cents of detuning. One
+ * `atan2` per block is free next to the three `exp` the parameterization
+ * already costs, and it removes the one term that would otherwise have to be
+ * argued rather than measured. `A(z) = z^-N * Dr(1/z)/Dr(z)` with
+ * `Dr(z) = 1 + a1 z^-1 + a2 z^-2`, so the phase is `-N*w - 2*arg Dr(e^jw)` and
+ * the phase delay is `N + 2*arg Dr(e^jw)/w`.
+ */
+export function designDispersion(
+  sampleRate: number,
+  frequency: number,
+  stiffness: number,
+  delay: number,
+) {
+  const budget = (delay - MIN_LOOP_BASE) / DISPERSION_SECTIONS;
+  if (!(stiffness > 0) || budget < THIRAN_ORDER) return NO_DISPERSION;
+
+  const b =
+    DISPERSION_MIN_B *
+    Math.pow(
+      DISPERSION_MAX_B / DISPERSION_MIN_B,
+      stiffness > 1 ? 1 : stiffness,
+    );
+  const lnB = Math.log(b);
+  const kd = Math.exp(
+    DISPERSION_K1 * lnB * lnB + DISPERSION_K2 * lnB + DISPERSION_K3,
+  ); // (5)
+  const cd = Math.exp(DISPERSION_C1 * lnB + DISPERSION_C2); // (6)
+  // (3): `log_{2^(1/12)}(f * 2^(1/12) / 27.5)`, which is A0 = 27.5 Hz at key 1
+  // and A4 = 440 Hz at key 49.
+  const key = 12 * Math.log2(frequency / 27.5) + 1;
+  const target = Math.exp(cd - key * kd); // (7)
+  const d =
+    target < THIRAN_ORDER ? THIRAN_ORDER : target > budget ? budget : target;
+
+  // (1) at N = 2.
+  const a1 = (-2 * (d - THIRAN_ORDER)) / (d + 1);
+  const a2 = ((d - THIRAN_ORDER) * (d - 1)) / ((d + 1) * (d + THIRAN_ORDER));
+
+  const w = (2 * Math.PI * frequency) / sampleRate;
+  const real = 1 + a1 * Math.cos(w) + a2 * Math.cos(2 * w);
+  const imaginary = -(a1 * Math.sin(w) + a2 * Math.sin(2 * w));
+  const phaseDelay =
+    DISPERSION_SECTIONS *
+    (THIRAN_ORDER + (2 * Math.atan2(imaginary, real)) / w);
+
+  return { a1, a2, phaseDelay };
+}
 
 /**
  * One string: a delay line, a loop, and an excitation summed into the loop's
@@ -52,14 +257,11 @@ export function createString(sampleRate: number, minFrequency: number) {
   let writeIndex = 0;
   let delay = maxDelay; // read distance in samples, this sample
   let delayTarget = maxDelay; // where it is heading, reached over a block
-  // Every filter in the loop is paid for out of the loop length or the string
-  // detunes - Smith's `P - 2` is one sample for the damping FIR and one for
-  // the interpolator. The damping filter below is the first half of that; the
-  // interpolator's share is still unaccounted for, which is the defect ticket
-  // 05 measures. The bookkeeping is written here once, not re-derived by each
-  // ticket that adds a filter.
-  const DAMPING_PHASE_DELAY = 1;
-  const phaseDelayCompensation = DAMPING_PHASE_DELAY;
+  // The summed phase delay of every loop element that is *not* the read - see
+  // the budget block above the constants. The damping filter's one sample, and
+  // once `stiffness` is off zero the dispersion cascade's own, which is a
+  // function of pitch and so has to be recomputed rather than declared.
+  let phaseDelayCompensation = DAMPING_PHASE_DELAY;
 
   // Fourth-order Lagrange interpolation for the fractional part of the delay,
   // which is what the fractional delay filter `Hfd` is in this loop. The
@@ -76,13 +278,7 @@ export function createString(sampleRate: number, minFrequency: number) {
   // synthesis at the sampling rate of 44.1 kHz" and Smith's own listing writes
   // `fdelay4`.
   //
-  // The kernel is exact for a delay in [1.5, 2.5] samples measured from its
-  // newest tap, so the integer split rounds rather than floors and the read
-  // reaches 2.5 samples *newer* than its nominal position in the worst case.
-  // That reach costs no phase delay - the five taps implement a delay of
-  // exactly `readDistance` - but it does set the shortest loop the string can
-  // hold, and so the highest note it can play.
-  const INTERPOLATOR_REACH = 2.5;
+  // Its reach, and what that costs, is `INTERPOLATOR_REACH` above.
   let c0 = 0;
   let c1 = 0;
   let c2 = 1;
@@ -94,23 +290,34 @@ export function createString(sampleRate: number, minFrequency: number) {
   let coefficientFraction = NaN;
 
   // The shortest loop the string can hold, and so the highest note it can
-  // play: the read's newest tap has to be a sample that has already been
-  // written, and the damping filter's sample comes out of the same budget.
-  // `params.ts` declares a `frequency.maxValue` this clamp can honour.
-  const MIN_LOOP_LENGTH = INTERPOLATOR_REACH + 1 + phaseDelayCompensation;
+  // play. `MIN_LOOP_BASE` while the cascade is bypassed, which is the default;
+  // `stiffness` raises it by what the cascade takes, and `setDispersion` is
+  // what keeps the two in step.
+  let minLoopLength = MIN_LOOP_BASE;
 
   // Smith's EKS two-zero damping filter, `rho * (h0*x' + h1*(x + x''))`, and
   // the one thing that makes this Karplus-Strong rather than a leaky comb: it
-  // is what makes high partials die before low ones. Its impulse response is
-  // symmetric about n = 1, so its phase delay is exactly one sample at every
-  // frequency - which is why `brightness` can change the tone without
-  // detuning the string, and why the sample it costs can be subtracted from
-  // the loop length once rather than tracked per pitch.
+  // is what makes high partials die before low ones. Its phase delay is
+  // `DAMPING_PHASE_DELAY`, one sample at every frequency, and that is why
+  // `brightness` can change the tone without detuning the string.
   let rho = 0;
   let h0 = 1;
   let h1 = 0;
   let x1 = 0; // x[n-1]
   let x2 = 0; // x[n-2]
+
+  // `Hdisp`: one second-order Thiran allpass section, `dispersionSections` of
+  // them in cascade, designed per block by `setDispersion`. `dispersing` is
+  // false at `stiffness = 0`, and then this whole block - state, multiplies and
+  // the sample it would cost the loop - is skipped, so the default path is the
+  // one ticket 08 left, sample for sample.
+  let dispersing = false;
+  let da1 = 0;
+  let da2 = 0;
+  let dx1 = 0;
+  let dx2 = 0;
+  let dy1 = 0;
+  let dy2 = 0;
 
   // Karplus and Strong's own two probabilistic variants, from the paper this
   // package is named after - the ones its title is about, "Plucked-String *and
@@ -188,7 +395,33 @@ export function createString(sampleRate: number, minFrequency: number) {
      * the slot about to be written.
      */
     setDelay(samples: number) {
-      delayTarget = Math.min(Math.max(samples, MIN_LOOP_LENGTH), maxDelay);
+      delayTarget = Math.min(Math.max(samples, minLoopLength), maxDelay);
+    },
+
+    /**
+     * `Hdisp`: the dispersion cascade, designed for this block's pitch.
+     *
+     * Call it **before** `setDelay`, which clamps against the loop floor this
+     * moves. Block-rate rather than per-sample for the same reason `rho` is:
+     * three `exp` and an `atan2` once per 128 samples is free, once per sample
+     * is more than the filter costs. The consequence is worth writing down -
+     * with `stiffness` above zero the loop floor rises, so inside a single
+     * block an a-rate modulation cannot reach as far *above* the block's first
+     * frequency as it could at zero. Any modulation slower than one render
+     * quantum never sees it, because the first frequency tracks the modulation.
+     */
+    setDispersion(stiffness: number, frequency: number) {
+      const design = designDispersion(
+        sampleRate,
+        frequency,
+        stiffness,
+        Math.min(sampleRate / frequency, maxDelay),
+      );
+      da1 = design.a1;
+      da2 = design.a2;
+      dispersing = design.phaseDelay > 0;
+      phaseDelayCompensation = DAMPING_PHASE_DELAY + design.phaseDelay;
+      minLoopLength = INTERPOLATOR_REACH + 1 + phaseDelayCompensation;
     },
 
     /**
@@ -259,6 +492,10 @@ export function createString(sampleRate: number, minFrequency: number) {
       line.fill(0);
       x1 = 0;
       x2 = 0;
+      dx1 = 0;
+      dx2 = 0;
+      dy1 = 0;
+      dy2 = 0;
       delay = delayTarget; // a new note starts in tune, it does not glide into it
 
       // Zero-mean, and that is a fix rather than a nicety. The damping filter's
@@ -396,8 +633,8 @@ export function createString(sampleRate: number, minFrequency: number) {
         // for anything.
         const wanted = delays === undefined ? delay + increment : delays[i];
         delay =
-          wanted < MIN_LOOP_LENGTH
-            ? MIN_LOOP_LENGTH
+          wanted < minLoopLength
+            ? minLoopLength
             : wanted > maxDelay
               ? maxDelay
               : wanted;
@@ -497,9 +734,31 @@ export function createString(sampleRate: number, minFrequency: number) {
         // the whole decay and `decay` would stop being a time in seconds.
         // Outside, `decay` is the ceiling and `stretch` lengthens only what
         // the damping filter shortens, which is the high partials.
-        const feedback = sign * rho * filtered;
+        let feedback = sign * rho * filtered;
         x2 = x1;
         x1 = sample;
+
+        // `Hdisp`, last in the loop. `Hloss*Hdisp*Hfd` is a product of LTI
+        // blocks so the order is free, and putting it here leaves the damping
+        // filter's `x1`/`x2` holding pre-dispersion reads - which is what makes
+        // the two probabilistic branches above mean exactly what they did.
+        //
+        // An allpass has magnitude exactly 1 at every frequency, so the loop's
+        // per-trip gain is still at most `rho < 1` and the contraction bound
+        // survives untouched. That is also why this cannot change any partial's
+        // decay time: it moves partials, it does not damp them.
+        if (dispersing) {
+          for (let section = 0; section < DISPERSION_SECTIONS; section++) {
+            const dispersed =
+              da2 * feedback + da1 * dx1 + dx2 - da1 * dy1 - da2 * dy2;
+            dx2 = dx1;
+            dx1 = feedback;
+            dy2 = dy1;
+            dy1 = dispersed;
+            feedback = dispersed;
+          }
+        }
+
         const write = writeIndex + HEAD;
         line[write] = feedback;
         if (writeIndex < TAIL) line[write + capacity] = feedback;
@@ -544,11 +803,12 @@ export function createKS(sampleRate: number, minFrequency: number) {
     dynamics = 0.5,
     position = 0.13,
     pickAngle = 0,
-    // And these two are Karplus and Strong's own variants, inside the loop -
-    // both neutral by default, so the shipped string is the one ticket 04
-    // built.
+    // And these three are inside the loop - Karplus and Strong's own two
+    // variants and the dispersion cascade. All neutral by default, so the
+    // shipped string is the one ticket 04 built.
     stretch = 1,
     blend = 1,
+    stiffness = 0,
   ) => {
     // Smith 3.3: the loop filter is applied once per period, so -60 dB in
     // `decay` seconds needs `rho^(f0*decay) = 0.001`. Pitch-independent by
@@ -569,6 +829,9 @@ export function createKS(sampleRate: number, minFrequency: number) {
       if (delays.length < length) delays = new Float64Array(length);
       for (let i = 0; i < length; i++) delays[i] = sampleRate / values[i];
     }
+    // The dispersion cascade is designed first, because it owns a share of the
+    // loop length and `setDelay` clamps against what is left.
+    string.setDispersion(stiffness, firstFrequency);
     // The loop length is set every block, not only on a rising edge, so the
     // pitch of a ringing string follows the parameter. `process` interpolates
     // towards it across the block.

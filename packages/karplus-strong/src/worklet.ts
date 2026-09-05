@@ -44,6 +44,7 @@ export class KsProcessor extends AudioWorkletProcessor {
       params.pickAngle[0],
       params.stretch[0],
       params.blend[0],
+      params.stiffness[0],
     );
 
     return this.r;

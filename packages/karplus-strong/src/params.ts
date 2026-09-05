@@ -119,8 +119,8 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // where "the sound does not decay; this is simple wavetable synthesis", is
     // what the top of this range approaches.
     //
-    // It is *not* dispersion (ticket 09): this lengthens high-partial decay,
-    // dispersion moves partial frequencies. Different effects, both shipping.
+    // It is *not* `stiffness`: this lengthens high-partial decay, dispersion
+    // moves partial frequencies. Different effects, both shipping.
     name: "stretch",
     defaultValue: 1,
     minValue: 1,
@@ -139,6 +139,33 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // leaves only odd harmonics - their "harplike" case.
     name: "blend",
     defaultValue: 1,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // How stiff the string is: `Hdisp`, the third block of Bank and Valimaki's
+    // loop filter, and the one that makes the partial series inharmonic. A real
+    // string's bending stiffness makes high partials travel faster, so partial
+    // `k` sits at `k*f0*sqrt(1 + B*k^2)` instead of at `k*f0`, and that stretch
+    // is most of what separates a piano or a clavinet from a synthetic comb.
+    //
+    // The filter is Rauhala and Valimaki's tunable dispersion filter (SPL 13(5),
+    // 2006), a second-order Thiran allpass redesigned from `frequency` and `B`
+    // every block, so the stiffness tracks the pitch rather than being baked in.
+    //
+    // **The taper is ours and unsourced**: `B = 1e-5 * 100^stiffness`, an
+    // exponential across the two decades of inharmonicity coefficient the paper
+    // searched for pianos. No paper in this corpus prescribes a knob mapping.
+    // 0 bypasses the cascade exactly - the default path costs nothing - and 1 is
+    // deliberately stiffer than any real string.
+    //
+    // Being an allpass it cannot change any partial's decay time, and the loop
+    // gives back exactly the phase delay it takes, so this moves neither the
+    // pitch nor the decay: it moves the partials. Which is what makes it a
+    // different thing from `stretch` above, and not a substitute for it.
+    name: "stiffness",
+    defaultValue: 0,
     minValue: 0,
     maxValue: 1,
     automationRate: "k-rate",

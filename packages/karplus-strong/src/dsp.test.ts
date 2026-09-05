@@ -1,4 +1,4 @@
-import { createKS, createString } from "./dsp";
+import { createKS, createString, designDispersion } from "./dsp";
 import { PARAMS } from "./params";
 
 // The first tests this package has had. A pluck fills the delay line with
@@ -83,6 +83,7 @@ function pluck(
   pickAngle = 0,
   stretch = 1,
   blend = 1,
+  stiffness = 0,
 ) {
   const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
   const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
@@ -100,6 +101,7 @@ function pluck(
       pickAngle,
       stretch,
       blend,
+      stiffness,
     );
     output.set(block.subarray(0, Math.min(BLOCK, output.length - n)), n);
   }
@@ -312,10 +314,29 @@ function t60(signal: Float32Array) {
  * rather than of one draw, so the assertions below average it.
  */
 const T60_PLUCKS = 32;
-function averageT60(frequency: number, decay: number, brightness = 0.5) {
+function averageT60(
+  frequency: number,
+  decay: number,
+  brightness = 0.5,
+  stiffness = 0,
+) {
   let total = 0;
   for (let i = 0; i < T60_PLUCKS; i++) {
-    total += t60(pluck(frequency, decay, Math.max(3, 3 * decay), brightness));
+    total += t60(
+      pluck(
+        frequency,
+        decay,
+        Math.max(3, 3 * decay),
+        brightness,
+        0.5,
+        0.5,
+        0.13,
+        0,
+        1,
+        1,
+        stiffness,
+      ),
+    );
   }
   return total / T60_PLUCKS;
 }
@@ -1637,6 +1658,427 @@ describe("createKS amplitude and stability with the loop variants", () => {
       }
 
       expect([stretch, blend, nonFinite]).toEqual([stretch, blend, 0]);
+      expect(lastSecond).toBeLessThanOrEqual(firstSecond);
+    }
+  }, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// `Hdisp`, the last of Bank and Valimaki's three blocks: dispersion. Rauhala
+// and Valimaki's tunable Thiran allpass, driven by a `stiffness` knob whose
+// taper is ours. Its two structural claims - allpass, so it cannot touch the
+// decay; compensated, so it cannot touch the pitch - are what the first half
+// of this group asserts; the second half is the thing it is *for*.
+// ---------------------------------------------------------------------------
+
+/** The `(frequency, stiffness)` corners the design has to survive. */
+const DISPERSION_GRID: [number, number][] = [];
+for (const frequency of [20, 30, 55, 110, 220, 440, 880, 1760, 3000, 5000]) {
+  for (const stiffness of [0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 1]) {
+    DISPERSION_GRID.push([frequency, stiffness]);
+  }
+}
+const MAX_DELAY = Math.ceil(SAMPLE_RATE / MIN_FREQUENCY);
+const design = (frequency: number, stiffness: number) =>
+  designDispersion(
+    SAMPLE_RATE,
+    frequency,
+    stiffness,
+    Math.min(SAMPLE_RATE / frequency, MAX_DELAY),
+  );
+
+/** `|A(e^jw)|` of one second-order allpass section. */
+function sectionMagnitude(a1: number, a2: number, w: number) {
+  const numerator = Math.hypot(
+    a2 + a1 * Math.cos(w) + Math.cos(2 * w),
+    -(a1 * Math.sin(w) + Math.sin(2 * w)),
+  );
+  const denominator = Math.hypot(
+    1 + a1 * Math.cos(w) + a2 * Math.cos(2 * w),
+    -(a1 * Math.sin(w) + a2 * Math.sin(2 * w)),
+  );
+  return numerator / denominator;
+}
+
+/** Its phase delay, `N + 2*arg Dr(e^jw)/w` - the quantity the loop pays back. */
+function sectionPhaseDelay(a1: number, a2: number, w: number) {
+  return (
+    2 +
+    (2 *
+      Math.atan2(
+        -(a1 * Math.sin(w) + a2 * Math.sin(2 * w)),
+        1 + a1 * Math.cos(w) + a2 * Math.cos(2 * w),
+      )) /
+      w
+  );
+}
+
+/**
+ * The first `count` partials of a pluck, in Hz, tracked upwards.
+ *
+ * Not a fixed window around `k*f0`: a stretched partial moves by more than half
+ * the spacing well before the 16th, so the search for partial `k` starts half a
+ * period above the one below it. Measured on a bright, comb-free pluck, because
+ * a partial that has been damped or notched out of existence cannot be located
+ * - `brightness` 1 makes the loop filter a plain delay, and `position` 0
+ * bypasses the pick-position comb, whose first null is near the 8th partial at
+ * the shipped setting.
+ */
+function partialSeries(
+  frequency: number,
+  stiffness: number,
+  count: number,
+  size = SPECTRAL_WINDOW,
+) {
+  const signal = pluck(
+    frequency,
+    3,
+    0.02 + (size + BLOCK) / SAMPLE_RATE,
+    1,
+    1,
+    1,
+    0,
+    0,
+    1,
+    1,
+    stiffness,
+  );
+  const start = Math.round(0.02 * SAMPLE_RATE);
+  const re = new Float64Array(size);
+  const im = new Float64Array(size);
+  for (let i = 0; i < size; i++) {
+    const hann = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (size - 1));
+    re[i] = (signal[start + i] ?? 0) * hann;
+  }
+  fft(re, im);
+
+  const magnitude = (k: number) =>
+    Math.sqrt(re[k] * re[k] + im[k] * im[k]) + 1e-30;
+  const bin = (hz: number) => (hz * size) / SAMPLE_RATE;
+  const found: number[] = [];
+  let previous = 0;
+  for (let partial = 1; partial <= count; partial++) {
+    const from = Math.max(2, Math.floor(bin(previous + 0.5 * frequency)));
+    const to = Math.min(
+      size / 2 - 2,
+      Math.ceil(bin(previous + 1.9 * frequency)),
+    );
+    if (to <= from) break;
+    let peak = from;
+    for (let k = from; k <= to; k++) {
+      if (magnitude(k) > magnitude(peak)) peak = k;
+    }
+    const a = Math.log(magnitude(peak - 1));
+    const b = Math.log(magnitude(peak));
+    const c = Math.log(magnitude(peak + 1));
+    const denominator = a - 2 * b + c;
+    const refined =
+      denominator !== 0 ? peak + (0.5 * (a - c)) / denominator : peak;
+    previous = (refined * SAMPLE_RATE) / size;
+    found.push(previous);
+  }
+  return found;
+}
+
+describe("designDispersion", () => {
+  // The property the whole ticket rests on. Unity magnitude at every frequency
+  // means the dispersion block cannot change any partial's decay time, so
+  // ticket 04's loop filter keeps sole ownership of it and ticket 02's decay
+  // assertions still hold at full stiffness. The checklist asks for 0.01 dB;
+  // measured, the worst deviation over this grid is 6.1e-12 dB, which is
+  // double-precision arithmetic rather than a design margin.
+  it("is allpass to within 0.01 dB from 20 Hz to 20 kHz, everywhere on the grid", () => {
+    let worst = 0;
+    for (const [frequency, stiffness] of DISPERSION_GRID) {
+      const { a1, a2, phaseDelay } = design(frequency, stiffness);
+      if (phaseDelay === 0) continue;
+      for (let f = 20; f <= 20000; f *= 1.02) {
+        const db = Math.abs(
+          20 *
+            Math.log10(
+              sectionMagnitude(a1, a2, (2 * Math.PI * f) / SAMPLE_RATE),
+            ),
+        );
+        if (db > worst) worst = db;
+      }
+    }
+    expect(worst).toBeLessThan(0.01);
+  });
+
+  // Ticket 06's cautionary tale is why this is an assertion and not a comment:
+  // a factor of 1.005 inside this loop reached 3.4e38. A Thiran allpass is
+  // stable only for `D > N - 1` and at `D = 1` exactly it has a pole on the
+  // unit circle, so `D` is clamped to `N = 2` - which is where the
+  // parameterization saturates anyway, and where the section is exactly `z^-2`.
+  // Measured, the worst pole radius the grid reaches is 0.985.
+  it("produces stable coefficients everywhere on the grid", () => {
+    let worstRadius = 0;
+    for (const [frequency, stiffness] of DISPERSION_GRID) {
+      const { a1, a2, phaseDelay } = design(frequency, stiffness);
+      if (phaseDelay === 0) continue;
+      expect([frequency, stiffness, Math.abs(a2) < 1]).toEqual([
+        frequency,
+        stiffness,
+        true,
+      ]);
+      expect([frequency, stiffness, Math.abs(a1) < 1 + a2]).toEqual([
+        frequency,
+        stiffness,
+        true,
+      ]);
+      const radius = Math.sqrt(Math.abs(a2));
+      if (radius > worstRadius) worstRadius = radius;
+    }
+    expect(worstRadius).toBeLessThan(0.99);
+  });
+
+  // Rauhala and Valimaki's (1), `a_k = (-1)^k (N choose k) prod (D-N+n)/(D-N+k+n)`,
+  // evaluated as the product it is written as rather than as the closed form
+  // `dsp.ts` uses. Section II-D-1 says to derive the second-order case from (1)
+  // by setting N = 2, and this is the assertion that says the derivation is
+  // right - the equations are typeset images in that PDF and are in no text
+  // extraction of it, so a transcription error would be silent.
+  it("matches the Thiran design equation evaluated as a product", () => {
+    for (const [frequency, stiffness] of DISPERSION_GRID) {
+      const { a1, a2, phaseDelay } = design(frequency, stiffness);
+      if (phaseDelay === 0) continue;
+      // Recover D from `a1 = -2(D-2)/(D+1)`.
+      const d = (4 - a1) / (a1 + 2);
+      const N = 2;
+      const product = (k: number) => {
+        let value = 1;
+        for (let n = 0; n <= N; n++) value *= (d - N + n) / (d - N + k + n);
+        return value;
+      };
+      expect(a1).toBeCloseTo(-1 * 2 * product(1), 9); // (-1)^1 * (2 choose 1)
+      expect(a2).toBeCloseTo(1 * 1 * product(2), 9); // (-1)^2 * (2 choose 2)
+      expect(d).toBeGreaterThanOrEqual(2); // clamped at N, never below
+    }
+  });
+
+  // The phase delay the loop is told to give back, against the same quantity
+  // computed from the coefficients - and against `D`, which section II-D-2 says
+  // is "a satisfactory approximation" for it. It is: the worst gap over this
+  // grid is 0.026 samples, 0.067 cents of detuning. `dsp.ts` uses the exact
+  // value anyway, because one `atan2` per block is free next to the three `exp`
+  // the parameterization already costs.
+  it("reports the cascade's exact phase delay at the fundamental", () => {
+    let worstApproximation = 0;
+    for (const [frequency, stiffness] of DISPERSION_GRID) {
+      const { a1, a2, phaseDelay } = design(frequency, stiffness);
+      if (phaseDelay === 0) continue;
+      const w = (2 * Math.PI * frequency) / SAMPLE_RATE;
+      expect(phaseDelay).toBeCloseTo(sectionPhaseDelay(a1, a2, w), 9);
+      const d = (4 - a1) / (a1 + 2);
+      const gap = Math.abs(d - phaseDelay);
+      if (gap > worstApproximation) worstApproximation = gap;
+    }
+    expect(worstApproximation).toBeLessThan(0.05); // samples
+  });
+
+  // Phase delay falling with frequency is the whole mechanism: high partials go
+  // round the loop faster, so they sit above the harmonic series.
+  it("delays low frequencies more than high ones, which is what stretches the partials", () => {
+    const { a1, a2, phaseDelay } = design(110, 1);
+    expect(phaseDelay).toBeGreaterThan(2);
+    let previous = Infinity;
+    for (let f = 20; f < SAMPLE_RATE / 2; f *= 1.2) {
+      const delay = sectionPhaseDelay(a1, a2, (2 * Math.PI * f) / SAMPLE_RATE);
+      expect(delay).toBeLessThan(previous);
+      previous = delay;
+    }
+    // "the phase delay decreases monotonically with frequency from D samples at
+    // dc to N samples at the Nyquist frequency" - section II-A.
+    expect(sectionPhaseDelay(a1, a2, Math.PI)).toBeCloseTo(2, 9);
+  });
+
+  it("is exactly bypassed at stiffness 0", () => {
+    for (const frequency of [20, 110, 440, 5000]) {
+      expect(design(frequency, 0)).toEqual({ a1: 0, a2: 0, phaseDelay: 0 });
+    }
+  });
+});
+
+describe("createKS stiffness", () => {
+  it("costs the default path nothing: stiffness 0 is the string", () => {
+    // Not "sounds the same" - the same samples. The cascade is behind one
+    // boolean and it takes no share of the loop length while it is off, so a
+    // default note is the pre-ticket render.
+    const before = withSeededNoise(5, () => pluck(440, 1, 0.2));
+    const after = withSeededNoise(5, () =>
+      pluck(440, 1, 0.2, 0.5, 0.5, 0.5, 0.13, 0, 1, 1, 0),
+    );
+    expect(Array.from(after)).toEqual(Array.from(before));
+  });
+
+  // The baseline: a pure delay line puts every partial at an exact integer
+  // multiple of f0, which is the defect this ticket exists to remove.
+  it("leaves the partials harmonic at stiffness 0", () => {
+    const found = partialSeries(110, 0, 16);
+    expect(found.length).toBe(16);
+    for (let k = 1; k <= found.length; k++) {
+      expect([k, Math.abs(cents(found[k - 1], k * 110)) < 2]).toEqual([
+        k,
+        true,
+      ]);
+    }
+  });
+
+  // And the thing it is for. Partial `k` of a stiff string sits at
+  // `k*f0*sqrt(1 + B*k^2)`, so the deviation from `k*f0` rises monotonically -
+  // measured 0.5 / 6.5 / 38.5 / 91.8 cents at partials 2 / 4 / 8 / 16.
+  it("stretches the partial series monotonically at stiffness 1", () => {
+    const found = partialSeries(110, 1, 16);
+    expect(found.length).toBe(16);
+    const deviation = found.map((f, i) => cents(f, (i + 1) * 110));
+    for (let k = 2; k < deviation.length; k++) {
+      expect([k, deviation[k] > deviation[k - 1]]).toEqual([k, true]);
+    }
+    expect(deviation[0]).toBeCloseTo(0, 0); // the fundamental does not move
+    expect(deviation[15]).toBeGreaterThan(50); // and the 16th is most of a semitone up
+  });
+
+  // Monotone in the knob, too: more stiffness, more stretch, at every partial.
+  it("stretches further as the knob turns", () => {
+    const at = [0, 0.25, 0.5, 0.75, 1].map((stiffness) => {
+      const found = partialSeries(110, stiffness, 16);
+      return cents(found[15], 16 * 110);
+    });
+    for (let i = 1; i < at.length; i++) {
+      expect([i, at[i] > at[i - 1]]).toEqual([i, true]);
+    }
+  });
+
+  // Success criterion 2, half one. The cascade's phase delay comes out of the
+  // loop length - `phaseDelayCompensation`, the same bookkeeping the damping
+  // filter and the interpolator go through - and it is computed at the
+  // fundamental, so the fundamental is where the compensation is exact.
+  //
+  // Measured with the spectral estimator: dispersion is precisely a loss of
+  // periodicity, which is what the autocorrelation one measures, so it is the
+  // wrong tool here even before its 1.4-2.5 cents of lag resolution is counted
+  // against a 5 cent tolerance.
+  it.each([110, 440, 1760])(
+    "does not detune the string as it sweeps, at %p Hz",
+    (frequency) => {
+      const measured = [0, 0.25, 0.5, 0.75, 1].map((stiffness) =>
+        cents(
+          spectralFundamental(
+            pluck(frequency, 1, 0.5, 0.5, 0.5, 0.5, 0.13, 0, 1, 1, stiffness),
+            frequency,
+          ),
+          frequency,
+        ),
+      );
+      expect(Math.max(...measured) - Math.min(...measured)).toBeLessThan(5);
+    },
+  );
+
+  // Success criterion 2, half two, and the consequence of the block being an
+  // allpass. The bound is the same 25% the brightness sweep uses, itself well
+  // inside Jarvelainen and Tolonen's 75-140% audible threshold.
+  it("does not change the decay time as it sweeps", () => {
+    const measured = [0, 0.5, 1].map((stiffness) =>
+      averageT60(440, 1, 0.5, stiffness),
+    );
+    const spread = Math.max(...measured) / Math.min(...measured);
+    expect(spread).toBeLessThan(1.25);
+  });
+
+  // `frequency.maxValue` is a measurement (ticket 05), and a filter that takes
+  // a share of the loop length is exactly the thing that could invalidate it.
+  // At 5 kHz the period is 8.82 samples and `D` has saturated to N, so the
+  // cascade is a pure two-sample delay and the floor is 6.5 - still under the
+  // period, and the declared maximum survives at full stiffness.
+  it("still plays its declared maximum within 5 cents at full stiffness", () => {
+    const MAX_FREQUENCY = PARAMS.find((p) => p.name === "frequency")!.maxValue;
+    let worst = 0;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const signal = pluck(
+        MAX_FREQUENCY,
+        1,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.13,
+        0,
+        1,
+        1,
+        1,
+      );
+      const error = Math.abs(
+        cents(spectralFundamental(signal, MAX_FREQUENCY), MAX_FREQUENCY),
+      );
+      if (error > worst) worst = error;
+    }
+    expect(worst).toBeLessThan(5);
+  });
+
+  it("stays finite and bounded across the corners of the range", () => {
+    let peak = 0;
+    let nonFinite = 0;
+    for (const frequency of [20, 110, 440, 1760, 5000]) {
+      for (const stiffness of [0, 0.5, 1]) {
+        for (const decay of [0.01, 1, 5]) {
+          for (const brightness of [0, 1]) {
+            for (const sample of pluck(
+              frequency,
+              decay,
+              0.3,
+              brightness,
+              1,
+              1,
+              0.13,
+              0,
+              1,
+              1,
+              stiffness,
+            )) {
+              if (!Number.isFinite(sample)) nonFinite++;
+              else if (Math.abs(sample) > peak) peak = Math.abs(sample);
+            }
+          }
+        }
+      }
+    }
+    expect(nonFinite).toBe(0);
+    // An allpass has magnitude exactly 1 at every frequency, so the loop is a
+    // contraction for exactly the reason it was before and `rho < 1` bounds it -
+    // which the 30 second render below is what actually proves.
+    //
+    // It is not, however, unity gain in the *time* domain, and this sweep is
+    // where that shows: `level` 1 into the pick-position comb, whose peak gain
+    // is 2, already reaches 2.25 with the cascade bypassed, and 2.71 with it at
+    // half stiffness. The extra 1.7 dB is a burst arriving all at once and
+    // coming back out smeared, so parts of it that used to cancel now overlap.
+    // The shipped defaults peak at 0.28; `level` is what buys the headroom, and
+    // that is the parameter's whole job.
+    expect(peak).toBeLessThan(3);
+  }, 120_000);
+
+  it("never grows over a 30 second render at full stiffness", () => {
+    for (const frequency of [110, 440]) {
+      const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+      const block = new Float32Array(BLOCK);
+      let firstSecond = 0;
+      let lastSecond = 0;
+      let nonFinite = 0;
+      const total = SAMPLE_RATE * 30;
+
+      for (let n = 0; n < total; n += BLOCK) {
+        ks(block, 1, frequency, 5, 1, 1, 1, 0, 0, 1, 1, 1);
+        for (const sample of block) {
+          if (!Number.isFinite(sample)) nonFinite++;
+          else if (n < SAMPLE_RATE) {
+            if (Math.abs(sample) > firstSecond) firstSecond = Math.abs(sample);
+          } else if (n >= total - SAMPLE_RATE) {
+            if (Math.abs(sample) > lastSecond) lastSecond = Math.abs(sample);
+          }
+        }
+      }
+
+      expect([frequency, nonFinite]).toEqual([frequency, 0]);
       expect(lastSecond).toBeLessThanOrEqual(firstSecond);
     }
   }, 120_000);
