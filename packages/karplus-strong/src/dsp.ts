@@ -487,8 +487,23 @@ export function createString(sampleRate: number, minFrequency: number) {
      * cannot outlast the loop; the comb and the level filter's tail
      * deliberately do, exactly as Smith's chain does, and what keeps the sum
      * inside full scale there is `level`.
+     *
+     * `draws` replaces the burst's `Math.random()` with uniform values in
+     * [-1, 1) supplied by the caller, which is how two of these closures become
+     * two *polarizations of one string* rather than two notes - Laurson et al.
+     * 2001: "Two basic string models of Figure 1 are used for each guitar
+     * string... They feed both from the same excitation." Omitted, this draws
+     * for itself exactly as it always has. Each string still removes its own
+     * burst's mean over its own burst length, because the two lengths differ by
+     * the detuning and by the dispersion compensation.
      */
-    pluck(level = 1, dynamics = 1, position = 0, pickAngle = 0) {
+    pluck(
+      level = 1,
+      dynamics = 1,
+      position = 0,
+      pickAngle = 0,
+      draws?: ArrayLike<number>,
+    ) {
       line.fill(0);
       x1 = 0;
       x2 = 0;
@@ -530,7 +545,8 @@ export function createString(sampleRate: number, minFrequency: number) {
       } else {
         let sum = 0;
         for (let i = 0; i < burstLength; i++) {
-          const value = level * (Math.random() * 2 - 1);
+          const value =
+            level * (draws === undefined ? Math.random() * 2 - 1 : draws[i]);
           noise[i] = value;
           sum += value;
         }
@@ -777,6 +793,60 @@ export function createString(sampleRate: number, minFrequency: number) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Two polarizations.
+//
+// A real string vibrates in two planes at once, and they couple to the bridge
+// differently. Jarvelainen and Karjalainen 2002 section 2 - read off the
+// rendered pages, this paper's text layer is mis-encoded - is the whole design:
+//
+//   "because of unequal bridge impedance seen by the polarization components,
+//   they have slightly different decay times. The horizontal polarization is
+//   dominant at first, having a much higher initial amplitude than the vertical
+//   component. However, it is decaying faster than the vertical component,
+//   which after a while becomes dominant. Thus the fast decaying but louder
+//   'prompt sound' is followed by the more sustained 'aftersound'."
+//
+//   "The unequal bridge impedance also causes a difference in the effective
+//   lenght of the string between the vertical and horizontal components. This
+//   results in a slight difference in the corresponding fundamental
+//   frequencies, which can be observed as beating."
+//
+// So the louder component is the faster one, which fixes every sign here: the
+// loop that carries most of the mix keeps `decay`'s own `rho`, and the second
+// loop is both quieter and slower. The mix parameter and the decay difference
+// are therefore one knob rather than two - which is what their section 6 says
+// they are: "If the polarization components are made equally strong, the
+// two-stage decay cannot be implemented at all."
+// ---------------------------------------------------------------------------
+
+// How much longer the weak polarization rings. Their section 6 says
+// "differences between 30 % and 90 % in the time constants of the horizontal
+// and vertical components were allowed perceptually", which is ambiguous about
+// what the percentage is of; Fig. 7's caption is not, and it is what pins this
+// number - they tested `t_h = 0.30 s` against `t_v = 0.54...1.7 s`, a ratio of
+// 1.8 to 5.7. Three is inside that on either reading, and it is the smallest
+// round number that makes the effect exist: modelled, the early-to-late decay
+// rate ratio at a 7 dB level difference is 1.60 at twice the time constant,
+// 1.87 at 2.5 and 2.14 at three.
+//
+// It is not free. The aftersound outlasts `decay` - about 2x at a useful mix,
+// 2.7x at equal strength - because `decay` is applied to the *prompt* sound,
+// which is the component it belongs to. Ticket 02's decay assertions are
+// unaffected: they run at `polarization = 0`, where there is no second loop.
+//
+// `rho = 0.001^(1/(f0*t60))`, so three times the time constant is `rho^(1/3)`.
+const POLARIZATION_TIME_CONSTANT = 3;
+
+// `detune` in cents rather than in Hz, because the mechanism above is a
+// difference in *effective length* and a length difference is a constant
+// relative frequency difference. So the beat rate scales with pitch, which is
+// what a real string does: 0.64 Hz at 110 Hz, 2.5 Hz at 440, 10.2 Hz at 1760.
+//
+// The range is **ours and unsourced**, the same kind of product decision as
+// ticket 09's stiffness taper - no paper in this corpus prescribes one.
+const MAX_DETUNE_CENTS = 10;
+
 /** One voice: a string, the gate contract, and the parameter mapping. */
 export function createKS(sampleRate: number, minFrequency: number) {
   const targetAmplitude = 0.001; // Amplitude decays to 0.1% of initial value
@@ -789,6 +859,16 @@ export function createKS(sampleRate: number, minFrequency: number) {
   // Scratch for the per-sample loop length when `frequency` is a-rate.
   // Allocated once and grown only if a host ever renders a longer block.
   let delays = new Float64Array(128);
+
+  // The second polarization, and everything it needs, allocated on the first
+  // block that asks for it. A patch that never turns `polarization` up never
+  // pays the second delay line's 8.8 KB, never fills a shared burst and never
+  // runs a mix pass - which is what makes the default path bit-identical rather
+  // than merely equivalent.
+  let second: ReturnType<typeof createString> | undefined;
+  let draws: Float64Array | undefined; // one burst, shared by both loops
+  let detunedDelays: Float64Array | undefined; // a-rate, for the second loop
+  let mix: Float32Array | undefined; // the second loop's own output block
 
   return (
     output: Float32Array,
@@ -809,6 +889,10 @@ export function createKS(sampleRate: number, minFrequency: number) {
     stretch = 1,
     blend = 1,
     stiffness = 0,
+    // And these two are the second polarization. `polarization: 0` is one
+    // string and costs exactly what one string cost.
+    detune = 0.5,
+    polarization = 0,
   ) => {
     // Smith 3.3: the loop filter is applied once per period, so -60 dB in
     // `decay` seconds needs `rho^(f0*decay) = 0.001`. Pitch-independent by
@@ -838,20 +922,93 @@ export function createKS(sampleRate: number, minFrequency: number) {
     string.setDelay(sampleRate / firstFrequency);
 
     const periods = firstFrequency * decay;
-    string.setDamping(
+    const rho =
       periods > 0
         ? Math.min(Math.pow(targetAmplitude, 1 / periods), maxLoopGain)
-        : 0, // a non-positive decay would invert the exponent and grow the loop
-      brightness,
-      stretch,
-      blend,
+        : 0; // a non-positive decay would invert the exponent and grow the loop
+    string.setDamping(rho, brightness, stretch, blend);
+
+    // The second polarization: quieter by `polarization`, slower by
+    // `POLARIZATION_TIME_CONSTANT`, and sharp by `detune`. Sharp rather than
+    // flat so its loop is the *shorter* of the two, which is what lets one
+    // shared burst sized from the first loop cover both.
+    const amount = polarization > 0 ? Math.min(polarization, 1) : 0;
+    const dual = amount > 0;
+    const ratio = Math.pow(
+      2,
+      (MAX_DETUNE_CENTS * Math.min(Math.max(detune, 0), 1)) / 1200,
     );
+    if (dual) {
+      if (second === undefined) second = createString(sampleRate, minFrequency);
+      const detuned = firstFrequency * ratio;
+      if (perSample) {
+        if (detunedDelays === undefined || detunedDelays.length < length) {
+          detunedDelays = new Float64Array(length);
+        }
+        for (let i = 0; i < length; i++) detunedDelays[i] = delays[i] / ratio;
+      }
+      second.setDispersion(stiffness, detuned);
+      second.setDelay(sampleRate / detuned);
+      second.setDamping(
+        rho > 0
+          ? Math.min(Math.pow(rho, 1 / POLARIZATION_TIME_CONSTANT), maxLoopGain)
+          : 0,
+        brightness,
+        stretch,
+        blend,
+      );
+      if (mix === undefined || mix.length < length) {
+        mix = new Float32Array(length);
+      }
+    }
+
+    // One burst, drawn here and handed to both loops, so the two are two
+    // polarizations of one pluck rather than two notes. Sized from the first
+    // loop, which is the longer of the two; each string uses the prefix its own
+    // burst length asks for. Not drawn at all while `dual` is false, which is
+    // what keeps the single-polarization path's `Math.random` sequence - and so
+    // its samples - identical to the pre-ticket one.
+    const excite = (loopLength: number) => {
+      if (!dual) {
+        string.pluck(level, dynamics, position, pickAngle);
+        return;
+      }
+      const wanted = Math.min(
+        Math.ceil(loopLength),
+        Math.ceil(sampleRate / minFrequency),
+      );
+      if (draws === undefined || draws.length < wanted) {
+        draws = new Float64Array(Math.ceil(sampleRate / minFrequency));
+      }
+      for (let i = 0; i < wanted; i++) draws[i] = Math.random() * 2 - 1;
+      string.pluck(level, dynamics, position, pickAngle, draws);
+      second!.pluck(level, dynamics, position, pickAngle, draws);
+    };
 
     let start = 0;
-    const render = (a: number, b: number) =>
-      perSample
-        ? string.process(output, a, b, delays)
-        : string.process(output, a, b);
+    const render = (a: number, b: number) => {
+      if (!dual) {
+        if (perSample) string.process(output, a, b, delays);
+        else string.process(output, a, b);
+        return;
+      }
+      if (perSample) {
+        string.process(output, a, b, delays);
+        second!.process(mix!, a, b, detunedDelays!);
+      } else {
+        string.process(output, a, b);
+        second!.process(mix!, a, b);
+      }
+      // A convex combination, and that is the amplitude bound: the weights sum
+      // to 1, so the mix can never exceed the louder of the two strings. It is
+      // also why `polarization` is not a volume knob - the two loops are near
+      // copies of each other, so their weighted mean sits at one string's level
+      // instead of summing to two.
+      const norm = 1 / (1 + amount);
+      for (let i = a; i < b; i++) {
+        output[i] = (output[i] + amount * mix![i]) * norm;
+      }
+    };
 
     // The rising edge is the whole anti-double-trigger rule: re-plucking needs
     // the trigger to return to <= 0 first, which is a genuine retrigger.
@@ -859,7 +1016,7 @@ export function createKS(sampleRate: number, minFrequency: number) {
       // k-rate: one value for the block, tested once - what it cost before.
       const value = typeof trigger === "number" ? trigger : trigger[0];
       if (detectGate(value) === true) {
-        string.pluck(level, dynamics, position, pickAngle);
+        excite(sampleRate / firstFrequency);
       }
     } else {
       // a-rate: the block is rendered in segments split at the rising edges,
@@ -870,8 +1027,11 @@ export function createKS(sampleRate: number, minFrequency: number) {
           if (i > start) render(start, i);
           // A pluck starts in tune at whatever the pitch is *now*, rather than
           // gliding into it from the previous note.
-          string.setDelay(perSample ? delays[i] : sampleRate / firstFrequency);
-          string.pluck(level, dynamics, position, pickAngle);
+          const at = perSample ? delays[i] : sampleRate / firstFrequency;
+          string.setDelay(at);
+          if (dual)
+            second!.setDelay(perSample ? detunedDelays![i] : at / ratio);
+          excite(at);
           start = i;
         }
       }

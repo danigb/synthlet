@@ -170,4 +170,61 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "k-rate",
   },
+  // And these two are the second polarization. A real string vibrates in two
+  // planes at once and they couple to the bridge differently, which is where
+  // beating and the two-stage decay both come from - Jarvelainen and
+  // Karjalainen 2002 section 2. `polarization` at 0 is one string and costs
+  // exactly what one string cost.
+  {
+    // How far the second polarization is mistuned, 0 to 10 cents. In *cents*
+    // rather than Hz because the mechanism is a difference in the string's
+    // effective length between the two planes, and a length difference is a
+    // constant relative frequency difference - so the beat rate follows the
+    // pitch, as a real string's does: 0.64 Hz at 110 Hz, 2.5 Hz at 440,
+    // 10.2 Hz at 1760.
+    //
+    // The range is **ours and unsourced**, like `stiffness`'s taper. The
+    // default sits mid-range so that turning `polarization` up on its own gives
+    // the beating the feature exists for; 0 gives a pure two-stage decay with
+    // no beating, which is Karjalainen, Valimaki and Tolonen's Fig. 10(b).
+    //
+    // It does nothing while `polarization` is 0.
+    name: "detune",
+    defaultValue: 0.5,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // How strong the second polarization is, and therefore how much of each
+    // effect there is. It is *one* knob for both on purpose: Jarvelainen and
+    // Karjalainen section 6 found that "if the polarization components are made
+    // equally strong, the two-stage decay cannot be implemented at all", so a
+    // control scheme with independent mix and decay-difference knobs would be
+    // offering a setting that does not exist.
+    //
+    // The value is the second component's amplitude relative to the first, so
+    // it *is* the level difference the paper measured thresholds against:
+    // `-20*log10(polarization)` dB. Their two findings land at 0.45 ("reduction
+    // of level of the vertical component was detected poorly until the level
+    // difference was about 7 dB") and 0.126 ("for differences greater than
+    // 18 dB beatings remained inaudible").
+    //
+    // - **0**, the default: one string, and bit-identical to the module without
+    //   this feature. No second delay line is even allocated.
+    // - **mid**: the characteristic pair - a loud fast "prompt sound" giving way
+    //   to a quiet, slow "aftersound", plus beating from `detune`.
+    // - **1**: equally strong, maximum beating, and no two-stage decay left.
+    //
+    // The weak polarization rings three times as long as the strong one, which
+    // is not a free parameter here - see `POLARIZATION_TIME_CONSTANT` in
+    // `dsp.ts`. So the note outlasts `decay` in dual mode, by about 2x at a
+    // useful mix: `decay` is the *prompt* sound's time, which is the component
+    // it is applied to.
+    name: "polarization",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
 ];

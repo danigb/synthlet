@@ -84,6 +84,8 @@ function pluck(
   stretch = 1,
   blend = 1,
   stiffness = 0,
+  detune = 0.5,
+  polarization = 0,
 ) {
   const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
   const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
@@ -102,6 +104,8 @@ function pluck(
       stretch,
       blend,
       stiffness,
+      detune,
+      polarization,
     );
     output.set(block.subarray(0, Math.min(BLOCK, output.length - n)), n);
   }
@@ -1729,6 +1733,7 @@ function partialSeries(
   stiffness: number,
   count: number,
   size = SPECTRAL_WINDOW,
+  polarization = 0,
 ) {
   const signal = pluck(
     frequency,
@@ -1742,6 +1747,8 @@ function partialSeries(
     1,
     1,
     stiffness,
+    0, // `detune` 0: one pitch, so a partial is one line rather than two
+    polarization,
   );
   const start = Math.round(0.02 * SAMPLE_RATE);
   const re = new Float64Array(size);
@@ -2015,32 +2022,41 @@ describe("createKS stiffness", () => {
     expect(worst).toBeLessThan(5);
   });
 
+  // Seeded, because the quantity is the peak of a noise burst and so is a
+  // random variable: unseeded, this sweep measured min 2.315, max 3.253, mean
+  // 2.618 over 40 draws, and crossed 3 in 3 of them - a test that fails one run
+  // in thirteen while asserting nothing that changed. Eight fixed seeds keep
+  // the coverage and make the verdict deterministic.
   it("stays finite and bounded across the corners of the range", () => {
     let peak = 0;
     let nonFinite = 0;
-    for (const frequency of [20, 110, 440, 1760, 5000]) {
-      for (const stiffness of [0, 0.5, 1]) {
-        for (const decay of [0.01, 1, 5]) {
-          for (const brightness of [0, 1]) {
-            for (const sample of pluck(
-              frequency,
-              decay,
-              0.3,
-              brightness,
-              1,
-              1,
-              0.13,
-              0,
-              1,
-              1,
-              stiffness,
-            )) {
-              if (!Number.isFinite(sample)) nonFinite++;
-              else if (Math.abs(sample) > peak) peak = Math.abs(sample);
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      withSeededNoise(seed, () => {
+        for (const frequency of [20, 110, 440, 1760, 5000]) {
+          for (const stiffness of [0, 0.5, 1]) {
+            for (const decay of [0.01, 1, 5]) {
+              for (const brightness of [0, 1]) {
+                for (const sample of pluck(
+                  frequency,
+                  decay,
+                  0.3,
+                  brightness,
+                  1,
+                  1,
+                  0.13,
+                  0,
+                  1,
+                  1,
+                  stiffness,
+                )) {
+                  if (!Number.isFinite(sample)) nonFinite++;
+                  else if (Math.abs(sample) > peak) peak = Math.abs(sample);
+                }
+              }
             }
           }
         }
-      }
+      });
     }
     expect(nonFinite).toBe(0);
     // An allpass has magnitude exactly 1 at every frequency, so the loop is a
@@ -2054,7 +2070,11 @@ describe("createKS stiffness", () => {
     // coming back out smeared, so parts of it that used to cancel now overlap.
     // The shipped defaults peak at 0.28; `level` is what buys the headroom, and
     // that is the parameter's whole job.
-    expect(peak).toBeLessThan(3);
+    //
+    // The bound is 3.5 rather than 3 because 3 was below the distribution's own
+    // maximum, not because anything got louder: over the eight seeds this
+    // asserts, the worst corner is 3.25.
+    expect(peak).toBeLessThan(3.5);
   }, 120_000);
 
   it("never grows over a 30 second render at full stiffness", () => {
@@ -2079,6 +2099,474 @@ describe("createKS stiffness", () => {
       }
 
       expect([frequency, nonFinite]).toEqual([frequency, 0]);
+      expect(lastSecond).toBeLessThanOrEqual(firstSecond);
+    }
+  }, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// Two polarizations. A real string vibrates in two planes at once and they
+// couple to the bridge differently, which is where the two most characteristic
+// features of a string tone come from - beating, and a two-stage decay.
+//
+// Jarvelainen and Karjalainen 2002 section 2, read off the rendered pages
+// because this paper's text layer is mis-encoded:
+//
+//   "The horizontal polarization is dominant at first, having a much higher
+//   initial amplitude than the vertical component. However, it is decaying
+//   faster than the vertical component, which after a while becomes dominant.
+//   Thus the fast decaying but louder 'prompt sound' is followed by the more
+//   sustained 'aftersound'."
+//
+// The louder component is the faster one, and that single fact fixes every sign
+// in the implementation. Their section 6 supplies the tolerances asserted here.
+// ---------------------------------------------------------------------------
+
+/**
+ * The amplitude envelope of one partial, by complex demodulation.
+ *
+ * Not the broadband envelope, and Fig. 1's caption says why: the overall
+ * amplitude of a beating string shows "the complex effect of the beating
+ * patterns of individual harmonics", because partial `k` beats at `k` times the
+ * fundamental's rate. The criterion is about one partial's beat, so the
+ * measurement isolates one - multiply by `e^(-jwt)` to bring it to dc, then
+ * lowpass. Four cascaded one-poles rather than one: a single pole is 6 dB per
+ * octave and leaves enough of the carrier through that the "beat rate" comes
+ * back as the carrier frequency.
+ */
+function partialEnvelope(
+  signal: Float32Array,
+  frequency: number,
+  fromSeconds: number,
+  toSeconds: number,
+  cutoff = 20,
+) {
+  const from = Math.round(fromSeconds * SAMPLE_RATE);
+  const to = Math.min(signal.length, Math.round(toSeconds * SAMPLE_RATE));
+  const w = (2 * Math.PI * frequency) / SAMPLE_RATE;
+  const coefficient = 1 - Math.exp((-2 * Math.PI * cutoff) / SAMPLE_RATE);
+  const POLES = 4;
+  const re = new Float64Array(POLES);
+  const im = new Float64Array(POLES);
+  const envelope = new Float64Array(Math.max(0, to - from));
+  for (let i = from; i < to; i++) {
+    let real = signal[i] * Math.cos(w * i);
+    let imaginary = -signal[i] * Math.sin(w * i);
+    for (let pole = 0; pole < POLES; pole++) {
+      re[pole] += coefficient * (real - re[pole]);
+      im[pole] += coefficient * (imaginary - im[pole]);
+      real = re[pole];
+      imaginary = im[pole];
+    }
+    envelope[i - from] = Math.hypot(real, imaginary);
+  }
+  return envelope;
+}
+
+/**
+ * The beat rate in Hz: the spectral peak of the envelope once its exponential
+ * decay has been taken out, which in the log domain is a straight line.
+ */
+function beatRate(envelope: Float64Array) {
+  let size = 1;
+  while (size * 2 <= envelope.length) size *= 2;
+  const log = new Float64Array(size);
+  for (let i = 0; i < size; i++) log[i] = Math.log(envelope[i] + 1e-30);
+  let sumX = 0;
+  let sumY = 0;
+  let sumXX = 0;
+  let sumXY = 0;
+  for (let i = 0; i < size; i++) {
+    sumX += i;
+    sumY += log[i];
+    sumXX += i * i;
+    sumXY += i * log[i];
+  }
+  const slope = (size * sumXY - sumX * sumY) / (size * sumXX - sumX * sumX);
+  const intercept = (sumY - slope * sumX) / size;
+
+  const re = new Float64Array(size);
+  const im = new Float64Array(size);
+  for (let i = 0; i < size; i++) {
+    const hann = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (size - 1));
+    re[i] = (log[i] - (slope * i + intercept)) * hann;
+  }
+  fft(re, im);
+  const power = (k: number) => re[k] * re[k] + im[k] * im[k];
+  let peak = 1;
+  for (let k = 1; k < size / 2; k++) if (power(k) > power(peak)) peak = k;
+  const magnitude = (k: number) => Math.log(Math.sqrt(power(k)) + 1e-30);
+  const a = magnitude(peak - 1);
+  const b = magnitude(peak);
+  const c = magnitude(peak + 1);
+  const denominator = a - 2 * b + c;
+  const refined =
+    denominator !== 0 ? peak + (0.5 * (a - c)) / denominator : peak;
+  return (refined * SAMPLE_RATE) / size;
+}
+
+/**
+ * Modulation depth: the envelope divided by its own local mean over one beat
+ * period, which takes out both the exponential decay and the two-stage knee and
+ * leaves the modulation. For two components of amplitude `A1` and `A2` it is
+ * `A2/A1`, so it reads the level difference straight back out - but only while
+ * the two ratios are what they were at the pluck, which is why every use of it
+ * below measures an *early* window. The two components decay at different rates
+ * by design, so `A2/A1` climbs through 1 as the note rings and the depth
+ * measured late is a statement about the decay difference, not the mix.
+ */
+function beatDepth(envelope: Float64Array, rateHz: number) {
+  const period = Math.max(2, Math.round(SAMPLE_RATE / rateHz));
+  const n = envelope.length;
+  const running = new Float64Array(n + 1);
+  for (let i = 0; i < n; i++) running[i + 1] = running[i] + envelope[i];
+  let high = -Infinity;
+  let low = Infinity;
+  for (let i = Math.floor(n * 0.2); i < Math.floor(n * 0.8); i++) {
+    const from = Math.max(0, i - (period >> 1));
+    const to = Math.min(n, i + (period >> 1));
+    const value = envelope[i] / ((running[to] - running[from]) / (to - from));
+    if (value > high) high = value;
+    if (value < low) low = value;
+  }
+  return high + low > 0 ? (high - low) / (high + low) : 0;
+}
+
+/** dB per second of the broadband envelope between two instants. */
+function decayRate(
+  signal: Float32Array,
+  fromSeconds: number,
+  toSeconds: number,
+) {
+  const first = Math.round(fromSeconds * SAMPLE_RATE);
+  const last = Math.round(toSeconds * SAMPLE_RATE);
+  let level = 0;
+  let atFirst = 0;
+  let atLast = 0;
+  for (let i = 0; i <= last && i < signal.length; i++) {
+    level += ENVELOPE_COEFFICIENT * (Math.abs(signal[i]) - level);
+    if (i === first) atFirst = level;
+    if (i === last) atLast = level;
+  }
+  return (
+    (20 * Math.log10(Math.max(atFirst, 1e-30) / Math.max(atLast, 1e-30))) /
+    (toSeconds - fromSeconds)
+  );
+}
+
+/**
+ * How much faster the note falls early than late, averaged over eight plucks -
+ * the two-stage decay as one number. Measured at `brightness` 1, where the
+ * damping filter degenerates to a plain delay and each polarization really is
+ * one exponential, so a ratio above 1 means two stages rather than "high
+ * partials died first". The control below reads 1.18 there.
+ */
+const TWO_STAGE_PLUCKS = 8;
+function twoStageRatio(polarization: number, detune = 0) {
+  let total = 0;
+  for (let i = 0; i < TWO_STAGE_PLUCKS; i++) {
+    const signal = pluck(
+      220,
+      2,
+      4,
+      1,
+      1,
+      1,
+      0,
+      0,
+      1,
+      1,
+      0,
+      detune,
+      polarization,
+    );
+    total += decayRate(signal, 0.05, 0.4) / decayRate(signal, 1.6, 2.6);
+  }
+  return total / TWO_STAGE_PLUCKS;
+}
+
+/** The level difference in dB the paper measured its thresholds against. */
+const levelDifference = (polarization: number) =>
+  -20 * Math.log10(polarization);
+
+describe("createKS polarization", () => {
+  it("costs the default path nothing: polarization 0 is one string", () => {
+    // Not "sounds the same" - the same samples. The second string, the shared
+    // burst buffer, the second delay array and the mix pass are all allocated
+    // on the first block that asks for them, and nothing asks while this is 0.
+    // In particular no extra `Math.random` is drawn, which is what this seeded
+    // comparison would otherwise catch immediately.
+    const before = withSeededNoise(11, () => pluck(440, 1, 0.2));
+    const after = withSeededNoise(11, () =>
+      pluck(440, 1, 0.2, 0.5, 0.5, 0.5, 0.13, 0, 1, 1, 0, 0.5, 0),
+    );
+    expect(Array.from(after)).toEqual(Array.from(before));
+  });
+
+  // "When the two models are slightly mistuned, a natural sounding beat effect
+  // results" - Karjalainen, Valimaki and Tolonen 1998. The rate of that beat is
+  // the frequency difference between the two loops, and `detune` is in cents,
+  // so it scales with pitch: measured 0.633 / 1.266 Hz at 220 Hz and 1.264 /
+  // 2.546 at 440, against 0.636 / 1.274 / 1.273 / 2.549 asked for. Worst error
+  // over the four, 0.7%.
+  it.each([220, 440])(
+    "beats at the detuning, at %p Hz",
+    (frequency) => {
+      for (const detune of [0.5, 1]) {
+        const MAX_DETUNE_CENTS = 10; // `dsp.ts`
+        const expected =
+          frequency * (Math.pow(2, (MAX_DETUNE_CENTS * detune) / 1200) - 1);
+        const signal = pluck(
+          frequency,
+          5,
+          6,
+          1,
+          0.5,
+          1,
+          0,
+          0,
+          1,
+          1,
+          0,
+          detune,
+          1,
+        );
+        const measured = beatRate(
+          partialEnvelope(signal, frequency, 0.05, 5.8),
+        );
+        expect([
+          frequency,
+          detune,
+          Math.abs(measured / expected - 1) < 0.1,
+        ]).toEqual([frequency, detune, true]);
+      }
+    },
+    60_000,
+  );
+
+  // Jarvelainen and Karjalainen section 6: "Reduction of level of the vertical
+  // component was detected poorly until the level difference was about 7 dB,
+  // and for differences greater than 18 dB beatings remained inaudible."
+  //
+  // The parameter *is* that level difference - it is the second component's
+  // amplitude relative to the first, so the difference is `-20*log10(p)` - and
+  // the two thresholds are therefore knob positions, 0.45 and 0.126. This is
+  // the assertion that the declared range spans the region they measured and
+  // that the depth tracks it.
+  it("loses its beating as the level difference rises past 18 dB", () => {
+    const depths = [1, 0.45, 0.25, 0.126, 0.063].map((polarization) => {
+      // 1760 Hz and full `detune`, so the beat is 10.2 Hz and several cycles
+      // fit in a window short enough that the two components' decay difference
+      // has not yet moved their ratio - see `beatDepth`.
+      const signal = pluck(
+        1760,
+        5,
+        3,
+        1,
+        0.5,
+        1,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        polarization,
+      );
+      const rate = beatRate(partialEnvelope(signal, 1760, 0.05, 2.8, 40));
+      return beatDepth(partialEnvelope(signal, 1760, 0.05, 0.5, 40), rate);
+    });
+    // Measured 0.99 / 0.55 / 0.31 / 0.16 / 0.08 at 0 / 6.9 / 12 / 18 / 24 dB,
+    // which is the amplitude ratio itself, as it should be.
+    for (let i = 1; i < depths.length; i++) {
+      expect([i, depths[i] < depths[i - 1]]).toEqual([i, true]);
+    }
+    expect(depths[0]).toBeGreaterThan(0.8); // equal strength: full modulation
+    expect(depths[3]).toBeLessThan(0.2); // 18 dB apart, where the paper found it inaudible
+    expect(levelDifference(0.126)).toBeCloseTo(18, 0);
+    expect(levelDifference(0.45)).toBeCloseTo(7, 0);
+  }, 60_000);
+
+  // The other half of section 2: the loud component decays fast, the quiet one
+  // rings on, and the sum has a knee. `detune` is 0 here, which is Karjalainen,
+  // Valimaki and Tolonen's Fig. 10(b) - equal fundamentals, different loop
+  // filters - so what is measured is the decay alone, with no beating in it.
+  it("decays in two stages at an intermediate polarization", () => {
+    // Measured 1.18 for one string, 2.67 for two.
+    expect(twoStageRatio(0)).toBeLessThan(1.5);
+    expect(twoStageRatio(0.25)).toBeGreaterThan(2);
+  }, 120_000);
+
+  // "If the polarization components are made equally strong, the two-stage
+  // decay cannot be implemented at all" - section 6, and the reason the mix and
+  // the decay difference are one knob here rather than two. The knee does not
+  // vanish at equal strength, but it flattens: measured 2.67 at 12 dB apart
+  // against 2.28 at 0 dB, because the crossover moves to the very start of the
+  // note and there is no first stage left to hear.
+  it("flattens the knee as the components approach equal strength", () => {
+    expect(twoStageRatio(1)).toBeLessThan(twoStageRatio(0.25));
+  }, 120_000);
+
+  // Ticket 02's pitch assertion, in dual mode, with `detune` at 0 so there is
+  // one pitch to measure. With `detune` up the pair deliberately spans up to
+  // 10 cents and "the pitch" is the pair's rather than a line: measured 4.3 to
+  // 5.3 cents at half detuning, which is the mistuning, not an error.
+  it.each([110, 440, 1760])(
+    "still plays %p Hz within 5 cents with both polarizations",
+    (frequency) => {
+      const signal = pluck(
+        frequency,
+        1,
+        0.5,
+        0.5,
+        0.5,
+        0.5,
+        0.13,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+      );
+      expect(
+        Math.abs(cents(spectralFundamental(signal, frequency), frequency)),
+      ).toBeLessThan(5);
+    },
+  );
+
+  // Ticket 02's decay assertion, *re-derived* rather than loosened, which is
+  // what success criterion 4 asks for: two-stage decay is not one exponential,
+  // so the number to compare against is the two-exponential model's own t60.
+  // The weak polarization rings `POLARIZATION_TIME_CONSTANT` = 3 times as long,
+  // with amplitudes `1/(1+p)` and `p/(1+p)`, so the sum reaches -60 dB later
+  // than `decay` asks - 2.30 s at 12 dB apart and 2.70 s at equal strength, for
+  // a `decay` of 1. `decay` is the *prompt* sound's time, which is the
+  // component it is applied to.
+  //
+  // At `brightness` 1, where the damping filter is a plain delay and each
+  // polarization really is one exponential - the same condition ticket 04's own
+  // t60 assertion is made under, and for the same reason.
+  it("rings past `decay` by what the two-exponential model predicts", () => {
+    const RATIO = 3; // POLARIZATION_TIME_CONSTANT
+    for (const polarization of [0.25, 1]) {
+      const tau = 1 / Math.log(1000); // decay = 1 s
+      const first = 1 / (1 + polarization);
+      const second = polarization / (1 + polarization);
+      const level = (t: number) =>
+        first * Math.exp(-t / tau) + second * Math.exp(-t / (RATIO * tau));
+      let low = 0;
+      let high = 20;
+      for (let i = 0; i < 200; i++) {
+        const middle = (low + high) / 2;
+        if (level(middle) > 0.001) low = middle;
+        else high = middle;
+      }
+      let total = 0;
+      const PLUCKS = 8;
+      for (let i = 0; i < PLUCKS; i++) {
+        total += t60(
+          pluck(440, 1, 8, 1, 0.5, 0.5, 0.13, 0, 1, 1, 0, 0, polarization),
+        );
+      }
+      // Measured 0.94 and 0.93 of the model. The band is Jarvelainen and
+      // Tolonen's 75-140%, applied to the model rather than to `decay`.
+      const ratio = total / PLUCKS / low;
+      expect([polarization, ratio >= 0.75 && ratio <= 1.4]).toEqual([
+        polarization,
+        true,
+      ]);
+    }
+  }, 120_000);
+
+  // The second loop is the *final* loop, not a stripped copy: same damping
+  // filter, same Lagrange read, same dispersion cascade, same probabilistic
+  // variants. A second polarization built without ticket 09's cascade would put
+  // its partials on the harmonic series while the first loop's were stretched,
+  // so the eighth partial of the mix would sit between the two.
+  it("gives the second polarization the whole string, dispersion included", () => {
+    // Tracked upwards rather than searched around `8*f0`: a stretched eighth
+    // partial has moved further than half the spacing, so a fixed window finds
+    // the ninth.
+    const eighth = (stiffness: number, polarization: number) =>
+      cents(
+        partialSeries(110, stiffness, 8, SPECTRAL_WINDOW, polarization)[7],
+        8 * 110,
+      );
+    expect(Math.abs(eighth(0, 1))).toBeLessThan(2); // harmonic with both loops
+    // 38.6 cents is where one dispersed string puts the eighth partial. Both
+    // loops dispersed put the pair in the same place; a second polarization
+    // built without the cascade would leave it half way back to harmonic.
+    expect(eighth(1, 1)).toBeGreaterThan(30);
+    expect(Math.abs(eighth(1, 1) - eighth(1, 0))).toBeLessThan(5);
+  });
+
+  // Seeded for the same reason as the stiffness sweep above: the peak of a
+  // noise burst is a random variable. This one measured min 1.955, max 2.518,
+  // mean 2.067 over 40 draws, so it was not failing - but an unseeded peak
+  // bound is a flake waiting for a change that shifts the mean.
+  it("stays finite and bounded across the corners of the range", () => {
+    let peak = 0;
+    let nonFinite = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      withSeededNoise(seed, () => {
+        for (const frequency of [20, 110, 440, 1760, 5000]) {
+          for (const polarization of [0, 0.5, 1]) {
+            for (const detune of [0, 1]) {
+              for (const stiffness of [0, 1]) {
+                for (const sample of pluck(
+                  frequency,
+                  1,
+                  0.3,
+                  0.5,
+                  1,
+                  1,
+                  0.13,
+                  0,
+                  1,
+                  1,
+                  stiffness,
+                  detune,
+                  polarization,
+                )) {
+                  if (!Number.isFinite(sample)) nonFinite++;
+                  else if (Math.abs(sample) > peak) peak = Math.abs(sample);
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+    expect(nonFinite).toBe(0);
+    // The mix is a convex combination - the weights are `1/(1+p)` and
+    // `p/(1+p)` and they sum to 1 - so it can never exceed the louder of the
+    // two strings, and the bound is the single-string one rather than twice it.
+    expect(peak).toBeLessThan(3);
+  }, 120_000);
+
+  it("never grows over a 30 second render with both polarizations", () => {
+    for (const polarization of [0.5, 1]) {
+      const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+      const block = new Float32Array(BLOCK);
+      let firstSecond = 0;
+      let lastSecond = 0;
+      let nonFinite = 0;
+      const total = SAMPLE_RATE * 30;
+
+      for (let n = 0; n < total; n += BLOCK) {
+        ks(block, 1, 110, 5, 1, 1, 1, 0, 0, 1, 1, 1, 1, polarization);
+        for (const sample of block) {
+          if (!Number.isFinite(sample)) nonFinite++;
+          else if (n < SAMPLE_RATE) {
+            if (Math.abs(sample) > firstSecond) firstSecond = Math.abs(sample);
+          } else if (n >= total - SAMPLE_RATE) {
+            if (Math.abs(sample) > lastSecond) lastSecond = Math.abs(sample);
+          }
+        }
+      }
+
+      expect([polarization, nonFinite]).toEqual([polarization, 0]);
       expect(lastSecond).toBeLessThanOrEqual(firstSecond);
     }
   }, 120_000);

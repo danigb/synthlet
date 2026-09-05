@@ -23,6 +23,8 @@ export type KarplusStrongInputs = {
   stretch: ParamInput;
   blend: ParamInput;
   stiffness: ParamInput;
+  detune: ParamInput;
+  polarization: ParamInput;
 };
 
 export type KarplusStrongWorkletNode = AudioWorkletNode & {
@@ -37,6 +39,8 @@ export type KarplusStrongWorkletNode = AudioWorkletNode & {
   stretch: AudioParam;
   blend: AudioParam;
   stiffness: AudioParam;
+  detune: AudioParam;
+  polarization: AudioParam;
   dispose(): void;
 };
 
