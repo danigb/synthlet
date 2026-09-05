@@ -49,4 +49,59 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "k-rate",
   },
+  // The four below shape the excitation, and every one of them is a filter or
+  // a gain *outside* the feedback loop - Smith's EKS chain,
+  // `excitation : smooth(pickangle) : pickposfilter : levelfilter(L,freq)` -
+  // so none of them can change the decay time or destabilise the string.
+  {
+    // How hard the string is plucked, as a plain amplitude on the burst. It
+    // used to be unconditionally 1: a pluck was a 0 dBFS noise transient
+    // whatever the patch's gain staging. The default leaves headroom for a
+    // patch that sums several voices, and for the comb below, whose peak gain
+    // is 2: a `level` of 1 with the comb enabled reaches 1.99, where the
+    // shipped defaults peak at about 0.21.
+    name: "level",
+    defaultValue: 0.5,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // Smith 3.5: "in real strings, the spectral centroid typically rises as
+    // plucking/striking becomes more energetic". This is that filter, a
+    // one-pole breaking at the fundamental, panned against its own input.
+    // Mapped to his Nyquist-limit level `L` as `L = dynamics^(5/3)`, the
+    // exponent that puts his default of -10 dB at the midpoint of the knob; 1
+    // bypasses the filter and 0.126 is his -60 dB extreme. Soft plucks are
+    // darker, and the decay time is untouched because none of this is in the
+    // loop.
+    name: "dynamics",
+    defaultValue: 0.5,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // Where along the string it is plucked - Smith 3.2's comb filter
+    // `1 - z^-floor(beta*P)`, with 0 at the bridge. The first notch lands at
+    // `f0/position`, so 0.13 (his default) empties the region around the 7th
+    // partial. **0 bypasses the comb**: `floor(beta*P)` reaches 0 for a small
+    // beta at a high pitch, and `1 - z^0` is silence rather than a bypass.
+    name: "position",
+    defaultValue: 0.13,
+    minValue: 0,
+    maxValue: 0.5,
+    automationRate: "k-rate",
+  },
+  {
+    // Smith 3.1's pick-direction one-pole, `(1-p)/(1 - p*z^-1)`: "real up-picks
+    // may be at different angles than down-picks, thus resulting in different
+    // plucking stiffness". Unity DC gain, so it dulls the attack without
+    // changing the level. Alternating it per note is a caller's job.
+    name: "pickAngle",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 0.9,
+    automationRate: "k-rate",
+  },
 ];

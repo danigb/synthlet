@@ -8,10 +8,9 @@ import { createGateDetector } from "./_gate";
 //   process = filtered_excitation : stringloop : ...
 //
 // - and this file is that shape. `Hloss` is Smith's EKS two-zero damping
-// filter; `Hdisp` is not written yet and `Hfd` is still the two-point linear
-// read the fractional delay started as. The excitation is an unshaped
-// full-scale burst. Every later ticket fills in one block and carries one
-// measurement.
+// filter; `Hfd` is a fourth-order Lagrange read; `Hdisp` is not written yet.
+// The excitation is Smith's three-filter chain, outside the loop. Every later
+// ticket fills in one block and carries one measurement.
 //
 // Deliberately not built on `scripts/_delay.ts`, synthlet's shared circular
 // buffer: its fractional reads are linear and Hermite, and the read this
@@ -113,7 +112,32 @@ export function createString(sampleRate: number, minFrequency: number) {
   let x1 = 0; // x[n-1]
   let x2 = 0; // x[n-2]
 
-  let burst = 0; // excitation samples still to be summed in
+  // The excitation chain, and every filter in it is *outside* the loop, which
+  // is the whole reason none of these four parameters can destabilise anything
+  // - Smith's EKS listing:
+  //
+  //   filtered_excitation = excitation : smooth(pickangle)
+  //       : pickposfilter : levelfilter(L,freq);
+  //   process = filtered_excitation : stringloop : ...
+  //
+  // The burst is generated into a buffer at pluck time rather than sample by
+  // sample, for two reasons: its exact mean can be removed (see `pluck`), and
+  // the pick-position comb can read *it* at `e - combDelay` instead of owning a
+  // second delay line. That reorders the chain to comb, pick angle, level,
+  // which Smith explicitly allows: "the filters in series outside the feedback
+  // loop can of course be implemented in any order".
+  const noise = new Float32Array(maxDelay);
+  let burstLength = 0; // noise samples in the buffer
+  let excitationIndex = 0; // where the chain is in its timeline
+  let excitationLength = 0; // burst + comb delay + the filters' tails
+  let combDelay = 0; // floor(position * P); 0 bypasses the comb
+  let pickCoefficient = 1; // 1 - p, the pick-direction one-pole
+  let pickState = 0;
+  let levelGain = 0; // Smith's dynamic-level lowpass, bilinear form
+  let levelPole = 0;
+  let levelState = 0;
+  let levelDirect = 1; // L * L0(L), the panned-in dry path
+  let levelMix = 0; // 1 - L, the panned-in filtered path
   let envelope = 0;
   let ringing = false;
 
@@ -142,27 +166,129 @@ export function createString(sampleRate: number, minFrequency: number) {
     },
 
     /**
-     * Excites the string: `P` full-scale samples summed into the loop input,
-     * where the old code filled the whole delay line. Only the `P` samples the
-     * read pointer had not yet reached were ever heard, so it is the same
-     * excitation - as a signal, which is what lets a later ticket filter,
-     * position and level it.
+     * Excites the string: a noise burst of `P` samples, shaped by Smith's
+     * three excitation filters, summed into the loop input.
      *
-     * `P` is `floor(read distance - the interpolator's reach)`: the read's
-     * newest tap sits up to 2.5 samples ahead of its nominal position and the
-     * damping filter reads `x[n]` directly, so that is where the shortest path
-     * round the loop closes - and past that point a summed burst sample would
-     * push the output beyond full scale.
+     * The defaults here are the *neutral* settings - no level change, no
+     * dynamic filter, no comb, no pick-direction tilt - so a bare `pluck()` is
+     * the unshaped burst that was here before this chain existed, sample for
+     * sample. The shipped defaults live in `params.ts` and reach this through
+     * `createKS`, which is where every other parameter mapping is too.
+     *
+     * - `level` scales the burst, before the filters. A pluck stops being a
+     *   0 dBFS transient whatever the patch's gain staging.
+     * - `dynamics` is Smith 3.5's dynamic-level filter: "in real strings, the
+     *   spectral centroid typically rises as plucking/striking becomes more
+     *   energetic". Mapped to his Nyquist-limit level `L` by `L = dynamics^(5/3)`
+     *   - the exponent that puts his own default of -10 dB at the knob's
+     *   midpoint, since `0.5^k = 10^(-10/20)` gives `k = 1/(2*log10(2)) =
+     *   1.661`. `dynamics = 1` is `L = 1`, where "the lowpass filter is
+     *   bypassed"; his -60 dB extreme is at 0.126. His note is worth keeping:
+     *   "a lively clavier is obtained by tying L to gain (MIDI velocity)".
+     * - `position` is Smith 3.2's pick-position comb, `1 - z^-floor(beta*P)`,
+     *   beta being normalised position with 0 at the bridge. Truncated rather
+     *   than interpolated, on his own authority: "pick position accuracy is
+     *   normally not critical, hence the 1% slider steps and lack of
+     *   delay-line interpolation in the comb filter". Lehtonen, Valimaki and
+     *   Laakso 2008 give the fractional-delay form, which is for cancelling
+     *   partials exactly - an analysis tool, not a timbre knob.
+     * - `pickAngle` is Smith 3.1's pick-direction one-pole, `(1-p)/(1-p*z^-1)`,
+     *   "a different coefficient for an up-pick than for a down-pick (such as 0
+     *   and 0.9) ... resulting in different plucking stiffness". Unity DC gain,
+     *   so it tilts the burst without changing its level.
+     *
+     * The burst is `floor(read distance - the interpolator's reach)` samples:
+     * the read's newest tap sits up to 2.5 samples ahead of its nominal
+     * position and the damping filter reads `x[n]` directly, so that is where
+     * the shortest path round the loop closes. That bound is why the *burst*
+     * cannot outlast the loop; the comb and the level filter's tail
+     * deliberately do, exactly as Smith's chain does, and what keeps the sum
+     * inside full scale there is `level`.
      */
-    pluck() {
+    pluck(level = 1, dynamics = 1, position = 0, pickAngle = 0) {
       line.fill(0);
       x1 = 0;
       x2 = 0;
       delay = delayTarget; // a new note starts in tune, it does not glide into it
-      burst = Math.floor(delay - phaseDelayCompensation - INTERPOLATOR_REACH);
-      // The burst is full scale, so the follower starts there rather than at
-      // zero - a zeroed envelope is below the threshold and would stop the
-      // note on its first sample.
+
+      // Zero-mean, and that is a fix rather than a nicety. The damping filter's
+      // taps sum to exactly 1 at every brightness, so a DC offset in the
+      // excitation decays at exactly `rho` and outlives every partial: the mean
+      // of `P` uniform draws is a fresh random number of order 1/sqrt(P), and
+      // it used to be what a broadband decay measurement ended up timing - one
+      // pluck's t60 at 1760 Hz ranged 0.36 to 1.02 of the requested second, all
+      // of it that residue. The comb below has a zero at DC and would remove it
+      // too, but `position = 0` is a supported setting, so this is what carries
+      // the property.
+      burstLength = Math.floor(
+        delay - phaseDelayCompensation - INTERPOLATOR_REACH,
+      );
+      let sum = 0;
+      for (let i = 0; i < burstLength; i++) {
+        const value = level * (Math.random() * 2 - 1);
+        noise[i] = value;
+        sum += value;
+      }
+      const mean = sum / burstLength;
+      let peak = 0;
+      for (let i = 0; i < burstLength; i++) {
+        noise[i] -= mean;
+        if (Math.abs(noise[i]) > peak) peak = Math.abs(noise[i]);
+      }
+      // Removing the mean moves every sample, so the burst can end up past the
+      // amplitude that was asked for - by the mean, which for a five-sample
+      // burst at 5 kHz is a quarter of full scale. Scaling it back preserves
+      // the zero sum exactly (scaling a zero-sum signal keeps it zero-sum) and
+      // restores the property the unshaped burst had: the excitation is never
+      // louder than `level`.
+      const limit = Math.abs(level);
+      if (peak > limit) {
+        const rescale = limit / peak;
+        for (let i = 0; i < burstLength; i++) noise[i] *= rescale;
+      }
+
+      // A comb of less than one sample is not a bypass, it is silence:
+      // `1 - z^0 = 0`. `floor(beta*P)` reaches 0 at the top of the range for
+      // any beta below about 0.11, so this guard is required - and it makes
+      // `position = 0` the natural neutral setting.
+      combDelay = position > 0 ? Math.floor(position * delay) : 0;
+
+      // Both poles are clamped to the ranges `params.ts` declares. An
+      // `AudioParam` already clamps, so this is for a direct caller: a pole at
+      // or above 1 here diverges, and a negative `dynamics` would make
+      // `Math.pow` NaN - and either one poisons the delay line for the rest of
+      // the note. It costs two comparisons per pluck.
+      const pole = pickAngle > 0 ? Math.min(pickAngle, 0.9) : 0;
+      pickCoefficient = 1 - pole;
+      pickState = 0;
+
+      // Smith's bilinear-transform design, verbatim from his effect.lib
+      // listing. He picks the bilinear transform over impulse invariance
+      // because "it gives more attenuation of high frequencies". The break
+      // frequency is the fundamental, so `Lw = PI*f0/fs` is just `PI/delay`.
+      const nyquistLevel = Math.pow(Math.min(Math.max(dynamics, 0), 1), 5 / 3);
+      const Lw = Math.PI / delay;
+      levelGain = Lw / (1 + Lw);
+      levelPole = (1 - Lw) / (1 + Lw);
+      levelDirect = nyquistLevel * Math.cbrt(nyquistLevel); // L * L0, L0 = L^(1/3)
+      levelMix = 1 - nyquistLevel;
+      levelState = 0;
+
+      // The two one-poles have unity DC gain, so the finished excitation
+      // integrates to zero only if their tails are allowed to run out. 60 dB
+      // is enough: what truncation leaves behind is some 70 dB below the offset
+      // the mean subtraction just removed.
+      const slowestPole = Math.max(pole, levelMix > 0 ? levelPole : 0);
+      const tail =
+        slowestPole > 0
+          ? Math.ceil(Math.log(1000) / -Math.log(slowestPole))
+          : 0;
+      excitationLength = burstLength + combDelay + tail;
+      excitationIndex = 0;
+
+      // The follower starts at 1 rather than at 0 - a zeroed envelope is below
+      // the stop threshold and would end the note on its first sample. It
+      // reaches the excitation's real level within 5 ms.
       envelope = 1;
       ringing = true;
     },
@@ -249,9 +375,19 @@ export function createString(sampleRate: number, minFrequency: number) {
           c3 * line[tap - 3] +
           c4 * line[tap - 4];
 
-        if (burst > 0) {
-          sample += Math.random() * 2 - 1;
-          burst--;
+        // The excitation chain, summed into the loop input. Three filters and
+        // a level, none of them inside the loop: comb, then pick-direction
+        // one-pole, then dynamic level. See `pluck` for what each one is.
+        if (excitationIndex < excitationLength) {
+          const e = excitationIndex++;
+          let excitation = e < burstLength ? noise[e] : 0;
+          const delayed = e - combDelay;
+          if (combDelay > 0 && delayed >= 0 && delayed < burstLength) {
+            excitation -= noise[delayed];
+          }
+          pickState += pickCoefficient * (excitation - pickState);
+          levelState = levelGain * pickState + levelPole * levelState;
+          sample += levelDirect * pickState + levelMix * levelState;
         }
         output[i] = sample;
 
@@ -296,9 +432,14 @@ export function createKS(sampleRate: number, minFrequency: number) {
     trigger: number | ArrayLike<number>,
     frequency: number | ArrayLike<number>,
     decay: number,
-    // `params.ts` declares the same default; a four-argument call is the
-    // shipped sound rather than an arbitrary one.
+    // `params.ts` declares the same defaults, so a short call is the shipped
+    // sound rather than an arbitrary one. The last four shape the excitation
+    // and none of them touches the loop.
     brightness = 0.5,
+    level = 0.5,
+    dynamics = 0.5,
+    position = 0.13,
+    pickAngle = 0,
   ) => {
     // Smith 3.3: the loop filter is applied once per period, so -60 dB in
     // `decay` seconds needs `rho^(f0*decay) = 0.001`. Pitch-independent by
@@ -344,7 +485,7 @@ export function createKS(sampleRate: number, minFrequency: number) {
       // k-rate: one value for the block, tested once - what it cost before.
       const value = typeof trigger === "number" ? trigger : trigger[0];
       if (detectGate(value) === true) {
-        string.pluck();
+        string.pluck(level, dynamics, position, pickAngle);
       }
     } else {
       // a-rate: the block is rendered in segments split at the rising edges,
@@ -356,7 +497,7 @@ export function createKS(sampleRate: number, minFrequency: number) {
           // A pluck starts in tune at whatever the pitch is *now*, rather than
           // gliding into it from the previous note.
           string.setDelay(perSample ? delays[i] : sampleRate / firstFrequency);
-          string.pluck();
+          string.pluck(level, dynamics, position, pickAngle);
           start = i;
         }
       }

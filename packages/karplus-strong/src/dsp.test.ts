@@ -66,22 +66,51 @@ const BLOCK = 128;
 // about the shipped node rather than about a literal repeated in a test.
 const MIN_FREQUENCY = PARAMS.find((p) => p.name === "frequency")!.minValue;
 
-/** Plucks once and renders `seconds` of output, block by block, as a graph would. */
+/**
+ * Plucks once and renders `seconds` of output, block by block, as a graph
+ * would. The excitation arguments default to `params.ts`'s defaults, exactly
+ * as `createKS` does, so every measurement below is a measurement of the
+ * shipped sound unless it says otherwise.
+ */
 function pluck(
   frequency: number,
   decay: number,
   seconds: number,
   brightness = 0.5,
+  level = 0.5,
+  dynamics = 0.5,
+  position = 0.13,
+  pickAngle = 0,
 ) {
   const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
   const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
   const block = new Float32Array(BLOCK);
   for (let n = 0; n < output.length; n += BLOCK) {
-    ks(block, 1, frequency, decay, brightness);
+    ks(
+      block,
+      1,
+      frequency,
+      decay,
+      brightness,
+      level,
+      dynamics,
+      position,
+      pickAngle,
+    );
     output.set(block.subarray(0, Math.min(BLOCK, output.length - n)), n);
   }
   return output;
 }
+
+/** The excitation chain switched off: the burst ticket 03 summed in, unshaped. */
+const NEUTRAL = [1, 1, 0, 0] as const;
+
+const peakOf = (signal: Float32Array) => {
+  let peak = 0;
+  for (const sample of signal)
+    if (Math.abs(sample) > peak) peak = Math.abs(sample);
+  return peak;
+};
 
 /** In-place radix-2 Cooley-Tukey FFT; both arrays are the same power-of-two length. */
 function fft(re: Float64Array, im: Float64Array) {
@@ -123,26 +152,51 @@ function fft(re: Float64Array, im: Float64Array) {
 const ANALYSIS_WINDOW = 2048; // 46 ms, 21.5 Hz per bin
 const BAND_EDGE = 5000; // the audit's, so these numbers stay comparable to its tables
 
-/** Fraction of the energy above `BAND_EDGE` in one window starting at `atSeconds`. */
-function highBandRatio(signal: Float32Array, atSeconds: number) {
-  const start = Math.round(atSeconds * SAMPLE_RATE);
-  const re = new Float64Array(ANALYSIS_WINDOW);
-  const im = new Float64Array(ANALYSIS_WINDOW);
-  for (let i = 0; i < ANALYSIS_WINDOW; i++) {
-    const hann =
-      0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (ANALYSIS_WINDOW - 1));
+/** Energy per bin of one Hann-windowed window of `size` samples from `start`. */
+function spectrum(signal: Float32Array, start: number, size: number) {
+  const re = new Float64Array(size);
+  const im = new Float64Array(size);
+  for (let i = 0; i < size; i++) {
+    const hann = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (size - 1));
     re[i] = (signal[start + i] ?? 0) * hann;
   }
   fft(re, im);
+  const energy = new Float64Array(size / 2);
+  for (let k = 0; k < size / 2; k++) energy[k] = re[k] * re[k] + im[k] * im[k];
+  return energy;
+}
 
+/**
+ * Fraction of the energy above `BAND_EDGE` in one window starting at
+ * `atSeconds`. `size` is the window: the default 2048 is 46 ms, and the
+ * excitation assertions use a short one because the pick-direction filter's
+ * whole effect is over in a few milliseconds.
+ */
+function highBandRatio(
+  signal: Float32Array,
+  atSeconds: number,
+  size = ANALYSIS_WINDOW,
+) {
+  const energy = spectrum(signal, Math.round(atSeconds * SAMPLE_RATE), size);
   let total = 0;
   let high = 0;
-  for (let k = 1; k < ANALYSIS_WINDOW / 2; k++) {
-    const energy = re[k] * re[k] + im[k] * im[k];
-    total += energy;
-    if ((k * SAMPLE_RATE) / ANALYSIS_WINDOW > BAND_EDGE) high += energy;
+  for (let k = 1; k < size / 2; k++) {
+    total += energy[k];
+    if ((k * SAMPLE_RATE) / size > BAND_EDGE) high += energy[k];
   }
   return total > 0 ? high / total : 0;
+}
+
+/** Energy-weighted mean frequency of one window - "how bright is the attack". */
+function spectralCentroid(signal: Float32Array, start: number, size: number) {
+  const energy = spectrum(signal, start, size);
+  let weighted = 0;
+  let total = 0;
+  for (let k = 1; k < size / 2; k++) {
+    weighted += ((k * SAMPLE_RATE) / size) * energy[k];
+    total += energy[k];
+  }
+  return total > 0 ? weighted / total : 0;
 }
 
 // The same 5 ms one-pole `dsp.ts` stops on, so "the level the note ended at"
@@ -316,6 +370,80 @@ const cents = (measured: number, target: number) =>
 const energyDb = (after: number, before: number) =>
   10 * Math.log10(Math.max(after, 1e-30) / Math.max(before, 1e-30));
 
+/**
+ * Runs `render` with `Math.random` stubbed so the noise burst is `+1, -1` and
+ * then silence - a two-sample impulse, whose sum is zero, so the zero-mean
+ * subtraction in `pluck` leaves it alone. What the excitation chain then emits
+ * is its own impulse response, and it is finite and short.
+ */
+function withImpulseBurst<T>(render: () => T): T {
+  const original = Math.random;
+  let call = 0;
+  Math.random = () => (call++ === 0 ? 1 : call === 2 ? 0 : 0.5);
+  try {
+    return render();
+  } finally {
+    Math.random = original;
+  }
+}
+
+/**
+ * Where the pick-position comb's first notch actually lands, in Hz.
+ *
+ * Measured on the excitation's impulse response rather than on a pluck: the
+ * response is only `floor(beta*P) + 2` samples long and the loop returns
+ * nothing for a whole period, so the first `P - 4` output samples contain all
+ * of it and nothing else. Zero-padding a complete finite response is the exact
+ * DTFT - no window, no leakage - which matters because a comb notch is a null,
+ * and a null is the one place where a few percent of leakage moves the answer
+ * by a few percent. The `+1, -1` burst puts a `1 - z^-1` tilt on the response,
+ * which has no zero anywhere but dc and so cannot move this one.
+ */
+const NOTCH_WINDOW = 8192;
+function combNotch(frequency: number, position: number) {
+  const period = SAMPLE_RATE / frequency;
+  const signal = withImpulseBurst(() =>
+    pluck(frequency, 1, 0.05, 0.5, 1, 1, position, 0),
+  );
+  const re = new Float64Array(NOTCH_WINDOW);
+  const im = new Float64Array(NOTCH_WINDOW);
+  for (let i = 0; i < Math.floor(period) - 4; i++) re[i] = signal[i];
+  fft(re, im);
+
+  const magnitude = (k: number) =>
+    Math.sqrt(re[k] * re[k] + im[k] * im[k]) + 1e-30;
+  const target = frequency / position;
+  const bin = (hz: number) => (hz * NOTCH_WINDOW) / SAMPLE_RATE;
+  const lowest = Math.max(1, Math.floor(bin(target * 0.6)));
+  const highest = Math.min(NOTCH_WINDOW / 2 - 2, Math.ceil(bin(target * 1.5)));
+  let notch = lowest;
+  for (let k = lowest; k <= highest; k++) {
+    if (magnitude(k) < magnitude(notch)) notch = k;
+  }
+  const a = Math.log(magnitude(notch - 1));
+  const b = Math.log(magnitude(notch));
+  const c = Math.log(magnitude(notch + 1));
+  const denominator = a - 2 * b + c;
+  const refined =
+    denominator !== 0 ? notch + (0.5 * (a - c)) / denominator : notch;
+  return (refined * SAMPLE_RATE) / NOTCH_WINDOW;
+}
+
+/**
+ * The decay time the loop's own transfer function predicts for the
+ * fundamental: `rho` once per period, times the damping filter's gain there.
+ * `decay` is derived from `rho` alone - Smith's formula - so this is the same
+ * number for every pitch only while the filter is transparent.
+ */
+function predictedT60(frequency: number, decay: number, brightness: number) {
+  const rho = Math.pow(0.001, 1 / (frequency * decay));
+  const h0 = (1 + brightness) / 2;
+  const h1 = (1 - brightness) / 4;
+  const perPeriod =
+    rho * (h0 + 2 * h1 * Math.cos((2 * Math.PI * frequency) / SAMPLE_RATE));
+  return Math.log(0.001) / Math.log(perPeriod) / frequency;
+}
+
 /** The brightness figure both groups below assert on: 5 ms to 250 ms, in dB. */
 function brightnessChangeDb(frequency: number, brightness = 0.5) {
   const signal = pluck(frequency, 1, 0.4, brightness);
@@ -361,22 +489,48 @@ describe("createKS decay", () => {
   // at 1760 Hz. `rho = 0.001^(1/(f0*t60))` is applied once per period, which
   // makes the same number mean the same seconds at every pitch.
   //
-  // What the follower times is the loop's slowest component, which is DC: the
-  // damping filter's taps sum to 1 at every brightness, so a DC offset in the
-  // burst decays at exactly `rho` and outlives every partial. At 110 Hz the
-  // fundamental decays at `rho` too and the two agree. At 1760 Hz they do not:
-  // `rho*(h0 + 2*h1*cos(w0))` is 0.992 rather than 1 there, so the *tone* is
-  // gone in 0.33 s at the default brightness while this measurement, which
-  // ends up timing the residue, reads 0.89. That is inherent to Smith's
-  // uncompensated `rho` - compensating it would put the loop gain above 1 at
-  // DC - and it is the honest reading of "the same knob at every pitch": the
-  // 15x spread is gone, a 3x one between tone and residue is not.
+  // This measurement used to be timing a DC residue rather than the string.
+  // The damping filter's taps sum to 1 at every brightness, so a DC offset in
+  // the burst decays at exactly `rho` and outlives every partial - and
+  // `Math.random()*2-1` has a mean of order 1/sqrt(P) per draw, so every pluck
+  // injected one. At 1760 Hz the same knob position read anywhere between 0.36
+  // and 1.02 of the requested second depending on the draw, and its average,
+  // 0.89, was the residue rather than the tone. Ticket 07 makes the burst
+  // zero-mean, so what is timed below is the string: the per-pluck spread at
+  // 1760 Hz is now 0.30 to 0.35.
+  //
+  // Which exposes what the residue was hiding. `rho = 0.001^(1/(f0*t60))` is
+  // Smith's formula and it accounts for the loop gain at dc, not at f0; the
+  // two-zero damping filter takes its own bite there, `h0 + 2*h1*cos(w0)`,
+  // which is 0.99997 at 110 Hz, 0.9995 at 440 and 0.9922 at 1760. So at the
+  // shipped brightness a 1 s `decay` is 0.33 s at 1760 Hz, and no arithmetic
+  // available here fixes it: `rho/(h0 + 2*h1*cos(w0))` is 1.0039, a loop gain
+  // above one at dc, and a symmetric three-tap can only have unity gain at w0
+  // by having `h1 = 0`, which is brightness 1 and no damping at all. The fix
+  // is a per-note loop-filter design (Bank and Valimaki 2003), which the
+  // folder README defers. So it is measured here rather than hidden: the two
+  // assertions below say what the module does, in the same 75-140% band.
   it.each([110, 440, 1760])(
-    "decays in 75-140%% of the requested time at %p Hz",
+    "decays in 75-140%% of the requested time at %p Hz, where nothing but `rho` damps it",
     (frequency) => {
-      const measured = averageT60(frequency, 1);
+      // brightness 1: the damping filter degenerates to a plain delay, the
+      // loop's per-period gain is exactly `rho`, and `decay` is the time it
+      // says at every pitch. Measured 0.971 / 0.960 / 0.968.
+      const measured = averageT60(frequency, 1, 1);
       expect(measured).toBeGreaterThanOrEqual(0.75);
       expect(measured).toBeLessThanOrEqual(1.4);
+    },
+  );
+
+  it.each([110, 440, 1760])(
+    "decays in 75-140%% of what the loop's own gain predicts at %p Hz",
+    (frequency) => {
+      // And at the shipped brightness the string decays as the loop filter
+      // says it should, which is the tighter statement. Measured 0.86 / 0.87 /
+      // 1.02 of prediction, where the predictions are 1.00 / 0.97 / 0.33 s.
+      const ratio = averageT60(frequency, 1) / predictedT60(frequency, 1, 0.5);
+      expect(ratio).toBeGreaterThanOrEqual(0.75);
+      expect(ratio).toBeLessThanOrEqual(1.4);
     },
   );
 });
@@ -510,6 +664,13 @@ describe("createKS excitation", () => {
   // the interpolator is the identity and what the loop does can be written
   // down exactly: one period of full-scale noise, then that period cycling
   // through the damping filter and nothing else.
+  //
+  // The first two assertions are made at the excitation chain's *neutral*
+  // settings, which is what ticket 07 owes the reader: with no level change,
+  // no dynamic filter, no comb and no pick angle, the burst is the one ticket
+  // 03 summed in, to the sample. What the shipped settings do to it is
+  // measured further down; that they do not leak into the loop afterwards is
+  // the third assertion here.
   const FREQUENCY = 441; // 44100 / 441 = 100 samples, exactly
   const PERIOD = 100;
   // One of those samples is the damping filter's phase delay, so the read
@@ -521,28 +682,41 @@ describe("createKS excitation", () => {
   const H0 = (1 + BRIGHTNESS) / 2;
   const H1 = (1 - BRIGHTNESS) / 4;
 
-  it("excites one period with full-scale noise", () => {
-    const signal = pluck(FREQUENCY, DECAY, 0.05);
-    const burst = signal.subarray(0, BURST);
-
+  it("excites one period with full-scale noise, unshaped", () => {
+    // Averaged over eight bursts: the RMS of 99 uniform draws has a standard
+    // deviation of 7%, which is most of the 15% band this used to assert on a
+    // single one - about one run in thirty landed outside it. Eight brings the
+    // standard error to 2.5%.
+    const BURSTS = 8;
     let peak = 0;
-    let sumOfSquares = 0;
-    for (const sample of burst) {
-      if (Math.abs(sample) > peak) peak = Math.abs(sample);
-      sumOfSquares += sample * sample;
+    let rms = 0;
+    for (let attempt = 0; attempt < BURSTS; attempt++) {
+      const burst = pluck(
+        FREQUENCY,
+        DECAY,
+        0.05,
+        BRIGHTNESS,
+        ...NEUTRAL,
+      ).subarray(0, BURST);
+      let sumOfSquares = 0;
+      for (const sample of burst) {
+        if (Math.abs(sample) > peak) peak = Math.abs(sample);
+        sumOfSquares += sample * sample;
+      }
+      rms += Math.sqrt(sumOfSquares / BURST) / BURSTS;
     }
-    const rms = Math.sqrt(sumOfSquares / BURST);
 
     expect(peak).toBeLessThanOrEqual(1);
-    expect(peak).toBeGreaterThan(0.9); // 99 draws; missing the top decile is a 1e-5 event
-    // Uniform on [-1, 1) has an RMS of 1/sqrt(3); 99 samples put it within
-    // about 7% of that, so 15% is a loose test of "still full scale".
-    expect(rms).toBeGreaterThan(0.85 / Math.sqrt(3));
-    expect(rms).toBeLessThan(1.15 / Math.sqrt(3));
+    expect(peak).toBeGreaterThan(0.9);
+    // Uniform on [-1, 1) has an RMS of 1/sqrt(3), and this measures 0.95 of
+    // that: removing the burst's mean and scaling its peak back to `level`
+    // costs about 5%, which is the price of an excitation that carries no dc.
+    expect(rms).toBeGreaterThan((0.95 * 0.85) / Math.sqrt(3));
+    expect(rms).toBeLessThan((0.95 * 1.15) / Math.sqrt(3));
   });
 
   it("then recirculates it through the damping filter, and nothing else", () => {
-    const signal = pluck(FREQUENCY, DECAY, 0.05);
+    const signal = pluck(FREQUENCY, DECAY, 0.05, BRIGHTNESS, ...NEUTRAL);
     let worst = 0;
     // The whole loop in one line: a round trip of `PERIOD` samples, of which
     // the filter is one, and `rho*(h0*x' + h1*(x + x''))` around it. If any
@@ -559,6 +733,27 @@ describe("createKS excitation", () => {
       if (difference > worst) worst = difference;
     }
     expect(worst).toBeLessThan(1e-6); // Float32 storage, not algorithm
+  });
+
+  it("recirculates the shaped excitation the same way, once it has ended", () => {
+    // The shipped chain deliberately outlasts a period: the comb is a delay of
+    // `floor(position*P)` and the dynamic-level filter is an IIR with a tail,
+    // so at these settings the excitation runs 222 samples against a loop of
+    // 100. That is Smith's structure - his `noiseburst` is a full period and
+    // the comb adds to it - and what keeps the sum inside full scale is
+    // `level` rather than the burst being short. Three periods in, the
+    // excitation is over and the loop is again the only thing running.
+    const signal = pluck(FREQUENCY, DECAY, 0.05);
+    let worst = 0;
+    for (let i = 3 * PERIOD; i < 8 * PERIOD; i++) {
+      const expected =
+        RHO *
+        (H0 * signal[i - PERIOD] +
+          H1 * (signal[i - PERIOD + 1] + signal[i - PERIOD - 1]));
+      const difference = Math.abs(signal[i] - expected);
+      if (difference > worst) worst = difference;
+    }
+    expect(worst).toBeLessThan(1e-6);
   });
 });
 
@@ -750,14 +945,23 @@ describe("createKS at the top of its range", () => {
   });
 
   it("stays bounded and audible at its declared maximum", () => {
-    const signal = pluck(MAX_FREQUENCY, 1, 0.5);
-    let peak = 0;
-    for (const sample of signal) {
-      if (!Number.isFinite(sample)) throw new Error("not finite");
-      if (Math.abs(sample) > peak) peak = Math.abs(sample);
+    // Averaged over eight plucks, because at 5 kHz the burst is five samples
+    // long and its peak is a draw of five numbers: with `level` at 0.5 one
+    // pluck measures anywhere between 0.07 and 0.33, where the mean over 40 is
+    // 0.21. It used to be a single pluck against 0.25, which only worked
+    // because the burst was full scale.
+    let total = 0;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const signal = pluck(MAX_FREQUENCY, 1, 0.5);
+      let peak = 0;
+      for (const sample of signal) {
+        if (!Number.isFinite(sample)) throw new Error("not finite");
+        if (Math.abs(sample) > peak) peak = Math.abs(sample);
+      }
+      expect(peak).toBeLessThanOrEqual(1);
+      total += peak;
     }
-    expect(peak).toBeLessThanOrEqual(1);
-    expect(peak).toBeGreaterThan(0.25); // a burst this short still excites it
+    expect(total / 8).toBeGreaterThan(0.1); // a burst this short still excites it
   });
 });
 
@@ -906,7 +1110,10 @@ describe("createKS with a moving pitch", () => {
     let peak = 0;
     for (const sample of held)
       if (Math.abs(sample) > peak) peak = Math.abs(sample);
-    expect(peak).toBeGreaterThan(0.5);
+    // 0.19-0.26 over plucks at the shipped `level` of 0.5, where an unshaped
+    // full-scale burst gave 0.6-0.9. The claim is "it played the note", not a
+    // level: that is the excitation-shaping group's business.
+    expect(peak).toBeGreaterThan(0.1);
     expect(Math.abs(cents(spectralFundamental(held, 330), 330))).toBeLessThan(
       5,
     );
@@ -932,4 +1139,176 @@ describe("createKS with a moving pitch", () => {
     expect(nonFinite).toBe(0);
     expect(peak).toBeLessThan(8);
   });
+});
+
+// ---------------------------------------------------------------------------
+// The excitation chain ticket 07 put on the pluck. Every filter here is
+// *outside* the loop - Smith's `filtered_excitation : stringloop` - so none of
+// them can change the decay time or destabilise the string, and the two
+// assertions that say so (the dynamics sweep below, and the loop identity
+// above) are the ones that make that structural claim checkable.
+// ---------------------------------------------------------------------------
+
+describe("createKS excitation shaping", () => {
+  it("no longer plucks at 0 dBFS", () => {
+    // The whole point of the ticket. An unshaped burst peaked at 0.96-0.99
+    // whatever the patch's gain staging; the shipped defaults - `level` 0.5
+    // into a dynamic-level filter at Smith's -10 dB - peak at 0.21 on average
+    // and 0.28 at worst, about -13.5 dBFS, which leaves a patch room to sum
+    // several voices.
+    for (const frequency of [110, 440, 1760]) {
+      const peak = peakOf(pluck(frequency, 1, 0.5));
+      expect(peak).toBeLessThan(0.5); // -6 dBFS
+      expect(peak).toBeGreaterThan(0.05); // and still a note
+    }
+  });
+
+  it("scales the burst by `level`, and nothing else", () => {
+    // `level` multiplies the noise before the three filters, so it is exactly
+    // linear: the same seeded draw at four levels gives peaks in the same
+    // ratio to well inside a percent.
+    const peaks = [0.1, 0.25, 0.5, 1].map((level) =>
+      withSeededNoise(7, () =>
+        peakOf(pluck(440, 1, 0.3, 0.5, level, 0.5, 0.13, 0)),
+      ),
+    );
+    const ratios = peaks.map((peak, i) => peak / [0.1, 0.25, 0.5, 1][i]);
+    expect(Math.max(...ratios) / Math.min(...ratios)).toBeLessThan(1.01);
+  });
+
+  // Smith 3.5: "in real strings, the spectral centroid typically rises as
+  // plucking/striking becomes more energetic".
+  it("lowers the attack's spectral centroid as `dynamics` falls", () => {
+    const DYNAMICS = [0, 0.25, 0.5, 0.75, 1];
+    // Paired across the sweep and averaged over eight draws: one noise burst
+    // moves the centroid of a 23 ms window by more than the two darkest steps
+    // are apart.
+    const measured = DYNAMICS.map((dynamics) => {
+      let total = 0;
+      for (let seed = 1; seed <= 8; seed++) {
+        total += withSeededNoise(seed, () =>
+          spectralCentroid(
+            pluck(440, 1, 0.1, 0.5, 0.5, dynamics, 0.13, 0),
+            0,
+            1024,
+          ),
+        );
+      }
+      return total / 8;
+    });
+    // Measured 1395, 1970, 3576, 4084, 4208 Hz.
+    for (let i = 1; i < measured.length; i++) {
+      expect(measured[i]).toBeGreaterThan(measured[i - 1]);
+    }
+    expect(measured[measured.length - 1] / measured[0]).toBeGreaterThan(2);
+  });
+
+  it("does not change the decay time as `dynamics` sweeps", () => {
+    // The structural claim, measured: the dynamic-level filter is outside the
+    // loop, so it colours the attack and leaves the decay to `decay` and
+    // `brightness`. Measured 0.89 / 0.84 / 0.79 s at 0 / 0.5 / 1, a spread of
+    // 1.13 - inside the same 25% bound the brightness sweep uses, and well
+    // inside Jarvelainen and Tolonen's 75-140% audible threshold. It is not 1
+    // exactly because a darker excitation puts less of the broadband envelope
+    // in the fast-decaying partials, which is the filter doing its job.
+    const measured = [0, 0.5, 1].map((dynamics) => {
+      let total = 0;
+      for (let i = 0; i < T60_PLUCKS; i++) {
+        total += t60(pluck(440, 1, 3, 0.5, 0.5, dynamics, 0.13, 0));
+      }
+      return total / T60_PLUCKS;
+    });
+    expect(Math.max(...measured) / Math.min(...measured)).toBeLessThan(1.25);
+  });
+
+  // Smith 3.2: `1 - z^-floor(beta*P)`, "0 being at the bridge and 1 at the
+  // nut", so the first notch is at `f0/beta`.
+  it.each([110, 440])(
+    "puts the pick-position comb's first notch at f0/position, at %p Hz",
+    (frequency) => {
+      for (const position of [0.1, 0.13, 0.25, 0.5]) {
+        const measured = combNotch(frequency, position);
+        const expected = frequency / position;
+        expect(Math.abs(measured / expected - 1)).toBeLessThan(0.05);
+      }
+    },
+  );
+
+  it("truncates the comb delay, which is what costs it accuracy up high", () => {
+    // The comb delay is `floor(beta*P)` samples, not a fractional delay, on
+    // Smith's own authority: "pick position accuracy is normally not critical,
+    // hence the 1% slider steps and lack of delay-line interpolation in the
+    // comb filter". This is the price, measured rather than waved at: at
+    // 880 Hz the period is 50 samples, `floor(0.13*50)` is 6 rather than 6.5,
+    // and the notch lands at 7350 Hz where `f0/beta` is 6769 - 8.6% high. The
+    // exact form is Lehtonen, Valimaki and Laakso 2008's inverse comb built on
+    // a fractional-delay filter, which is for cancelling partials precisely;
+    // this is a timbre knob.
+    const error = Math.abs(combNotch(880, 0.13) / (880 / 0.13) - 1);
+    expect(error).toBeGreaterThan(0.05);
+    expect(error).toBeLessThan(0.12);
+  });
+
+  // Smith 3.1: "real up-picks may be at different angles than down-picks, thus
+  // resulting in different plucking stiffness".
+  it("darkens the first 5 ms as `pickAngle` rises", () => {
+    const measured = [0, 0.3, 0.6, 0.9].map((pickAngle) => {
+      let total = 0;
+      for (let seed = 1; seed <= 8; seed++) {
+        total += withSeededNoise(seed, () =>
+          highBandRatio(
+            pluck(440, 1, 0.1, 0.5, 0.5, 0.5, 0.13, pickAngle),
+            0,
+            256,
+          ),
+        );
+      }
+      return total / 8;
+    });
+    // Measured 0.605, 0.443, 0.243, 0.056 of the energy above 5 kHz.
+    for (let i = 1; i < measured.length; i++) {
+      expect(measured[i]).toBeLessThan(measured[i - 1]);
+    }
+    // 10.3 dB at the top of the range, against a bound of 6.
+    expect(energyDb(measured[3], measured[0])).toBeLessThan(-6);
+  });
+});
+
+describe("createKS amplitude with the excitation shaped", () => {
+  // The four excitation parameters at their corners. Nothing here is inside
+  // the loop, so this cannot diverge - but it is where the module's *level*
+  // now lives, and the number is worth writing down: the pick-position comb is
+  // `1 - z^-D`, whose peak gain is 2, so a `level` of 1 with the comb enabled
+  // reaches 1.99. `level` is what buys the headroom back, which is the whole
+  // point of the parameter; at the shipped defaults the same sweep peaks at
+  // 0.28.
+  it("stays finite, and bounded by the comb's own gain", () => {
+    let peak = 0;
+    let nonFinite = 0;
+    for (const frequency of [20, 110, 440, 1760, 5000]) {
+      for (const level of [0.5, 1]) {
+        for (const dynamics of [0, 0.5, 1]) {
+          for (const position of [0, 0.13, 0.5]) {
+            for (const pickAngle of [0, 0.9]) {
+              for (const sample of pluck(
+                frequency,
+                1,
+                0.2,
+                0.5,
+                level,
+                dynamics,
+                position,
+                pickAngle,
+              )) {
+                if (!Number.isFinite(sample)) nonFinite++;
+                else if (Math.abs(sample) > peak) peak = Math.abs(sample);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(nonFinite).toBe(0);
+    expect(peak).toBeLessThan(2.5);
+  }, 120_000);
 });
