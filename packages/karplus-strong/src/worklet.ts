@@ -1,6 +1,12 @@
 import { createKS } from "./dsp";
 import { PARAMS } from "./params";
 
+// The delay line has to hold the longest period the declared range asks for,
+// so its size comes from `params.ts` rather than a literal: the buffer and the
+// declared range cannot drift apart again. At 20 Hz / 44.1 kHz that is 2207
+// floats (8.8 KB), allocated once per node.
+const MIN_FREQUENCY = PARAMS.find((p) => p.name === "frequency")!.minValue;
+
 export class KsProcessor extends AudioWorkletProcessor {
   r: boolean; // running
   g: ReturnType<typeof createKS>;
@@ -8,7 +14,7 @@ export class KsProcessor extends AudioWorkletProcessor {
   constructor() {
     super();
     this.r = true;
-    this.g = createKS(sampleRate, 100);
+    this.g = createKS(sampleRate, MIN_FREQUENCY);
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":

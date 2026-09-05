@@ -4,10 +4,22 @@ export function createKS(sampleRate: number, minFrequency: number) {
   const targetAmplitude = 0.001; // Amplitude decays to 0.1% of initial value
   const maxDelayLineLength = Math.ceil(sampleRate / minFrequency) + 2; // Extra samples for interpolation
 
+  // The note ends on an envelope of |y|, not on an instantaneous sample: the
+  // signal is noise-derived, so a bare threshold on one sample is satisfied by
+  // a zero crossing at any amplitude. -100 dBFS is inaudible under any
+  // playback gain.
+  const stopThreshold = 1e-5; // -100 dBFS
+  // One-pole follower with a 5 ms time constant. It settles (5 tau, 1103
+  // samples) inside half a period at 20 Hz - the lowest pitch params.ts
+  // declares, 2205 samples - so it never mistakes a trough for silence at any
+  // supported pitch.
+  const envelopeCoefficient = 1 - Math.exp(-1 / (0.005 * sampleRate));
+
   const delayLine = new Float32Array(maxDelayLineLength);
 
   let delayInSamples = maxDelayLineLength - 2;
   let writeIndex = 0;
+  let envelope = 0;
 
   let isPlaying = false;
   const detectGate = createGateDetector();
@@ -36,6 +48,10 @@ export function createKS(sampleRate: number, minFrequency: number) {
         delayLine[i] = Math.random() * 2 - 1;
       }
       writeIndex = 0;
+      // The burst is full scale, so the follower starts there rather than at
+      // zero - a zeroed envelope is below the threshold and would stop the
+      // note on its first sample.
+      envelope = 1;
       isPlaying = true;
     }
 
@@ -64,8 +80,9 @@ export function createKS(sampleRate: number, minFrequency: number) {
 
         writeIndex = (writeIndex + 1) % maxDelayLineLength;
 
-        // Stop playing if the signal has decayed below a threshold
-        if (Math.abs(currentSample) < 1e-8) {
+        // Stop playing once the envelope - not one sample - is inaudible
+        envelope += envelopeCoefficient * (Math.abs(currentSample) - envelope);
+        if (envelope < stopThreshold) {
           isPlaying = false;
           for (let j = i + 1; j < outputLength; j++) {
             output[j] = 0;
