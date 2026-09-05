@@ -104,4 +104,43 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 0.9,
     automationRate: "k-rate",
   },
+  // And these two are inside the loop: Karplus and Strong's own probabilistic
+  // variants, from the 1983 paper this package is named after. Both are
+  // neutral at their defaults, and both cost one random number per sample and
+  // no multiplies - "the stretch factor and blend factor are independent, so
+  // the algorithm can be implemented with two separate tests".
+  {
+    // Their decay stretching: apply the damping filter with probability 1/S
+    // and pass the sample through unchanged otherwise, so "the decay time of
+    // each overtone is approximately multiplied by S". `decay` is still the
+    // ceiling - the loop gain is applied every round trip whatever the coin
+    // says - so what this lengthens is the high end, which is what the damping
+    // filter shortens. 1 is the unstretched algorithm; their S = infinity,
+    // where "the sound does not decay; this is simple wavetable synthesis", is
+    // what the top of this range approaches.
+    //
+    // It is *not* dispersion (ticket 09): this lengthens high-partial decay,
+    // dispersion moves partial frequencies. Different effects, both shipping.
+    name: "stretch",
+    defaultValue: 1,
+    minValue: 1,
+    maxValue: 20,
+    automationRate: "k-rate",
+  },
+  {
+    // Their drum algorithm, discovered by Kevin Karplus in December 1979:
+    // negate the loop signal with probability 1 - b. "With a blend factor of
+    // 1, the algorithm reduces to the basic plucked-string algorithm, with p
+    // controlling the pitch. With a blend factor of 1/2, the sound is
+    // drumlike. Intermediate values produce sounds intermediate between
+    // plucked string and drum." At 1/2 the buffer length stops controlling
+    // pitch and starts controlling the decay of the noise burst; at 0 the
+    // signal is negated every period, which drops the pitch an octave and
+    // leaves only odd harmonics - their "harplike" case.
+    name: "blend",
+    defaultValue: 1,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
 ];

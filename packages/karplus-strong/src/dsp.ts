@@ -112,6 +112,45 @@ export function createString(sampleRate: number, minFrequency: number) {
   let x1 = 0; // x[n-1]
   let x2 = 0; // x[n-2]
 
+  // Karplus and Strong's own two probabilistic variants, from the paper this
+  // package is named after - the ones its title is about, "Plucked-String *and
+  // Drum* Timbres":
+  //
+  //   stretch: y[t] = y[t-p]                    with probability 1 - 1/S
+  //            y[t] = (y[t-p] + y[t-p-1])/2     with probability 1/S
+  //   blend:   y[t] = +(y[t-p] + y[t-p-1])/2    with probability b
+  //            y[t] = -(y[t-p] + y[t-p-1])/2    with probability 1 - b
+  //
+  // and their combined form, on which they note: "the stretch factor and blend
+  // factor are independent, so the algorithm can be implemented with two
+  // separate tests, and no multiplies are needed". Two tests is what this is.
+  //
+  // The thresholds are integers, compared against a 32-bit generator, so the
+  // hot path has no division and no float compare. Each has its own flag
+  // rather than a sentinel value, because `blend = 0` - the "harplike" case
+  // that negates *every* sample - is a threshold of zero and a real setting.
+  let stretchThreshold = 0; // 1/S as a 32-bit fraction
+  let stretching = false;
+  let blendThreshold = 0; // b as a 32-bit fraction
+  let blending = false;
+  let probabilistic = false; // neither active: the whole branch is skipped
+
+  // A private xorshift32, seeded lazily from `Math.random` the first time a
+  // coin is actually flipped after a pluck. Private because it is 3x cheaper
+  // (measured: 1.35 ns a call against `Math.random`'s 4.05, 50M calls) but
+  // mostly because it is *separate*: the loop's coin flips do not consume the
+  // sequence the excitation draws its noise from, so a default note is
+  // bit-identical to one from before this existed, and a seeded measurement of
+  // the excitation still measures the excitation.
+  let rngState = 1;
+  let rngSeeded = false;
+  const nextRandom = () => {
+    rngState ^= rngState << 13;
+    rngState ^= rngState >>> 17;
+    rngState ^= rngState << 5;
+    return (rngState >>>= 0);
+  };
+
   // The excitation chain, and every filter in it is *outside* the loop, which
   // is the whole reason none of these four parameters can destabilise anything
   // - Smith's EKS listing:
@@ -159,10 +198,21 @@ export function createString(sampleRate: number, minFrequency: number) {
      * the raised cosine with a zero at Nyquist. DC gain is `h0 + 2*h1 = 1` for
      * every B, so brightness moves the rolloff and never the decay time.
      */
-    setDamping(gain: number, brightness: number) {
+    setDamping(gain: number, brightness: number, stretch = 1, blend = 1) {
       rho = gain;
       h0 = (1 + brightness) / 2;
       h1 = (1 - brightness) / 4;
+      // `1/S` and `b` as 32-bit fractions, compared against a uniform draw
+      // over [0, 2^32). `stretch = 1` and `blend = 1` are the neutral
+      // settings: both flags go false and the loop is untouched, which is what
+      // makes the default path cost exactly what it did before.
+      stretching = stretch > 1;
+      stretchThreshold = stretching
+        ? (4294967296 / Math.min(stretch, 1e6)) >>> 0
+        : 0;
+      blending = blend < 1;
+      blendThreshold = blending ? (4294967296 * Math.max(blend, 0)) >>> 0 : 0;
+      probabilistic = stretching || blending;
     },
 
     /**
@@ -223,28 +273,47 @@ export function createString(sampleRate: number, minFrequency: number) {
       burstLength = Math.floor(
         delay - phaseDelayCompensation - INTERPOLATOR_REACH,
       );
-      let sum = 0;
-      for (let i = 0; i < burstLength; i++) {
-        const value = level * (Math.random() * 2 - 1);
-        noise[i] = value;
-        sum += value;
-      }
-      const mean = sum / burstLength;
-      let peak = 0;
-      for (let i = 0; i < burstLength; i++) {
-        noise[i] -= mean;
-        if (Math.abs(noise[i]) > peak) peak = Math.abs(noise[i]);
-      }
-      // Removing the mean moves every sample, so the burst can end up past the
-      // amplitude that was asked for - by the mean, which for a five-sample
-      // burst at 5 kHz is a quarter of full scale. Scaling it back preserves
-      // the zero sum exactly (scaling a zero-sum signal keeps it zero-sum) and
-      // restores the property the unshaped burst had: the excitation is never
-      // louder than `level`.
-      const limit = Math.abs(level);
-      if (peak > limit) {
-        const rescale = limit / peak;
-        for (let i = 0; i < burstLength; i++) noise[i] *= rescale;
+      // A blended loop is loaded with a *constant*, which is Karplus and
+      // Strong's own Fig. 4: "the initial wavetable can be filled with a
+      // constant (A), since the drum algorithm will create the randomness
+      // itself... starting with a constant gives some buildup before the
+      // decay, while starting with randomness gives maximum amplitude
+      // initially. Blends near 1 require nonconstant initial loading of the
+      // wavetable, as little or no randomness is introduced."
+      //
+      // The zero-mean subtraction below is skipped for it, and has to be - the
+      // mean of a constant is the constant, and removing it leaves silence.
+      // It is also unnecessary: the dc residue it exists to remove is a mode
+      // of a loop that preserves dc, and a loop that flips sign at random has
+      // no such mode. (The pick-position comb does annihilate a constant,
+      // `x[n] - x[n-D]` being zero wherever the burst is flat, so a drum voice
+      // wants `position` at 0.)
+      if (blending) {
+        noise.fill(level, 0, burstLength);
+      } else {
+        let sum = 0;
+        for (let i = 0; i < burstLength; i++) {
+          const value = level * (Math.random() * 2 - 1);
+          noise[i] = value;
+          sum += value;
+        }
+        const mean = sum / burstLength;
+        let peak = 0;
+        for (let i = 0; i < burstLength; i++) {
+          noise[i] -= mean;
+          if (Math.abs(noise[i]) > peak) peak = Math.abs(noise[i]);
+        }
+        // Removing the mean moves every sample, so the burst can end up past the
+        // amplitude that was asked for - by the mean, which for a five-sample
+        // burst at 5 kHz is a quarter of full scale. Scaling it back preserves
+        // the zero sum exactly (scaling a zero-sum signal keeps it zero-sum) and
+        // restores the property the unshaped burst had: the excitation is never
+        // louder than `level`.
+        const limit = Math.abs(level);
+        if (peak > limit) {
+          const rescale = limit / peak;
+          for (let i = 0; i < burstLength; i++) noise[i] *= rescale;
+        }
       }
 
       // A comb of less than one sample is not a bypass, it is silence:
@@ -285,6 +354,8 @@ export function createString(sampleRate: number, minFrequency: number) {
           : 0;
       excitationLength = burstLength + combDelay + tail;
       excitationIndex = 0;
+      // A fresh coin sequence per note, drawn only if a coin is flipped.
+      rngSeeded = false;
 
       // The follower starts at 1 rather than at 0 - a zeroed envelope is below
       // the stop threshold and would end the note on its first sample. It
@@ -393,7 +464,40 @@ export function createString(sampleRate: number, minFrequency: number) {
 
         // The loop filter. `h0 + 2*h1` is 1 for every brightness, so this is a
         // contraction whenever `rho < 1` and the loop cannot grow.
-        const feedback = rho * (h0 * x1 + h1 * (sample + x2));
+        let filtered = h0 * x1 + h1 * (sample + x2);
+        let sign = 1;
+        if (probabilistic) {
+          // Seeded on first use rather than at every pluck, so a note that
+          // never flips a coin never touches `Math.random` - which is what
+          // makes the default path bit-identical - while a note whose
+          // `stretch` is automated up mid-ring still gets a fresh sequence.
+          if (!rngSeeded) {
+            rngState = (Math.random() * 4294967296) >>> 0 || 1;
+            rngSeeded = true;
+          }
+          // Stretch: skip the damping filter, keeping `x1` - which is the same
+          // one sample of delay the filter has, so the loop length does not
+          // move with `S` and the string does not detune. K&S's period shifts
+          // from `p + 1/2` to `p + 1/(2S)` because their averager carries half
+          // a sample; ticket 04's symmetric three-tap carries exactly one at
+          // every frequency, and so does this branch.
+          if (stretching && nextRandom() >= stretchThreshold) {
+            filtered = x1;
+          }
+          // Blend: negate the loop signal with probability 1 - b. A second,
+          // independent draw, as the paper's combined recurrence requires.
+          if (blending && nextRandom() >= blendThreshold) {
+            sign = -1;
+          }
+        }
+        // Both branches have magnitude at most 1 at every frequency - `G(w)`
+        // when the filter runs, exactly 1 when it is skipped or negated - so
+        // the loop is still a contraction whenever `rho < 1`, and `rho` stays
+        // *outside* the coin flip on purpose: inside, `stretch` would multiply
+        // the whole decay and `decay` would stop being a time in seconds.
+        // Outside, `decay` is the ceiling and `stretch` lengthens only what
+        // the damping filter shortens, which is the high partials.
+        const feedback = sign * rho * filtered;
         x2 = x1;
         x1 = sample;
         const write = writeIndex + HEAD;
@@ -440,6 +544,11 @@ export function createKS(sampleRate: number, minFrequency: number) {
     dynamics = 0.5,
     position = 0.13,
     pickAngle = 0,
+    // And these two are Karplus and Strong's own variants, inside the loop -
+    // both neutral by default, so the shipped string is the one ticket 04
+    // built.
+    stretch = 1,
+    blend = 1,
   ) => {
     // Smith 3.3: the loop filter is applied once per period, so -60 dB in
     // `decay` seconds needs `rho^(f0*decay) = 0.001`. Pitch-independent by
@@ -471,6 +580,8 @@ export function createKS(sampleRate: number, minFrequency: number) {
         ? Math.min(Math.pow(targetAmplitude, 1 / periods), maxLoopGain)
         : 0, // a non-positive decay would invert the exponent and grow the loop
       brightness,
+      stretch,
+      blend,
     );
 
     let start = 0;

@@ -20,6 +20,8 @@ export type KarplusStrongInputs = {
   dynamics: ParamInput;
   position: ParamInput;
   pickAngle: ParamInput;
+  stretch: ParamInput;
+  blend: ParamInput;
 };
 
 export type KarplusStrongWorkletNode = AudioWorkletNode & {
@@ -31,6 +33,8 @@ export type KarplusStrongWorkletNode = AudioWorkletNode & {
   dynamics: AudioParam;
   position: AudioParam;
   pickAngle: AudioParam;
+  stretch: AudioParam;
+  blend: AudioParam;
   dispose(): void;
 };
 

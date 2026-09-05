@@ -81,6 +81,8 @@ function pluck(
   dynamics = 0.5,
   position = 0.13,
   pickAngle = 0,
+  stretch = 1,
+  blend = 1,
 ) {
   const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
   const output = new Float32Array(Math.ceil(SAMPLE_RATE * seconds));
@@ -96,6 +98,8 @@ function pluck(
       dynamics,
       position,
       pickAngle,
+      stretch,
+      blend,
     );
     output.set(block.subarray(0, Math.min(BLOCK, output.length - n)), n);
   }
@@ -197,6 +201,81 @@ function spectralCentroid(signal: Float32Array, start: number, size: number) {
     total += energy[k];
   }
   return total > 0 ? weighted / total : 0;
+}
+
+/**
+ * How fast one band of the spectrum decays, in dB per second, measured between
+ * two windows. A *rate*, which is what a decay-stretching claim is about, and
+ * a narrow band because the answer is a per-partial one: everything above
+ * 5 kHz at 1760 Hz spans loop gains from 0.94 down to 0.5, so a wide band
+ * decays as a mixture rather than as an exponential.
+ */
+function bandDecayRate(
+  signal: Float32Array,
+  centre: number,
+  width: number,
+  fromSeconds: number,
+  toSeconds: number,
+) {
+  const size = 1024;
+  const level = (at: number) => {
+    const energy = spectrum(signal, Math.round(at * SAMPLE_RATE), size);
+    let sum = 0;
+    for (let k = 1; k < size / 2; k++) {
+      const frequency = (k * SAMPLE_RATE) / size;
+      if (frequency > centre - width && frequency < centre + width) {
+        sum += energy[k];
+      }
+    }
+    return 10 * Math.log10(Math.max(sum, 1e-30));
+  };
+  return (level(fromSeconds) - level(toSeconds)) / (toSeconds - fromSeconds);
+}
+
+/**
+ * How periodic the signal is: the peak normalised autocorrelation over the
+ * lags a pitch could occupy. A plucked string is a delay line going round, so
+ * this is near 1; Karplus and Strong's drum "is aperiodic", so it is not.
+ */
+function periodicity(signal: Float32Array, frequency: number) {
+  const period = SAMPLE_RATE / frequency;
+  const from = Math.round(0.02 * SAMPLE_RATE);
+  const length = Math.min(Math.round(0.2 * SAMPLE_RATE), signal.length - from);
+  let best = 0;
+  for (
+    let lag = Math.floor(period * 0.5);
+    lag <= Math.ceil(period * 2.5);
+    lag++
+  ) {
+    let dot = 0;
+    let energyA = 0;
+    let energyB = 0;
+    for (let i = 0; i + lag < length; i++) {
+      const a = signal[from + i];
+      const b = signal[from + i + lag];
+      dot += a * b;
+      energyA += a * a;
+      energyB += b * b;
+    }
+    const norm = Math.sqrt(energyA * energyB);
+    const score = norm > 0 ? dot / norm : 0;
+    if (score > best) best = score;
+  }
+  return best;
+}
+
+/** Geometric over arithmetic mean of the spectrum: 0 is a line, 1 is noise. */
+function spectralFlatness(signal: Float32Array, start: number, size: number) {
+  const energy = spectrum(signal, start, size);
+  let logSum = 0;
+  let sum = 0;
+  let count = 0;
+  for (let k = 1; k < size / 2; k++) {
+    logSum += Math.log(energy[k] + 1e-30);
+    sum += energy[k];
+    count++;
+  }
+  return Math.exp(logSum / count) / (sum / count);
 }
 
 // The same 5 ms one-pole `dsp.ts` stops on, so "the level the note ended at"
@@ -1310,5 +1389,255 @@ describe("createKS amplitude with the excitation shaped", () => {
     }
     expect(nonFinite).toBe(0);
     expect(peak).toBeLessThan(2.5);
+  }, 120_000);
+});
+
+// ---------------------------------------------------------------------------
+// Karplus and Strong's own two probabilistic variants, from the 1983 paper
+// this package is named after - the ones its title is about. `stretch` is
+// *their* decay stretching, from "Modifications in the Basic Algorithm", not
+// Jaffe and Smith's identically-lettered one; `blend` is the drum algorithm
+// Kevin Karplus discovered in December 1979. Both are inside the loop, and
+// both are neutral at their defaults.
+// ---------------------------------------------------------------------------
+
+describe("createKS stretch", () => {
+  it("costs the default path nothing: stretch 1 and blend 1 are the string", () => {
+    // Not "sounds the same" - the same samples. The probabilistic branch is
+    // behind one boolean, and its generator is private, so a default note does
+    // not even draw a random number: the excitation's seeded sequence is
+    // untouched and this render is the pre-ticket one.
+    const before = withSeededNoise(3, () => pluck(440, 1, 0.2));
+    const after = withSeededNoise(3, () =>
+      pluck(440, 1, 0.2, 0.5, 0.5, 0.5, 0.13, 0, 1, 1),
+    );
+    expect(Array.from(after)).toEqual(Array.from(before));
+  });
+
+  // "The decay time of each overtone is approximately multiplied by S."
+  it("multiplies a partial's decay time by roughly the stretch factor", () => {
+    const STRETCHES = [1, 2, 4, 8];
+    // The third partial of a 1760 Hz string, where the damping filter's loss
+    // dominates: measured 1128 dB/s unstretched, against the 60 dB/s that
+    // `decay = 1` alone imposes.
+    const rate = (stretch: number) => {
+      let total = 0;
+      const PLUCKS = 8;
+      for (let i = 0; i < PLUCKS; i++) {
+        const signal = pluck(1760, 1, 0.3, 0.5, 0.5, 1, 0.13, 0, stretch, 1);
+        total += bandDecayRate(signal, 5280, 400, 0.005, 0.05) / PLUCKS;
+      }
+      return total;
+    };
+    const rates = STRETCHES.map(rate);
+
+    // Monotone, and by the right amount. `rho` is outside the coin flip, so it
+    // sets a floor the stretch cannot lift: the rate is `60 + (r1 - 60)/S`
+    // rather than `r1/S`, which is why S = 4 gives 3.5 rather than 4. Measured
+    // 1.00 / 1.89 / 3.50 / 6.37 against a model of 1.00 / 1.90 / 3.45 / 5.83.
+    for (let i = 1; i < rates.length; i++) {
+      expect(rates[i]).toBeLessThan(rates[i - 1]);
+    }
+    const RHO_RATE = 60; // dB/s from `decay = 1`, at every pitch
+    for (let i = 0; i < STRETCHES.length; i++) {
+      const model = RHO_RATE + (rates[0] - RHO_RATE) / STRETCHES[i];
+      expect(Math.abs(rates[i] / model - 1)).toBeLessThan(0.2);
+    }
+  });
+
+  // K&S's period moves from `p + 1/2` to `p + 1/(2S)` because their averager
+  // carries half a sample of phase delay and skipping it removes it. Ticket
+  // 04's damping filter is symmetric, so it carries exactly one sample at
+  // every frequency - and the skip path here is `x[n-1]`, which carries
+  // exactly one too. So there is nothing to compensate, and this is the
+  // assertion that says so.
+  //
+  // Measured with the autocorrelation estimator, and by the *spread* across
+  // the sweep rather than the absolute error, for two reasons. Randomly
+  // switching between two loop filters modulates the loop, which puts a noise
+  // skirt around every partial: the spectral estimator reads one pluck's peak
+  // out of that skirt and scatters by up to 15 cents at 110 Hz while its mean
+  // stays at -0.3, where autocorrelation - which measures periodicity, and
+  // periodicity is what "detune" means - scatters by 0.27. And the
+  // autocorrelation estimator has a lag-resolution bias of its own, 1.5 cents
+  // at 440 Hz, which is constant across the sweep and cancels in a spread.
+  // Measured spread: 0.06 / 0.31 / 0.77 cents at 110 / 440 / 1760.
+  it.each([110, 440, 1760])(
+    "does not detune the string as it sweeps, at %p Hz",
+    (frequency) => {
+      const PLUCKS = 6;
+      const measured = [1, 2, 5, 10, 20].map((stretch) => {
+        let total = 0;
+        for (let i = 0; i < PLUCKS; i++) {
+          const signal = pluck(
+            frequency,
+            1,
+            0.5,
+            0.5,
+            0.5,
+            0.5,
+            0.13,
+            0,
+            stretch,
+            1,
+          );
+          total += cents(fundamental(signal, frequency), frequency) / PLUCKS;
+        }
+        return total;
+      });
+      expect(Math.max(...measured) - Math.min(...measured)).toBeLessThan(5);
+    },
+  );
+});
+
+describe("createKS blend", () => {
+  // `position` is 0 and `dynamics` 1 throughout this group: the pick-position
+  // comb is a *string* filter and it annihilates the constant wavetable the
+  // drum is loaded with, `x[n] - x[n-D]` being zero wherever the burst is flat.
+  const drum = (frequency: number, seconds: number, blend: number) =>
+    pluck(frequency, 1, seconds, 0.5, 0.5, 1, 0, 0, 1, blend);
+
+  // "With a blend factor of 1/2, the sound is drumlike."
+  it("turns the string into a drum at 1/2", () => {
+    const string = periodicity(drum(440, 0.5, 1), 440);
+    const drumlike = periodicity(drum(440, 0.5, 0.5), 440);
+    // A delay line going round is as periodic as a signal gets; the drum "is
+    // aperiodic", and measures it: 0.996 against 0.16.
+    expect(string).toBeGreaterThan(0.9);
+    expect(drumlike).toBeLessThan(0.4);
+
+    // And the spectrum fills in: a line spectrum has a flatness near 0, noise
+    // near 1. Measured 0.00003 against 0.54.
+    expect(spectralFlatness(drum(440, 0.5, 1), 2048, 4096)).toBeLessThan(0.01);
+    expect(spectralFlatness(drum(440, 0.5, 0.5), 2048, 4096)).toBeGreaterThan(
+      0.3,
+    );
+  });
+
+  // "A blend factor of 0 negates the entire signal every p + 1/2 samples. This
+  // drops the frequency an octave and leaves only odd harmonics of the new
+  // fundamental... the sound is harplike."
+  it("drops an octave and keeps only odd harmonics at 0", () => {
+    const signal = drum(440, 0.5, 0);
+    expect(Math.abs(cents(spectralFundamental(signal, 220), 220))).toBeLessThan(
+      5,
+    );
+
+    const energy = spectrum(signal, 2048, 16384);
+    const at = (frequency: number) => {
+      const k = Math.round((frequency * 16384) / SAMPLE_RATE);
+      let peak = 0;
+      for (let j = k - 2; j <= k + 2; j++)
+        if (energy[j] > peak) peak = energy[j];
+      return 10 * Math.log10(peak + 1e-30);
+    };
+    // Odd harmonics of 220 present, even ones gone: measured 54.9 / -62.2 /
+    // 44.6 / -71.8 / 38.0 dB at 220 / 440 / 660 / 880 / 1100.
+    for (const odd of [220, 660, 1100]) {
+      for (const even of [440, 880]) {
+        expect(at(odd) - at(even)).toBeGreaterThan(80);
+      }
+    }
+  });
+
+  // "The initial wavetable can be filled with a constant (A), since the drum
+  // algorithm will create the randomness itself... starting with a constant
+  // gives some buildup before the decay, while starting with randomness gives
+  // maximum amplitude initially."
+  it("loads the wavetable with a constant, and builds up from it", () => {
+    const signal = drum(200, 0.5, 0.5);
+    // The loop returns nothing for a whole period, so the first samples are
+    // the excitation and the excitation is flat.
+    for (let i = 0; i < 64; i++) expect(signal[i]).toBe(0.5); // `level`
+    // And then it grows past it rather than starting at its maximum: 0.67
+    // against the 0.5 it was loaded with.
+    expect(peakOf(signal)).toBeGreaterThan(0.55);
+  });
+
+  // "For b = 1/2, the wavetable length does not control the pitch of the tone,
+  // as the sound is aperiodic. Instead, it controls the decay time of the
+  // noise burst. The decay time is roughly proportional to p."
+  it("makes the buffer length a decay control rather than a pitch", () => {
+    const measured = [100, 200, 500, 1000].map((frequency) =>
+      t60(drum(frequency, 1.5, 0.5)),
+    );
+    // Measured 0.221 / 0.109 / 0.067 / 0.055 s. The first pair is the
+    // proportionality itself - twice the buffer, 2.03x the decay - and it
+    // flattens at short buffers, where `rho` and the excitation length are
+    // what is left.
+    for (let i = 1; i < measured.length; i++) {
+      expect(measured[i]).toBeLessThan(measured[i - 1]);
+    }
+    expect(measured[0] / measured[1]).toBeGreaterThan(1.7);
+    expect(measured[0] / measured[1]).toBeLessThan(2.4);
+    expect(measured[0] / measured[3]).toBeGreaterThan(3);
+  });
+});
+
+describe("createKS amplitude and stability with the loop variants", () => {
+  it("stays finite and bounded across the corners of both", () => {
+    let peak = 0;
+    let nonFinite = 0;
+    for (const frequency of [20, 110, 440, 1760, 5000]) {
+      for (const level of [0.5, 1]) {
+        for (const stretch of [1, 4, 20]) {
+          for (const blend of [1, 0.5, 0]) {
+            for (const position of [0, 0.13, 0.5]) {
+              for (const sample of pluck(
+                frequency,
+                1,
+                0.3,
+                0.5,
+                level,
+                0.5,
+                position,
+                0,
+                stretch,
+                blend,
+              )) {
+                if (!Number.isFinite(sample)) nonFinite++;
+                else if (Math.abs(sample) > peak) peak = Math.abs(sample);
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(nonFinite).toBe(0);
+    // Measured 0.90. Both branches have magnitude at most 1 - the skip path is
+    // a pure delay and the sign flip is a sign - so the loop is a contraction
+    // for exactly the same reason it was before, and `rho < 1` still bounds it.
+    expect(peak).toBeLessThan(2.5);
+  }, 120_000);
+
+  it("never grows over a 30 second render with both at their corners", () => {
+    const CORNERS: [number, number][] = [];
+    for (const stretch of [1, 20]) {
+      for (const blend of [1, 0.5, 0]) CORNERS.push([stretch, blend]);
+    }
+
+    for (const [stretch, blend] of CORNERS) {
+      const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+      const block = new Float32Array(BLOCK);
+      let firstSecond = 0;
+      let lastSecond = 0;
+      let nonFinite = 0;
+      const total = SAMPLE_RATE * 30;
+
+      for (let n = 0; n < total; n += BLOCK) {
+        ks(block, 1, 110, 5, 1, 1, 1, 0, 0, stretch, blend);
+        for (const sample of block) {
+          if (!Number.isFinite(sample)) nonFinite++;
+          else if (n < SAMPLE_RATE) {
+            if (Math.abs(sample) > firstSecond) firstSecond = Math.abs(sample);
+          } else if (n >= total - SAMPLE_RATE) {
+            if (Math.abs(sample) > lastSecond) lastSecond = Math.abs(sample);
+          }
+        }
+      }
+
+      expect([stretch, blend, nonFinite]).toEqual([stretch, blend, 0]);
+      expect(lastSecond).toBeLessThanOrEqual(firstSecond);
+    }
   }, 120_000);
 });
