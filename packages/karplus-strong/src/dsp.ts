@@ -30,13 +30,16 @@ export function createString(sampleRate: number, minFrequency: number) {
   // literal: the buffer and the declared range cannot drift apart again.
   const maxDelay = Math.ceil(sampleRate / minFrequency); // 2205 at 20 Hz
   const capacity = maxDelay + 1;
-  // The guard tail: the last GUARD slots mirror the first GUARD, so a read
-  // straddling the wrap point still reads contiguous memory and the hot loop
-  // needs no per-tap wrapping. Linear interpolation needs one; a fourth-order
-  // Lagrange read needs three past the integer tap, so the tail is sized for
-  // that now and the ticket that swaps the interpolator changes only the read.
-  const GUARD = 4;
-  const line = new Float32Array(capacity + GUARD);
+  // Guards at both ends: the slots past the end mirror the first few, the
+  // slots before the start mirror the last few, so a read straddling the wrap
+  // point still reads contiguous memory and the hot loop needs no per-tap
+  // wrapping. The five-tap read below is centred, so it reaches two samples
+  // either side of its nominal position and runs off *both* ends - which is
+  // why the tail ticket 03 sized for it now has a head to match. Logical slot
+  // `s` lives at physical `s + HEAD`.
+  const HEAD = 2;
+  const TAIL = 4;
+  const line = new Float32Array(HEAD + capacity + TAIL);
 
   // The note ends on an envelope of |y|, not on an instantaneous sample: the
   // signal is noise-derived, so a bare threshold on one sample is satisfied by
@@ -58,6 +61,44 @@ export function createString(sampleRate: number, minFrequency: number) {
   // ticket that adds a filter.
   const DAMPING_PHASE_DELAY = 1;
   const phaseDelayCompensation = DAMPING_PHASE_DELAY;
+
+  // Fourth-order Lagrange interpolation for the fractional part of the delay,
+  // which is what the fractional delay filter `Hfd` is in this loop. The
+  // two-point linear read it replaces is a lowpass whose loss at Nyquist is
+  // `|1 - 2*frac|`, applied once per trip round the loop - so the timbre used
+  // to be a near-arbitrary function of `frac(sampleRate/frequency)`: at 441 Hz
+  // nothing above 5 kHz decayed at all, and one semitone away it was gone in
+  // 250 ms.
+  //
+  // Lagrange rather than allpass because a glide is a rapidly-varying delay
+  // and Smith 3.6.2 names allpass as the interpolator that "can exhibit
+  // artifacts when the delay changes too rapidly"; fourth order because
+  // Laurson et al. 2001 call third "the minimum required for high-quality
+  // synthesis at the sampling rate of 44.1 kHz" and Smith's own listing writes
+  // `fdelay4`.
+  //
+  // The kernel is exact for a delay in [1.5, 2.5] samples measured from its
+  // newest tap, so the integer split rounds rather than floors and the read
+  // reaches 2.5 samples *newer* than its nominal position in the worst case.
+  // That reach costs no phase delay - the five taps implement a delay of
+  // exactly `readDistance` - but it does set the shortest loop the string can
+  // hold, and so the highest note it can play.
+  const INTERPOLATOR_REACH = 2.5;
+  let c0 = 0;
+  let c1 = 0;
+  let c2 = 1;
+  let c3 = 0;
+  let c4 = 0;
+  // The coefficients depend only on the fractional part, and `readIndex`
+  // advances by exactly one sample per sample, so they are recomputed only
+  // when the delay actually moves. Today it never moves inside a note.
+  let coefficientFraction = NaN;
+
+  // The shortest loop the string can hold, and so the highest note it can
+  // play: the read's newest tap has to be a sample that has already been
+  // written, and the damping filter's sample comes out of the same budget.
+  // `params.ts` declares a `frequency.maxValue` this clamp can honour.
+  const MIN_LOOP_LENGTH = INTERPOLATOR_REACH + 1 + phaseDelayCompensation;
 
   // Smith's EKS two-zero damping filter, `rho * (h0*x' + h1*(x + x''))`, and
   // the one thing that makes this Karplus-Strong rather than a leaky comb: it
@@ -84,10 +125,7 @@ export function createString(sampleRate: number, minFrequency: number) {
      * the slot about to be written.
      */
     setDelay(samples: number) {
-      delayTarget = Math.min(
-        Math.max(samples, 1 + phaseDelayCompensation),
-        maxDelay,
-      );
+      delayTarget = Math.min(Math.max(samples, MIN_LOOP_LENGTH), maxDelay);
     },
 
     /**
@@ -110,18 +148,18 @@ export function createString(sampleRate: number, minFrequency: number) {
      * excitation - as a signal, which is what lets a later ticket filter,
      * position and level it.
      *
-     * `P` is `floor(read distance)`: the interpolator's second tap sits one
-     * sample *newer* than its first and the damping filter reads `x[n]`
-     * directly, so the shortest path round the loop closes there - and past
-     * that point a summed burst sample would push the output beyond full
-     * scale.
+     * `P` is `floor(read distance - the interpolator's reach)`: the read's
+     * newest tap sits up to 2.5 samples ahead of its nominal position and the
+     * damping filter reads `x[n]` directly, so that is where the shortest path
+     * round the loop closes - and past that point a summed burst sample would
+     * push the output beyond full scale.
      */
     pluck() {
       line.fill(0);
       x1 = 0;
       x2 = 0;
       delay = delayTarget; // a new note starts in tune, it does not glide into it
-      burst = Math.floor(delay - phaseDelayCompensation);
+      burst = Math.floor(delay - phaseDelayCompensation - INTERPOLATOR_REACH);
       // The burst is full scale, so the follower starts there rather than at
       // zero - a zeroed envelope is below the threshold and would stop the
       // note on its first sample.
@@ -144,12 +182,34 @@ export function createString(sampleRate: number, minFrequency: number) {
         delay += increment;
         let readIndex = writeIndex - (delay - phaseDelayCompensation);
         if (readIndex < 0) readIndex += capacity;
-        const index = Math.floor(readIndex);
-        const frac = readIndex - index;
-        // The guard tail is what makes the second tap unconditional: at the
-        // end of the line it reads the mirror of slot 0.
-        const a = line[index];
-        let sample = a + frac * (line[index + 1] - a);
+        // Round, not floor: the kernel is accurate for a delay within half a
+        // sample of the centre of its five taps.
+        const index = Math.round(readIndex);
+        const fraction = readIndex - index;
+
+        if (fraction !== coefficientFraction) {
+          coefficientFraction = fraction;
+          // Delay from the newest tap, in [1.5, 2.5].
+          const d = 2 - fraction;
+          const d1 = d - 1;
+          const d2 = d - 2;
+          const d3 = d - 3;
+          const d4 = d - 4;
+          c0 = (d1 * d2 * d3 * d4) / 24;
+          c1 = (d * d2 * d3 * d4) / -6;
+          c2 = (d * d1 * d3 * d4) / 4;
+          c3 = (d * d1 * d2 * d4) / -6;
+          c4 = (d * d1 * d2 * d3) / 24;
+        }
+
+        // Five taps, newest first, straight through both guards.
+        const tap = index + HEAD + 2;
+        let sample =
+          c0 * line[tap] +
+          c1 * line[tap - 1] +
+          c2 * line[tap - 2] +
+          c3 * line[tap - 3] +
+          c4 * line[tap - 4];
 
         if (burst > 0) {
           sample += Math.random() * 2 - 1;
@@ -162,8 +222,10 @@ export function createString(sampleRate: number, minFrequency: number) {
         const feedback = rho * (h0 * x1 + h1 * (sample + x2));
         x2 = x1;
         x1 = sample;
-        line[writeIndex] = feedback;
-        if (writeIndex < GUARD) line[writeIndex + capacity] = feedback;
+        const write = writeIndex + HEAD;
+        line[write] = feedback;
+        if (writeIndex < TAIL) line[write + capacity] = feedback;
+        if (writeIndex >= capacity - HEAD) line[write - capacity] = feedback;
         writeIndex = writeIndex + 1 === capacity ? 0 : writeIndex + 1;
 
         // Stop playing once the envelope - not one sample - is inaudible

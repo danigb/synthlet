@@ -11,10 +11,16 @@ export const PARAMS: readonly ParamDescriptor[] = [
     automationRate: "k-rate",
   },
   {
+    // The top is measured, not declared. Above about 5 kHz the loop is under
+    // nine samples long, holds four partials and is excited by a burst of
+    // five, and the pitch stops being reliable: the worst of 16 plucks lands
+    // 2.1 cents out at 5000 Hz, 8.3 at 5500 and 21 at 6000. 5 kHz is the
+    // highest round number that holds inside the 5 cent tolerance every time.
+    // The old 20000 was 2.2 samples of delay, which is not a string.
     name: "frequency",
     defaultValue: 440,
     minValue: 20,
-    maxValue: 20000,
+    maxValue: 5000,
     automationRate: "k-rate",
   },
   {
