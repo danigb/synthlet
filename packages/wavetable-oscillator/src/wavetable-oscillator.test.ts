@@ -12,10 +12,10 @@ describe("WavetableOscillator", () => {
     const osc = WavetableOscillator(10);
     osc.set(new Float32Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), 10);
     // sampleRate / len = 1 Hz is this table's natural pitch, so 0.5 Hz is half
-    // a table sample per output sample.
+    // a table sample per output sample. One plane, so `morph` does nothing.
     const inputs = {
       frequency: [0.5],
-      morphFrequency: [1],
+      morph: [0],
     };
     const output = new Float32Array(10);
     osc.agen(output, inputs);
@@ -40,16 +40,19 @@ describe("WavetableOscillator", () => {
       10,
     );
     // Two cycles of a 1 Hz table per second: two table samples per output one.
-    const inputs = {
-      frequency: [2],
-      morphFrequency: [1],
-    };
+    // Three planes, so `morph` 0, 0.5 and 1 are planes 0, 1 and 2 exactly - the
+    // property ticket 05 exists for, and the round numbers make it legible.
+    //
+    // The steps between the three blocks are a full plane each, well past the
+    // declick's threshold of half a plane per sample, so the second and third
+    // snapshots are the 64-sample ramp caught mid-flight rather than the plane
+    // read straight. That is the point: a jumped position ramps.
     const output = new Float32Array(10);
-    osc.agen(output, inputs);
+    osc.agen(output, { frequency: [2], morph: [0] });
     expect(output).toMatchSnapshot();
-    osc.agen(output, inputs);
+    osc.agen(output, { frequency: [2], morph: [0.5] });
     expect(output).toMatchSnapshot();
-    osc.agen(output, inputs);
+    osc.agen(output, { frequency: [2], morph: [1] });
     expect(output).toMatchSnapshot();
   });
 });

@@ -65,7 +65,7 @@ function render(
   osc.set(message.wavetable, message.length);
   const out = new Float32Array(length);
   const block = new Float32Array(128);
-  const inputs = { frequency: [frequency], morphFrequency: [0] };
+  const inputs = { frequency: [frequency], morph: [0] };
   for (let at = 0; at < length; at += 128) {
     const size = Math.min(128, length - at);
     const view = size === 128 ? block : block.subarray(0, size);

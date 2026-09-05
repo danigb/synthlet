@@ -30,12 +30,23 @@ export type { BuiltInShape } from "./wavetable-builder";
 
 export type WavetableInputs = {
   frequency?: ParamInput;
-  morphFrequency?: ParamInput;
+  morph?: ParamInput;
 };
 
 export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
   frequency: AudioParam;
-  morphFrequency: AudioParam;
+  /**
+   * The wavetable position in `[0, 1]`: 0 is the first plane, 1 is the last,
+   * and everything between crossfades the two planes either side of it.
+   * Normalized rather than a plane index, so a modulator patched into it does
+   * not have to know the current table's plane count.
+   *
+   * a-rate: `Lfo(ac, { frequency: 0.05 }).connect(osc.morph)` is a slow scan,
+   * and the same connection at audio rate is a wavetable oscillator's signature
+   * sound. A position that jumps - a slider drag, an envelope step - is ramped
+   * over 64 samples rather than stepped.
+   */
+  morph: AudioParam;
   loadWavetable(urlOrName: string): Promise<void>;
   fetchWavetableNames(): Promise<string[]>;
   setWavetable(wavetable: Wavetable): void;

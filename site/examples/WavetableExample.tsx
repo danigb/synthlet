@@ -7,6 +7,8 @@ import {
   Compound,
   fetchWavetableNames,
   Gain,
+  Lfo,
+  LfoType,
   Param,
   WavetableOscillator,
 } from "synthlet";
@@ -25,17 +27,29 @@ const WavetableSynth = (ac: AudioContext) => {
   // No `loadWavetable` here: the oscillator ships with a built-in sine ->
   // triangle -> sawtooth -> square table and is audible before anything is
   // fetched. Picking a name from the dropdown replaces it.
-  const osc = WavetableOscillator(ac, { frequency: freq });
+  //
+  // `morph` is the wavetable position, 0 = first plane and 1 = last. It starts
+  // centred so the LFO below has room either side of it.
+  const osc = WavetableOscillator(ac, { frequency: freq, morph: 0.5 });
   const amp = AdsrAmp(ac, { gate });
   const out = Gain(ac, { gain: volume });
+
+  // The oscillator used to carry its own morph phasor, as a `morphFrequency`
+  // parameter. It does not any more: `morph` is a-rate, so an `Lfo` into it is
+  // the same sound and can be any shape, any depth and any rate - which is what
+  // this connection demonstrates. The slider sets the centre, the LFO swings
+  // around it, and Web Audio clamps the sum into the parameter's 0..1.
+  const lfo = Lfo(ac, { frequency: 0.2, type: LfoType.Triangle, gain: 0 });
+  lfo.connect(osc.morph);
 
   osc.connect(amp).connect(out);
 
   return Compound({
     output: out,
-    owns: [osc, amp, gate, freq, volume],
+    owns: [osc, amp, lfo, gate, freq, volume],
     exposes: {
       osc,
+      lfo,
       gate: gate.input,
       freq: freq.input,
       volume: volume.input,
@@ -80,13 +94,29 @@ function WavetableExample() {
         <div></div>
 
         <Slider
-          label="Morph freq"
+          label="Morph"
           labelClassName="text-right"
           inputClassName="col-span-2"
           min={0}
-          max={10}
-          step={0.1}
-          param={synth.osc.morphFrequency}
+          max={1}
+          param={synth.osc.morph}
+        />
+        <Slider
+          label="Morph LFO rate"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={0}
+          max={20}
+          units=" Hz"
+          param={synth.lfo.frequency}
+        />
+        <Slider
+          label="Morph LFO depth"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={0}
+          max={0.5}
+          param={synth.lfo.gain}
         />
       </div>
       <div className="flex mt-4">

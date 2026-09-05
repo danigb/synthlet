@@ -107,6 +107,24 @@ describe("descriptors", () => {
     );
     expect(aRate.map((d) => d.name)).toEqual(["frequency"]);
   });
+
+  // Scanning a wavetable at audio rate is one of the format's signature sounds,
+  // and a k-rate position quantises it to one step per render quantum. It is
+  // also normalized 0..1 rather than a plane index, so a modulator patched into
+  // it does not have to know the current table's plane count.
+  it("keeps WavetableOscillator's morph at a-rate, normalized 0..1", () => {
+    const aRate = synthlet.WavetableOscillator.descriptors.filter(
+      (d) => d.automationRate === "a-rate",
+    );
+    expect(aRate.map((d) => d.name)).toEqual(["morph"]);
+    expect(aRate[0]).toEqual({
+      name: "morph",
+      defaultValue: 0,
+      minValue: 0,
+      maxValue: 1,
+      automationRate: "a-rate",
+    });
+  });
 });
 
 describe.each(withDescriptors)("%s.descriptors", (_name, factory) => {

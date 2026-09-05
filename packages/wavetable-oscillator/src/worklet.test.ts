@@ -37,7 +37,7 @@ describe("WavetableOscillatorWorkletNode", () => {
     // 4 is one table sample per output sample.
     const params = {
       frequency: [4],
-      morphFrequency: [0],
+      morph: [0],
     };
     expect(Array.from(runProcessMono(processor, 10, params))).toEqual(
       Array.from(wavetable),

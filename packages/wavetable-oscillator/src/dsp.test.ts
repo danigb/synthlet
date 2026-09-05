@@ -48,14 +48,20 @@ const FLOAT32_STEP = 1.1920929e-7;
 
 type Params = {
   frequency?: number;
-  morphFrequency?: number;
+  /**
+   * A number for the k-rate case - one value for the whole block, which is how
+   * an unconnected `AudioParam` arrives - or a function of the absolute sample
+   * index for the a-rate one, which `render` fills into a block-sized
+   * `Float32Array` the way a connected one arrives.
+   */
+  morph?: number | ((index: number) => number);
 };
 
 const inputsOf = (params: Params) => ({
   frequency: [params.frequency ?? 440],
-  // Off unless a test is about the morph: a running phasor would otherwise put
-  // a crossfade in the middle of every spectrum measured here.
-  morphFrequency: [params.morphFrequency ?? 0],
+  // Plane 0 unless a test is about the morph: a crossfade in the middle of a
+  // spectrum measurement would make it a measurement of two planes at once.
+  morph: [typeof params.morph === "number" ? params.morph : 0],
 });
 
 /**
@@ -83,11 +89,24 @@ function render(
 
   const out = new Float32Array(warmup + length);
   const buffer = new Float32Array(block);
-  const inputs = inputsOf(params);
+  const inputs: {
+    frequency: number[];
+    morph: ArrayLike<number>;
+  } = inputsOf(params);
+  const morphAt = typeof params.morph === "function" ? params.morph : null;
+  const morphBuffer = new Float32Array(block);
 
   for (let at = 0; at < out.length; at += block) {
     const size = Math.min(block, out.length - at);
     const view = size === block ? buffer : buffer.subarray(0, size);
+    if (morphAt) {
+      // Same length as the output, which is what makes the unit read it per
+      // sample, and refilled per block because that is how it arrives.
+      const morph =
+        size === block ? morphBuffer : morphBuffer.subarray(0, size);
+      for (let i = 0; i < size; i++) morph[i] = morphAt(at + i);
+      inputs.morph = morph;
+    }
     osc.agen(view, inputs);
     out.set(view, at);
   }
@@ -128,37 +147,263 @@ const centsFrom = (measured: number, f0: number) =>
 // ---------------------------------------------------------------------------
 
 describe("the morph", () => {
-  // Three constant planes one full scale apart, so the crossfade's own step is
-  // exactly `morphFrequency / sampleRate * |planeA - planeB|` and any departure
-  // from it is the defect. Before ticket 01 hoisted the plane advance above the
-  // output write, this measured 1.9977 at every rate: a full-scale one-sample
-  // impulse on each of the phasor's wraps.
+  /**
+   * Ticket 05 replaced the internal `morphFrequency` phasor with an a-rate
+   * `morph` position in 0..1, so this whole block is rewritten rather than
+   * retuned: the parameter ticket 02 measured no longer exists. What it
+   * measured - "steps by the crossfade and nothing more" - survives as
+   * `it("morphs smoothly across the whole range")` below, against a position
+   * swept by the caller instead of by a phasor nobody could aim.
+   *
+   * Two properties do the work. **Indexing gives Serra, Rubine & Dannenberg's
+   * swap discipline (JAES 38(3) 1990 §1.1) for free** - as the position crosses
+   * an integer the coefficient of the plane being exchanged is exactly zero -
+   * and a **64-sample ramp** covers the case indexing cannot: a position that
+   * jumps, or a table replaced under the reader.
+   */
+
+  /** The declick ramp in `wavetable-oscillator.ts`, and the bound it implies. */
+  const DECLICK = 64;
+
+  /**
+   * Two planes a full scale apart, so a jump between them is 2.0 - the largest
+   * discontinuity a normalized table can contain, and the number every declick
+   * bound below is a fraction of.
+   */
   const PLANE_GAP = 2;
 
-  it.each([
-    [100, 1],
-    [5, 2],
-    [0.05, 25],
-  ])(
-    "steps by the crossfade and nothing more at %p Hz",
-    (morphFrequency, seconds) => {
+  /** `count` constant planes alternating +1 / -1: every adjacent pair maximal. */
+  const alternatingPlanes = (len: number, count: number) =>
+    constantPlanes(
+      len,
+      ...Array.from({ length: count }, (_, k) => (k % 2 === 0 ? 1 : -1)),
+    );
+
+  it.each([2, 3, 4, 5, 8])(
+    "sits still at a chosen plane, %p planes",
+    (count) => {
+      // Success criterion 1. `morph` at `k / (planes - 1)` is plane `k` and
+      // nothing else, sample for sample - not close to it.
+      //
+      // Exact even where `k / (count - 1)` is not a binary fraction: `1/3 * 3`
+      // is 0.9999999999999998 in float64, so the mix carries a 2.2e-16 error
+      // and misses the plane by at most 4.4e-16 - 2.7e-9 of a float32 ulp at
+      // 1.0, which the write into the output array annihilates. Measured worst
+      // error over every row here: 0.
       const len = 64;
-      const signal = render(
-        constantPlanes(len, 1, -1, 0),
+      const values = Array.from(
+        { length: count },
+        (_, k) => -1 + (2 * k) / (count - 1),
+      );
+      const table = constantPlanes(len, ...values);
+
+      for (let k = 0; k < count; k++) {
+        const signal = render(
+          table,
+          len,
+          { frequency: 440, morph: k / (count - 1) },
+          { length: 256 },
+        );
+        for (const sample of signal)
+          expect(sample).toBe(Math.fround(values[k]));
+      }
+    },
+  );
+
+  it("sits still at a chosen plane of the built-in table", () => {
+    // The same property against ticket 04's generated set, which is four planes
+    // of real waveforms rather than constants, read at a moving offset.
+    const len = 256;
+    const { data } = defaultWavetable(len);
+
+    for (let k = 0; k < 4; k++) {
+      const plane = data.slice(k * len, (k + 1) * len);
+      const morphed = render(
+        data,
         len,
-        { frequency: 440, morphFrequency },
-        { length: Math.round(SAMPLE_RATE * seconds) },
+        { frequency: 440, morph: k / 3 },
+        { length: 1024 },
+      );
+      const alone = render(plane, len, { frequency: 440 }, { length: 1024 });
+      expect(Array.from(morphed)).toEqual(Array.from(alone));
+    }
+  });
+
+  it.each([2, 3, 4, 8])(
+    "morphs smoothly across the whole range, %p planes",
+    (count) => {
+      // Success criterion 2, and ticket 02's assertion in its new form. A full
+      // 0 -> 1 sweep over one second, a-rate, across planes that are maximally
+      // different from their neighbours.
+      //
+      // The bound is the crossfade's own step and nothing else: one sample of
+      // position movement is `1 / (N - 1)`, which is `count - 1` times that
+      // along the plane axis, times the gap between the planes it is crossing.
+      // Measured 4.5419e-5 / 9.0837e-5 / 1.3626e-4 / 3.1793e-4 against
+      // predictions 4.5353e-5 / 9.0705e-5 / 1.3606e-4 / 3.1747e-4 - the excess
+      // is the float32 write.
+      const len = 64;
+      const N = SAMPLE_RATE;
+      const signal = render(
+        alternatingPlanes(len, count),
+        len,
+        { frequency: 440, morph: (i) => i / (N - 1) },
+        { length: N },
       );
 
-      // Expressed as the step rather than as a literal, so that the assertion
-      // still says something true if a later ticket changes the morph rate. At
-      // 100 Hz it is 0.0045351 and the measured worst case is 0.0045352.
-      const step = (morphFrequency / SAMPLE_RATE) * PLANE_GAP;
+      // The tolerance is float32 and nothing else: the position arrives in a
+      // Float32Array, so each delta carries up to one ulp of quantization that
+      // the plane axis multiplies by `(count - 1) * PLANE_GAP`, and the output
+      // is a Float32Array too, which adds one ulp per sample of the difference.
+      const step = (1 / (N - 1)) * (count - 1) * PLANE_GAP;
+      const tolerance = ((count - 1) * PLANE_GAP + 2) * FLOAT32_STEP;
       expect(maxAbsoluteDifference(signal)).toBeLessThanOrEqual(
-        step + FLOAT32_STEP,
+        step + tolerance,
       );
-      // And the phasor really did wrap - otherwise the bound above is vacuous.
-      expect(peak(signal)).toBeGreaterThan(0.5);
+      // And the sweep really did reach the far end, or the bound is vacuous.
+      expect(signal[N - 1]).toBe(count % 2 === 0 ? -1 : 1);
+      expect(peak(signal)).toBeLessThanOrEqual(1);
+    },
+  );
+
+  it.each([2, 4, 8, 64])("declicks a jumped position, %p planes", (count) => {
+    // Success criterion 3. `morph` stepped 0 -> 1 in one sample, between planes
+    // that are a full scale apart: the whole table crossed instantly, which is
+    // what a slider drag or a stepped envelope does.
+    //
+    // Without the ramp the step is `PLANE_GAP` - 2.0, full scale. With it the
+    // jump contributes at most `PLANE_GAP / DECLICK` to any one sample, and
+    // since the planes are constants there is no waveform slope underneath:
+    // measured 0.03125 exactly, at every plane count here.
+    //
+    // This is also the row that rejects the ticket's suggested threshold of one
+    // plane per sample. At `planes === 2` that is 1.0 - the entire parameter
+    // range - so nothing would ever be declicked and this case would measure
+    // the full 2.0. The threshold shipped is half a plane per sample, the plane
+    // axis's Nyquist rate rather than its sample rate.
+    const len = 64;
+    const N = 512;
+    const signal = render(
+      alternatingPlanes(len, count),
+      len,
+      { frequency: 440, morph: (i) => (i < 128 ? 0 : 1) },
+      { length: N },
+    );
+
+    expect(maxAbsoluteDifference(signal)).toBeLessThanOrEqual(
+      PLANE_GAP / DECLICK + FLOAT32_STEP,
+    );
+    // And it arrives: a ramp that never lands would satisfy the bound too.
+    expect(signal[N - 1]).toBe(count % 2 === 0 ? -1 : 1);
+  });
+
+  it("declicks a table change", () => {
+    // Success criterion 4, and the audit's W2 measured again. Two three-plane
+    // tables swapped mid-cycle at a fixed morph position, which is exactly what
+    // `loadWavetable` does from the site demo's dropdown while audio runs. The
+    // audit measured 0.5517 -> -0.2190, a step of 0.7707.
+    //
+    // The tables are the same length here, so `set()` keeps the read position -
+    // the discontinuity is purely the change of data, which is the audit's case
+    // exactly. The frequency is `SAMPLE_RATE / BLOCK`, which at len 256 makes
+    // the increment exactly 2 samples: one block advances the read position by
+    // a whole number of cycles, so the swapped oscillator and a fresh one are
+    // at the same offset and can be compared sample for sample.
+    const len = 256;
+    const sines = new Float32Array(len * 3);
+    const cosines = new Float32Array(len * 3);
+    for (let p = 0; p < 3; p++) {
+      for (let i = 0; i < len; i++) {
+        const w = (2 * Math.PI * (p + 1) * i) / len;
+        sines[p * len + i] = Math.sin(w);
+        cosines[p * len + i] = Math.cos(w);
+      }
+    }
+
+    const inputs = { frequency: [SAMPLE_RATE / BLOCK], morph: [0.4] };
+    const osc = WavetableOscillator(SAMPLE_RATE);
+    const before = new Float32Array(BLOCK);
+    osc.set(sines, len);
+    osc.agen(before, inputs);
+
+    const after = new Float32Array(BLOCK);
+    osc.set(cosines, len);
+    osc.agen(after, inputs);
+
+    expect(Math.abs(after[0] - before[BLOCK - 1])).toBeLessThan(0.02);
+
+    // And the ramp is over inside the block - the second half is the new table
+    // read straight, which is what makes this a declick and not a filter.
+    const straight = new Float32Array(BLOCK);
+    const reference = WavetableOscillator(SAMPLE_RATE);
+    reference.set(cosines, len);
+    reference.agen(straight, inputs);
+    expect(Array.from(after.subarray(DECLICK))).toEqual(
+      Array.from(straight.subarray(DECLICK)),
+    );
+    // The declick really was needed: undamped, the step is the audit's 0.7707
+    // order of magnitude rather than a hundredth of it.
+    expect(Math.abs(straight[0] - before[BLOCK - 1])).toBeGreaterThan(0.5);
+  });
+
+  it("takes an audio-rate ramp where morphFrequency used to be", () => {
+    // Success criterion 5. `morphFrequency`'s default was a 0.05 Hz sawtooth
+    // phasor; an `Lfo` at 0.05 Hz into `morph` is the same signal, and the
+    // package no longer has to contain one. Its wrap - 1 back to 0 in a single
+    // sample - is a real discontinuity now that the position is external, and
+    // the declick is what covers it: measured 4.6e-6 at 0.05 Hz and 1.57e-2 at
+    // 100 Hz, both under the ramp's own bound.
+    const len = 64;
+    const table = constantPlanes(len, 1, -1, 0);
+
+    for (const [frequency, length] of [
+      [0.05, SAMPLE_RATE * 2],
+      [100, SAMPLE_RATE],
+    ]) {
+      const signal = render(
+        table,
+        len,
+        { frequency: 440, morph: (i) => ((frequency * i) / SAMPLE_RATE) % 1 },
+        { length },
+      );
+      expect(maxAbsoluteDifference(signal)).toBeLessThanOrEqual(
+        PLANE_GAP / DECLICK + FLOAT32_STEP,
+      );
+      // The scan really did run: plane 1 is -1 and only a crossing reaches it.
+      expect(peak(signal)).toBe(1);
+    }
+  });
+
+  it.each([1, 2, 4])(
+    "survives morph at both extremes and a-rate, %p planes",
+    (count) => {
+      // Every corner of the position input at once: the two ends of the
+      // declared range, values outside it, NaN, and a sweep - against a table
+      // with a single plane, where there is no axis to move along at all.
+      const len = 64;
+      const table = alternatingPlanes(len, count);
+      const positions: (number | ((i: number) => number))[] = [
+        0,
+        1,
+        -5,
+        5,
+        NaN,
+        (i: number) => i / 255,
+        (i: number) => (i % 2 === 0 ? 0 : 1),
+      ];
+
+      for (const morph of positions) {
+        const signal = render(
+          table,
+          len,
+          { frequency: 440, morph },
+          { length: 256 },
+        );
+        for (const sample of signal) {
+          expect(Number.isFinite(sample)).toBe(true);
+          expect(Math.abs(sample)).toBeLessThanOrEqual(1);
+        }
+      }
     },
   );
 
@@ -167,7 +412,7 @@ describe("the morph", () => {
     const signal = render(
       constantPlanes(len, 1, -1, 0),
       len,
-      { morphFrequency: 100 },
+      { morph: (i) => (i % SAMPLE_RATE) / (SAMPLE_RATE - 1) },
       { length: SAMPLE_RATE },
     );
     expect(peak(signal)).toBeLessThanOrEqual(1);
@@ -397,7 +642,7 @@ describe("totality", () => {
     osc.set(table, len);
 
     const buffer = new Float32Array(BLOCK);
-    const inputs = inputsOf({ frequency, morphFrequency: 0.05 });
+    const inputs = inputsOf({ frequency, morph: 0.5 });
     for (let block = 0; block < 2; block++) {
       osc.agen(buffer, inputs);
       for (const sample of buffer) {
@@ -446,6 +691,12 @@ describe("set()", () => {
     // A 2048-sample table swapped for a 64-sample one mid-note. The old read
     // position is far outside the new array, and before ticket 01 reset it the
     // first twelve samples were NaN and a fifth of the block was wrong.
+    //
+    // The block is no longer a flat 0.25 throughout, because ticket 05 replaced
+    // ticket 01's hard reset with a 64-sample ramp: the first block is the old
+    // table's last sample sliding onto the new table's constant. What the test
+    // is for is unchanged - nothing reads out of range, so nothing is NaN - and
+    // the ramp lands exactly, on the sample it is supposed to.
     const osc = WavetableOscillator(SAMPLE_RATE);
     const buffer = new Float32Array(64);
     const inputs = inputsOf({ frequency: 440 });
@@ -455,7 +706,16 @@ describe("set()", () => {
     osc.set(constantPlanes(64, 0.25, 0.25), 64);
     osc.agen(buffer, inputs);
 
-    for (const sample of buffer) expect(sample).toBe(0.25);
+    for (const sample of buffer) {
+      expect(Number.isFinite(sample)).toBe(true);
+      expect(Math.abs(sample)).toBeLessThanOrEqual(1);
+    }
+    // 64 samples of ramp, so the 64th is the new table and nothing else.
+    expect(buffer[63]).toBe(0.25);
+
+    const next = new Float32Array(64);
+    osc.agen(next, inputs);
+    for (const sample of next) expect(sample).toBe(0.25);
   });
 
   it("makes the swap deterministic", () => {
@@ -479,13 +739,13 @@ describe("set()", () => {
     expect(afterA).toEqual(afterB);
     expect(beforeA).toBe(beforeB);
 
-    // The step across the swap is still whatever the new table holds at offset
-    // 0 - resetting the read position makes it *knowable*, not small. Measured
-    // 0.744097 for these tables; it read 0.3797 before ticket 03, purely because
-    // the increment changed and so the 2048-sample table is left mid-cycle
-    // somewhere else. **Ticket 05's crossfade is what bounds it**, and when it
-    // lands this number should drop by an order of magnitude.
-    expect(Math.abs(afterA[0] - beforeA)).toBeLessThan(0.8);
+    // Ticket 01 reset the read position, which made the step across the swap
+    // knowable but not small: 0.744097 for these tables, 0.3797 before ticket
+    // 03 changed the increment. Ticket 05's declick is what bounds it, and the
+    // bound is arithmetic rather than empirical - the first sample of a
+    // 64-sample linear ramp is the old step divided by 64. Measured 0.011627,
+    // which is 0.744097 / 64 to seven digits.
+    expect(Math.abs(afterA[0] - beforeA)).toBeLessThan(0.02);
   });
 });
 
@@ -495,12 +755,33 @@ describe("the render loop", () => {
     // and the tests above use several sizes. If a state update ever moves out
     // of the sample loop into `agen`, this is what catches it.
     const table = sineTable(256 * 3);
-    const params = { frequency: 440, morphFrequency: 0.05 };
+    const params = { frequency: 440, morph: 0.5 };
     const eightBlocks = render(table, 256, params, {
       length: 1024,
       block: 128,
     });
     const oneBlock = render(table, 256, params, { length: 1024, block: 1024 });
+    expect(eightBlocks).toEqual(oneBlock);
+  });
+
+  it("does not depend on the block size with an a-rate morph", () => {
+    // The declick's ramp counter is instance state precisely so that a jump
+    // arriving at the end of a quantum finishes in the next one. If it ever
+    // became block-local, a sweep that crosses a block boundary would render
+    // differently at 128 and at 1024 - which is what this reads.
+    const len = 64;
+    const table = constantPlanes(len, 1, -1, 0);
+    // Continuous for most of it and a full-scale jump at 700, deliberately not
+    // on a 128-sample boundary.
+    const params = {
+      frequency: 440,
+      morph: (i: number) => (i < 700 ? i / 1023 : 0),
+    };
+    const eightBlocks = render(table, len, params, {
+      length: 1024,
+      block: 128,
+    });
+    const oneBlock = render(table, len, params, { length: 1024, block: 1024 });
     expect(eightBlocks).toEqual(oneBlock);
   });
 });

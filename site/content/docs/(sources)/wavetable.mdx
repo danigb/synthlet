@@ -23,7 +23,7 @@ await registerWavetableOscillatorWorklet(audioContext);
 
 // Create the oscillator and connect it to the destination
 const osc = WavetableOscillator(audioContext, {
-  morphFrequency: 0.1,
+  morph: 0.5,
 });
 osc.connect(audioContext.destination);
 
@@ -40,7 +40,8 @@ osc.frequency.value = 880;
 ## Parameters
 
 - `frequency`: The frequency of the oscillator in Hz. Default is 440.
-- `morphFrequency`: The frequency of the morphing in Hz. Default is 0.
+- `morph`: The wavetable position, 0 (first plane) to 1 (last plane). Default is 0. a-rate, so an `Lfo` connected to it scans the table at any rate and any
+  shape; a position that jumps is ramped over 64 samples rather than clicked.
 
 ## Loading wavetables
 
