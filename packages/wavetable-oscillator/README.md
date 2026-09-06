@@ -40,17 +40,17 @@ osc.frequency.value = 440;
 
 ## Parameters
 
-| Param         | Default | Min     | Max    | Rate   | Meaning                                                                                   |
-| ------------- | ------- | ------- | ------ | ------ | ------------------------------------------------------------------------------------------ |
-| `frequency`   | 440     | −20000  | 20000  | a-rate | Pitch in Hz. **Bipolar**: a modulator connected here is through-zero linear FM, not half-wave-rectified |
-| `detune`      | 0       | −1200   | 1200   | a-rate | Detune in cents                                                                             |
-| `morph`       | 0       | 0       | 1      | a-rate | Wavetable position: 0 is the first plane, 1 the last. A jump is ramped over 64 samples rather than clicked |
-| `sync`        | 0       | 0       | 1      | a-rate | Hard sync. A rising edge restarts the table read at `phase`, band-limited, at the cost of two samples of latency |
-| `segments`    | 8       | 0       | 256    | k-rate | Stochastic mode: how many parts the table is divided into. 0 and 1 both mean one           |
-| `pitchChaos`  | 0.5     | 0       | 1      | a-rate | Stochastic mode: pitch random-walk step, as a fraction of `pitchSpread`                     |
-| `pitchSpread` | 0       | 0       | 24     | a-rate | Stochastic mode: pitch barrier in semitones. **0 disables the pitch path**                 |
-| `ampChaos`    | 0.5     | 0       | 1      | a-rate | Stochastic mode: amplitude random-walk step, as a fraction of `ampSpread`                   |
-| `ampSpread`   | 0       | 0       | 1      | a-rate | Stochastic mode: amplitude barrier. **0 disables the amplitude path**                       |
+| Param         | Default | Min    | Max   | Rate   | Meaning                                                                                                          |
+| ------------- | ------- | ------ | ----- | ------ | ---------------------------------------------------------------------------------------------------------------- |
+| `frequency`   | 440     | −20000 | 20000 | a-rate | Pitch in Hz. **Bipolar**: a modulator connected here is through-zero linear FM, not half-wave-rectified          |
+| `detune`      | 0       | −1200  | 1200  | a-rate | Detune in cents                                                                                                  |
+| `morph`       | 0       | 0      | 1     | a-rate | Wavetable position: 0 is the first plane, 1 the last. A jump is ramped over 64 samples rather than clicked       |
+| `sync`        | 0       | 0      | 1     | a-rate | Hard sync. A rising edge restarts the table read at `phase`, band-limited, at the cost of two samples of latency |
+| `segments`    | 8       | 0      | 256   | k-rate | Stochastic mode: how many parts the table is divided into. 0 and 1 both mean one                                 |
+| `pitchChaos`  | 0.5     | 0      | 1     | a-rate | Stochastic mode: pitch random-walk step, as a fraction of `pitchSpread`                                          |
+| `pitchSpread` | 0       | 0      | 24    | a-rate | Stochastic mode: pitch barrier in semitones. **0 disables the pitch path**                                       |
+| `ampChaos`    | 0.5     | 0      | 1     | a-rate | Stochastic mode: amplitude random-walk step, as a fraction of `ampSpread`                                        |
+| `ampSpread`   | 0       | 0      | 1     | a-rate | Stochastic mode: amplitude barrier. **0 disables the amplitude path**                                            |
 
 Three construction options, not `AudioParam`s because each is a one-time
 condition or an algorithm choice rather than a continuous signal:
@@ -66,8 +66,8 @@ condition or an algorithm choice rather than a continuous signal:
 
 ## Stochastic mode
 
-Five parameters put Raphael Radna's [*Dynamic Stochastic Wavetable
-Synthesis*](https://dafx23.create.aau.dk/) (DAFx-23) on top of whatever table is
+Five parameters put Raphael Radna's [_Dynamic Stochastic Wavetable
+Synthesis_](https://dafx23.create.aau.dk/) (DAFx-23) on top of whatever table is
 loaded. The table is split into `segments` equal parts, and each part gets a
 **pitch deviation** and an **amplitude deviation** drawn by a bounded random walk
 that iterates once per wave cycle. The pitch deviation bends the read rate; the
@@ -103,7 +103,7 @@ to make the roughness part of a note's shape; connecting an audio-rate source
 will not give you audio-rate modulation.
 
 `WavetableOscillator(ac, { pitchPerSegment: true })` draws the pitch deviation
-once per *segment* instead of once per cycle. That is standard DSWS and it is the
+once per _segment_ instead of once per cycle. That is standard DSWS and it is the
 rougher, more aliased mode; the default is Radna §2.4's single-segment pitch
 fluctuation, which measures 18.5 dB less energy above 10 kHz at the paper's own
 settings.
@@ -121,11 +121,11 @@ What that costs, measured on a sine table so the numbers are the stage's own and
 not the table's — alias SNR in dB, higher is cleaner:
 
 | barrier | `ampSpread` at 440 Hz | at 1760 Hz |
-|---|---|---|
-| 0.1 | 67.6 | 43.5 |
-| 0.25 | 62.0 | 39.6 |
-| 0.5 | 56.0 | 34.0 |
-| 1.0 | 46.0 | 26.3 |
+| ------- | --------------------- | ---------- |
+| 0.1     | 67.6                  | 43.5       |
+| 0.25    | 62.0                  | 39.6       |
+| 0.5     | 56.0                  | 34.0       |
+| 1.0     | 46.0                  | 26.3       |
 
 The oscillator's own floor is 57.4 dB at 440 Hz and 74.5 at 1760, so up to about
 `ampSpread` 0.25 at 440 Hz the stage is quieter than the oscillator it is
@@ -136,7 +136,7 @@ continuum and the point of the mode, not a defect.
 Two things this package does that the paper does not. The single-segment pitch
 mode is the **default** rather than an option, because it is the one mitigation
 the paper actually implements. And the pitch deviation is applied to the phase
-increment *before* the mipmap level is chosen, so a segment read two octaves up
+increment _before_ the mipmap level is chosen, so a segment read two octaves up
 reads a table band-limited two octaves darker: measured, 10.9 dB at a
 half-octave barrier across four segments.
 
@@ -187,27 +187,27 @@ phase disagreement, no DC and a peak of exactly 1.0000 after.
 Each of these is an assertion in `src/dsp.test.ts`, with the measured value in
 a comment beside its threshold.
 
-| What                                    | Measured                                                            |
-| ---------------------------------------- | --------------------------------------------------------------------- |
-| Pitch accuracy                            | Worst case 0.705 cents against a 5-cent bar, across 4 table lengths, 3 pitches, 2 sample rates |
-| Detune accuracy                           | Worst case 0.231 cents against a 2-cent bar, across 7 detune values  |
-| Morph / table-swap click                  | The audit's own step of 0.7707 (full scale ±1) reduced to under 0.02, ramp complete inside one render quantum |
-| Alias floor, mipmapped sawtooth           | 59.3 dB at 110 Hz down to 82.1 dB at 3520 Hz — 7 to 72 dB above the same table with no pyramid |
-| Octave-boundary crossing                  | Largest step in level or aliasing across a 300–700 Hz sweep is 0.175%, and it is not at a mip-level crossover |
-| Hard sync, corrected vs. naive reset      | 17.6 to 33.9 dB of alias rejection bought for two samples (45.4 µs) of latency |
-| Imported-table conditioning (worst case)  | `SYNLP10`: 5.7 dB average crossfade loss → 0.00 dB, 121.9° phase disagreement → 0.0° |
-| Stochastic mode at zero spread            | Bit-exact, sample for sample, against the same patch with the five inputs absent |
+| What                                     | Measured                                                                                                      |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Pitch accuracy                           | Worst case 0.705 cents against a 5-cent bar, across 4 table lengths, 3 pitches, 2 sample rates                |
+| Detune accuracy                          | Worst case 0.231 cents against a 2-cent bar, across 7 detune values                                           |
+| Morph / table-swap click                 | The audit's own step of 0.7707 (full scale ±1) reduced to under 0.02, ramp complete inside one render quantum |
+| Alias floor, mipmapped sawtooth          | 59.3 dB at 110 Hz down to 82.1 dB at 3520 Hz — 7 to 72 dB above the same table with no pyramid                |
+| Octave-boundary crossing                 | Largest step in level or aliasing across a 300–700 Hz sweep is 0.175%, and it is not at a mip-level crossover |
+| Hard sync, corrected vs. naive reset     | 17.6 to 33.9 dB of alias rejection bought for two samples (45.4 µs) of latency                                |
+| Imported-table conditioning (worst case) | `SYNLP10`: 5.7 dB average crossfade loss → 0.00 dB, 121.9° phase disagreement → 0.0°                          |
+| Stochastic mode at zero spread           | Bit-exact, sample for sample, against the same patch with the five inputs absent                              |
 
 ## Attribution
 
 Original, derived from published descriptions:
 
-| What                                        | Citation                                                                                                       |
-| -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| The crossfade / swap discipline for `morph`  | Serra, Rubine & Dannenberg, *Analysis and Synthesis of Tones by Spectral Interpolation*, JAES 38(3), 1990, §1.1 (and its 1988 ICMC precursor) |
-| The in-phase-harmonics constraint on plane authoring | Serra, Rubine & Dannenberg 1990 §1.2, confirmed independently by Horner, Beauchamp & Haken, *Wavetable and FM Matching Synthesis of Musical Instrument Tones*, ICMC 1992, §1, and Mohr, *Wavetable Interpolation of Multiple Instrument Tones*, ICMC 2005, §1 |
-| Mip-level interpolation ("no step across an octave") | Trausmuth & Huovilainen, *POWERWAVE*, DAFx-05, §2.3                                                             |
-| The stochastic mode                          | Radna, *Dynamic Stochastic Wavetable Synthesis*, DAFx-23                                                        |
+| What                                                 | Citation                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The crossfade / swap discipline for `morph`          | Serra, Rubine & Dannenberg, _Analysis and Synthesis of Tones by Spectral Interpolation_, JAES 38(3), 1990, §1.1 (and its 1988 ICMC precursor)                                                                                                                 |
+| The in-phase-harmonics constraint on plane authoring | Serra, Rubine & Dannenberg 1990 §1.2, confirmed independently by Horner, Beauchamp & Haken, _Wavetable and FM Matching Synthesis of Musical Instrument Tones_, ICMC 1992, §1, and Mohr, _Wavetable Interpolation of Multiple Instrument Tones_, ICMC 2005, §1 |
+| Mip-level interpolation ("no step across an octave") | Trausmuth & Huovilainen, _POWERWAVE_, DAFx-05, §2.3                                                                                                                                                                                                           |
+| The stochastic mode                                  | Radna, _Dynamic Stochastic Wavetable Synthesis_, DAFx-23                                                                                                                                                                                                      |
 
 No code is ported from any of these — each is a from-scratch implementation of
 a published algorithm description. See the repository's
