@@ -30,7 +30,7 @@ const osc = WavetableOscillator(audioContext, {
 osc.connect(audioContext.destination);
 
 // Load a wavetable
-const wavetable = await loadWavetable(audioContext, "SYNLP10");
+const wavetable = await loadWavetable("SYNLP10");
 osc.setWavetable(wavetable);
 
 // Change the frequency
@@ -145,7 +145,7 @@ import {
 
 const wavetableNames = await fetchWavetableNames(); // => ["SYNLP10", "SYNLP165",   ...]
 
-const wavetable = await loadWavetable(audioContext, "SYNLP10");
+const wavetable = await loadWavetable("SYNLP10");
 
 osc.setWavetable(wavetable);
 ```
