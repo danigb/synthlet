@@ -89,6 +89,7 @@ describe("descriptors", () => {
       ["AdsrAmp", "gate", "k-rate"],
       ["AdsrEnv", "gate", "k-rate"],
       ["Arp", "trigger", "k-rate"],
+      ["Granite", "freeze", "k-rate"],
       ["Impulse", "trigger", "k-rate"],
       ["KarplusStrong", "trigger", "k-rate"],
       ["WavetableOscillator", "sync", "a-rate"],
