@@ -15,9 +15,10 @@ import { createDelayLine } from "./_delay";
 // rate `r` while the write head advances at 1x is a read whose delay moves by
 // `-(r - 1)` per sample. At `r = 1` it is constant and the grain tracks the
 // input; at `r = 2` it closes on the write head a sample per sample, which is
-// what the clamp in `activate()` is for. When ticket 05 stops calling
-// `write()`, the same expression with `-r` is freeze - no special addressing
-// mode, and no branch here today.
+// what the clamp in `activate()` is for. **Freeze is "don't call `write()`"**:
+// with the head stopped the delay has to fall by `r` per sample instead of
+// rising by `1 - r`, which is the same expression minus one, so the render loop
+// subtracts a hoisted `advance` and there is no frozen addressing mode.
 //
 // **The randomness lives in two places, and they are different kinds.** Six
 // draws per *grain* in `activate()` make every grain different (ticket 03); two
@@ -81,6 +82,34 @@ const MIN_RISE = 0.05;
 
 /** Envelope table resolution. 1024 points plus a guard for the interpolator. */
 const ENVELOPE_POINTS = 1024;
+
+/**
+ * The freeze crossfade, in samples. Truax's number, for exactly this splice:
+ * "with most material, 100 samples per fade is inaudible and avoids
+ * transients." 2.3 ms at 44.1 kHz, and a count rather than a time so it stays
+ * the same *splice* at every sample rate.
+ */
+const FADE_SAMPLES = 100;
+
+/**
+ * The feedback high-pass corner, in Hz, as Clouds writes it
+ * (`granular_processor.cc:190-203`) and as `digital-delay` already carries it:
+ * `20 + 100*feedback^2`, so 20 Hz open and 110 Hz at this module's maximum
+ * 0.95. The corner rises with the feedback because that is when a build-up has
+ * time to happen. It is stability rather than tone, and it is always on.
+ */
+const feedbackCorner = (feedback: number) => 20 + 100 * feedback * feedback;
+
+/** One-pole coefficient for a corner in Hz. `digital-delay`'s form. */
+const onePole = (hz: number, sampleRate: number) =>
+  1 - Math.exp((-2 * Math.PI * hz) / sampleRate);
+
+/**
+ * Alternating sign, so it cannot itself accumulate as DC. Without it a feedback
+ * tail decaying towards zero ends up running entirely in denormals, and a loop
+ * that never stops running never recovers from that. `digital-delay`'s value.
+ */
+const DENORMAL = 1e-20;
 
 /**
  * The default seed. Two nodes given the same one produce the same cloud, which
@@ -270,6 +299,9 @@ export function createGranulator(
   let level = 1;
   let levelSpread = 0;
   let wet = 1;
+  let frozen = false;
+  let feedback = 0;
+  let hpCoefficient = onePole(feedbackCorner(0), sampleRate);
   // `pan === 0 && panSpread === 0`, hoisted out of `activate()`.
   let centred = true;
   // Whether the two lines hold different signals, which decides the pan law.
@@ -277,6 +309,18 @@ export function createGranulator(
 
   let countdown = 0;
   let gain = WINDOW_GAIN;
+  // The feedback path's state: the previous sample's wet output, the two
+  // high-pass integrators, and the alternating denormal offset.
+  let wetPrevL = 0;
+  let wetPrevR = 0;
+  let hpL = 0;
+  let hpR = 0;
+  let denormal = DENORMAL;
+  // The freeze crossfade: samples left to fade, and the last value written
+  // before the freeze, which is what the fade starts from.
+  let fade = 0;
+  let holdL = 0;
+  let holdR = 0;
 
   /** Instrumentation. Read by the tests; nothing in the DSP branches on it. */
   const stats = {
@@ -307,6 +351,8 @@ export function createGranulator(
     panSpread_: number,
     level_: number,
     levelSpread_: number,
+    freeze_: number,
+    feedback_: number,
     wet_: number,
   ) {
     // One sample is the floor, so at most one grain is born per sample and the
@@ -344,6 +390,21 @@ export function createGranulator(
     panSpread = clamp01(panSpread_);
     level = clamp01(level_);
     levelSpread = clamp01(levelSpread_);
+    // The repo's `> 0` gate rule, not `>= 0.5`: it is the comparison that
+    // survives `Param`'s `input * gain + offset`, so a gate driven from a
+    // scaled control still opens.
+    const wasFrozen = frozen;
+    frozen = freeze_ > 0;
+    // Only the *leaving* edge needs a fade, and the reason is asymmetric rather
+    // than an oversight. Entering freeze changes no sample in the buffer and
+    // leaves every grain's read index continuous, so there is nothing to splice;
+    // leaving it writes new audio against the last pre-freeze sample and sends
+    // that join travelling outward through the buffer, where every grain
+    // eventually crosses it. `dsp.test.ts` measures both edges.
+    if (wasFrozen && !frozen) fade = FADE_SAMPLES;
+
+    feedback = feedback_ < 0 ? 0 : feedback_ > 0.95 ? 0.95 : feedback_;
+    hpCoefficient = onePole(feedbackCorner(feedback), sampleRate);
     wet = clamp01(wet_);
     centred = pan === 0 && panSpread === 0;
   }
@@ -516,12 +577,96 @@ export function createGranulator(
     stereoInput = stereo;
     const lineL = lines[0];
     const lineR = lines[1];
+    // Hoisted, so the grain loop pays a subtraction rather than a branch.
+    const advance = frozen ? 1 : 0;
 
     for (let i = 0; i < outL.length; i++) {
       const dryL = inL[i];
       const dryR = inR[i];
-      lineL.write(dryL);
-      lineR.write(dryR);
+
+      // **Freeze is "don't call `write()`."** There is no frozen addressing
+      // mode below, only a write head that stopped, which is what ticket 02's
+      // moving-delay design bought: see `advance` at the grain loop.
+      //
+      // Feedback is therefore *inert while frozen* for free rather than by a
+      // gate - the ticket's decision ("the alternative makes the freeze button
+      // a lie") is what not writing already means.
+      if (!frozen) {
+        // The feedback path, in the house order: high-pass, then saturate,
+        // then sum ahead of the dry input. Both are required rather than
+        // optional, and Bencina says why: "due to the non-linear time and
+        // amplitude response of the sum of active grains it may be necessary to
+        // insert a compression or limiting element in the feedback loop to
+        // avoid instability" - `feedback.maxValue` of 0.95 is not a loop gain
+        // of 0.95, because the grain sum is not a linear gain.
+        //
+        // It is the *previous* sample's wet output, because `write()` has to
+        // happen before the grain loop reads: a grain reads at delay >= 1, so
+        // moving the write after the read would shift every grain by a sample
+        // and this ticket owes bit-identity to ticket 04. One sample of loop
+        // latency against a delay measured in thousands.
+        //
+        // Exact at `feedback: 0`: `0 * x` is +-0, the one-pole state stays at 0
+        // and so contributes 0, `Math.tanh(+-0)` is +-0, and `dry + +-0` is
+        // `dry`. No branch, no blend.
+        const rawL = dryL + feedback * (wetPrevL + denormal);
+        const rawR = dryR + feedback * (wetPrevR + denormal);
+        denormal = -denormal;
+
+        // The saturator sits on the sum that is *written*, not on the feedback
+        // branch alone, so what the buffer holds is bounded rather than only
+        // what is added to it - and it arrives in proportion to `feedback`,
+        // which is `digital-delay`'s blend and Clouds' before it: "at
+        // `feedback = 0` the line stores the input exactly, and the saturator
+        // arrives in proportion to how much of a loop there actually is."
+        // `Math.tanh` is `clip-amp`'s `ClipType.Tanh`, the house soft clip.
+        //
+        // Measured: it is what makes the loop *quieter* at its maximum than in
+        // the middle - peak 3.70 at `feedback: 0.5` against 3.22 at 0.95.
+        const satL = rawL + feedback * (Math.tanh(rawL) - rawL);
+        const satR = rawR + feedback * (Math.tanh(rawR) - rawR);
+
+        // The high-pass is on **everything the loop contributed** - the
+        // feedback and whatever the saturator did to it - rather than on the
+        // feedback branch before the saturator. A soft clip is odd, but the
+        // grain sum it is fed is not symmetric over any short window, so it
+        // rectifies a little DC of its own; high-passing ahead of it leaves
+        // that DC to reach the buffer, and the measurement says so - it is the
+        // difference between -50.83 dBFS of mean and -102.75 over 60 s at
+        // `feedback: 0.95`, against -102.80 with no feedback at all.
+        // Subtracting the dry input first is what keeps the
+        // filter out of the dry path: at `feedback: 0` the contribution is
+        // exactly 0, the state stays at 0, and `write(dry + 0)` is `write(dry)`.
+        const loopL = satL - dryL;
+        const loopR = satR - dryR;
+        hpL += hpCoefficient * (loopL - hpL);
+        hpR += hpCoefficient * (loopR - hpR);
+        const injectL = dryL + (loopL - hpL);
+        const injectR = dryR + (loopR - hpR);
+
+        if (fade > 0) {
+          // Leaving freeze splices the first new sample against the last one
+          // written before the freeze, and that splice then travels outward
+          // through the whole buffer at one sample per sample, so every grain
+          // crosses it. Truax's number for exactly this: "with most material,
+          // 100 samples per fade is inaudible and avoids transients."
+          //
+          // The fade is against the *held* last written sample rather than
+          // against what the buffer already holds at that index. The buffer's
+          // own content there is the ring's oldest sample, which is what the
+          // splice is *against* - fading into it would replace one step with
+          // two. Holding starts the join at zero difference by construction.
+          const g = 0.5 - 0.5 * Math.cos(Math.PI * (1 - fade / FADE_SAMPLES));
+          fade--;
+          lineL.write(holdL + (injectL - holdL) * g);
+          lineR.write(holdR + (injectR - holdR) * g);
+        } else {
+          holdL = injectL;
+          holdR = injectR;
+          lineL.write(holdL);
+          lineR.write(holdR);
+        }
+      }
 
       // Bencina's `nextOnset` counter, with his `nextInteronset()` no longer a
       // constant:
@@ -582,10 +727,29 @@ export function createGranulator(
         const f = x - j;
         const env = envelope[j] + (envelope[j + 1] - envelope[j]) * f;
 
-        sumL += lineL.readHermite(g.delay) * env * g.gainL;
-        sumR += lineR.readHermite(g.delay) * env * g.gainR;
+        // The bound holds unconditionally rather than only while the write head
+        // is moving. Live, `activate()`'s arithmetic already guarantees
+        // `delay >= 1` at both endpoints and this returns `g.delay` untouched,
+        // so it is bit-exact; frozen, a forward grain's delay falls all the way
+        // to `origin * available` and reaches about `ratio/2` at the very last
+        // sample of a grain born at `position: 0`. That is inside the grain's
+        // own envelope tail, where `env` is of order 1e-5, but the module states
+        // `[1, size - 4]` as an invariant and `dsp.test.ts` asserts it, so it is
+        // cheaper to keep it true than to qualify it.
+        const read = g.delay < 1 ? 1 : g.delay;
+        sumL += lineL.readHermite(read) * env * g.gainL;
+        sumR += lineR.readHermite(read) * env * g.gainR;
 
-        g.delay += g.delayStep;
+        // `advance` is the write head's motion, and subtracting it is the whole
+        // of freeze. `delay` is the distance *behind* the head, so a grain's
+        // read index moves at `advance - delayStep`; live that is `ratio`, and
+        // frozen the head contributes nothing, so the delay has to fall by
+        // `ratio` itself to keep the same trajectory. Forward, `delayStep - 1`
+        // is `-ratio`; reversed, `(1 + ratio) - 1` is `+ratio`. One subtraction
+        // covers both, the grain keeps the fields it was born with, and the read
+        // index is **continuous across both freeze edges** - which is why
+        // entering freeze cannot click.
+        g.delay += g.delayStep - advance;
         g.phase += g.phaseInc;
         if (--g.remaining > 0) {
           k++;
@@ -616,9 +780,17 @@ export function createGranulator(
           : WINDOW_GAIN;
       gain += GAIN_SMOOTHING * (target - gain);
 
+      // The feedback tap is the **wet** signal - the grain sum - and not the
+      // dry/wet mix. Bencina's phrase is "the output of the Delay Line
+      // Granulator", which is what the granulator made; taking the mix instead
+      // would inject the dry input a second time and make `wet` a feedback
+      // control.
+      wetPrevL = gain * sumL;
+      wetPrevR = gain * sumR;
+
       // Exact at `wet = 0`: `dry + 0 * anything` is `dry`, sample for sample.
-      outL[i] = dryL + wet * (gain * sumL - dryL);
-      outR[i] = dryR + wet * (gain * sumR - dryR);
+      outL[i] = dryL + wet * (wetPrevL - dryL);
+      outR[i] = dryR + wet * (wetPrevR - dryR);
     }
   }
 
@@ -630,6 +802,14 @@ export function createGranulator(
     activeCount = 0;
     countdown = 0;
     gain = WINDOW_GAIN;
+    wetPrevL = 0;
+    wetPrevR = 0;
+    hpL = 0;
+    hpR = 0;
+    denormal = DENORMAL;
+    fade = 0;
+    holdL = 0;
+    holdR = 0;
     // Reseeded, not continued: a reset that left the generator where it was
     // would make two runs of the same render differ.
     random = createRandom(seed);

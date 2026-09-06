@@ -46,6 +46,17 @@ export type GraniteInputs = {
   level?: ParamInput;
   /** Per-grain gain randomisation, 0 to 1. Downward from `level`. */
   levelSpread?: ParamInput;
+  /**
+   * Stops recording into the buffer while `> 0`, so the last few seconds become
+   * a playable object. `feedback` is inert while frozen.
+   */
+  freeze?: ParamInput;
+  /**
+   * Grain output summed back into the buffer, 0 to 0.95. Saturated and
+   * high-passed on the way, so high settings are a texture rather than a
+   * hazard; with `pitch` up it stacks transpositions.
+   */
+  feedback?: ParamInput;
   /** Dry/wet, 0 to 1. 0 is an exact bypass. */
   wet?: ParamInput;
   /**
@@ -87,6 +98,8 @@ export type GraniteWorkletNode = AudioWorkletNode & {
   panSpread: AudioParam;
   level: AudioParam;
   levelSpread: AudioParam;
+  freeze: AudioParam;
+  feedback: AudioParam;
   wet: AudioParam;
   dispose(): void;
 };
@@ -103,6 +116,10 @@ export type GraniteWorkletNode = AudioWorkletNode & {
  * `jitter` and `intermittency` are the two that randomise the *stream* rather
  * than a grain: the first scatters the onsets without changing the density, the
  * second drops grains and lowers it.
+ *
+ * `freeze` and `feedback` are the two that only exist because there is a write
+ * head - freeze stops it, feedback feeds it - and are what make granite a
+ * granular *delay* rather than a granulator with an input.
  *
  * ```ts
  * const granite = Granite(ac, { rate: 40, duration: 60, pitch: 12 });

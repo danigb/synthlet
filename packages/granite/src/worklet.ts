@@ -39,7 +39,7 @@ export class GraniteProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
-    // Every parameter is k-rate, so this is sixteen reads per block. The grains
+    // Every parameter is k-rate, so this is eighteen reads per block. The grains
     // born inside the block all see the same control values; what makes them
     // differ is the draw each one takes from them in `activate()`, and what
     // moves their onsets off the grid is the draw the scheduler takes from
@@ -60,6 +60,8 @@ export class GraniteProcessor extends AudioWorkletProcessor {
       params.panSpread[0],
       params.level[0],
       params.levelSpread[0],
+      params.freeze[0],
+      params.feedback[0],
       params.wet[0],
     );
 

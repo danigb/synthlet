@@ -394,6 +394,61 @@ export const PARAMS: readonly ParamDescriptor[] = [
     automationRate: "k-rate",
   },
   {
+    // Stops recording into the buffer, so the last few seconds become a
+    // playable object rather than a window that slides. It is the one button
+    // every hardware granulator ships, and Truax's: "the continuous model also
+    // allows the memory to be 'frozen' at particular moments, similar to the
+    // fixed-sample model."
+    //
+    // **The gate is `> 0`, not `>= 0.5`** - the repo-wide rule, and it is the
+    // comparison that survives `Param`'s `input * gain + offset`, so a gate
+    // driven from a scaled control still opens.
+    //
+    // It costs the DSP one subtraction. A grain's playhead is a delay measured
+    // from the write head, so a head that stops moving *is* the frozen
+    // addressing; `dsp.ts` derives it, and the read index is continuous across
+    // both edges, which is why entering freeze cannot click and leaving it needs
+    // a 100-sample fade against the splice it writes.
+    //
+    // `feedback` is inert while this is on. That is the ticket's decision and
+    // not an accident of the code: letting the loop write while `freeze` says
+    // not to would make the button a lie.
+    //
+    // Truax's variable-rate time-shifting - the `off:on` ratio, which
+    // interpolates continuously between live and frozen - is the sequel this
+    // parameter is the endpoint of, and it is deferred.
+    name: "freeze",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // The granulator's own output, summed back into the delay line ahead of the
+    // dry input. Bencina: "the output of the Delay Line Granulator may be mixed
+    // back into the delay line input to create feedback effects... for example,
+    // feedback combined with pitch shifted grains creates stacked
+    // transpositions (chords) spaced according to the transposition factor."
+    // Truax's continuous model carries the same control, "the amplitude of
+    // samples being fed back into the delay line".
+    //
+    // **0.95 is not a loop gain of 0.95**, which is why the ceiling alone does
+    // not make it safe - Bencina again: "due to the non-linear time and
+    // amplitude response of the sum of active grains it may be necessary to
+    // insert a compression or limiting element in the feedback loop to avoid
+    // instability." The sum of `n` overlapping grains is not a gain of 1, so
+    // the path carries a `tanh` saturator and a one-pole high-pass whose corner
+    // rises with the setting. Both are in `dsp.ts` and both are mandatory.
+    //
+    // The tap is the wet grain sum rather than the dry/wet mix, so `wet` is not
+    // secretly a second feedback control.
+    name: "feedback",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 0.95,
+    automationRate: "k-rate",
+  },
+  {
     // Dry/wet. **Defaulted to 1**, where it used to be 0.5, so the module's own
     // sound is what you hear first.
     //

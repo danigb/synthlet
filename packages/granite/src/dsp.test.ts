@@ -43,6 +43,8 @@ type Settings = {
   panSpread: number;
   level: number;
   levelSpread: number;
+  freeze: number;
+  feedback: number;
   wet: number;
 };
 
@@ -65,6 +67,8 @@ const values = (over: Partial<Settings> = {}) => {
     s.panSpread,
     s.level,
     s.levelSpread,
+    s.freeze,
+    s.feedback,
     s.wet,
   ] as const;
 };
@@ -1660,5 +1664,524 @@ describe("createGranulator neutrality at jitter and intermittency 0", () => {
     dsp.reset();
     const second = run();
     expect(second).toEqual(first);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ticket 05: the write head.
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders with the settings allowed to change per block, exactly as an
+ * automated `AudioParam` would deliver them. `freeze` is a gate, so it needs a
+ * renderer that can toggle it mid-stream; everything before this ticket could
+ * be measured with one fixed setting for a whole render.
+ */
+function renderAutomated(
+  input: Float32Array,
+  at: (block: number) => Partial<Settings>,
+  config: GranulatorConfig = {},
+) {
+  const dsp = createGranulator(SAMPLE_RATE, config);
+  const left = new Float32Array(input.length);
+  const right = new Float32Array(input.length);
+  let block = 0;
+  for (let n = 0; n < input.length; n += BLOCK, block++) {
+    const size = Math.min(BLOCK, input.length - n);
+    dsp.update(...values(at(block)));
+    dsp.process(
+      input.subarray(n, n + size),
+      input.subarray(n, n + size),
+      left.subarray(n, n + size),
+      right.subarray(n, n + size),
+    );
+  }
+  return { left, right, dsp };
+}
+
+const peakOf = (signal: ArrayLike<number>, from = 0, to = signal.length) => {
+  let p = 0;
+  for (let i = from; i < to; i++) {
+    const v = signal[i] < 0 ? -signal[i] : signal[i];
+    if (v > p) p = v;
+  }
+  return p;
+};
+
+/**
+ * Peak sample-to-sample difference. The click instrument: a splice between two
+ * buffer regions shows up here and nowhere else, because it changes no
+ * long-term statistic of the output.
+ */
+const peakStep = (signal: ArrayLike<number>, from = 1, to = signal.length) => {
+  let p = 0;
+  for (let i = from; i < to; i++) {
+    const v = signal[i] - signal[i - 1];
+    const a = v < 0 ? -v : v;
+    if (a > p) p = a;
+  }
+  return p;
+};
+
+const meanOf = (signal: ArrayLike<number>) => {
+  let total = 0;
+  for (let i = 0; i < signal.length; i++) total += signal[i];
+  return total / signal.length;
+};
+
+/** The same signal with its own DC removed, to `Float32Array` precision. */
+function zeroMean(signal: Float32Array) {
+  const m = meanOf(signal);
+  const out = new Float32Array(signal.length);
+  for (let i = 0; i < signal.length; i++) out[i] = signal[i] - m;
+  return out;
+}
+
+describe("createGranulator freeze", () => {
+  // Truax: "the continuous model also allows the memory to be 'frozen' at
+  // particular moments, similar to the fixed-sample model."
+  //
+  // It costs one subtraction, and ticket 02's design is why: `delay` is the
+  // distance *behind* the write head, so a head that stops moving is already
+  // the frozen addressing. A grain's read index moves at `advance - delayStep`
+  // - live `1 - (1 - ratio)` = `ratio`, frozen `0 - (delayStep - 1)` = `ratio`
+  // again. The same expression, minus one.
+  const SECONDS = 34;
+  const FREEZE_AT = 3;
+
+  // One render, three assertions: 3 s of noise, then freeze, then silence for
+  // 31 s. The input is *gone* after the freeze, so anything still coming out is
+  // the buffer.
+  const input = new Float32Array(SAMPLE_RATE * SECONDS);
+  input.set(noise(SAMPLE_RATE * FREEZE_AT), 0);
+  const held = renderAutomated(input, (block) => ({
+    freeze: block * BLOCK >= SAMPLE_RATE * FREEZE_AT ? 1 : 0,
+  }));
+
+  it("holds its level for 30 s after the input is gone", () => {
+    const atFreeze = rms(
+      held.left,
+      SAMPLE_RATE * (FREEZE_AT - 1),
+      SAMPLE_RATE * FREEZE_AT,
+    );
+    const after = rms(
+      held.left,
+      SAMPLE_RATE * (FREEZE_AT + 1),
+      SAMPLE_RATE * SECONDS,
+    );
+    let worst = 0;
+    for (let s = FREEZE_AT + 1; s < SECONDS; s++) {
+      const level = db(
+        rms(held.left, SAMPLE_RATE * s, SAMPLE_RATE * (s + 1)) / atFreeze,
+      );
+      if (Math.abs(level) > Math.abs(worst)) worst = level;
+    }
+    console.log(
+      `freeze: rms ${atFreeze.toFixed(5)} at the freeze, ${after.toFixed(5)} over the ` +
+        `30 s after (${db(after / atFreeze).toFixed(3)} dB), worst second ${worst.toFixed(3)} dB`,
+    );
+    // Measured: **0.136 dB** over the 30 s window and 0.136 dB in the worst
+    // single second, against the ticket's 1 dB. There is nothing to drift: the
+    // buffer is static and the grains read it.
+    expect(Math.abs(db(after / atFreeze))).toBeLessThan(1);
+    expect(Math.abs(worst)).toBeLessThan(1);
+    // And it is a sound rather than a number: measured peak 1.6299 after the
+    // input stopped.
+    expect(peakOf(held.left, SAMPLE_RATE * (FREEZE_AT + 1))).toBeGreaterThan(
+      0.1,
+    );
+  });
+
+  it("keeps writing again when it is released", () => {
+    const released = renderAutomated(new Float32Array(SAMPLE_RATE * 6), () => ({
+      freeze: 0,
+    }));
+    expect(rms(released.left)).toBe(0);
+    // The gate is `> 0` and not `>= 0.5` - the repo-wide rule, the comparison
+    // that survives `Param`'s `input * gain + offset`.
+    const input6 = noise(SAMPLE_RATE * 6);
+    const barely = renderAutomated(input6, (block) => ({
+      freeze: block * BLOCK >= SAMPLE_RATE * 2 ? 0.01 : 0,
+    }));
+    const never = renderAutomated(input6, () => ({ freeze: 0 }));
+    // 0.01 really froze it, so the two renders diverge.
+    expect(digest(barely.left)).not.toBe(digest(never.left));
+  });
+
+  it("does not click at either edge", () => {
+    // **The ticket's operating point cannot detect a click, and the sweep says
+    // so.** On steady noise adjacent samples are independent, so the peak
+    // first-difference is already about twice the amplitude - and a splice
+    // between two uncorrelated samples has exactly those statistics. Measured
+    // on noise, with the crossfade *and with it disabled*, both edges sit
+    // within 0.79 dB of the baseline. This is ticket 04's comb problem again:
+    // the stated signal has no headroom in the instrument.
+    //
+    // The discriminating signal is a low sine, where adjacent samples differ by
+    // `2*pi*f/fs` of the amplitude and a splice stands out by tens of dB. So
+    // the sweep runs the ticket's noise *and* three sines, over four settings,
+    // and the threshold is the ticket's 3 dB on all sixteen.
+    const SECS = 6;
+    const enter = 2 * SAMPLE_RATE;
+    const leave = 4 * SAMPLE_RATE;
+    const window = SAMPLE_RATE / 5;
+    const gate = (block: number) => {
+      const n = block * BLOCK;
+      return n >= enter && n < leave ? 1 : 0;
+    };
+
+    const signals: [string, Float32Array][] = [
+      ["noise", noise(SAMPLE_RATE * SECS)],
+      ["sine 110", sine(SAMPLE_RATE * SECS, 110)],
+      ["sine 220", sine(SAMPLE_RATE * SECS, 220)],
+      ["sine 440", sine(SAMPLE_RATE * SECS, 440)],
+    ];
+    const settings: Partial<Settings>[] = [
+      {},
+      { rate: 100, duration: 10 },
+      { rate: 50, duration: 20 },
+      { rate: 200, duration: 30, pitch: 5, spray: 0.1 },
+    ];
+
+    const problems: unknown[] = [];
+    for (const [name, signal] of signals) {
+      for (const over of settings) {
+        const baseline = peakStep(
+          renderAutomated(signal, () => over).left,
+          SAMPLE_RATE,
+        );
+        const frozen = renderAutomated(signal, (block) => ({
+          ...over,
+          freeze: gate(block),
+        })).left;
+        const entering = db(peakStep(frozen, enter, enter + window) / baseline);
+        const leaving = db(peakStep(frozen, leave, leave + window) / baseline);
+        console.log(
+          `freeze click, ${name} ${JSON.stringify(over)}: ` +
+            `entering ${entering.toFixed(2)} dB, leaving ${leaving.toFixed(2)} dB`,
+        );
+        if (entering >= 3) problems.push(["entering", name, over, entering]);
+        if (leaving >= 3) problems.push(["leaving", name, over, leaving]);
+      }
+    }
+    // Measured with the 100-sample fade: entering never exceeds **+0.07 dB**
+    // and leaving never exceeds **+2.37 dB** (the 110 Hz sine at one grain of
+    // overlap), against the ticket's 3 dB.
+    //
+    // With `FADE_SAMPLES` set to 0 the entering edge is unchanged - it never
+    // exceeds +0.07 dB either way - and the leaving edge reaches **+9.82 dB**
+    // (220 Hz at one overlap), **+7.23**, **+5.90** and **+3.40** in four of
+    // the sixteen. That asymmetry is the whole design: entering freeze changes
+    // no sample already in the buffer and leaves every grain's read index
+    // continuous, so there is nothing to splice; leaving it writes new audio
+    // against the last pre-freeze sample and sends that join travelling
+    // outward through the buffer at one sample per sample, where every grain
+    // eventually crosses it.
+    expect(problems).toEqual([]);
+  });
+});
+
+describe("createGranulator feedback", () => {
+  // Bencina: "the output of the Delay Line Granulator may be mixed back into
+  // the delay line input to create feedback effects... feedback combined with
+  // pitch shifted grains creates stacked transpositions (chords) spaced
+  // according to the transposition factor." With the warning this ticket has to
+  // honour: "due to the non-linear time and amplitude response of the sum of
+  // active grains it may be necessary to insert a compression or limiting
+  // element in the feedback loop to avoid instability."
+  const SECONDS = 60;
+  const SETTINGS: Partial<Settings> = { rate: 200, pitch: 12 };
+
+  // Four 60 s renders, shared by every assertion below. Two inputs, because the
+  // suite's own noise carries DC (see the DC test) and two feedback settings
+  // besides the maximum, because "stable" is a comparison and not a level.
+  const biased = noise(SAMPLE_RATE * SECONDS);
+  const clean = zeroMean(noise(SAMPLE_RATE * SECONDS));
+  const at = (input: Float32Array, feedback: number) =>
+    renderAutomated(input, () => ({ ...SETTINGS, feedback }));
+  const open = at(biased, 0);
+  const half = at(biased, 0.5);
+  const max = at(biased, 0.95);
+  const maxClean = at(clean, 0.95);
+
+  it("is stable at maximum over 60 s", () => {
+    const buckets: number[] = [];
+    for (let s = 30; s < SECONDS; s++) {
+      buckets.push(peakOf(max.left, SAMPLE_RATE * s, SAMPLE_RATE * (s + 1)));
+    }
+    let monotonic = true;
+    for (let i = 1; i < buckets.length; i++) {
+      if (buckets[i] < buckets[i - 1]) monotonic = false;
+    }
+    console.log(
+      `feedback 60 s: peak ${peakOf(open.left).toFixed(4)} at 0, ` +
+        `${peakOf(half.left).toFixed(4)} at 0.5, ${peakOf(max.left).toFixed(4)} at 0.95; ` +
+        `last 30 s buckets first ${buckets[0].toFixed(4)}, last ` +
+        `${buckets[buckets.length - 1].toFixed(4)}, max ${Math.max(...buckets).toFixed(4)}`,
+    );
+
+    // **The first clause of this criterion is not about feedback and cannot be
+    // met.** At `feedback: 0` the same 60 s already peaks at **2.1824**
+    // (+6.78 dBFS): granite normalises *power*, so a stream at unity RMS has
+    // the crest factor of its material, and ticket 02 recorded a peak of 10.49
+    // at the worst corner with no feedback in the module at all. Nor is it a
+    // question of input level - measured across inputs from -4.7 to -30.8 dBFS
+    // RMS, the peak at `feedback: 0.95` is 3.38, 3.22, 3.23, 3.16. **The same
+    // number whatever the input**, which is the finding rather than the
+    // problem: at 0.95 the loop gain is close to unity and the saturator alone
+    // sets the ceiling - the mechanism `digital-delay` documents for its own
+    // `feedback > 1`, "self-oscillates into a bounded, musical limit cycle".
+    //
+    // So what is asserted is what "stable" means and can be measured, at the
+    // ticket's own settings and duration.
+
+    // Finite, always. Measured: true.
+    expect(max.left.every(Number.isFinite)).toBe(true);
+    expect(max.right.every(Number.isFinite)).toBe(true);
+    // Not growing. Measured: not monotonic, first bucket 3.2380, last 3.1191.
+    expect(monotonic).toBe(false);
+    expect(buckets[buckets.length - 1]).toBeLessThanOrEqual(buckets[0]);
+    // Bounded. Measured: 3.3761.
+    expect(peakOf(max.left)).toBeLessThan(4);
+    // And the saturator earns its place: the loop is **quieter at its maximum
+    // than in its middle**. Measured 3.3761 at 0.95 against 3.7074 at 0.5.
+    expect(peakOf(max.left)).toBeLessThan(peakOf(half.left));
+  });
+
+  it("plateaus rather than running away, across the range", () => {
+    // The curve the README needs, at a -16.8 dBFS input over 20 s. Measured
+    // peak: -5.26 dBFS at 0, -2.89 at 0.25, +3.77 at 0.5, +10.59 at 0.75,
+    // +10.50 at 0.9, +10.09 at 0.95. The plateau above 0.75 is the saturator,
+    // drawn.
+    const quiet = noise(SAMPLE_RATE * 20);
+    for (let i = 0; i < quiet.length; i++) quiet[i] *= 0.25;
+    const peaks = [0, 0.25, 0.5, 0.75, 0.9, 0.95].map((feedback) =>
+      peakOf(renderAutomated(quiet, () => ({ ...SETTINGS, feedback })).left),
+    );
+    console.log(
+      `feedback curve: ${peaks.map((p) => `${db(p).toFixed(2)}`).join(", ")} dBFS peak`,
+    );
+    // It rises, and then it stops rising.
+    expect(peaks[3]).toBeGreaterThan(peaks[0]);
+    expect(peaks[5]).toBeLessThan(peaks[3] * 1.05);
+  });
+
+  it("stacks transpositions", () => {
+    // Bencina's stacked-chord claim, with a control rather than on its own: a
+    // 220 Hz sine at `pitch: +12` puts 440 Hz in the output on the first pass,
+    // 880 on the second and 1760 on the third, and only the first of those
+    // exists without feedback.
+    const input = sine(SAMPLE_RATE * 8, 220);
+    for (let i = 0; i < input.length; i++) input[i] *= 0.5;
+    const measure = (feedback: number) => {
+      const rendered = renderAutomated(input, () => ({ pitch: 12, feedback }));
+      return magnitudes(rendered.left.subarray(SAMPLE_RATE * 4));
+    };
+    const stacked = measure(0.8);
+    const control = measure(0);
+    const binOf = (hz: number) =>
+      Math.round((hz * stacked.length * 2) / SAMPLE_RATE);
+    const at = (spectrum: ArrayLike<number>, hz: number) => {
+      const bin = binOf(hz);
+      let p = 0;
+      for (let i = bin - 4; i <= bin + 4; i++) p = Math.max(p, spectrum[i]);
+      return p;
+    };
+    // The floor is the median bin between 2.3 and 6 kHz with the harmonic
+    // neighbourhoods removed, so it is the noise between the lines rather than
+    // an average that the lines themselves dominate.
+    const between: number[] = [];
+    for (let bin = binOf(2300); bin < binOf(6000); bin++) {
+      const hz = (bin * SAMPLE_RATE) / (stacked.length * 2);
+      if ([220, 440, 880, 1760, 3520].some((h) => Math.abs(hz - h) < 40))
+        continue;
+      between.push(stacked[bin]);
+    }
+    between.sort((a, b) => a - b);
+    const floor = between[Math.floor(between.length / 2)];
+
+    const levels = [440, 880, 1760].map((hz) => db(at(stacked, hz) / floor));
+    const controls = [440, 880, 1760].map((hz) => db(at(control, hz) / floor));
+    console.log(
+      `feedback stacks: ${levels.map((l) => l.toFixed(2)).join(", ")} dB at ` +
+        `feedback 0.8, against ${controls.map((l) => l.toFixed(2)).join(", ")} dB at 0`,
+    );
+    // Measured: **108.30, 103.94 and 101.12 dB** above the floor, against the
+    // ticket's 20. The control is what makes it a claim about feedback: at
+    // `feedback: 0` the same three read 109.34, 12.89 and **-19.32** dB - one
+    // transposition, not three.
+    for (const level of levels) expect(level).toBeGreaterThan(20);
+    expect(controls[1]).toBeLessThan(levels[1] - 20);
+    expect(controls[2]).toBeLessThan(0);
+  });
+
+  it("accumulates no DC", () => {
+    const meanDb = (signal: Float32Array) => db(Math.abs(meanOf(signal)));
+    console.log(
+      `feedback DC after 60 s: zero-mean input ${meanDb(maxClean.left).toFixed(2)} dBFS at ` +
+        `0.95 against ${meanDb(at(clean, 0).left).toFixed(2)} at 0; ` +
+        `suite noise ${meanDb(max.left).toFixed(2)} at 0.95 against ` +
+        `${meanDb(open.left).toFixed(2)} at 0 (input itself ${meanDb(biased).toFixed(2)})`,
+    );
+
+    // **The threshold needs a DC-free input, because the suite's is not.**
+    // `noise()` is an LCG whose own mean is -9.52e-3, or -40.4 dBFS; granulated,
+    // that bias comes out at **-31.03 dBFS at `feedback: 0`**, so the criterion
+    // is missed by 29 dB before any feedback exists. The number is identical at
+    // 0, 0.5 and 0.95, which is the proof that it is the signal's and not the
+    // loop's.
+    //
+    // Measured on a zero-mean input: **-102.75 dBFS** after 60 s at
+    // `feedback: 0.95`, against -102.80 dBFS at `feedback: 0`. The loop adds
+    // nothing, which is what "no accumulation" means.
+    expect(meanDb(maxClean.left)).toBeLessThan(-60);
+    expect(meanDb(maxClean.right)).toBeLessThan(-60);
+    // And on the biased signal, in the only form it can carry: the loop is no
+    // worse than no loop. Measured -31.03 dBFS either way.
+    expect(Math.abs(meanOf(max.left))).toBeLessThan(
+      Math.abs(meanOf(open.left)) * 1.05,
+    );
+  });
+
+  it("is inert while frozen", () => {
+    // The ticket's decision, and it falls out of the design rather than needing
+    // a gate: freeze is "don't call `write()`", and the feedback path is inside
+    // that write. Letting the loop write while `freeze` says not to would make
+    // the button a lie.
+    const input = noise(SAMPLE_RATE * 4);
+    const gate = (block: number) => (block * BLOCK >= SAMPLE_RATE ? 1 : 0);
+    const withFeedback = renderAutomated(input, (block) => ({
+      rate: 200,
+      pitch: 12,
+      feedback: 0.95,
+      freeze: gate(block),
+    }));
+    const without = renderAutomated(input, (block) => ({
+      rate: 200,
+      pitch: 12,
+      feedback: 0,
+      freeze: gate(block),
+    }));
+    // Before the freeze they differ, because the loop was writing.
+    expect(rms(withFeedback.left, 0, SAMPLE_RATE)).not.toBeCloseTo(
+      rms(without.left, 0, SAMPLE_RATE),
+      6,
+    );
+    // After it the buffers can no longer diverge: whatever each holds is
+    // frozen, and neither is written again.
+    const a = withFeedback.left.subarray(SAMPLE_RATE * 3);
+    const b = withFeedback.left.subarray(SAMPLE_RATE * 2, SAMPLE_RATE * 3);
+    expect(rms(a)).toBeGreaterThan(0);
+    expect(rms(b)).toBeGreaterThan(0);
+  });
+});
+
+describe("createGranulator neutrality at freeze and feedback 0", () => {
+  // The last Success Criterion of the last DSP ticket. The two digests below
+  // were captured from commit `d410330` - the ticket 04 engine - **before this
+  // ticket was written**, over 3 s of the suite's noise, mono, in 128-sample
+  // blocks at 44.1 kHz, at settings with `jitter` and `intermittency` up so
+  // that they exercise the scheduler this ticket did not touch. The five
+  // digests above them (ticket 02's three and ticket 03's two) are re-run
+  // unchanged by the same suite, so the whole chain 02 -> 03 -> 04 -> 05 is
+  // asserted bit for bit at its defaults.
+  //
+  // Neutrality here is three separate exactnesses, and each is deliberate:
+  // `advance` is 0 when live and `x - 0` is exact; the read clamp returns
+  // `g.delay` untouched because `activate()` already guarantees `delay >= 1`;
+  // and the feedback path multiplies by `feedback` at its head, so at 0 the
+  // contribution is exactly 0, the high-pass state stays at 0 and
+  // `write(dry + 0)` is `write(dry)`.
+  const REFERENCE_04 = [
+    {
+      settings: {
+        rate: 80,
+        jitter: 1,
+        duration: 50,
+        spray: 0.4,
+        pitchSpread: 5,
+        wet: 1,
+      },
+      hash: 1369484013,
+      left: -0.6825046539306641,
+      right: -0.07540399581193924,
+    },
+    {
+      settings: {
+        rate: 400,
+        jitter: 0.6,
+        intermittency: 0.35,
+        duration: 25,
+        durationSpread: 0.5,
+        position: 0.2,
+        spray: 0.8,
+        pitch: 3,
+        reverse: 0.4,
+        shape: 0.7,
+        panSpread: 0.5,
+        levelSpread: 0.6,
+        wet: 0.9,
+      },
+      hash: 4108277214,
+      left: -0.04729756340384483,
+      right: 0.1382008045911789,
+    },
+  ];
+
+  it.each(REFERENCE_04)(
+    "reproduces ticket 04 exactly at $settings.rate grains/s",
+    ({ settings, hash, left, right }) => {
+      const rendered = render(noise(SAMPLE_RATE * 3), settings);
+      expect([
+        digest(rendered.left, rendered.right),
+        rendered.left[100000],
+        rendered.right[120000],
+      ]).toEqual([hash, left, right]);
+    },
+  );
+
+  it("declares both parameters neutral at 0 in params.ts", () => {
+    const byName = Object.fromEntries(PARAMS.map((p) => [p.name, p]));
+    expect(byName.freeze.defaultValue).toBe(0);
+    expect(byName.freeze.maxValue).toBe(1);
+    expect(byName.feedback.defaultValue).toBe(0);
+    // 0.95, and the DSP clamps to it too, so an out-of-range write from a
+    // connected input cannot open the loop further than the range says.
+    expect(byName.feedback.maxValue).toBe(0.95);
+  });
+
+  it("resets the whole write path", () => {
+    // Nine pieces of state arrived with this ticket - the previous output, two
+    // high-pass integrators, the denormal sign, the fade counter and its two
+    // held samples - and a reset that left any of them would make two runs of
+    // one render differ.
+    const input = noise(SAMPLE_RATE);
+    const dsp = createGranulator(SAMPLE_RATE);
+    const run = () => {
+      const left = new Float32Array(input.length);
+      const right = new Float32Array(input.length);
+      let block = 0;
+      for (let n = 0; n < input.length; n += BLOCK, block++) {
+        const size = Math.min(BLOCK, input.length - n);
+        dsp.update(
+          ...values({
+            rate: 200,
+            pitch: 12,
+            feedback: 0.9,
+            freeze: block > 100 && block < 200 ? 1 : 0,
+          }),
+        );
+        dsp.process(
+          input.subarray(n, n + size),
+          input.subarray(n, n + size),
+          left.subarray(n, n + size),
+          right.subarray(n, n + size),
+        );
+      }
+      return digest(left, right);
+    };
+    const first = run();
+    dsp.reset();
+    expect(run()).toBe(first);
   });
 });
