@@ -113,8 +113,17 @@ decay * 0.1 * (sampleRate / frequency); // old knob -> seconds
 
 The other breaking change needs nothing from you unless you want the old sound
 back: the excitation is no longer an unconditional full-scale noise burst.
-`level: 1, dynamics: 1, position: 0` is not approximately the old burst, it is
-the same burst.
+`level: 1, dynamics: 1, position: 0` switches every stage of the excitation
+chain off — the comb, the pick-angle filter and the dynamics filter are all
+pass-throughs at those values — so what is left is the old burst with one
+deliberate difference: it is zero-mean now, which costs about 5% of its RMS.
+
+That difference is not cosmetic and is why it was made. The damping filter's
+taps sum to exactly 1 at every `brightness`, so any DC offset in the excitation
+decayed at exactly the loop gain and outlived every partial. A burst of
+`Math.random() * 2 - 1` has a mean of order `1/√P`, so every pluck left one
+behind: at 1760 Hz the audible tone was gone in 0.33 s while the note's measured
+decay read 0.89 s, because what it was timing was the residue.
 
 ## Where `decay` stops being the length of the note
 

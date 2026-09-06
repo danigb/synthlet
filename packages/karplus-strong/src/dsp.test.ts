@@ -592,9 +592,32 @@ function longestT60(frequency: number, brightness: number) {
   );
 }
 
-/** The brightness figure both groups below assert on: 5 ms to 250 ms, in dB. */
-function brightnessChangeDb(frequency: number, brightness = 0.5) {
-  const signal = pluck(frequency, 1, 0.4, brightness);
+/**
+ * The brightness figure both groups below assert on: 5 ms to 250 ms, in dB.
+ *
+ * `stiffness` is threaded through so ticket 09 can re-run ticket 02's two
+ * high-band groups with the dispersion cascade in the loop; every argument
+ * between it and `brightness` is `pluck`'s own default, so the call at
+ * `stiffness = 0` is the one it always was, sample for sample.
+ */
+function brightnessChangeDb(
+  frequency: number,
+  brightness = 0.5,
+  stiffness = 0,
+) {
+  const signal = pluck(
+    frequency,
+    1,
+    0.4,
+    brightness,
+    0.5,
+    0.5,
+    0.13,
+    0,
+    1,
+    1,
+    stiffness,
+  );
   return energyDb(highBandRatio(signal, 0.25), highBandRatio(signal, 0.005));
 }
 
@@ -2167,6 +2190,122 @@ describe("createKS stiffness", () => {
     const spread = Math.max(...measured) / Math.min(...measured);
     expect(spread).toBeLessThan(1.25);
   });
+
+  // Success criterion 4: all of ticket 02's assertions hold at `stiffness = 1`
+  // as well as at 0. Its pitch, decay, amplitude and long-render groups are the
+  // four re-asserted around this comment; the three below are the rest of it -
+  // brightness, timbre versus tuning, and termination - re-run with the cascade
+  // at full.
+  //
+  // Every bound here was measured before it was written, because dispersion is
+  // exactly the thing that could have moved these numbers: it moves partial
+  // frequencies, so a band edge fixed at 5 kHz sees a different set of partials
+  // than it did at `stiffness = 0`. None of them had to move. All three are
+  // ticket 02's own bounds, unwidened, and the measured values are recorded
+  // above each so a later regression has something to be compared against.
+
+  // Ticket 02's brightness group. Its two `it.each` lists at once - the three
+  // pitches around 440 and the two near-integer delays - because at full
+  // stiffness there is nothing left to tell them apart: what separated them was
+  // the two-point interpolator's `|1 - 2*frac|` damping, ticket 04 removed it,
+  // and an allpass cascade cannot put a tuning dependence back.
+  //
+  // Seeded and asserted on the worst of eight draws rather than on one, because
+  // the quantity is a ratio of two noise-burst spectra and moves about 10 dB
+  // between draws. Worst of the eight, per pitch, in dB:
+  //
+  //   439.4: -62.6   440.0: -62.5   440.6: -62.5   441.0: -62.6   436.6: -62.5
+  //
+  // against -60.4 / -60.4 / -60.5 / -60.6 / -59.0 with the cascade bypassed on
+  // the same seeds. The fall is a couple of dB *deeper* with dispersion in, so
+  // the -20 dB bound is ticket 02's, unchanged, with 42 dB of margin.
+  it.each([439.4, 440.0, 440.6, 441.0, 436.6])(
+    "loses 20 dB of its band above 5 kHz at %p Hz, at full stiffness",
+    (frequency) => {
+      const worst = Math.max(
+        ...[1, 2, 3, 4, 5, 6, 7, 8].map((seed) =>
+          withSeededNoise(seed, () => brightnessChangeDb(frequency, 0.5, 1)),
+        ),
+      );
+      expect(worst).toBeLessThanOrEqual(-20);
+    },
+  );
+
+  // Ticket 02's timbre-versus-tuning group: five pitches within 20 cents of
+  // each other must still be the same instrument once the cascade is stretching
+  // their partials. Its structure exactly - 16 seeds, one excitation shared
+  // across the five pitches so the comparison stays paired, the mean spread
+  // asserted - and its 6 dB bound, because the measurement did not move: mean
+  // spread 1.61 dB at full stiffness against the ~1.9 dB the group above
+  // records at 0, with a per-seed range of 0.42 to 5.43 dB.
+  //
+  // Which is what the design predicts. `stiffness` maps to an inharmonicity
+  // coefficient `B` and the cascade's coefficients follow from `B` and f0; 20
+  // cents of tuning moves f0 by 1.2%, so all five get very nearly the same
+  // stretch and none of them gets a different instrument out of it.
+  it("damps its high band to within 6 dB across five pitches 20 cents apart, at full stiffness", () => {
+    const SEEDS = 16;
+    let total = 0;
+    for (let seed = 1; seed <= SEEDS; seed++) {
+      const changes = [439.4, 440.0, 440.6, 441.0, 436.6].map((frequency) =>
+        withSeededNoise(seed, () => brightnessChangeDb(frequency, 0.5, 1)),
+      );
+      total += Math.max(...changes) - Math.min(...changes);
+    }
+    expect(total / SEEDS).toBeLessThanOrEqual(6);
+  });
+
+  // Ticket 02's termination group, at full stiffness. The cascade is the one
+  // thing in the loop that could keep a tail alive without ever raising its
+  // level: it is allpass, so it removes no energy of its own, and it smears
+  // each period into the next rather than handing it back intact.
+  //
+  // It does not. All 40 stop, the longest at 5.5 s against 5.7 s with the
+  // cascade bypassed on the same seeds, and every one of them ends at -100.00
+  // dBFS. That last number is structural rather than lucky: `dsp.ts` stops on
+  // its own 5 ms envelope crossing `stopThreshold = 1e-5`, and the envelope
+  // here uses the same coefficient, so the level at the last non-zero sample is
+  // that threshold to the digit.
+  //
+  // Seeded, unlike ticket 02's, which takes 40 unseeded draws. Seeds 1..40 keep
+  // the same 40 independent excitations and make the verdict deterministic -
+  // including the loop's private xorshift, which draws its own seed from
+  // `Math.random`.
+  it("ends all 40 plucks at full stiffness, none of them above -100 dBFS", () => {
+    const CAP_SECONDS = 100; // the longest stop measured here is 5.5 s
+    const endLevels: number[] = [];
+
+    for (let attempt = 0; attempt < 40; attempt++) {
+      withSeededNoise(attempt + 1, () => {
+        const ks = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+        const block = new Float32Array(BLOCK);
+        let level = 0;
+        let atLastNonZero = 0;
+        let stopped = false;
+
+        for (let n = 0; n < SAMPLE_RATE * CAP_SECONDS; n += BLOCK) {
+          ks(block, 1, 440, 5, 0.5, 0.5, 0.5, 0.13, 0, 1, 1, 1);
+          let silent = true;
+          for (let i = 0; i < BLOCK; i++) {
+            level += ENVELOPE_COEFFICIENT * (Math.abs(block[i]) - level);
+            if (block[i] !== 0) {
+              silent = false;
+              atLastNonZero = level;
+            }
+          }
+          if (silent) {
+            stopped = true;
+            break;
+          }
+        }
+
+        expect([attempt, stopped]).toEqual([attempt, true]);
+        endLevels.push(20 * Math.log10(Math.max(atLastNonZero, 1e-30)));
+      });
+    }
+
+    expect(Math.max(...endLevels)).toBeLessThanOrEqual(-100);
+  }, 120_000);
 
   // `frequency.maxValue` is a measurement (ticket 05), and a filter that takes
   // a share of the loop length is exactly the thing that could invalidate it.
