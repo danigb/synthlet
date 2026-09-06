@@ -293,6 +293,11 @@ describe("WavetableOscillator", () => {
       "detune",
       "morph",
       "sync",
+      "segments",
+      "pitchChaos",
+      "pitchSpread",
+      "ampChaos",
+      "ampSpread",
     ]);
   });
 
@@ -311,14 +316,25 @@ describe("WavetableOscillator", () => {
     // it gets there is `dsp.test.ts`'s `it("starts where phase says")`.
     expect(
       created(WavetableOscillator(context)).options.processorOptions,
-    ).toEqual({ phase: 0 });
+    ).toEqual({ phase: 0, pitchPerSegment: false });
     expect(
       created(WavetableOscillator(context, { phase: 0.25 })).options
         .processorOptions,
-    ).toEqual({ phase: 0.25 });
+    ).toEqual({ phase: 0.25, pitchPerSegment: false });
     expect(
       created(WavetableOscillator(context, { phase: "random" })).options
         .processorOptions,
-    ).toEqual({ phase: "random" });
+    ).toEqual({ phase: "random", pitchPerSegment: false });
+  });
+
+  it("sends the stochastic pitch mode to the processor", () => {
+    // Ticket 11's other construction option, and it travels the same way and
+    // for a related reason: it selects between Radna 2.4's single-segment pitch
+    // fluctuation and the standard per-segment one, which is an algorithm and
+    // not a value. `false` is the paper's own default.
+    expect(
+      created(WavetableOscillator(context, { pitchPerSegment: true })).options
+        .processorOptions,
+    ).toEqual({ phase: 0, pitchPerSegment: true });
   });
 });

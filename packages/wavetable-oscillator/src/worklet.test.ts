@@ -77,4 +77,55 @@ describe("WavetableOscillatorWorkletNode", () => {
     // correction on top of it - which is why this is a bound and not a value.
     expect(out[8]).toBeLessThan(0.4);
   });
+
+  it("is inert with the stochastic parameters at their defaults", () => {
+    // The other half of the same point, for ticket 11: the real processor is
+    // always handed all five stochastic parameters, and `dsp.test.ts`'s harness
+    // omits them on purpose so that every measurement above it drives the
+    // pre-ticket loop. This is where the always-on wiring is checked, and what
+    // it has to show is *nothing at all* - the defaults `params.ts` declares
+    // put both barriers at 0, which Radna 2.3 makes the exact bypass.
+    const processor = new WavetableOscillatorWorkletProcessor();
+    const wavetable = Float32Array.from({ length: 10 }, (_, i) => i / 10);
+    processor.port.onmessage({
+      data: { type: "WAVETABLE", wavetable, length: 10 },
+    });
+    const out = runProcessMono(processor, 10, {
+      frequency: [4],
+      morph: [0],
+      segments: [8],
+      pitchChaos: [0.5],
+      pitchSpread: [0],
+      ampChaos: [0.5],
+      ampSpread: [0],
+    });
+    expect(Array.from(out)).toEqual(Array.from(wavetable));
+  });
+
+  it("carries the stochastic barriers through to the walk", () => {
+    // And that an open barrier does reach the DSP through this path, or the
+    // test above would pass on a processor that never read the parameters at
+    // all. The amplitude path only, so the comparison is sample-aligned.
+    const processor = new WavetableOscillatorWorkletProcessor();
+    const wavetable = Float32Array.from({ length: 10 }, (_, i) => i / 10);
+    processor.port.onmessage({
+      data: { type: "WAVETABLE", wavetable, length: 10 },
+    });
+    const params = {
+      frequency: [4],
+      morph: [0],
+      segments: [4],
+      pitchChaos: [0.5],
+      pitchSpread: [0],
+      ampChaos: [1],
+      ampSpread: [0.5],
+    };
+    // One cycle to draw the first deviation series, then a cycle that shows it.
+    runProcessMono(processor, 10, params);
+    const out = runProcessMono(processor, 10, params);
+    let moved = 0;
+    for (let i = 0; i < 10; i++)
+      moved = Math.max(moved, Math.abs(out[i] - wavetable[i]));
+    expect(moved).toBeGreaterThan(0);
+  });
 });

@@ -30,5 +30,40 @@ exports[`WavetableOscillatorWorkletNode has parameter descriptors 1`] = `
     "minValue": 0,
     "name": "sync",
   },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 8,
+    "maxValue": 256,
+    "minValue": 0,
+    "name": "segments",
+  },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0.5,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "pitchChaos",
+  },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 24,
+    "minValue": 0,
+    "name": "pitchSpread",
+  },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0.5,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "ampChaos",
+  },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "ampSpread",
+  },
 ]
 `;

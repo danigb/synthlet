@@ -124,7 +124,14 @@ describe("descriptors", () => {
   // `frequency * 2^(detune/1200) * len / sampleRate`, and a k-rate pitch
   // quantises FM to 2.9 ms at 44.1 kHz, which aliases for any modulator above
   // about 172 Hz.
-  it("keeps WavetableOscillator's four signals at a-rate", () => {
+  it("keeps WavetableOscillator's eight signals at a-rate", () => {
+    // Ticket 11's four stochastic barriers and step sizes joined them. They are
+    // *read* once per wave cycle, because a bounded random walk is a per-cycle
+    // process and sampling its parameters faster would not make it move faster;
+    // a-rate is what decides *which* value the boundary gets - the one at its
+    // own sample rather than the one at the top of the render quantum. The
+    // segment count is the exception and is k-rate: Radna 2.1 makes it
+    // "variable at runtime" but it is a structure and not a signal.
     const aRate = synthlet.WavetableOscillator.descriptors.filter(
       (d) => d.automationRate === "a-rate",
     );
@@ -133,6 +140,10 @@ describe("descriptors", () => {
       "detune",
       "morph",
       "sync",
+      "pitchChaos",
+      "pitchSpread",
+      "ampChaos",
+      "ampSpread",
     ]);
     expect(aRate[2]).toEqual({
       name: "morph",
@@ -158,6 +169,32 @@ describe("descriptors", () => {
       minValue: -20000,
       maxValue: 20000,
       automationRate: "a-rate",
+    });
+  });
+
+  // Ticket 11's stage is off by default and exactly inert when off - the DSP
+  // test asserts sample-for-sample identity against the same patch without it -
+  // and the property that makes that reachable is that **both barriers default
+  // to 0**. Radna 2.3: "reducing both barrier position parameters to zero
+  // reproduces the input wavetable at a constant pitch". If a default ever
+  // moves, every alias floor this package publishes moves with it.
+  //
+  // `segments` carries `minValue: 0` where 1 would be natural, and that is this
+  // library's standing decision rather than a slip: `connectParams` writes
+  // `param.value = 0` for every connected input, so a positive minimum makes
+  // Chrome clamp that write and warn. 0 and 1 are both one segment in the DSP.
+  it("keeps WavetableOscillator's stochastic mode off by default", () => {
+    const byName = Object.fromEntries(
+      synthlet.WavetableOscillator.descriptors.map((d) => [d.name, d]),
+    );
+    expect(byName.pitchSpread.defaultValue).toBe(0);
+    expect(byName.ampSpread.defaultValue).toBe(0);
+    expect(byName.segments).toEqual({
+      name: "segments",
+      defaultValue: 8,
+      minValue: 0,
+      maxValue: 256,
+      automationRate: "k-rate",
     });
   });
 });

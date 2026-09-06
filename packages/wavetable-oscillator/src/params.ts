@@ -80,4 +80,84 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "a-rate",
   },
+  // Radna's Dynamic Stochastic Wavetable Synthesis (DAFx-23) as a modulation
+  // layer: the table is divided into segments, each carrying a pitch and an
+  // amplitude deviation drawn by a bounded random walk that iterates once per
+  // wave cycle.
+  //
+  // **The two barriers default to 0 and that is the bypass**, exactly rather
+  // than approximately: Radna 2.3 says "reducing both barrier position
+  // parameters to zero reproduces the input wavetable at a constant pitch",
+  // and `dsp.test.ts` asserts it sample for sample against the same patch with
+  // the stage absent. Every alias floor this package publishes is measured with
+  // these five present and holds to the printed decimal.
+  //
+  // M, the segment count. Structural rather than a signal - Radna 2.1 makes it
+  // "variable at runtime" but not modulatable - so k-rate, and the one
+  // parameter here that is.
+  //
+  // **`minValue` is 0 rather than the natural 1**, and that is this folder's
+  // standing decision rather than a slip: `connectParams` writes
+  // `param.value = 0` for every connected input, so a positive minimum makes
+  // Chrome clamp that write and warn on every modulated instance. 0 and 1 both
+  // mean one segment, which is Radna's own "the entire wavetable is affected
+  // uniformly". 8 is the paper's Fig. 4 setting.
+  {
+    name: "segments",
+    defaultValue: 8,
+    minValue: 0,
+    maxValue: 256,
+    automationRate: "k-rate",
+  },
+  // The random-walk step size for the pitch path, as a fraction of the barrier:
+  // how much of the available range the deviation may cross in one wave cycle.
+  // 0 is a frozen walk, 1 redraws it from the whole range every cycle.
+  //
+  // 0.5 by default so that opening `pitchSpread` on its own does something. A
+  // chaos of 0 with a barrier open is a legal state and means "hold".
+  {
+    name: "pitchChaos",
+    defaultValue: 0.5,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "a-rate",
+  },
+  // The pitch barrier in equal-tempered semitones, symmetric about the pitch
+  // the oscillator was asked for: how far the deviation can get from centre.
+  // **0 disables the pitch path entirely.**
+  //
+  // ±24 at the top is Radna's own Fig. 4 setting ("pitch barrier range of ±
+  // two octaves"), which is the noise end of the continuum; ±0.5 is a drift and
+  // ±2 a wide vibrato.
+  //
+  // a-rate, like the three below, and what that buys is where the value is read
+  // rather than how often: the walk is a per-cycle process, so all four are
+  // sampled at the wave-cycle boundary. At a-rate that is the value at the
+  // boundary's own sample; k-rate could only offer the value at the top of the
+  // render quantum it fell in.
+  {
+    name: "pitchSpread",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 24,
+    automationRate: "a-rate",
+  },
+  // The same two knobs for the amplitude path, whose deviation is added to the
+  // sample and folded at ±1 - "a segmented, stochastic wavefolder" (Radna 2.2).
+  {
+    name: "ampChaos",
+    defaultValue: 0.5,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "a-rate",
+  },
+  // The amplitude barrier as a proportion of full scale. **0 disables the
+  // amplitude path entirely.**
+  {
+    name: "ampSpread",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "a-rate",
+  },
 ];

@@ -173,6 +173,65 @@ function WavetableExample() {
           param={synth.lfo.gain}
         />
       </div>
+
+      {/*
+        Radna's Dynamic Stochastic Wavetable Synthesis, layered over whichever
+        table is selected above. Both spreads start at 0, which is the exact
+        bypass - drag either one up and the same table starts to move.
+
+        Read them in pairs: the spread is how far the deviation can get, the
+        chaos is how fast it gets there. Segments is the roughness and the
+        brightness, and it is also the aliasing: this stage is not band-limited
+        and the paper it comes from says so.
+      */}
+      <div className="grid grid-cols-4 gap-4 mt-4 pt-2 border-t border-fd-border">
+        <div className="col-span-4 text-sm text-zinc-400">
+          Chaos — a stochastic pitch and amplitude walk over the table above,
+          one draw per wave cycle. Both spreads at 0 is off.
+        </div>
+        <Slider
+          label="Pitch spread"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={0}
+          max={24}
+          units=" st"
+          param={synth.osc.pitchSpread}
+        />
+        <Slider
+          label="Pitch chaos"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={0}
+          max={1}
+          param={synth.osc.pitchChaos}
+        />
+        <Slider
+          label="Amp spread"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={0}
+          max={1}
+          param={synth.osc.ampSpread}
+        />
+        <Slider
+          label="Amp chaos"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={0}
+          max={1}
+          param={synth.osc.ampChaos}
+        />
+        <Slider
+          label="Segments"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={1}
+          max={256}
+          step={1}
+          param={synth.osc.segments}
+        />
+      </div>
       <div className="flex mt-4">
         <GateButton gate={synth.gate} />
       </div>

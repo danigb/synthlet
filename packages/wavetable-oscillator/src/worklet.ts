@@ -12,13 +12,16 @@ export class WavetableOscillatorWorkletProcessor extends AudioWorkletProcessor {
   // `phase` travels in `processorOptions` rather than as an `AudioParam`: it is
   // a one-time initial condition, and an `AudioParam` would promise it means
   // something continuously. Read once, here, so `"random"` is drawn per
-  // instance — which is the point of it.
+  // instance — which is the point of it. `pitchPerSegment` rides along for a
+  // related reason: it selects an algorithm rather than carrying a value.
   constructor(options?: AudioWorkletNodeOptions) {
     super();
+    const settings = options?.processorOptions as
+      { phase?: number | "random"; pitchPerSegment?: boolean } | undefined;
     this.u = WavetableOscillator(
       sampleRate,
-      (options?.processorOptions as { phase?: number | "random" } | undefined)
-        ?.phase,
+      settings?.phase,
+      settings?.pitchPerSegment,
     );
     this.r = true;
     this.port.onmessage = (event) => {

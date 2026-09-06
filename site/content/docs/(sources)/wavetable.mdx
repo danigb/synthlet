@@ -52,6 +52,9 @@ osc.frequency.value = 880;
   `1`, default 0, and **a-rate**, unlike every other gate in the library: the
   reset is placed at the sub-sample instant the gate crossed zero, which a
   k-rate gate could only round to the nearest render quantum.
+- `segments`, `pitchChaos`, `pitchSpread`, `ampChaos`, `ampSpread`: the
+  stochastic mode, below. Both spreads default to 0 and that is an exact
+  bypass.
 
 `phase` is a **construction option** rather than a parameter - `number` or
 `"random"` - because it is a one-time initial condition. Three instances built
@@ -93,6 +96,42 @@ as `@synthlet/polyblep-oscillator`): a correction is written backwards into
 samples that have been computed but not yet emitted.
 
 <WavetableSyncExample />
+
+## Stochastic mode
+
+Raphael Radna's *Dynamic Stochastic Wavetable Synthesis* (DAFx-23), layered over
+whichever table is loaded. The table is split into `segments` equal parts, and
+each part gets a pitch deviation and an amplitude deviation drawn by a bounded
+random walk that iterates once per wave cycle. The pitch deviation bends the read
+rate; the amplitude deviation is added to the sample, interpolated across segment
+boundaries so none of them is a step, and folded at ±1. The range is drift →
+thickening → granular roughness → noise.
+
+```ts
+// organic drift: every note slightly different, nothing else changes
+const osc = WavetableOscillator(audioContext, {
+  pitchSpread: 0.2,
+  pitchChaos: 0.3,
+});
+```
+
+`pitchSpread` (0–24 semitones) and `ampSpread` (0–1) are the barriers — how far a
+deviation can get from centre — and each one at 0 switches its path off entirely.
+`pitchChaos` and `ampChaos` (0–1) are the step sizes, as a fraction of the
+barrier: how much of that range the walk may cross in one cycle. `segments`
+(0–256, k-rate) is the roughness and the brightness.
+
+The four a-rate parameters are **read once per wave cycle**, because that is the
+rate the walk runs at. An envelope into `ampSpread` makes the roughness part of a
+note's shape; an audio-rate source there does not give audio-rate modulation.
+
+**This stage is not band-limited, and the paper says so.** The knees the
+deviations put at the segment boundaries are a broadband source that no amount of
+table band-limiting removes, so the spreads and `segments` are
+roughness-versus-aliasing knobs rather than tone controls — see the package
+README for the measured numbers. `{ pitchPerSegment: true }` at construction is
+the rougher, more aliased pitch mode; the default draws one pitch deviation per
+cycle, which is the one antialiasing measure the paper implements.
 
 ## Loading wavetables
 

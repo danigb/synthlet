@@ -68,6 +68,11 @@ export type WavetableInputs = {
   detune?: ParamInput;
   morph?: ParamInput;
   sync?: ParamInput;
+  segments?: ParamInput;
+  pitchChaos?: ParamInput;
+  pitchSpread?: ParamInput;
+  ampChaos?: ParamInput;
+  ampSpread?: ParamInput;
 };
 
 export type WavetableOscillatorOptions = WavetableInputs & {
@@ -88,6 +93,23 @@ export type WavetableOscillatorOptions = WavetableInputs & {
    * ```
    */
   phase?: number | "random";
+  /**
+   * How often the stochastic mode's **pitch** deviation is drawn, if the mode
+   * is running at all: `false` (the default) once per wave cycle, `true` once
+   * per segment.
+   *
+   * The default is Radna 2.4's own recommendation and is the one antialiasing
+   * measure that paper implements. Treating the whole table as a single
+   * segment for pitch "preserves the shape, and therefore timbre, of a
+   * particular wavetable" — measured here, 18.5 dB less energy above 10 kHz at
+   * the paper's Fig. 4 settings, and a spectral centroid of 894 Hz against
+   * 1651. `true` is the standard DSWS behaviour: rougher, granular, and
+   * audibly more aliased.
+   *
+   * A construction option rather than an `AudioParam` because it selects an
+   * algorithm, and an `AudioParam` would promise it can be crossfaded.
+   */
+  pitchPerSegment?: boolean;
   /**
    * Where `loadWavetable` and `fetchWavetableNames` resolve bare names. A
    * string is shorthand for `waveditCatalog(baseUrl)`; a `WavetableCatalog`
@@ -170,6 +192,59 @@ export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
    */
   sync: AudioParam;
   /**
+   * How many segments the table is divided into for the stochastic mode, 0–256,
+   * k-rate. More segments is a brighter and rougher deviation (Radna 2.1
+   * Fig. 2); 0 and 1 both mean one segment, the case where the whole table is
+   * affected uniformly.
+   *
+   * Structural rather than a signal, so it is the one parameter of the five
+   * that is not a-rate.
+   */
+  segments: AudioParam;
+  /**
+   * How much of the pitch barrier the deviation may cross in one wave cycle,
+   * `[0, 1]`: 0 freezes the walk where it stands, 1 redraws it from the whole
+   * range every cycle. It is the *speed* knob; `pitchSpread` is the depth one.
+   */
+  pitchChaos: AudioParam;
+  /**
+   * The stochastic pitch deviation's barrier, in semitones either side of the
+   * pitch you asked for: `[0, 24]`, and **0 switches the pitch path off**.
+   *
+   * ```ts
+   * // organic drift, the subtle end
+   * const osc = WavetableOscillator(ac, { pitchSpread: 0.2, pitchChaos: 0.3 });
+   * // Radna's own Fig. 4 setting, which is the noise end
+   * const noisy = WavetableOscillator(ac, { pitchSpread: 24, pitchChaos: 0.25 });
+   * ```
+   *
+   * The deviation is centred in semitones, so the tone holds the pitch it was
+   * asked for: measured, the mean over four seconds at a half-semitone barrier
+   * is within 2.3 cents. The mean *frequency* of the same signal is slightly
+   * flat — 1.5 cents at a barrier of one semitone — because averaging a
+   * symmetric deviation in the log domain is not the same as averaging it in
+   * Hz.
+   *
+   * a-rate, and the four stochastic parameters are all **sampled once per wave
+   * cycle**, because that is the rate the random walk runs at. Connecting an
+   * envelope here works and is the intended way to make the roughness part of
+   * a note's shape; connecting an audio-rate oscillator does not produce
+   * audio-rate modulation.
+   */
+  pitchSpread: AudioParam;
+  /** `pitchChaos` for the amplitude path: how fast that walk moves. */
+  ampChaos: AudioParam;
+  /**
+   * The stochastic amplitude deviation's barrier, `[0, 1]` of full scale, and
+   * **0 switches the amplitude path off**.
+   *
+   * The deviation is added to the sample, interpolated across segment
+   * boundaries so none of them is a step, and folded at ±1 — Radna calls the
+   * result "a segmented, stochastic wavefolder". It is the timbral half of the
+   * mode, and the noisier half: see the README for what it costs in aliasing.
+   */
+  ampSpread: AudioParam;
+  /**
    * Where this node resolves bare wavetable names. Set at construction with
    * `WavetableOscillator(ac, { catalog })`, and writable afterwards — it is
    * read at call time, not captured.
@@ -241,7 +316,10 @@ const create = createWorkletConstructor<
   workletOptions: (inputs: Partial<WavetableOscillatorOptions>) => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
-    processorOptions: { phase: inputs.phase ?? 0 },
+    processorOptions: {
+      phase: inputs.phase ?? 0,
+      pitchPerSegment: inputs.pitchPerSegment ?? false,
+    },
   }),
   postCreate(node) {
     node.setWavetable = (wavetable, options) => {

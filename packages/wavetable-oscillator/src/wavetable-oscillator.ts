@@ -1,5 +1,6 @@
 import { blampResidual4, blepResidual4 } from "./_blep";
 import { createGateDetector } from "./_gate";
+import { clamped, fold, MAX_SEGMENTS, walk } from "./stochastic";
 
 type Inputs = {
   frequency: ArrayLike<number>;
@@ -22,6 +23,19 @@ type Inputs = {
    * switched on the connection.
    */
   sync?: ArrayLike<number>;
+  /**
+   * Radna's DSWS stage, ticket 11. **All five are optional, and their absence
+   * is the whole of the bypass** - the same discipline `sync` above uses. A
+   * caller with no interest in the mode, which is every test written before
+   * this ticket, takes the sample loop exactly as it was: no walk, no segment
+   * index, no fold. The worklet always supplies them, and there they are inert
+   * at their defaults because both barriers default to 0.
+   */
+  segments?: ArrayLike<number>;
+  pitchChaos?: ArrayLike<number>;
+  pitchSpread?: ArrayLike<number>;
+  ampChaos?: ArrayLike<number>;
+  ampSpread?: ArrayLike<number>;
 };
 
 /**
@@ -35,6 +49,14 @@ const IDECLICK = 1 / DECLICK;
 
 /** Substituted for an absent `detune` input, once per block. */
 const NO_DETUNE = [0];
+
+/**
+ * Substituted for any absent stochastic input, once per block: a closed
+ * barrier and a frozen walk, which is the same thing the parameter defaults
+ * say. `NO_DETUNE`'s idiom, and it is what keeps the five optional members out
+ * of the sample loop as five `undefined` tests.
+ */
+const OFF = [0];
 
 /**
  * Where the read position starts, as a fraction of one cycle.
@@ -89,6 +111,18 @@ function crossingAge(previous: number, gate: number): number {
 export function WavetableOscillator(
   sampleRate: number,
   phase?: number | "random",
+  /**
+   * Radna 2.4's mode switch, and it defaults to the paper's own
+   * recommendation. `false` fluctuates the pitch **once per wave cycle**,
+   * whatever `segments` says, which "preserves the shape, and therefore
+   * timbre, of a particular wavetable"; `true` fluctuates it per segment, the
+   * standard DSWS behaviour, which is rougher and measurably more aliased.
+   *
+   * A construction option rather than an `AudioParam` for the reason `phase`
+   * is one: it selects an algorithm, and an `AudioParam` would promise it can
+   * be crossfaded.
+   */
+  pitchPerSegment?: boolean,
 ) {
   // Drawn once, at construction, and re-applied by every `set()` that changes
   // the table length - the only event that makes a read position meaningless.
@@ -113,6 +147,10 @@ export function WavetableOscillator(
   const isr = 1 / sampleRate;
 
   let len = 0;
+  // `1 / len`, because the segment index needs the phase - `offset / len`,
+  // Radna Eq. 2 - once per sample and a divide is the one operation in this
+  // loop that is not a multiply.
+  let ilen = 0;
   let planes = 0;
   let offset = 0;
   let inc = 0;
@@ -137,6 +175,36 @@ export function WavetableOscillator(
   // is what decides whether the mip level is recomputed per sample and whether a
   // level jump is declicked; see updateLevel().
   let pitchARate = false;
+
+  /*
+   * Radna's DSWS stage (DAFx-23), ticket 11.
+   *
+   * Two deviation series, `P` and `A` in the paper's notation, one entry per
+   * segment: pitch in equal-tempered semitones and amplitude as a proportion
+   * of the full range (2.3). Allocated once at construction at the ceiling
+   * 2.1 sets, never per cycle - the whole cost argument for the mode is that
+   * the O(M) work happens once per wave cycle and the per-sample work is a
+   * floor, a lookup, a lerp and a fold.
+   */
+  const pitchDeviation = new Float32Array(MAX_SEGMENTS);
+  const ampDeviation = new Float32Array(MAX_SEGMENTS);
+  // M in use this block, resolved from the k-rate `segments` parameter.
+  let segments = 1;
+  // The pitch deviation currently in force, as a ratio on the increment rather
+  // than in semitones: it is folded into updateInc(), which is what gives the
+  // deviated read rate the Nyquist clamp and the mipmap level it would not get
+  // from a multiply at the read.
+  let pitchMul = 1;
+  // The segment whose pitch deviation `pitchMul` came from, in per-segment
+  // mode. `-1` forces the next sample to apply one, which is how a fresh cycle
+  // and a changed `segments` both re-arm it.
+  let segment = -1;
+  // Set per block: whether the stage runs at all, and whether each half of it
+  // has anything to do. `walking` false is the bypass, and it is bit-exact:
+  // nothing between the table read and the output is touched.
+  let walking = false;
+  let pitchWalks = false;
+  let ampWalks = false;
 
   /*
    * Hard sync.
@@ -190,13 +258,23 @@ export function WavetableOscillator(
   // which is the whole of through-zero FM in a wavetable: the sibling package
   // needed a discontinuity scheduler rewritten around a signed increment for the
   // same feature.
+  //
+  // `pitchMul` is ticket 11's stochastic pitch deviation, 1 unless the mode is
+  // running. It is a factor here rather than a multiply at the read, and that
+  // is the whole reason the deviation is band-limited at all: Radna took "no
+  // further antialiasing measures" (3.1) and ticket 06's handoff expected the
+  // same here, because the deviation moves the read rate *within* a cycle and
+  // so does not look like a pitch change. Routed through this expression it
+  // looks like exactly one: it gets the Nyquist clamp, and `updateLevel()`
+  // below picks a mip level for the rate actually being read, so a segment
+  // taken two octaves up reads two octaves darker.
   function updateInc(frequency: number, cents: number) {
     $frequency = frequency;
     if (cents !== $detune) {
       $detune = cents;
       ratio = Math.pow(2, cents / 1200);
     }
-    const raw = frequency * ratio * len * isr;
+    const raw = frequency * ratio * pitchMul * len * isr;
     const max = len / 2;
     inc =
       raw > 0
@@ -296,7 +374,17 @@ export function WavetableOscillator(
     // The k-rate rule is untouched and still fires: a 110 → 7040 Hz step at a
     // block boundary measures 0.00169 through this path against 0.10784 through
     // the a-rate one, which is the 64× a 64-sample ramp is supposed to give.
-    if (!pitchARate && Math.abs(next - $level) > 0.5) declick();
+    //
+    // **Suppressed while ticket 11's stochastic pitch walk is running too**,
+    // and this is the jump-detector question ticket 05's handoff asked ticket
+    // 11 to decide - answered on the level axis rather than the morph one,
+    // because the mode never touches the morph position. A pitch walk with a
+    // barrier of 24 semitones crosses two octaves at a cycle boundary, which is
+    // a level step of 4 against a threshold of 0.5, so left alone every large
+    // deviation would retrigger the ramp and the declick would slew-limit the
+    // one thing the mode exists for. Same reasoning as the a-rate case above:
+    // past the threshold the ramp has stopped being a declick.
+    if (!pitchARate && !pitchWalks && Math.abs(next - $level) > 0.5) declick();
     $level = next;
   }
 
@@ -304,6 +392,7 @@ export function WavetableOscillator(
     const had = len;
     $wavetable = wavetable;
     len = Math.min(length, wavetable.length);
+    ilen = len > 0 ? 1 / len : 0;
     // A pyramid is `mipLevels` copies of the whole plane set, level-major, so a
     // plane is `level * planes + p` and the reader needs no second dimension. A
     // count that does not divide the data is not a pyramid — fall back to one
@@ -448,6 +537,67 @@ export function WavetableOscillator(
     const synced = sync !== undefined && sync.length > 0;
     const sRate = synced && sync.length === n;
 
+    // Ticket 11's stage, engaged for this block or not.
+    //
+    // A barrier at 0 "reproduces the input wavetable at a constant pitch"
+    // (Radna 2.3), so both barriers at 0 is the bypass and it is the default.
+    // A k-rate barrier is answered on its value; an a-rate one engages the
+    // stage whatever its samples say, which is the rule `sync` uses one line up
+    // and is the same bargain - scanning 128 floats a block to find out would
+    // cost more than the branch it saves, and a caller who connected something
+    // to a barrier is asking for the path.
+    //
+    // The flags are latched rather than assigned, because a barrier that closes
+    // only returns its deviations to zero when the walk next iterates - at a
+    // cycle boundary, not at a block boundary. They are what the sample loop
+    // tests, so the stage keeps running exactly long enough to release what it
+    // is holding, and the boundary below is where it lets go.
+    //
+    // The two barriers are tested for presence rather than substituted with
+    // `OFF`, and that is not symmetry with `detune` going missing: a one-element
+    // stand-in has `length === n` when the block is one sample long, which the
+    // block-size tests render, and the a-rate arm of the rule above would then
+    // engage the stage on an input nobody supplied. The two step sizes can be
+    // substituted, because their rate only decides which element to read and
+    // both elements of a stand-in are the same zero.
+    const pitchSpread = inputs.pitchSpread;
+    const ampSpread = inputs.ampSpread;
+    const pitchChaos = inputs.pitchChaos ?? OFF;
+    const ampChaos = inputs.ampChaos ?? OFF;
+    const psRate = pitchSpread !== undefined && pitchSpread.length === n;
+    const asRate = ampSpread !== undefined && ampSpread.length === n;
+    const pcRate = pitchChaos.length === n;
+    const acRate = ampChaos.length === n;
+    if (psRate || (pitchSpread !== undefined && pitchSpread[0] > 0))
+      pitchWalks = true;
+    if (asRate || (ampSpread !== undefined && ampSpread[0] > 0))
+      ampWalks = true;
+    walking = pitchWalks || ampWalks;
+    // The one loose end of routing the deviation through updateInc(): if the
+    // stage stops being engaged while `pitchMul` is off 1 - which needs a
+    // caller to close the barrier and stop the read in the same breath, since
+    // otherwise the next cycle boundary restores it - the increment would stay
+    // bent. One test per block, not per sample.
+    if (!walking && pitchMul !== 1) {
+      pitchMul = 1;
+      updateInc($frequency, $detune);
+    }
+    if (walking) {
+      // M, k-rate: it is a structural choice rather than a signal, and Radna
+      // 2.1 makes it "variable at runtime" rather than modulatable. The
+      // comparison form resolves NaN to 1, and 0 - which is what `minValue: 0`
+      // exists for, see params.ts - is one segment, the case where "the entire
+      // wavetable is affected uniformly".
+      const raw = inputs.segments;
+      const count = raw === undefined ? 1 : Math.floor(raw[0]);
+      const resolved =
+        count > 1 ? (count < MAX_SEGMENTS ? count : MAX_SEGMENTS) : 1;
+      if (resolved !== segments) {
+        segments = resolved;
+        segment = -1;
+      }
+    }
+
     // The pitch moves inside the block only if something driving it does. When
     // neither does, the increment and its mip level are computed once for the
     // whole block, exactly as they were before this ticket, and the `Math.log2`
@@ -497,6 +647,28 @@ export function WavetableOscillator(
     const jump = planes > 1 ? 0.5 / (planes - 1) : Infinity;
 
     for (let i = 0; i < n; i++) {
+      // Radna Eq. 1-2: the index of the segment holding this sample is
+      // `floor(M * phi)` with `phi = offset / len`, and `mu` (Eq. 6) is what is
+      // left over. Both halves of the stage want them, so they are computed
+      // once, here, and only when the stage is running.
+      let mu = 0;
+      let seg = 0;
+      if (walking) {
+        mu = segments * offset * ilen;
+        seg = Math.floor(mu);
+        mu -= seg;
+        // Eq. 3, per segment: the deviation of the segment being read "modulates
+        // the base oscillator pitch", so the increment changes as the table is
+        // read. Only in per-segment mode - 2.4's default treats the whole table
+        // as one segment for pitch, which is applied at the cycle boundary
+        // below. The `Math.pow` runs at most once per segment crossing, so it is
+        // O(M) per cycle like the walk itself and never per sample.
+        if (pitchPerSegment && seg !== segment) {
+          segment = seg;
+          pitchMul = Math.pow(2, pitchDeviation[seg] / 12);
+          if (!pitchARate) updateInc($frequency, $detune);
+        }
+      }
       if (pitchARate) {
         updateInc(
           fRate ? frequency[i] : frequency[0],
@@ -565,6 +737,23 @@ export function WavetableOscillator(
       }
 
       let y = readAt(m, offset);
+      if (ampWalks) {
+        // Radna Eq. 4-6, and the reason the amplitude path needs no declick of
+        // its own: the deviation applied to a sample is a linear interpolation
+        // between its own segment's and the next one's - the last segment
+        // wrapping to the first, Eq. 5 - so no segment boundary is ever a step.
+        // Eq. 7-8's fold is what keeps the sum in range, and it is what makes
+        // the stage a wavefolder; see `fold()`.
+        //
+        // **After the plane crossfade and before the declick ramp.** After,
+        // because the deviation is defined on the output sample and not on one
+        // plane of it; before, because a ramp started by a table swap or a
+        // jumped morph position has to land on the signal that is actually
+        // being emitted.
+        const next = seg + 1 < segments ? seg + 1 : 0;
+        const a = ampDeviation[seg];
+        y = fold(y + a + (ampDeviation[next] - a) * mu);
+      }
       if (ramp > 0) {
         ramp--;
         // Hold the pre-jump output and ramp linearly onto the live signal. The
@@ -589,7 +778,57 @@ export function WavetableOscillator(
       last = output[i];
 
       // `len` is at least 1 here because agen() returns early on len === 0.
-      offset = wrap(offset + inc);
+      const advanced = offset + inc;
+      // The wave cycle boundary, and the only place the walks iterate (Radna
+      // 2.3: "iterated every wave cycle"). Ticket 01 made the wrap the single
+      // well-defined place the read position turns over, and this is it, read
+      // in both directions because through-zero FM runs the pointer backwards
+      // and a cycle counted backwards is still a cycle.
+      if (walking && (advanced >= len || advanced < 0)) {
+        // The four parameters are read *here*, once per cycle, rather than once
+        // per sample. That is not an economy, it is the rate the algorithm runs
+        // at: the walk is a per-cycle process, and sampling its step size
+        // faster would not make it move faster. Declared a-rate all the same,
+        // so the value taken is the one at the boundary's own sample rather
+        // than the one at the top of the block.
+        //
+        // Both barriers are clamped with the house comparison form, so a NaN
+        // arriving from a direct caller resolves to a closed barrier rather
+        // than poisoning a walk that has no way back out.
+        const pb = pitchWalks
+          ? clamped(psRate ? pitchSpread![i] : pitchSpread![0], 24)
+          : 0;
+        const ab = ampWalks
+          ? clamped(asRate ? ampSpread![i] : ampSpread![0], 1)
+          : 0;
+        // "The step size scales the random value" (2.3). Ours scales it as a
+        // *fraction of the barrier*, so the two knobs are independent: the
+        // barrier says how far the deviation can get from centre and the chaos
+        // says how much of that it may cross in one cycle. A chaos of 0 with a
+        // barrier open is a legal, frozen walk.
+        const pc = clamped(pcRate ? pitchChaos[i] : pitchChaos[0], 1);
+        const ac = clamped(acRate ? ampChaos[i] : ampChaos[0], 1);
+        walk(pitchDeviation, segments, pb * pc, pb);
+        walk(ampDeviation, segments, ab * ac, ab);
+        // A closed barrier reflects every deviation to exactly 0, so this is
+        // where the stage releases: one cycle after the caller closes it, the
+        // flags go false and the loop is back to the bypass, bit for bit.
+        pitchWalks = pb !== 0;
+        ampWalks = ab !== 0;
+        walking = pitchWalks || ampWalks;
+        // Radna 2.4, and the default: "we can treat the entire wavetable as a
+        // single segment for the purpose of pitch fluctuation, regardless of
+        // the number of segments used for amplitude fluctuation. In this case,
+        // the pitch fluctuation occurs once per cycle". One `Math.pow` per
+        // cycle, and `pitchDeviation[0]` is exactly 0 once the barrier closes,
+        // so this is also what puts the increment back.
+        if (!pitchPerSegment) {
+          pitchMul = Math.pow(2, pitchDeviation[0] / 12);
+          updateInc($frequency, $detune);
+        }
+        segment = -1;
+      }
+      offset = wrap(advanced);
     }
   }
 

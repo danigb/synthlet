@@ -4,6 +4,7 @@ import { blampResidual4, blepResidual4 } from "./_blep";
 import {
   aliasSnr,
   centroid,
+  magnitudes,
   maxAbsoluteDifference,
   peak,
   peakFrequency,
@@ -63,6 +64,11 @@ type Params = {
   detune?: Rate;
   morph?: Rate;
   sync?: Rate;
+  segments?: number;
+  pitchChaos?: Rate;
+  pitchSpread?: Rate;
+  ampChaos?: Rate;
+  ampSpread?: Rate;
 };
 
 type Inputs = {
@@ -70,7 +76,21 @@ type Inputs = {
   detune: ArrayLike<number>;
   morph: ArrayLike<number>;
   sync?: ArrayLike<number>;
+  segments?: ArrayLike<number>;
+  pitchChaos?: ArrayLike<number>;
+  pitchSpread?: ArrayLike<number>;
+  ampChaos?: ArrayLike<number>;
+  ampSpread?: ArrayLike<number>;
 };
+
+/** The five stochastic inputs, and the defaults `params.ts` declares. */
+const STOCHASTIC = {
+  segments: 8,
+  pitchChaos: 0.5,
+  pitchSpread: 0,
+  ampChaos: 0.5,
+  ampSpread: 0,
+} as const;
 
 /**
  * `sync` is present only when a test asks for it, and that is load-bearing
@@ -78,6 +98,11 @@ type Inputs = {
  * ring and its two samples of latency. Every test written before that ticket
  * passes no `sync`, so every one of them still drives the zero-latency loop,
  * bit for bit - which is what makes the alias floors above provably untouched.
+ *
+ * Ticket 11's five inputs follow exactly the same rule, and for the same
+ * reason: a test that names none of them drives the loop with no stochastic
+ * stage at all. `it("is a no-op at zero spread")` is what says the two paths
+ * are the same signal anyway.
  */
 const inputsOf = (params: Params): Inputs => {
   const inputs: Inputs = {
@@ -89,8 +114,42 @@ const inputsOf = (params: Params): Inputs => {
   };
   if (params.sync !== undefined)
     inputs.sync = [typeof params.sync === "number" ? params.sync : 0];
+  for (const name of Object.keys(STOCHASTIC) as (keyof typeof STOCHASTIC)[]) {
+    if (params[name] === undefined) continue;
+    // One named member brings the whole group, because that is how the worklet
+    // supplies them: `parameters` always carries all five.
+    for (const each of Object.keys(STOCHASTIC) as (keyof typeof STOCHASTIC)[]) {
+      const value = params[each];
+      inputs[each] = [typeof value === "number" ? value : STOCHASTIC[each]];
+    }
+    break;
+  }
   return inputs;
 };
+
+/**
+ * A deterministic 32-bit LCG installed over `Math.random` for the duration of
+ * `fn`, and removed after it.
+ *
+ * The shipped code carries no seed: `stochastic.ts` draws from `Math.random()`
+ * because that is what every generator in this library does, and a PRNG here
+ * would go into every user's processor payload to serve a test. Stubbing is
+ * where the determinism belongs, and it is what keeps this suite from being
+ * flaky - every assertion below that depends on a draw runs inside one of
+ * these, and the two that are *about* randomness say so.
+ */
+function seeded<T>(seed: number, fn: () => T): T {
+  let state = seed >>> 0;
+  const spy = jest.spyOn(Math, "random").mockImplementation(() => {
+    state = (state * 1664525 + 1013904223) >>> 0;
+    return state / 4294967296;
+  });
+  try {
+    return fn();
+  } finally {
+    spy.mockRestore();
+  }
+}
 
 /**
  * Renders `length` samples from one oscillator, block by block, the way the
@@ -118,6 +177,11 @@ function render(
      * compares rather than pinning a value.
      */
     phase?: number | "random";
+    /**
+     * Ticket 11's construction option: `true` fluctuates the pitch once per
+     * segment, `false` (the default, and Radna 2.4's) once per wave cycle.
+     */
+    pitchPerSegment?: boolean;
   } = {},
 ) {
   const length = options.length ?? ANALYSIS_LENGTH;
@@ -125,7 +189,11 @@ function render(
   const warmup = options.warmup ?? 0;
   const sampleRate = options.sampleRate ?? SAMPLE_RATE;
 
-  const osc = WavetableOscillator(sampleRate, options.phase);
+  const osc = WavetableOscillator(
+    sampleRate,
+    options.phase,
+    options.pitchPerSegment,
+  );
   osc.set(table, len, options.levels ?? 1);
 
   const out = new Float32Array(warmup + length);
@@ -133,7 +201,18 @@ function render(
   const inputs = inputsOf(params);
   // One buffer per parameter that arrives a-rate, refilled per block because
   // that is how a connected `AudioParam` arrives.
-  const aRate = (["frequency", "detune", "morph", "sync"] as const)
+  const aRate = (
+    [
+      "frequency",
+      "detune",
+      "morph",
+      "sync",
+      "pitchChaos",
+      "pitchSpread",
+      "ampChaos",
+      "ampSpread",
+    ] as const
+  )
     .map((name) => {
       const at = params[name];
       return typeof at === "function"
@@ -1461,6 +1540,435 @@ describe("the built-in table", () => {
     // thing through the node, which is where the network would have been.
     const signal = render(data, len, { frequency: 440 }, { length: 128 });
     expect(peak(signal)).toBeGreaterThan(0.5);
+  });
+});
+
+describe("the stochastic mode", () => {
+  // Ticket 11: Radna's Dynamic Stochastic Wavetable Synthesis (DAFx-23) as a
+  // modulation layer over the table read.
+  //
+  // Every assertion that depends on a draw runs inside `seeded()`, so nothing
+  // here is flaky; the two tests that are *about* the randomness say so and use
+  // the real `Math.random`.
+  const len = 256;
+  const built = defaultWavetable(len);
+
+  /**
+   * A parameter that holds `value` for the first `warm` samples and then falls
+   * to 0 - the only way to *freeze* a walk, and what several measurements below
+   * need. A chaos of 0 leaves each deviation exactly where it is (the step is
+   * zero and the reflection is a no-op), so the stage becomes a static,
+   * periodic transform of the table and the harmonic metrics apply to it again.
+   */
+  const freeze = (value: number, warm: number) => (i: number) =>
+    i < warm ? value : 0;
+
+  it("is a no-op at zero spread", () => {
+    // **The load-bearing test of the whole ticket.** The mode is the only thing
+    // in this folder that adds a sound rather than fixing one, and what makes it
+    // safe to add to a package people already use is that switching it off is
+    // exact rather than quiet. Both barriers at 0 is Radna 2.3's own bypass:
+    // "reducing both barrier position parameters to zero reproduces the input
+    // wavetable at a constant pitch".
+    //
+    // Sample for sample, against the same patch rendered with the five inputs
+    // *absent* - which is what every test above this line does - across the
+    // pitch range and with the pyramid engaged.
+    for (const f0 of [110, 440, 3520]) {
+      const without = render(
+        built.data,
+        len,
+        { frequency: f0, morph: 0.5 },
+        { levels: built.levels },
+      );
+      const with0 = render(
+        built.data,
+        len,
+        { frequency: f0, morph: 0.5, pitchSpread: 0, ampSpread: 0 },
+        { levels: built.levels },
+      );
+      expect(Array.from(with0)).toEqual(Array.from(without));
+    }
+  });
+
+  it.each([
+    [110, 59.26],
+    [220, 48.39],
+    [440, 57.4],
+    [880, 66.14],
+    [1760, 74.49],
+    [3520, 82.13],
+  ])("leaves %p Hz's alias floor exactly where it was: %p dB", (f0, db) => {
+    // Criterion 1 again, at the number the folder actually promises. The six
+    // floors of `describe("aliasing")` re-measured with the stage present and
+    // both barriers closed: identical to the printed decimal, because the
+    // samples are identical.
+    const raw = sawTable(len);
+    const pyramid = mipmapWavetable({ data: raw, length: len });
+    const measured = aliasSnr(
+      render(
+        pyramid.data,
+        len,
+        { frequency: f0, pitchSpread: 0, ampSpread: 0 },
+        { warmup: WARMUP, levels: pyramid.levels },
+      ),
+      f0,
+      SAMPLE_RATE,
+    );
+    expect(Math.abs(measured - db)).toBeLessThan(0.15);
+  });
+
+  it("releases the stage one cycle after the barrier closes", () => {
+    // The stage is latched on by a barrier and released by the *walk*, not by
+    // the block: a closed barrier only zeroes the deviations when the walk next
+    // iterates, which is at a cycle boundary. So closing it leaves a tail of at
+    // most one cycle, and then the output is the bypass again - bit for bit,
+    // 27 samples later at 440 Hz, which is what says nothing is left behind in
+    // the state. The fold goes with it: an all-zero deviation series is not
+    // "fold by nothing", it is not folding.
+    //
+    // **The amplitude path only, and that is not a gap.** A pitch deviation
+    // moves the read position while it runs, so an oscillator that has been
+    // through one comes back at the right frequency and the wrong phase - the
+    // same waveform, some samples along. Nothing is retained; there is just no
+    // sample-for-sample comparison to make.
+    const close = 8192;
+    const moved = seeded(4, () =>
+      render(
+        built.data,
+        len,
+        {
+          frequency: 440,
+          morph: 0.5,
+          ampSpread: freeze(0.5, close),
+          ampChaos: 1,
+        },
+        { levels: built.levels, length: 16384 },
+      ),
+    );
+    const plain = render(
+      built.data,
+      len,
+      { frequency: 440, morph: 0.5 },
+      { levels: built.levels, length: 16384 },
+    );
+    // One cycle at 440 Hz is 100 samples; 128 is the block that contains it.
+    const from = close + 128;
+    expect(Array.from(moved.subarray(from))).toEqual(
+      Array.from(plain.subarray(from)),
+    );
+    // And it was not a no-op before that, or the comparison above proves
+    // nothing.
+    const before = new Float32Array(close);
+    for (let i = 0; i < close; i++) before[i] = moved[i] - plain[i];
+    expect(peak(before)).toBeGreaterThan(0.1);
+  });
+
+  it.each([false, true])(
+    "stays in range at maximum chaos, per-segment %p",
+    (pitchPerSegment) => {
+      // Criterion 2. Every parameter at the top of its declared range, on the
+      // four-plane built-in set, at the bottom, middle and top of the pitch
+      // range. The fold is what holds it: Radna Eq. 7-8 reflects the excess
+      // rather than clipping it, and `fold()`'s clamp covers the one case the
+      // equations do not.
+      seeded(1, () => {
+        for (const f0 of [55, 440, 3520]) {
+          const signal = render(
+            built.data,
+            len,
+            {
+              frequency: f0,
+              morph: 0.5,
+              segments: 256,
+              pitchChaos: 1,
+              pitchSpread: 24,
+              ampChaos: 1,
+              ampSpread: 1,
+            },
+            { levels: built.levels, pitchPerSegment },
+          );
+          for (let i = 0; i < signal.length; i++) {
+            expect(Number.isFinite(signal[i])).toBe(true);
+          }
+          expect(peak(signal)).toBeLessThanOrEqual(1);
+        }
+      });
+    },
+  );
+
+  it.each([1, 2, 3, 4])("holds pitch on average, seed %p", (seed) => {
+    // Criterion 3, and it is a statement about the walk rather than about the
+    // read: the barrier is symmetric about 0 semitones and an elastic
+    // reflection keeps the stationary distribution uniform, so the deviation
+    // has mean zero in semitones and the tone sits where it was asked to.
+    //
+    // **Mean pitch, cycle by cycle, not mean rate.** Those are different
+    // averages of the same signal and only the first one is what "pitch" means:
+    // a deviation centred in semitones is centred in the log domain, so the
+    // mean of `log2(1 / period)` is exactly 0, while the mean *frequency* of
+    // the same signal is flat by Jensen's inequality - measurably, 1.5 cents at
+    // a barrier of 1 semitone and 3.8 at 2. That flatness is a real property of
+    // the algorithm and is documented rather than corrected; correcting it
+    // would mean dividing out a constant that is only right for one
+    // distribution, and Radna's own future work adds more of them.
+    //
+    // Four seconds at a barrier of half a semitone - a 100-cent-wide wobble -
+    // and `pitchChaos` at 1. **The window is what sets the bar, not the
+    // algorithm**: the walk has memory at every chaos, so the sample mean of a
+    // finite window wanders in proportion to the barrier and inversely to the
+    // square root of the length. Measured across eight seeds: 2.3 cents worst
+    // case here, 4.2 if the window is halved, 4.6 if the barrier is doubled.
+    // Four seeds, because one seeded run proves nothing about a mean.
+    const signal = seeded(seed, () =>
+      render(
+        built.data,
+        len,
+        { frequency: 440, pitchSpread: 0.5, pitchChaos: 1 },
+        { levels: built.levels, length: 4 * SAMPLE_RATE },
+      ),
+    );
+    const crossings: number[] = [];
+    for (let i = 1; i < signal.length; i++) {
+      if (signal[i - 1] <= 0 && signal[i] > 0) {
+        crossings.push(i - 1 + signal[i - 1] / (signal[i - 1] - signal[i]));
+      }
+    }
+    let cents = 0;
+    for (let k = 1; k < crossings.length; k++) {
+      cents +=
+        1200 * Math.log2(SAMPLE_RATE / (crossings[k] - crossings[k - 1]) / 440);
+    }
+    expect(Math.abs(cents / (crossings.length - 1))).toBeLessThan(5);
+  });
+
+  it("is quieter in the high end in single-segment mode", () => {
+    // Criterion 4, and Radna 2.4's claim, at the paper's own Fig. 4 settings:
+    // "a center pitch of C5 (523.25 Hz), pitch barrier range of +/- two
+    // octaves, pitch step size of six semitones, and no amplitude fluctuation",
+    // on a sinusoidal table so the table contributes nothing of its own.
+    //
+    // The paper says the single-segment spectrum "shows less energy in the
+    // high-frequency range despite otherwise identical parameters". Measured
+    // here as the share of energy above 10 kHz, with the same seed on both
+    // sides so the two renders are the same deviation series read two ways:
+    // -59.2 dB against -40.7 dB, which is 18.5 dB, and the spectral centroid
+    // moves 894 Hz to 1651 Hz with it.
+    //
+    // This is the whole reason single-segment is the default here as it is
+    // there: it is the one antialiasing measure the paper actually implements.
+    const table = sineTable(len);
+    const params = {
+      frequency: 523.25,
+      pitchSpread: 24,
+      pitchChaos: 0.25,
+      ampSpread: 0,
+    };
+    const above10k = (signal: Float32Array) => {
+      const bins = magnitudes(signal);
+      const binWidth = SAMPLE_RATE / (bins.length * 2);
+      let high = 0;
+      let total = 0;
+      for (let i = 1; i < bins.length; i++) {
+        const power = bins[i] * bins[i];
+        total += power;
+        if (i * binWidth >= 10000) high += power;
+      }
+      return 10 * Math.log10(high / total);
+    };
+    const single = seeded(11, () => render(table, len, params));
+    const perSegment = seeded(11, () =>
+      render(table, len, params, { pitchPerSegment: true }),
+    );
+    expect(above10k(single)).toBeLessThan(above10k(perSegment) - 15);
+    expect(centroid(single, SAMPLE_RATE)).toBeLessThan(
+      centroid(perSegment, SAMPLE_RATE),
+    );
+  });
+
+  it("varies between renders", () => {
+    // The one test that uses the real `Math.random`: two instances, identical
+    // parameters, and the whole point of the mode is that they are not the same
+    // note. `phase` is 0 on both, so the difference is the walks and nothing
+    // else.
+    const params = {
+      frequency: 220,
+      pitchSpread: 2,
+      ampSpread: 0.3,
+      morph: 0.5,
+    };
+    const a = render(built.data, len, params, {
+      levels: built.levels,
+      length: 4096,
+    });
+    const b = render(built.data, len, params, {
+      levels: built.levels,
+      length: 4096,
+    });
+    const difference = new Float32Array(a.length);
+    for (let i = 0; i < a.length; i++) difference[i] = a[i] - b[i];
+    expect(peak(difference)).toBeGreaterThan(0.1);
+  });
+
+  // The stage's own aliasing, in isolation, which is what ticket 06's handoff
+  // asked for: a sinusoidal table read with `levels: 1`, so the table is band-
+  // limited to one partial and every extra bin in the output is the stage's.
+  //
+  // **Measured on a frozen walk**, because `aliasSnr` cannot answer the
+  // question on a moving one: the mode is deliberately inharmonic, so a live
+  // walk puts real signal in bins the metric counts as noise and the number
+  // stops being about aliasing. Warm the walks, drop the chaos to 0, and the
+  // deviations hold: the output becomes an exactly periodic, statically folded
+  // waveform, and the metric is meaningful again. What it measures then is the
+  // segment knees alone - which is precisely the source Radna declines to
+  // treat, "as the linear interpolation of DSWS, like that of DSS, ultimately
+  // produces its own aliasing artifacts" (3.1).
+  //
+  // **`removeDC` is on, and the mode is why.** An amplitude deviation is a
+  // per-segment offset, and its mean over a cycle is not zero: this stage
+  // generates genuine DC, up to 0.5 of full scale at `ampSpread` 1. `aliasSnr`
+  // counts bin 0 as noise, so leaving it in reads 19 dB where the aliasing is
+  // 26 - the same judgement ticket 10 recorded for hard sync, and the opposite
+  // of the unsynced floors, where the DC is not real.
+  //
+  // Against the table's own floors - 57.4 dB at 440 Hz, 74.5 at 1760 - the
+  // amplitude path is *quieter than the oscillator it modulates* up to about
+  // `ampSpread` 0.25 at 440 Hz, and is the dominant source above that and at
+  // every higher pitch. That is the honest shape of the trade, and the README
+  // says so.
+  it.each([
+    [440, 0.1, 67.57],
+    [440, 0.25, 62.03],
+    [440, 0.5, 55.98],
+    [440, 1, 46.0],
+    [1760, 0.1, 43.52],
+    [1760, 0.25, 39.61],
+    [1760, 0.5, 33.98],
+    [1760, 1, 26.32],
+  ])(
+    "folds at %p Hz with an amplitude barrier of %p at %p dB",
+    (f0, spread, db) => {
+      const warm = 8192;
+      const signal = seeded(5, () =>
+        render(
+          sineTable(len),
+          len,
+          {
+            frequency: f0,
+            ampSpread: spread,
+            ampChaos: freeze(1, warm),
+            pitchSpread: 0,
+            segments: 8,
+          },
+          { warmup: warm, length: ANALYSIS_LENGTH },
+        ),
+      );
+      expect(
+        Math.abs(aliasSnr(signal, f0, SAMPLE_RATE, { removeDC: true }) - db),
+      ).toBeLessThan(0.15);
+    },
+  );
+
+  it.each([
+    [2, 0.25, 65.29],
+    [2, 1, 53.25],
+    [8, 0.25, 43.49],
+    [8, 1, 31.35],
+    [64, 0.25, 52.17],
+    [64, 1, 49.16],
+  ])(
+    "bends the read across %p segments with a barrier of %p at %p dB",
+    (segments, spread, db) => {
+      // The pitch path's own knees, the same way: frozen, per-segment mode -
+      // the rough one - on a sinusoidal table at 440 Hz. Single-segment mode
+      // has no row here at all, and that is the result rather than an omission:
+      // frozen, one deviation per cycle is a constant detune, so it introduces
+      // no knee and no aliasing of its own. The measured pitch is read back
+      // from the signal because a per-segment deviation set changes the cycle
+      // length; at a barrier of 1 semitone across 2 segments it lands 45 cents
+      // sharp of 440, which is the deviation set and not an error.
+      //
+      // 64 segments measuring cleaner than 8 is real and is the sampling
+      // catching up with the modulation: at 440 Hz on a 256-sample table the
+      // read advances 2.55 samples per output sample, so a 64-segment table
+      // changes its increment faster than it is sampled and the deviations
+      // average out. Radna's Fig. 2 brightness curve flattens over the same
+      // range.
+      const warm = 8192;
+      const signal = seeded(5, () =>
+        render(
+          sineTable(len),
+          len,
+          {
+            frequency: 440,
+            ampSpread: 0,
+            pitchSpread: spread,
+            pitchChaos: freeze(1, warm),
+            segments,
+          },
+          { warmup: warm, length: ANALYSIS_LENGTH, pitchPerSegment: true },
+        ),
+      );
+      const f0 = peakFrequency(signal, SAMPLE_RATE);
+      expect(Math.abs(aliasSnr(signal, f0, SAMPLE_RATE) - db)).toBeLessThan(
+        0.15,
+      );
+    },
+  );
+
+  it("keeps the deviated read on the mipmap pyramid", () => {
+    // Ticket 06's handoff predicted the opposite - "the mode's segment pitch
+    // deviations move the READ RATE within a cycle, and that does not go
+    // through `updateInc()`, so it gets no mipmap protection" - and the
+    // prediction is what the implementation is built to falsify: the deviation
+    // is a factor *inside* `updateInc()`, so `updateLevel()` picks a level for
+    // the rate actually being read.
+    //
+    // Measured on the full-bandwidth sawtooth with its pyramid, at 440 Hz with
+    // a frozen half-octave pitch walk across four segments, in per-segment
+    // mode: 35.51 dB with the pyramid against 24.56 without it, so the
+    // protection is worth **10.95 dB**. Same table, same seed, same deviation
+    // series; the only difference is whether the oscillator is allowed to
+    // select a level for the rate it is actually reading at.
+    //
+    // Four segments and half an octave rather than the extremes, because past
+    // that the stage's own knees are louder than anything the pyramid can fix
+    // and both columns collapse to the same number - at a 2-octave barrier
+    // across eight segments it is 23.04 against 23.00. That is the honest
+    // shape of it: the mipmap protects the *table* from the deviation, and
+    // nothing here protects the deviation from itself.
+    const warm = 8192;
+    const pyramid = mipmapWavetable({ data: sawTable(len), length: len });
+    const params = {
+      frequency: 440,
+      pitchSpread: 6,
+      pitchChaos: freeze(1, warm),
+      ampSpread: 0,
+      segments: 4,
+    };
+    const withPyramid = seeded(9, () =>
+      render(pyramid.data, len, params, {
+        warmup: warm,
+        levels: pyramid.levels,
+        pitchPerSegment: true,
+      }),
+    );
+    const without = seeded(9, () =>
+      render(pyramid.data, len, params, {
+        warmup: warm,
+        pitchPerSegment: true,
+      }),
+    );
+    const f0 = peakFrequency(withPyramid, SAMPLE_RATE);
+    const protectedDb = aliasSnr(withPyramid, f0, SAMPLE_RATE);
+    const flat = aliasSnr(
+      without,
+      peakFrequency(without, SAMPLE_RATE),
+      SAMPLE_RATE,
+    );
+    expect(Math.abs(protectedDb - 35.51)).toBeLessThan(0.15);
+    expect(Math.abs(flat - 24.56)).toBeLessThan(0.15);
+    expect(protectedDb).toBeGreaterThan(flat + 10);
   });
 });
 
