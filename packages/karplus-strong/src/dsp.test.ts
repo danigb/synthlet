@@ -325,22 +325,30 @@ function averageT60(
   decay: number,
   brightness = 0.5,
   stiffness = 0,
+  seed = 101,
 ) {
   let total = 0;
   for (let i = 0; i < T60_PLUCKS; i++) {
-    total += t60(
-      pluck(
-        frequency,
-        decay,
-        Math.max(3, 3 * decay),
-        brightness,
-        0.5,
-        0.5,
-        0.13,
-        0,
-        1,
-        1,
-        stiffness,
+    // Seeded at the helper rather than at each call site, so every decay
+    // assertion in this file is deterministic at once. Averaging 32 draws
+    // narrows the scatter but does not remove it, and two of the assertions
+    // below sit within a few percent of their bound - which is how this one
+    // was caught.
+    total += withSeededNoise(seed + i, () =>
+      t60(
+        pluck(
+          frequency,
+          decay,
+          Math.max(3, 3 * decay),
+          brightness,
+          0.5,
+          0.5,
+          0.13,
+          0,
+          1,
+          1,
+          stiffness,
+        ),
       ),
     );
   }
@@ -541,13 +549,47 @@ function combNotch(frequency: number, position: number) {
  * `decay` is derived from `rho` alone - Smith's formula - so this is the same
  * number for every pitch only while the filter is transparent.
  */
+/**
+ * The damping filter's own gain at the fundamental, `G(w0) = h0 + 2*h1*cos(w0)`.
+ * It is 1 only at `brightness` 1, and it is the reason `rho` is divided by it.
+ */
+function filterGainAt(frequency: number, brightness: number) {
+  return (
+    (1 + brightness) / 2 +
+    ((1 - brightness) / 2) * Math.cos((2 * Math.PI * frequency) / SAMPLE_RATE)
+  );
+}
+
+/** The loop gain the module actually uses, clamp included. */
+const MAX_LOOP_GAIN = 0.99999;
+function loopGainOf(frequency: number, decay: number, brightness: number) {
+  return Math.min(
+    Math.pow(0.001, 1 / (frequency * decay)) /
+      filterGainAt(frequency, brightness),
+    MAX_LOOP_GAIN,
+  );
+}
+
+/**
+ * The decay time the loop's own transfer function predicts for the fundamental:
+ * `rho` once per period, times the damping filter's gain there. `rho` is
+ * derived so that the product is `0.001^(1/(f0*t60))` - so this returns
+ * `decay` exactly, unless the clamp binds, and then it returns the longest the
+ * filter can deliver.
+ */
 function predictedT60(frequency: number, decay: number, brightness: number) {
-  const rho = Math.pow(0.001, 1 / (frequency * decay));
-  const h0 = (1 + brightness) / 2;
-  const h1 = (1 - brightness) / 4;
   const perPeriod =
-    rho * (h0 + 2 * h1 * Math.cos((2 * Math.PI * frequency) / SAMPLE_RATE));
+    loopGainOf(frequency, decay, brightness) *
+    filterGainAt(frequency, brightness);
   return Math.log(0.001) / Math.log(perPeriod) / frequency;
+}
+
+/** The longest decay a given brightness can deliver at a given pitch. */
+function longestT60(frequency: number, brightness: number) {
+  return (
+    Math.log(0.001) /
+    (frequency * Math.log(filterGainAt(frequency, brightness)))
+  );
 }
 
 /** The brightness figure both groups below assert on: 5 ms to 250 ms, in dB. */
@@ -621,24 +663,68 @@ describe("createKS decay", () => {
     (frequency) => {
       // brightness 1: the damping filter degenerates to a plain delay, the
       // loop's per-period gain is exactly `rho`, and `decay` is the time it
-      // says at every pitch. Measured 0.971 / 0.960 / 0.968.
+      // says at every pitch. Measured 0.970 / 0.957 / 0.961.
       const measured = averageT60(frequency, 1, 1);
       expect(measured).toBeGreaterThanOrEqual(0.75);
       expect(measured).toBeLessThanOrEqual(1.4);
     },
   );
 
-  it.each([110, 440, 1760])(
-    "decays in 75-140%% of what the loop's own gain predicts at %p Hz",
+  // And at the **shipped** brightness, which is ticket 04's criterion 1 in its
+  // own words and used to hold only at `brightness` 1. `rho` is now derived from
+  // the loop's gain at the fundamental rather than at dc - divided by
+  // `G(w0) = h0 + 2*h1*cos(w0)`, which is what the ear actually hears once per
+  // period - so `decay` means the same seconds at every brightness. Measured
+  // ratios to the requested time:
+  //
+  //   110 Hz:  0.897 / 0.852 / 0.805 at decay 0.5 / 1 / 3
+  //   440 Hz:  0.914 / 0.863 / 0.817
+  //
+  // against 0.85 / 0.83 / - before, and 0.33 at 1760 Hz, which is the next
+  // assertion's business. The systematic 0.85 is the measurement rather than the
+  // string: `t60` times the broadband envelope, and the partials above the
+  // fundamental decay faster than it does by construction.
+  it.each([110, 440])(
+    "decays in 75-140%% of the requested time at %p Hz, at the shipped brightness",
     (frequency) => {
-      // And at the shipped brightness the string decays as the loop filter
-      // says it should, which is the tighter statement. Measured 0.86 / 0.87 /
-      // 1.02 of prediction, where the predictions are 1.00 / 0.97 / 0.33 s.
-      const ratio = averageT60(frequency, 1) / predictedT60(frequency, 1, 0.5);
-      expect(ratio).toBeGreaterThanOrEqual(0.75);
-      expect(ratio).toBeLessThanOrEqual(1.4);
+      for (const decay of [0.5, 1, 3]) {
+        const ratio = averageT60(frequency, decay) / decay;
+        expect([decay, ratio >= 0.75 && ratio <= 1.4]).toEqual([decay, true]);
+      }
     },
+    120_000,
   );
+
+  // Where it does *not* hold, and why - which is a property of a symmetric
+  // three-tap filter rather than of this code. `G(w0) < 1` for every brightness
+  // below 1, so asking for a decay longer than the filter alone can deliver
+  // needs a loop gain above 1 at dc, and that is the 3.4e38 failure. The clamp
+  // binds instead, and the string decays as fast as the filter allows:
+  //
+  //   t60_max = ln(0.001) / (f0 * ln(1/G(w0)))
+  //
+  // which at `brightness` 0.5 is 2045 s at 110 Hz, 32 s at 440, **0.50 s at
+  // 1760** and 22 ms at 5 kHz. So 1760 Hz honours any `decay` up to half a
+  // second and nothing beyond it - measured 0.963 of the request at `decay` 0.5,
+  // and 0.963 of the ceiling at both `decay` 1 and `decay` 3.
+  it("delivers the longest decay the damping filter allows, and says what it is", () => {
+    const ceiling = longestT60(1760, 0.5);
+    expect(ceiling).toBeCloseTo(0.5, 2);
+    // Inside the ceiling, `decay` is honoured.
+    const short = averageT60(1760, 0.5) / 0.5;
+    expect(short).toBeGreaterThanOrEqual(0.75);
+    expect(short).toBeLessThanOrEqual(1.4);
+    // Beyond it, the request is capped rather than approximated.
+    for (const decay of [1, 3]) {
+      const ratio = averageT60(1760, decay) / ceiling;
+      expect([decay, ratio >= 0.75 && ratio <= 1.4]).toEqual([decay, true]);
+      // The prediction sits a hair under the ceiling, because the clamp leaves
+      // `maxLoopGain`'s own 0.001% of loss in the loop rather than exactly 1.
+      expect(
+        Math.abs(predictedT60(1760, decay, 0.5) / ceiling - 1),
+      ).toBeLessThan(0.01);
+    }
+  }, 120_000);
 });
 
 describe("createKS brightness", () => {
@@ -784,7 +870,9 @@ describe("createKS excitation", () => {
   const BURST = PERIOD - 1;
   const DECAY = 1;
   const BRIGHTNESS = 0.5;
-  const RHO = Math.pow(0.001, 1 / (FREQUENCY * DECAY));
+  // `rho` is derived from the loop's gain at the *fundamental*, so it carries
+  // the damping filter's own response there divided back out - see `loopGainOf`.
+  const RHO = loopGainOf(FREQUENCY, DECAY, BRIGHTNESS);
   const H0 = (1 + BRIGHTNESS) / 2;
   const H1 = (1 - BRIGHTNESS) / 4;
 
@@ -956,21 +1044,49 @@ describe("createKS brightness as a knob", () => {
     },
   );
 
-  // DC gain is `h0 + 2*h1 = 1` for every B, so the *fundamental's* decay is
-  // `rho`'s business alone. What this measures is the broadband envelope,
-  // which also contains the partials brightness exists to damp, so it moves a
-  // little: 0.85 at B = 0 against 0.95 at B = 1. That gap was 2% while the
-  // interpolator was adding its own B-independent damping on top, and 12% now
-  // that it is not - the decoupling showing up as a number. The bound is the
-  // perceptual one this folder uses everywhere: Jarvelainen and Tolonen put
-  // the audible threshold for a decay-time change at 75-140%, so a 25% bound
-  // is comfortably inside what a listener could report.
+  // Ticket 04's criterion 4, and it has two halves that want measuring
+  // separately.
+  //
+  // **The fundamental's decay does not move at all.** `rho` is derived so that
+  // the loop's gain *at the fundamental* delivers the requested time, so this is
+  // true by construction rather than approximately: the t60 of a band around f0
+  // measures 1.000 s at every brightness from 0 to 1, to four decimal places.
+  it("does not change the fundamental's decay time as it sweeps", () => {
+    const measured = [0, 0.25, 0.5, 0.75, 1].map((brightness) => {
+      let total = 0;
+      const PLUCKS = 8;
+      for (let seed = 1; seed <= PLUCKS; seed++) {
+        total +=
+          60 /
+          withSeededNoise(seed, () =>
+            bandDecayRate(pluck(440, 1, 2, brightness), 440, 80, 0.1, 0.6),
+          ) /
+          PLUCKS;
+      }
+      return total;
+    });
+    const spread = Math.max(...measured) / Math.min(...measured);
+    expect(spread).toBeLessThan(1.05);
+  }, 60_000);
+
+  // **The broadband envelope still moves by 11%, and that is brightness
+  // working.** What `t60` times is the whole signal, which contains the partials
+  // brightness exists to damp: measured 0.860 / 0.863 / 0.957 s at B = 0 / 0.5 /
+  // 1. B = 0 and B = 0.5 are 0.4% apart; all of the remaining 11% is the B = 1
+  // endpoint, where the filter degenerates to a plain delay and *every* partial
+  // decays at exactly `rho` instead of the high ones going first.
+  //
+  // So the criterion's "less than 10%" is met by the string and not by the
+  // broadband measurement, and the bound here is tightened only as far as the
+  // measurement honestly supports: 15%, against a measured 11.3% and the 25% it
+  // used to allow. Jarvelainen and Tolonen's audible threshold is 75-140%, so
+  // all of this is well inside what a listener could report.
   it("does not change the decay time as it sweeps", () => {
     const measured = BRIGHTNESSES.map((brightness) =>
       averageT60(440, 1, brightness),
     );
     const spread = Math.max(...measured) / Math.min(...measured);
-    expect(spread).toBeLessThan(1.25);
+    expect(spread).toBeLessThan(1.15);
   });
 
   // And the thing it is for: more brightness, more high band left at 250 ms.
@@ -1138,6 +1254,40 @@ describe("createKS with a moving pitch", () => {
     }
     expect(worst).toBeLessThan(10);
   });
+
+  // Ticket 06's criterion 1 says "up to one octave per 0.5 s", and the
+  // assertion above runs at half that rate. This is the criterion's own rate,
+  // in both directions, using the `rampUp`/`rampDown` the level assertion
+  // further down already slides at. Measured worst error 2.4 cents up and 4.7
+  // down, against the criterion's 10.
+  it.each([
+    ["up", rampUp],
+    ["down", rampDown],
+  ])(
+    "tracks an octave per half second, sliding %s, within 10 cents",
+    (_direction, glide) => {
+      const WINDOW = 4096;
+      let worst = 0;
+      for (let seed = 1; seed <= 4; seed++) {
+        const signal = withSeededNoise(seed, () => slide(glide, 0.8, 3));
+        for (let point = 0; point < 8; point++) {
+          const start = Math.round((0.04 + point * 0.05) * SAMPLE_RATE);
+          let requested = 0;
+          for (let i = 0; i < WINDOW; i++) requested += glide(start + i);
+          requested /= WINDOW;
+          const error = Math.abs(
+            cents(
+              spectralFundamental(signal, requested, start, WINDOW),
+              requested,
+            ),
+          );
+          if (error > worst) worst = error;
+        }
+      }
+      expect(worst).toBeLessThan(10);
+    },
+    60_000,
+  );
 
   it("turns a 5 Hz modulation into symmetric vibrato", () => {
     const WINDOW = 2048;
@@ -1467,16 +1617,24 @@ describe("createKS stretch", () => {
     const rates = STRETCHES.map(rate);
 
     // Monotone, and by the right amount. `rho` is outside the coin flip, so it
-    // sets a floor the stretch cannot lift: the rate is `60 + (r1 - 60)/S`
-    // rather than `r1/S`, which is why S = 4 gives 3.5 rather than 4. Measured
-    // 1.00 / 1.89 / 3.50 / 6.37 against a model of 1.00 / 1.90 / 3.45 / 5.83.
+    // sets a floor the stretch cannot lift: the rate is
+    // `rhoRate + (r1 - rhoRate)/S` rather than `r1/S`.
+    //
+    // `rhoRate` is not 60 dB/s any more. `rho` is derived from the loop's gain
+    // at the fundamental, and at 1760 Hz with `brightness` 0.5 that division
+    // asks for more than 1 and is clamped - so at this setting `rho` contributes
+    // essentially no loss at all and the damping filter is doing all of it.
+    // Computed from the shipped `rho` rather than assumed.
     for (let i = 1; i < rates.length; i++) {
       expect(rates[i]).toBeLessThan(rates[i - 1]);
     }
-    const RHO_RATE = 60; // dB/s from `decay = 1`, at every pitch
+    const rhoRate = -20 * Math.log10(loopGainOf(1760, 1, 0.5)) * 1760;
     for (let i = 0; i < STRETCHES.length; i++) {
-      const model = RHO_RATE + (rates[0] - RHO_RATE) / STRETCHES[i];
-      expect(Math.abs(rates[i] / model - 1)).toBeLessThan(0.2);
+      const model = rhoRate + (rates[0] - rhoRate) / STRETCHES[i];
+      expect([STRETCHES[i], Math.abs(rates[i] / model - 1) < 0.2]).toEqual([
+        STRETCHES[i],
+        true,
+      ]);
     }
   });
 

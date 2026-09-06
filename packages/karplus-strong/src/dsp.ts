@@ -1141,11 +1141,42 @@ export function createKS(sampleRate: number, minFrequency: number) {
       damping > 0 && seconds > DAMP_MUTE_TIME
         ? seconds * Math.pow(DAMP_MUTE_TIME / seconds, damping)
         : seconds;
-    // Smith 3.3, applied to whatever decay time is left after damping.
+    // Smith 3.3 gives `rho^(f0*t60) = 0.001`, and that accounts for the loop's
+    // gain at **dc**. What is heard is its gain at the fundamental, which is
+    // `rho` times the damping filter's own response there,
+    // `G(w0) = h0 + 2*h1*cos(w0)` - so the requested decay has to be divided by
+    // it or `decay` means what it says only at `brightness` 1. Untouched, a
+    // 1 second `decay` measured 0.33 s at 1760 Hz at the shipped brightness.
+    //
+    // **Clamped at `maxLoopGain`, and that clamp is a real limit rather than a
+    // safety net.** `G(w0) < 1` for every brightness below 1, so the division
+    // asks for a loop gain above 1 at dc whenever the requested decay is longer
+    // than the filter alone can deliver - and a loop with gain above 1 at dc is
+    // the 3.4e38 failure ticket 06 hit. Where it binds, the string decays as
+    // fast as the filter allows and no slower; the longest reachable decay is
+    //
+    //   t60_max = ln(0.001) / (f0 * ln(1/G(w0)))
+    //
+    // which is 0.50 s at 1760 Hz and 22 ms at 5 kHz at `brightness` 0.5, and
+    // 16 s at 440 Hz. A symmetric three-tap filter cannot do better: its gain at
+    // `w0` is only 1 when `h1 = 0`, which is `brightness` 1 and no damping at
+    // all. Closing that gap needs the per-note loop-filter design (Bank and
+    // Valimaki 2003) the folder README defers.
+    //
+    // `G(w0) >= brightness >= 0`, since `h0 - 2*h1 = brightness`, so the
+    // division is safe for every declared setting; at exactly Nyquist with
+    // `brightness` 0 it would be a division by zero, and the clamp catches the
+    // infinity.
+    const w0 = (2 * Math.PI * firstFrequency) / sampleRate;
+    const filterGain =
+      (1 + brightness) / 2 + ((1 - brightness) / 2) * Math.cos(w0);
     const loopGain = (seconds: number) => {
       const periods = firstFrequency * muted(seconds);
       return periods > 0
-        ? Math.min(Math.pow(targetAmplitude, 1 / periods), maxLoopGain)
+        ? Math.min(
+            Math.pow(targetAmplitude, 1 / periods) / filterGain,
+            maxLoopGain,
+          )
         : 0; // a non-positive decay would invert the exponent and grow the loop
     };
     const rho = loopGain(decay);
