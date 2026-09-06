@@ -1,6 +1,7 @@
 import * as synthlet from "./index";
 import type { ParamDescriptor } from "./_worklet";
 import {
+  AnalogDelayMode,
   ArpScale,
   ClipType,
   LfoType,
@@ -21,12 +22,14 @@ const EXPECTED = [
   "AdEnv",
   "AdsrAmp",
   "AdsrEnv",
+  "AnalogDelay",
   "Arp",
   "BiquadFilter",
   "Chorus",
   "ClipAmp",
   "Clock",
   "DattorroReverb",
+  "DigitalDelay",
   "Euclid",
   "FlexAudioBufferSource",
   "Gain",
@@ -75,13 +78,13 @@ describe("descriptors", () => {
   // not others - which is exactly the bug the shared detector removed.
   //
   // The **rate** is not part of that contract, and each entry declares its own.
-  // Every module here but one only has to decide which 128-frame block a
-  // trigger fired in, and k-rate says so. `PolyblepOscillator.sync` has to
-  // decide where *inside a sample*: it is hard sync, the reset is placed at the
+  // Every module here but two only has to decide which 128-frame block a
+  // trigger fired in, and k-rate says so. The two `sync` params have to decide
+  // where *inside a sample*: it is hard sync, the reset is placed at the
   // interpolated crossing instant, and a value read once per quantum would
-  // quantise it to 2.9 ms at 44.1 kHz. That is a per-module decision about
-  // resolution, not a weakening of the shared shape - which is why the shape
-  // below is still asserted whole.
+  // quantise it to 2.9 ms at 44.1 kHz - 20 dB of alias rejection. That is a
+  // per-module decision about resolution, not a weakening of the shared shape,
+  // which is why the shape below is still asserted whole.
   it("declares every trigger-like param the same way", () => {
     const TRIGGERS: [string, string, ParamDescriptor["automationRate"]][] = [
       ["AdAmp", "trigger", "k-rate"],
@@ -92,6 +95,7 @@ describe("descriptors", () => {
       ["Impulse", "trigger", "k-rate"],
       ["KarplusStrong", "trigger", "k-rate"],
       ["PolyblepOscillator", "sync", "a-rate"],
+      ["WavetableOscillator", "sync", "a-rate"],
     ];
 
     for (const [name, param, automationRate] of TRIGGERS) {
@@ -133,6 +137,89 @@ describe("descriptors", () => {
       "sync",
     ]);
   });
+
+  // Scanning a wavetable at audio rate is one of the format's signature sounds,
+  // and a k-rate position quantises it to one step per render quantum. It is
+  // also normalized 0..1 rather than a plane index, so a modulator patched into
+  // it does not have to know the current table's plane count.
+  //
+  // `frequency` and `detune` joined it at a-rate: all three are one expression,
+  // `frequency * 2^(detune/1200) * len / sampleRate`, and a k-rate pitch
+  // quantises FM to 2.9 ms at 44.1 kHz, which aliases for any modulator above
+  // about 172 Hz.
+  it("keeps WavetableOscillator's eight signals at a-rate", () => {
+    // Ticket 11's four stochastic barriers and step sizes joined them. They are
+    // *read* once per wave cycle, because a bounded random walk is a per-cycle
+    // process and sampling its parameters faster would not make it move faster;
+    // a-rate is what decides *which* value the boundary gets - the one at its
+    // own sample rather than the one at the top of the render quantum. The
+    // segment count is the exception and is k-rate: Radna 2.1 makes it
+    // "variable at runtime" but it is a structure and not a signal.
+    const aRate = synthlet.WavetableOscillator.descriptors.filter(
+      (d) => d.automationRate === "a-rate",
+    );
+    expect(aRate.map((d) => d.name)).toEqual([
+      "frequency",
+      "detune",
+      "morph",
+      "sync",
+      "pitchChaos",
+      "pitchSpread",
+      "ampChaos",
+      "ampSpread",
+    ]);
+    expect(aRate[2]).toEqual({
+      name: "morph",
+      defaultValue: 0,
+      minValue: 0,
+      maxValue: 1,
+      automationRate: "a-rate",
+    });
+  });
+
+  // `AudioParam` sums its inputs with the intrinsic value, so a node connected
+  // to a frequency is linear FM by construction - and a range that starts at 0
+  // half-wave rectifies the modulator, which does not tame the spectrum, it
+  // makes it the spectrum of a *different* modulator. Bipolar is what makes it
+  // through-zero: the read pointer runs backwards.
+  it("keeps WavetableOscillator's frequency bipolar", () => {
+    const frequency = synthlet.WavetableOscillator.descriptors.find(
+      (d) => d.name === "frequency",
+    );
+    expect(frequency).toEqual({
+      name: "frequency",
+      defaultValue: 440,
+      minValue: -20000,
+      maxValue: 20000,
+      automationRate: "a-rate",
+    });
+  });
+
+  // Ticket 11's stage is off by default and exactly inert when off - the DSP
+  // test asserts sample-for-sample identity against the same patch without it -
+  // and the property that makes that reachable is that **both barriers default
+  // to 0**. Radna 2.3: "reducing both barrier position parameters to zero
+  // reproduces the input wavetable at a constant pitch". If a default ever
+  // moves, every alias floor this package publishes moves with it.
+  //
+  // `segments` carries `minValue: 0` where 1 would be natural, and that is this
+  // library's standing decision rather than a slip: `connectParams` writes
+  // `param.value = 0` for every connected input, so a positive minimum makes
+  // Chrome clamp that write and warn. 0 and 1 are both one segment in the DSP.
+  it("keeps WavetableOscillator's stochastic mode off by default", () => {
+    const byName = Object.fromEntries(
+      synthlet.WavetableOscillator.descriptors.map((d) => [d.name, d]),
+    );
+    expect(byName.pitchSpread.defaultValue).toBe(0);
+    expect(byName.ampSpread.defaultValue).toBe(0);
+    expect(byName.segments).toEqual({
+      name: "segments",
+      defaultValue: 8,
+      minValue: 0,
+      maxValue: 256,
+      automationRate: "k-rate",
+    });
+  });
 });
 
 describe.each(withDescriptors)("%s.descriptors", (_name, factory) => {
@@ -159,6 +246,12 @@ const members = (values: object) =>
   Object.values(values).filter((v): v is number => typeof v === "number");
 
 const ENUM_PARAMS = [
+  {
+    name: "AnalogDelay.mode",
+    values: AnalogDelayMode,
+    factory: synthlet.AnalogDelay,
+    param: "mode",
+  },
   {
     name: "Noise.type",
     values: NoiseType,
@@ -209,6 +302,7 @@ describe.each(ENUM_PARAMS)("$name", ({ values, factory, param }) => {
 // checked at build time; this is the cheap runtime half, and fails if a name
 // stops being exported at all.
 const ENUMS = {
+  AnalogDelayMode,
   ArpScale,
   ClipType,
   LfoType,

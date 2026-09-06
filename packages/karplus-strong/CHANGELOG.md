@@ -1,4 +1,4 @@
-# @synthlet/karplus-strong-oscillator
+# @synthlet/karplus-strong
 
 ## 0.1.0
 

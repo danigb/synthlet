@@ -1,6 +1,7 @@
 import { AdAmp, AdEnv } from "@synthlet/ad";
 import { ClipAmp, ClipType } from "@synthlet/clip-amp";
 import { Impulse } from "@synthlet/impulse";
+import { KarplusStrong } from "@synthlet/karplus-strong";
 import { Lfo, LfoType } from "@synthlet/lfo";
 import { Noise, NoiseType } from "@synthlet/noise";
 import { Param } from "@synthlet/param";
@@ -366,4 +367,63 @@ export const CongaDrum = (
   click.connect(clickAmp).connect(out);
 
   return drum(out, params, [freq, osc, oscAmp, click, clickAmp]);
+};
+
+/**
+ * The drum half of "Digital Synthesis of Plucked-String **and Drum**
+ * Timbres" - Karplus and Strong 1983, the drum algorithm Kevin Karplus
+ * discovered in December 1979 - and the one voice in this kit that is a
+ * resonator rather than an oscillator through an envelope.
+ *
+ * It is `KarplusStrong` with `blend` at 1/2, where "the sound is drumlike".
+ * At that blend the buffer length stops being a pitch:
+ *
+ * > For b = 1/2, the wavetable length does not control the pitch of the tone,
+ * > as the sound is aperiodic. Instead, it controls the decay time of the noise
+ * > burst... For fairly large p (200 or more) and a sampling frequency of
+ * > 20 KHz, the effect is that of a snare drum. For small p (around 20), the
+ * > effect is that of a brushed tom-tom.
+ *
+ * Their p = 200 at 20 kHz is 100 Hz and their p = 20 is 1 kHz, so `tone`
+ * sweeps 100...1000 Hz, which is their own snare-to-brushed-tom axis: low tone
+ * is a big, long drum and high tone a small, tight one.
+ *
+ * `decay` drives the resonator's own loop gain rather than an amplifier
+ * envelope, because this voice decays physically - that is what a loop with a
+ * loss in it does, and it is the reason to build a drum out of one. `stretch`
+ * is at 4 for the paper's own reason: "for drums (b near 1/2), increasing S
+ * increases the 'snare' sound, allowing smaller values of p to be used for the
+ * same duration". Without it the damping filter alone ends the hit in 60 ms
+ * whatever `decay` says, because a randomly-signed loop carries white noise
+ * and a two-zero lowpass takes 2.3 dB a trip out of white noise; with it the
+ * knob spans 88 to 571 ms at the low end of `tone` and 75 to 204 at the high
+ * end, which is a drum's worth of range.
+ *
+ * `position` is 0 because the pick-position comb is a *string* filter and it
+ * annihilates the constant wavetable the drum is loaded with, and `dynamics`
+ * is 1 for the same reason: nothing here is a pluck.
+ */
+export const MembraneDrum = (
+  context: AudioContext,
+  inputs: DrumInputs = {},
+): DrumNode => {
+  const params = toParams(context, inputs);
+  const freq = Param.lin(context, params.tone, 100, 1000);
+
+  const membrane = KarplusStrong(context, {
+    trigger: params.trigger,
+    frequency: freq,
+    decay: params.decayTime,
+    blend: 0.5,
+    stretch: 4,
+    brightness: 0.8,
+    level: 0.6, // peaks at 0.87: the drum builds up past its own load
+    position: 0,
+    dynamics: 1,
+  });
+  const out = Gain(context, { gain: params.volume });
+
+  membrane.connect(out);
+
+  return drum(out, params, [freq, membrane]);
 };

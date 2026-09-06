@@ -17,6 +17,7 @@ const PROCESSOR_KEYS: Record<string, string> = {
   AdsrProcessor: "__ADSR__",
   ClipAmpProcessor: "__CLIP_AMP__",
   ImpulseProcessor: "__IMPULSE__",
+  KsProcessor: "__KS-OSC__",
   LfoProcessor: "__LFO__",
   NoiseWorkletProcessor: "__NOISE__",
   ParamProcessor: "__PARAM__",
@@ -62,7 +63,7 @@ describe("registerMonoSynth", () => {
 });
 
 describe("registerDrums", () => {
-  it("registers the six worklets the drums build", async () => {
+  it("registers the seven worklets the drums build", async () => {
     const { context } = createAudioContextMock();
 
     await expect(registerDrums(context)).resolves.toBe(context);
@@ -71,6 +72,7 @@ describe("registerDrums", () => {
       "__AD__",
       "__CLIP_AMP__",
       "__IMPULSE__",
+      "__KS-OSC__",
       "__LFO__",
       "__NOISE__",
       "__PARAM__",
@@ -98,13 +100,13 @@ describe("registration is cached", () => {
 
     expect(addedModules.length).toBe(afterMono);
 
-    // The drums share param and lfo with MonoSynth: four new, not six.
+    // The drums share param and lfo with MonoSynth: five new, not seven.
     await registerDrums(context);
-    expect(addedModules.length).toBe(afterMono + 4);
+    expect(addedModules.length).toBe(afterMono + 5);
 
     // And registerAllWorklets afterwards only adds what is still missing.
     await registerAllWorklets(context);
-    expect(addedModules.length).toBe(22);
-    expect(registered(context)).toHaveLength(22);
+    expect(addedModules.length).toBe(24);
+    expect(registered(context)).toHaveLength(24);
   });
 });

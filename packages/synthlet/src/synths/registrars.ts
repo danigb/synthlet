@@ -2,6 +2,7 @@ import { registerAdWorklet } from "@synthlet/ad";
 import { registerAdsrWorklet } from "@synthlet/adsr";
 import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerImpulseWorklet } from "@synthlet/impulse";
+import { registerKarplusStrongWorklet } from "@synthlet/karplus-strong";
 import { registerLfoWorklet } from "@synthlet/lfo";
 import { registerNoiseWorklet } from "@synthlet/noise";
 import { registerParamWorklet } from "@synthlet/param";
@@ -30,12 +31,13 @@ export function registerMonoSynth(
   ]).then(() => context);
 }
 
-/** Register the worklets the ten drums build between them. */
+/** Register the worklets the eleven drums build between them. */
 export function registerDrums(context: AudioContext): Promise<AudioContext> {
   return Promise.all([
     registerAdWorklet(context),
     registerClipAmpWorklet(context),
     registerImpulseWorklet(context),
+    registerKarplusStrongWorklet(context), // MembraneDrum's resonator
     registerLfoWorklet(context), // HandclapDrum's ramp
     registerNoiseWorklet(context),
     registerParamWorklet(context),

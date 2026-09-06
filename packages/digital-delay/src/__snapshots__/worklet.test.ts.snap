@@ -1,0 +1,62 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`DigitalDelayProcessor has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.25,
+    "maxValue": 2,
+    "minValue": 0.0002,
+    "name": "time",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.4,
+    "maxValue": 1.2,
+    "minValue": 0,
+    "name": "feedback",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.3,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "mix",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": -1,
+    "name": "tone",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "mod",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "spread",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "cross",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "diffuse",
+  },
+]
+`;

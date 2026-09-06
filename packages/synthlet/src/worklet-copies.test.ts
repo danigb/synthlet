@@ -60,11 +60,16 @@ describe("the gate contract", () => {
       "euclid",
       "impulse",
       "karplus-strong",
-      // The oscillator consumes one: a rising edge on `sync` is a hard-sync
-      // reset, and it detects that edge with the shared detector rather than a
-      // second one of its own. The sub-sample fraction it needs afterwards is
-      // its own arithmetic and stays in `dsp.ts`.
+      // The two consumers that are neither an envelope nor a clock: both take
+      // a rising edge on `sync` as a hard-sync reset, and both detect it with
+      // the shared detector rather than a second one of their own. They are
+      // also the two that read a gate a-rate, because they need the sub-sample
+      // instant of the crossing and not only the block it fell in - a reset
+      // quantised to a render quantum is 2.9 ms of jitter at 44.1 kHz. The
+      // arithmetic that turns that instant into a phase stays in each
+      // package's own `dsp.ts`.
       "polyblep-oscillator",
+      "wavetable-oscillator",
     ]);
   });
 });
@@ -77,10 +82,12 @@ describe.each(gatePackages)("%s", (pkg) => {
   });
 });
 
-// The band-limiting kernels are copied the same way, but only into the packages
-// that correct a discontinuity. `lfo` and `wavetable-oscillator` are the
-// intended next consumers; each opts in by carrying the file, which is one `cp`
-// and one entry in the list below.
+// And the band-limiting kernels, under the same rule: the packages that have a
+// discontinuity to correct. `wavetable-oscillator` uses them for hard sync;
+// `polyblep-oscillator` adopted them when it was rewritten on a discontinuity
+// scheduler, which is what makes them shared rather than one package's private
+// table. `lfo` is the intended next consumer, and opts in the same way - one
+// `cp` and one entry in the list below.
 const blepSource = readFileSync(join(root, "scripts/_blep.ts"), "utf8");
 const blepPackages = packages.filter((pkg) =>
   existsSync(join(root, "packages", pkg, "src/_blep.ts")),
@@ -88,7 +95,10 @@ const blepPackages = packages.filter((pkg) =>
 
 describe("the band-limiting kernels", () => {
   it("are shared by every package that corrects a discontinuity", () => {
-    expect(blepPackages).toEqual(["polyblep-oscillator"]);
+    expect(blepPackages).toEqual([
+      "polyblep-oscillator",
+      "wavetable-oscillator",
+    ]);
   });
 });
 
@@ -97,5 +107,59 @@ describe.each(blepPackages)("%s", (pkg) => {
     expect(
       readFileSync(join(root, "packages", pkg, "src/_blep.ts"), "utf8"),
     ).toBe(blepSource);
+  });
+});
+
+// The delay line is copied the same way, but only into the packages that need
+// a circular buffer. `digital-delay` wrote it and `analog-delay` is the proof
+// it is genuinely shared rather than a private ring buffer with a public name:
+// the two read it differently - a crossfade between two heads against a glide
+// towards one - and neither needed a change to the primitive. Six packages
+// grew their own before it existed and none of them adopt it retroactively for
+// free: `karplus-strong` is next, and swapping its linear interpolator removes
+// the accidental lowpass that is currently its only damping, so that adoption
+// is coupled to its ticket 04 rather than done here.
+const delaySource = readFileSync(join(root, "scripts/_delay.ts"), "utf8");
+const delayPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_delay.ts")),
+);
+
+describe("the delay line", () => {
+  it("is shared by every package that needs a circular buffer", () => {
+    expect(delayPackages).toEqual(["analog-delay", "digital-delay"]);
+  });
+});
+
+describe.each(delayPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_delay.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_delay.ts"), "utf8"),
+    ).toBe(delaySource);
+  });
+});
+
+// The measuring instrument is copied the same way, and is the only shared file
+// here that no shipped code imports: it exists so that two packages' alias-SNR
+// and spectrum numbers are comparable. `polyblep-oscillator` is the obvious
+// third consumer and deliberately does not carry a copy yet: it grew its own
+// `spectrum.ts` in parallel, pinned to the two sawtooth rows its audit
+// published, and adopting this one has to be a deliberate step that re-pins
+// those numbers rather than a `cp` performed by a merge.
+const spectrumSource = readFileSync(join(root, "scripts/_spectrum.ts"), "utf8");
+const spectrumPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_spectrum.ts")),
+);
+
+describe("the measuring instrument", () => {
+  it("is shared by every package whose tests measure a spectrum", () => {
+    expect(spectrumPackages).toEqual(["digital-delay", "wavetable-oscillator"]);
+  });
+});
+
+describe.each(spectrumPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_spectrum.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_spectrum.ts"), "utf8"),
+    ).toBe(spectrumSource);
   });
 });

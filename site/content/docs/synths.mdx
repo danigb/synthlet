@@ -47,7 +47,7 @@ Several drum synthesizers are available, all with the same constructor: `Drum(au
 ```ts
 import { registerDrums, KickDrum } from "synthlet";
 
-// One registrar for all ten drums
+// One registrar for all eleven drums
 const ac = await registerDrums(new AudioContext());
 const kick = KickDrum(ac, { tone: 0.2, decay: 0.7 });
 kick.trigger.value = 1;
@@ -79,3 +79,9 @@ The following drums are available:
 - `HandclapDrum`
 - `TomDrum`
 - `CongaDrum`
+- `MembraneDrum` — the odd one out: a
+  [Karplus-Strong](/docs/ks) resonator rather than an oscillator through an
+  envelope, using Karplus and Strong's own drum algorithm from the 1983 paper. So
+  its `decay` drives the resonator's loop gain rather than an amplifier envelope,
+  and the hit decays physically; `tone` sweeps the buffer length over
+  100–1000 Hz, which is the paper's own snare-to-brushed-tom axis
