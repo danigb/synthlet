@@ -43,7 +43,7 @@ gain would take every frequency down together and sound like a fader.
 
 **Legato** works and is now asserted: changing `frequency` with no trigger moves
 the pitch (measured 220.10 → 329.84 Hz) with no step at the block boundaries.
-What made this possible was removing the delay *snap* from `pluck` for a string
+What made this possible was removing the delay _snap_ from `pluck` for a string
 that is already ringing; a new note still starts in tune rather than gliding into
 it.
 

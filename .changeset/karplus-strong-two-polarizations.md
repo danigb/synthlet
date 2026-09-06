@@ -7,8 +7,8 @@ Karjalainen, Välimäki and Tolonen say separate a plucked string from a
 "synthesizer-like" tone — **beating**, and a **two-stage decay**.
 
 A real string vibrates in two planes at once. They see different bridge
-impedances, so — Järveläinen and Karjalainen 2002, §2 — *"the fast decaying but
-louder 'prompt sound' is followed by the more sustained 'aftersound'"*, and the
+impedances, so — Järveläinen and Karjalainen 2002, §2 — _"the fast decaying but
+louder 'prompt sound' is followed by the more sustained 'aftersound'"_, and the
 same unequal impedance makes the two planes slightly different in pitch, which is
 heard as beating.
 
@@ -17,20 +17,20 @@ KarplusStrong(ac, { frequency: 220, decay: 2, polarization: 0.3 }); // a real st
 ```
 
 **`polarization`** (0–1, default 0) is the second component's amplitude relative
-to the first, so it *is* the level difference the listening test measured
+to the first, so it _is_ the level difference the listening test measured
 thresholds against: `-20·log10(polarization)` dB. Their two findings land on the
 knob at 0.45 (7 dB, where reduction starts being detected) and 0.126 (18 dB,
 beyond which "beatings remained inaudible"). Measured modulation depth of the
 fundamental: **0.99 / 0.55 / 0.31 / 0.16 / 0.08** at 0 / 6.9 / 12 / 18 / 24 dB.
 
-It is one knob for both effects on purpose. §6: *"If the polarization components
-are made equally strong, the two-stage decay cannot be implemented at all"* — so
+It is one knob for both effects on purpose. §6: _"If the polarization components
+are made equally strong, the two-stage decay cannot be implemented at all"_ — so
 a control scheme with separate mix and decay-difference knobs would be offering a
 setting that does not exist. Measured early-to-late decay-rate ratio: **1.18** for
 one string, **2.67** at 12 dB apart, **2.28** at equal strength.
 
 **`detune`** (0–1, default 0.5) mistunes the second loop by up to 10 cents —
-cents rather than Hz because the mechanism is a difference in effective *length*,
+cents rather than Hz because the mechanism is a difference in effective _length_,
 so the beat rate follows the pitch as a real string's does. Measured beat rate
 against the frequency difference asked for: 0.633 / 1.266 Hz at 220 Hz and
 1.264 / 2.546 at 440, worst error **0.7%**. At `detune: 0` the two loops are in
@@ -45,8 +45,8 @@ time, which is the component it is applied to.
 
 Both polarizations are the **whole** string — the same damping filter, Lagrange
 read, dispersion cascade and probabilistic variants — and both are excited by the
-**same** burst, following Laurson et al. 2001: *"They feed both from the same
-excitation."*
+**same** burst, following Laurson et al. 2001: _"They feed both from the same
+excitation."_
 
 Three properties worth stating.
 
@@ -56,7 +56,7 @@ Three properties worth stating.
   the 8.8 KB. 20.0 ns/sample at the default, 44.4 with the second polarization,
   68.2 with dispersion as well — 0.09% to 0.30% of one core at 44.1 kHz.
 - **It is not a volume knob.** The mix is a convex combination, `(first +
-  p·second)/(1 + p)`, so the pair sits at one string's level rather than summing
+p·second)/(1 + p)`, so the pair sits at one string's level rather than summing
   to two — and can never exceed the louder of them, which is also the amplitude
   bound.
 - **The pitch does not move.** At `detune: 0` the pair plays within 5 cents at

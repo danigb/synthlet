@@ -13,9 +13,9 @@ KarplusStrong(ac, { frequency: 110, decay: 3, level: 1, tension: 0.5 }); // it b
 ```
 
 The glide is driven by the pluck's **energy**, following Avanzini, Marogna and
-Bank 2012 — *"the short-time average of the tension variation, which is
+Bank 2012 — _"the short-time average of the tension variation, which is
 responsible for pitch glides, is approximately proportional to the system
-energy"* — and specifically their §V-B energy storage model, which applies
+energy"_ — and specifically their §V-B energy storage model, which applies
 exactly when the excitation is an initial state rather than a continuous driver:
 the burst's energy seeds it and the loop's own dissipation decays it. Not
 Tolonen et al.'s elongation sum, which costs "hundreds of addition and
@@ -44,7 +44,7 @@ module measures **2.75 Hz** there at `tension: 0.1`.
 **The contour needed no tuning.** Järveläinen and Välimäki built their stimuli
 with "the time constant of the frequency descent … 50% of the overall time
 constant of amplitude decay". A descent with half the amplitude's time constant
-is a descent proportional to amplitude *squared* — which is energy. The two
+is a descent proportional to amplitude _squared_ — which is energy. The two
 papers are the same statement, and implementing either gives the other.
 
 **Default 0, deliberately.** Their own conclusion is that "any pitch glide weaker

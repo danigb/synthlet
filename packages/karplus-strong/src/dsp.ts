@@ -1158,7 +1158,7 @@ export function createKS(sampleRate: number, minFrequency: number) {
     //   t60_max = ln(0.001) / (f0 * ln(1/G(w0)))
     //
     // which is 0.50 s at 1760 Hz and 22 ms at 5 kHz at `brightness` 0.5, and
-    // 16 s at 440 Hz. A symmetric three-tap filter cannot do better: its gain at
+    // 32 s at 440 Hz. A symmetric three-tap filter cannot do better: its gain at
     // `w0` is only 1 when `h1 = 0`, which is `brightness` 1 and no damping at
     // all. Closing that gap needs the per-note loop-filter design (Bank and
     // Valimaki 2003) the folder README defers.

@@ -18,12 +18,12 @@ KarplusStrong(ac, { frequency: 110, decay: 3, stiffness: 1 }); // clangorous
 
 Measured on the 110 Hz string, cents sharp of the harmonic series:
 
-| stiffness | 4th partial | 8th | 16th |
-| --------- | ----------- | --- | ---- |
-| 0         | 0.0         | 0.0 | 0.0  |
-| 0.25      | 0.1         | 1.0 | 8.1  |
-| 0.5       | 0.3         | 3.4 | 19.6 |
-| 1         | 6.6         | 38.6| 91.8 |
+| stiffness | 4th partial | 8th  | 16th |
+| --------- | ----------- | ---- | ---- |
+| 0         | 0.0         | 0.0  | 0.0  |
+| 0.25      | 0.1         | 1.0  | 8.1  |
+| 0.5       | 0.3         | 3.4  | 19.6 |
+| 1         | 6.6         | 38.6 | 91.8 |
 
 The filter is **Rauhala and Välimäki's tunable dispersion filter** (IEEE Signal
 Processing Letters 13(5), 2006): a second-order Thiran allpass whose
