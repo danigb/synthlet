@@ -74,18 +74,25 @@ describe("descriptors", () => {
   // One gate/trigger contract means one shape for the param that carries it:
   // if these drifted apart, the same signal would drive some modules and not
   // others - which is exactly the bug the shared detector removed.
+  //
+  // The rate is the one thing that is *not* part of the contract, so it is a
+  // column rather than a constant. Every gate in the library only has to decide
+  // which block it fired in, and is k-rate; `WavetableOscillator`'s `sync` has
+  // to decide where inside a *sample*, because a reset quantised to a render
+  // quantum is 2.9 ms of jitter at 44.1 kHz and costs 20 dB of alias rejection.
   it("declares every trigger-like param the same way", () => {
-    const TRIGGERS: [string, string][] = [
-      ["AdAmp", "trigger"],
-      ["AdEnv", "trigger"],
-      ["AdsrAmp", "gate"],
-      ["AdsrEnv", "gate"],
-      ["Arp", "trigger"],
-      ["Impulse", "trigger"],
-      ["KarplusStrong", "trigger"],
+    const TRIGGERS: [string, string, AutomationRate][] = [
+      ["AdAmp", "trigger", "k-rate"],
+      ["AdEnv", "trigger", "k-rate"],
+      ["AdsrAmp", "gate", "k-rate"],
+      ["AdsrEnv", "gate", "k-rate"],
+      ["Arp", "trigger", "k-rate"],
+      ["Impulse", "trigger", "k-rate"],
+      ["KarplusStrong", "trigger", "k-rate"],
+      ["WavetableOscillator", "sync", "a-rate"],
     ];
 
-    for (const [name, param] of TRIGGERS) {
+    for (const [name, param, automationRate] of TRIGGERS) {
       const factory = (synthlet as any)[name] as Factory;
       const descriptor = factory.descriptors.find((d) => d.name === param);
       expect([name, descriptor]).toEqual([
@@ -95,7 +102,7 @@ describe("descriptors", () => {
           defaultValue: 0,
           minValue: 0,
           maxValue: 1,
-          automationRate: "k-rate",
+          automationRate,
         },
       ]);
     }
@@ -117,11 +124,16 @@ describe("descriptors", () => {
   // `frequency * 2^(detune/1200) * len / sampleRate`, and a k-rate pitch
   // quantises FM to 2.9 ms at 44.1 kHz, which aliases for any modulator above
   // about 172 Hz.
-  it("keeps WavetableOscillator's three signals at a-rate", () => {
+  it("keeps WavetableOscillator's four signals at a-rate", () => {
     const aRate = synthlet.WavetableOscillator.descriptors.filter(
       (d) => d.automationRate === "a-rate",
     );
-    expect(aRate.map((d) => d.name)).toEqual(["frequency", "detune", "morph"]);
+    expect(aRate.map((d) => d.name)).toEqual([
+      "frequency",
+      "detune",
+      "morph",
+      "sync",
+    ]);
     expect(aRate[2]).toEqual({
       name: "morph",
       defaultValue: 0,

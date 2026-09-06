@@ -292,6 +292,7 @@ describe("WavetableOscillator", () => {
       "frequency",
       "detune",
       "morph",
+      "sync",
     ]);
   });
 

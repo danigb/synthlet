@@ -47,4 +47,34 @@ describe("WavetableOscillatorWorkletNode", () => {
     processor.port.onmessage({ data: { type: "DISPOSE" } });
     expect(processor.process([], [[new Float32Array(10)]], params)).toBe(false);
   });
+
+  it("carries the sync gate through to the reset", () => {
+    // `parameters` always contains every declared param, so the real processor
+    // is *always* on the synced path - two samples of latency and all - even
+    // with nothing connected. `dsp.test.ts` never sees that, because its
+    // harness omits `sync` on purpose to keep the pre-sync tests bit-exact, so
+    // this is the only place the always-on wiring is exercised.
+    const processor = new WavetableOscillatorWorkletProcessor();
+    const wavetable = Float32Array.from({ length: 10 }, (_, i) => i / 10);
+    processor.port.onmessage({
+      data: { type: "WAVETABLE", wavetable, length: 10 },
+    });
+
+    const sync = new Float32Array(10);
+    sync[6] = 1;
+    const out = runProcessMono(processor, 10, {
+      frequency: [4],
+      morph: [0],
+      sync,
+    });
+
+    // Two samples of latency, so the table's own ramp appears one index later
+    // than it would unsynced, and the reset on sample 6 lands at index 8.
+    expect(out[0]).toBe(0);
+    expect(out[1]).toBe(0);
+    expect(out[4]).toBeCloseTo(0.2, 6);
+    // Restarted at phase 0 rather than continuing to 0.6, with the kernel's
+    // correction on top of it - which is why this is a bound and not a value.
+    expect(out[8]).toBeLessThan(0.4);
+  });
 });

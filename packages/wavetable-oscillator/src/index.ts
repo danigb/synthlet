@@ -67,6 +67,7 @@ export type WavetableInputs = {
   frequency?: ParamInput;
   detune?: ParamInput;
   morph?: ParamInput;
+  sync?: ParamInput;
 };
 
 export type WavetableOscillatorOptions = WavetableInputs & {
@@ -141,6 +142,33 @@ export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
    * over 64 samples rather than stepped.
    */
   morph: AudioParam;
+  /**
+   * Hard sync: a rising edge restarts the table read at `phase`.
+   *
+   * ```ts
+   * const master = PolyblepOscillator(ac, { frequency: 110, type: 2 });
+   * const slave = WavetableOscillator(ac, { frequency: 275, sync: master });
+   * ```
+   *
+   * a-rate, and that is not decoration. The reset is placed at the sub-sample
+   * instant the gate crossed zero, and the step and the corner it makes are
+   * band-limited with the same 4-point B-spline kernels
+   * `@synthlet/polyblep-oscillator` uses. A gate read once per render quantum
+   * could only place the reset on a block boundary, which is 2.9 ms of jitter at
+   * 44.1 kHz.
+   *
+   * **This is where the node's two samples of latency come from** - 45.4 us,
+   * the same as `@synthlet/polyblep-oscillator`, and paid whether or not
+   * anything is connected here, because a latency that changed when you plugged
+   * a cable in would step the output mid-note. It buys 17.6 to 33.9 dB of alias
+   * rejection over an uncorrected reset.
+   *
+   * The gate rule for the whole library applies: drive it with
+   * `setValueAtTime` or `linearRampToValueAtTime`, or from another oscillator,
+   * but never with `setTargetAtTime` - a signal that asymptotes towards zero
+   * never reaches it, so the gate would never re-arm.
+   */
+  sync: AudioParam;
   /**
    * Where this node resolves bare wavetable names. Set at construction with
    * `WavetableOscillator(ac, { catalog })`, and writable afterwards — it is

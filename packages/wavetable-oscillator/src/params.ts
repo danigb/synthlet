@@ -52,4 +52,32 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "a-rate",
   },
+  // Hard sync. A rising edge restarts the table read at the `phase`
+  // construction option, at the sub-sample instant the gate crossed, with the
+  // step *and* the corner band-limited by the 4-point B-spline kernels of
+  // `_blep.ts`.
+  //
+  // The shape is the library's one gate contract, `scripts/_gate.ts`: a gate is
+  // on while the signal is positive and a trigger is the transition from
+  // non-positive to positive, so `{ 0, 0, 1 }` is what every trigger-like param
+  // in synthlet declares and `packages/synthlet/src/descriptors.test.ts` is what
+  // keeps them in step.
+  //
+  // **The rate is not part of that contract, and this one is a-rate.** Every
+  // other trigger in the library only has to decide *which block* it fired in;
+  // this one has to decide *where inside a sample*. A gate read once per
+  // 128-frame quantum quantises the reset to 2.9 ms at 44.1 kHz, and a reset
+  // placed at the sample boundary rather than at the crossing measures 11.6 to
+  // 32.0 dB of alias SNR against 40.1 to 55.4 dB for the corrected one - the
+  // sync path becoming the loudest thing in the output. Callers follow the rule
+  // the contract asks of every gate line: `setValueAtTime` or
+  // `linearRampToValueAtTime`, never `setTargetAtTime`, because a signal that
+  // asymptotes towards zero never reaches it and the gate would never re-arm.
+  {
+    name: "sync",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "a-rate",
+  },
 ];

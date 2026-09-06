@@ -1,5 +1,6 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import { blampResidual4, blepResidual4 } from "./_blep";
 import {
   aliasSnr,
   centroid,
@@ -61,15 +62,35 @@ type Params = {
   frequency?: Rate;
   detune?: Rate;
   morph?: Rate;
+  sync?: Rate;
 };
 
-const inputsOf = (params: Params) => ({
-  frequency: [typeof params.frequency === "number" ? params.frequency : 440],
-  detune: [typeof params.detune === "number" ? params.detune : 0],
-  // Plane 0 unless a test is about the morph: a crossfade in the middle of a
-  // spectrum measurement would make it a measurement of two planes at once.
-  morph: [typeof params.morph === "number" ? params.morph : 0],
-});
+type Inputs = {
+  frequency: ArrayLike<number>;
+  detune: ArrayLike<number>;
+  morph: ArrayLike<number>;
+  sync?: ArrayLike<number>;
+};
+
+/**
+ * `sync` is present only when a test asks for it, and that is load-bearing
+ * rather than tidy: supplying it at all is what engages ticket 10's pending
+ * ring and its two samples of latency. Every test written before that ticket
+ * passes no `sync`, so every one of them still drives the zero-latency loop,
+ * bit for bit - which is what makes the alias floors above provably untouched.
+ */
+const inputsOf = (params: Params): Inputs => {
+  const inputs: Inputs = {
+    frequency: [typeof params.frequency === "number" ? params.frequency : 440],
+    detune: [typeof params.detune === "number" ? params.detune : 0],
+    // Plane 0 unless a test is about the morph: a crossfade in the middle of a
+    // spectrum measurement would make it a measurement of two planes at once.
+    morph: [typeof params.morph === "number" ? params.morph : 0],
+  };
+  if (params.sync !== undefined)
+    inputs.sync = [typeof params.sync === "number" ? params.sync : 0];
+  return inputs;
+};
 
 /**
  * Renders `length` samples from one oscillator, block by block, the way the
@@ -109,14 +130,10 @@ function render(
 
   const out = new Float32Array(warmup + length);
   const buffer = new Float32Array(block);
-  const inputs: {
-    frequency: ArrayLike<number>;
-    detune: ArrayLike<number>;
-    morph: ArrayLike<number>;
-  } = inputsOf(params);
+  const inputs = inputsOf(params);
   // One buffer per parameter that arrives a-rate, refilled per block because
   // that is how a connected `AudioParam` arrives.
-  const aRate = (["frequency", "detune", "morph"] as const)
+  const aRate = (["frequency", "detune", "morph", "sync"] as const)
     .map((name) => {
       const at = params[name];
       return typeof at === "function"
@@ -840,6 +857,341 @@ describe("the pitch inputs", () => {
     const measured = centroid(signal, SAMPLE_RATE);
     expect(measured).toBeGreaterThan(4600);
     expect(Math.abs(measured - 4748.4)).toBeLessThan(1);
+  });
+});
+
+describe("hard sync", () => {
+  /**
+   * A rising edge on `sync` restarts the table read at `phase`, at the
+   * **sub-sample instant the gate crossed**, with the step *and* the corner
+   * band-limited by `_blep.ts`'s 4-point B-spline kernels. That costs two
+   * samples of output latency, which ticket 10 exists to decide rather than
+   * assume.
+   *
+   * **The decision, measured.** Alias SNR in dB with ticket 06's pyramid on, a
+   * naive sawtooth master into `sync` and a 256-sample sawtooth slave. `8x` is
+   * the same patch rendered at 352.8 kHz and decimated through a 513-tap
+   * windowed sinc - the ceiling no correction can beat.
+   *
+   *   master  ratio   naive   sub-sample  +BLEP   +BLAMP   8x
+   *   110     1.5     32.0    49.0        49.2    49.6     50.1
+   *   110     2.5     30.2    54.2        54.1    55.1     63.0
+   *   110     2.73    29.6    43.0        53.0    53.9     56.4
+   *   440     1.5     20.9    38.7        38.7    52.9     59.8
+   *   440     2.5     19.2    38.2        38.2    51.7     59.5
+   *   440     2.73    18.6    30.2        38.0    49.7     48.9
+   *   1760    1.5     14.3    32.1        32.1    46.8     55.7
+   *   1760    2.5     12.2    31.4        31.4    45.5     55.0
+   *   1760    2.73    11.6    21.9        28.2    40.1     41.3
+   *
+   * **17.6 to 33.9 dB over the naive reset**, against the ticket's bar of 6, so
+   * the two samples are bought. The rows are the floors below, and the reason
+   * they are pinned rather than described: removing either kernel drops them
+   * back into the middle columns and fails a test.
+   *
+   * **Both kernels are needed.** At the classic half-integer ratios the step
+   * height on a sawtooth table is *exactly zero* - the reset alternates between
+   * half a cycle and none, and a sawtooth's value at half a cycle equals its
+   * value at zero - so `+BLEP` is bit-identical to the uncorrected arm on those
+   * rows and all 14.2 dB at 440 Hz comes from the BLAMP. A wavetable reset is a
+   * corner at least as often as it is a step.
+   *
+   * **The metric runs with `removeDC` on, and only here.** A hard-synced
+   * sawtooth carries a large and entirely real DC component - 0.164 at 110 Hz,
+   * ratio 1.5 - and `aliasSnr` counts bin 0 as noise, so leaving it in buries
+   * the measurement: every arm above reads 8-16 dB and they are
+   * indistinguishable. The unsynced floors keep `removeDC` off, where the DC is
+   * not real.
+   *
+   * **And the reset is never declicked**, which reverses ticket 09's handoff.
+   * A 64-sample ramp needs the next edge more than 64 samples away, so above
+   * `sampleRate / 64` - 689 Hz - it never completes: at a 1760 Hz master it
+   * takes the peak from 0.96 to 0.32 and the alias SNR to 14.4 dB.
+   */
+
+  const len = 256;
+  const saw = sawTable(len);
+  const pyramid = mipmapWavetable({ data: saw, length: len });
+  const levels = pyramid.levels ?? 1;
+
+  /** The two samples the pending ring costs. */
+  const LATENCY = 2;
+
+  /** A ramp plane: the read position is readable straight off the output. */
+  const rampTable = Float32Array.from({ length: len }, (_, i) => i / len);
+
+  /**
+   * A naive bipolar sawtooth master at `f0`: one rising zero crossing per
+   * cycle, and a linear one, so the crossing's sub-sample instant is exactly
+   * recoverable from the two samples either side of it. This is the patch -
+   * `PolyblepOscillator` into `sync` - and not a test convenience.
+   */
+  const rampGate = (f0: number) => (i: number) =>
+    2 * (((f0 * i) / SAMPLE_RATE) % 1) - 1 + 1e-12;
+
+  /** The other shape a caller writes: `setValueAtTime(1, t)`, a hard step. */
+  const stepGate = (at: number) => (i: number) => (i >= at ? 1 : 0);
+
+  it("restarts on a rising edge", () => {
+    // Success criterion 1. A step gate at sample 300 puts the crossing at the
+    // sample boundary, so the read restarts at `phase` on sample 300 itself and
+    // appears at output 302.
+    //
+    // The assertion is made two samples past that, at output 304, because the
+    // 4-point residual's support is the four slots around the reset: samples
+    // 298 through 301 carry a correction and sample 302 onward is the naive
+    // read. On a ramp plane that read *is* the position, so `2 * inc / len` is
+    // exact rather than approximate.
+    const f0 = 440;
+    const inc = (f0 * len) / SAMPLE_RATE;
+    const signal = render(
+      rampTable,
+      len,
+      { frequency: f0, sync: stepGate(300) },
+      { length: 512 },
+    );
+    expect(signal[300 + LATENCY + 2]).toBe(Math.fround((2 * inc) / len));
+    // And it really restarted: without the reset the position would have been
+    // most of the way round the table, nowhere near the start.
+    expect(signal[300 + LATENCY - 3]).toBeGreaterThan(0.5);
+  });
+
+  it("places the reset at the sub-sample instant the gate crossed", () => {
+    // The half of criterion 1 that is the reason `sync` is a-rate at all. A
+    // ramp gate crossing zero a known fraction of a sample before sample 300
+    // restarts the read at `phase` *at the crossing*, so by sample 300 the
+    // position has already advanced by that fraction of an increment.
+    //
+    // Two samples past the support the output is the naive read again, so the
+    // position is `(d + 2) * inc / len` exactly - and it differs from the
+    // sample-quantised answer by `d * inc / len`, which is what the whole
+    // sub-sample path buys.
+    const f0 = 440;
+    const inc = (f0 * len) / SAMPLE_RATE;
+    for (const d of [0.25, 0.5, 0.75]) {
+      // The crossing is `1 - d` of the way from sample 299 to sample 300, which
+      // is `d` samples *before* 300 - the age the correction is placed at.
+      const gate = (i: number) => (i < 300 ? -(1 - d) : i - 300 + d);
+      const signal = render(
+        rampTable,
+        len,
+        { frequency: f0, sync: gate },
+        { length: 512 },
+      );
+      expect(signal[300 + LATENCY + 2]).toBeCloseTo(((d + 2) * inc) / len, 6);
+    }
+  });
+
+  // A read position slow enough that the table does not wrap inside the render,
+  // so the output of a ramp plane is the number of samples since the last reset,
+  // divided by 1024, and can be asserted exactly.
+  const SLOW = SAMPLE_RATE / 1024;
+
+  it("does not restart while the gate stays high", () => {
+    // Success criterion 2. The gate contract fires on the transition from
+    // non-positive to positive and nothing else, so a gate held high for 600
+    // samples resets once, at its edge, and not 600 times.
+    //
+    // Asserted on the position rather than by counting steps: on a ramp plane
+    // the output *is* the position, so 200 and 400 samples after the single
+    // reset it must be exactly 200/1024 and 400/1024. A per-sample retrigger
+    // would pin it near zero, and any second reset would show up as a smaller
+    // number at the later point.
+    const signal = render(
+      rampTable,
+      len,
+      { frequency: SLOW, sync: stepGate(400) },
+      { length: 1000 },
+    );
+    expect(signal[600 + LATENCY]).toBe(Math.fround(200 / 1024));
+    expect(signal[800 + LATENCY]).toBe(Math.fround(400 / 1024));
+  });
+
+  it("re-arms on a falling edge", () => {
+    // The other half of the contract: a gate that returns to non-positive and
+    // rises again fires again. Two edges, two resets, and the second one is what
+    // makes the position at 950 read from 800 rather than from 400.
+    const signal = render(
+      rampTable,
+      len,
+      {
+        frequency: SLOW,
+        sync: (i) => ((i >= 400 && i < 500) || i >= 800 ? 1 : 0),
+      },
+      { length: 1000 },
+    );
+    expect(signal[600 + LATENCY]).toBe(Math.fround(200 / 1024));
+    expect(signal[950 + LATENCY]).toBe(Math.fround(150 / 1024));
+  });
+
+  it("costs exactly two samples and nothing else when the gate is silent", () => {
+    // A connected but silent `sync` must be the same oscillator, delayed by the
+    // ring and by nothing else - no correction is written, so the pending slots
+    // carry the naive samples untouched.
+    //
+    // This is also the assertion that says what the latency *is*. It is paid
+    // whether or not anything is connected, because a latency that changed when
+    // a cable was plugged in would step the output by two samples mid-note; the
+    // same two samples `polyblep-oscillator` pays, so the library's two
+    // oscillators stay aligned with each other.
+    const params = { frequency: 440, morph: 0.5 };
+    const bare = render(pyramid.data, len, params, { length: 1024, levels });
+    const gated = render(
+      pyramid.data,
+      len,
+      { ...params, sync: () => 0 },
+      { length: 1024, levels },
+    );
+    expect(gated[0]).toBe(0);
+    expect(gated[1]).toBe(0);
+    expect(Array.from(gated.subarray(LATENCY))).toEqual(
+      Array.from(bare.subarray(0, 1024 - LATENCY)),
+    );
+  });
+
+  it.each([
+    [110, 1.5, 48.1, 49.62],
+    [110, 2.5, 53.5, 55.09],
+    [110, 1.37, 53.9, 55.44],
+    [110, 2.73, 52.4, 53.9],
+    [440, 1.5, 51.3, 52.86],
+    [440, 2.5, 50.2, 51.71],
+    [440, 1.37, 49.8, 51.34],
+    [440, 2.73, 48.2, 49.72],
+    [1760, 1.5, 45.3, 46.81],
+    [1760, 2.5, 44.0, 45.51],
+    [1760, 1.37, 41.9, 43.46],
+    [1760, 2.73, 38.6, 40.13],
+  ])(
+    "keeps sync alias SNR above %p Hz at ratio %p's floor of %p dB",
+    (f0, ratio, floorDb, measuredDb) => {
+      // Success criterion 3, and the ticket's decision as an assertion. The
+      // floors are 1.5 dB below the measurement and the measurement is pinned
+      // to 0.15 dB. Take either kernel out and these collapse to the
+      // 21.9-38.7 dB of the uncorrected arm; take the sub-sample placement out
+      // as well and to 11.6-32.0 dB.
+      const signal = render(
+        pyramid.data,
+        len,
+        { frequency: f0 * ratio, sync: rampGate(f0) },
+        { warmup: WARMUP, levels },
+      );
+      const measured = aliasSnr(signal, f0, SAMPLE_RATE, { removeDC: true });
+      expect(measured).toBeGreaterThan(floorDb);
+      expect(Math.abs(measured - measuredDb)).toBeLessThan(0.15);
+    },
+  );
+
+  it.each([0.5, 1, 1.37, 2, 2.5, 3.7, 5, 8])(
+    "stays finite under a-rate sync at ratio %p",
+    (ratio) => {
+      // Success criterion 4's totality half: every sync ratio the ticket names,
+      // integer and not, against a master sweeping the audible range - and with
+      // the pitch a-rate too, so the increment, the mip level and the reset all
+      // move inside the same sample.
+      for (const f0 of [55, 440, 3520]) {
+        const signal = render(
+          pyramid.data,
+          len,
+          {
+            frequency: (i) =>
+              f0 * ratio * (1 + 0.5 * Math.sin((2 * Math.PI * 60 * i) / 44100)),
+            sync: rampGate(f0),
+            morph: 0.5,
+          },
+          { length: 4096, levels },
+        );
+        for (const sample of signal) {
+          expect(Number.isFinite(sample)).toBe(true);
+          expect(Math.abs(sample)).toBeLessThanOrEqual(2);
+        }
+        expect(peak(signal)).toBeGreaterThan(0);
+      }
+    },
+  );
+
+  it("syncs correctly while morphing", () => {
+    // Success criterion 4's other half. The step height and the corner are read
+    // at the *live* morph position and mip level, not at a cached plane pair, so
+    // a reset landing mid-crossfade is corrected against the waveform actually
+    // being played.
+    //
+    // Against a table whose planes are maximally different - the crossfade is
+    // where a stale plane index would show up as a step of up to 2.0 - and with
+    // the position swept a-rate under the sync. Nothing may leave the range the
+    // planes span by more than the correction's own overshoot.
+    const short = 64;
+    const table = constantPlanes(
+      short,
+      ...Array.from({ length: 4 }, (_, k) => (k % 2 === 0 ? 1 : -1)),
+    );
+    const signal = render(
+      table,
+      short,
+      {
+        frequency: 660,
+        sync: rampGate(220),
+        morph: (i) => (i % 4096) / 4095,
+      },
+      // Past the ring's own fill: the first two samples of a synced instance are
+      // the empty slots, which is a step like any other cold start and is pinned
+      // in `costs exactly two samples` above.
+      { length: 8192, warmup: 4 },
+    );
+    for (const sample of signal) {
+      expect(Number.isFinite(sample)).toBe(true);
+      expect(Math.abs(sample)).toBeLessThanOrEqual(1.5);
+    }
+
+    // And the correction really is reading the right planes: on constant planes
+    // the pre- and post-reset values are equal whenever the position is on a
+    // plane, so the only steps left are the crossfade's own. Measured 0.0323
+    // against the 2.0 a plane-pair error would produce.
+    expect(maxAbsoluteDifference(signal)).toBeLessThan(0.5);
+  });
+
+  it("does not depend on the block size with an a-rate sync", () => {
+    // The ring is instance state precisely so that a correction whose support
+    // reaches past the end of a render quantum lands in the next one. If it ever
+    // became block-local, an edge near a boundary would render differently at
+    // 128 and at 1024 - which is what this reads.
+    const params = {
+      frequency: 660,
+      sync: rampGate(220),
+      morph: 0.5,
+    };
+    const options = { levels, length: 2048 };
+    const eightBlocks = render(pyramid.data, len, params, {
+      ...options,
+      block: 128,
+    });
+    const oneBlock = render(pyramid.data, len, params, {
+      ...options,
+      block: 1024,
+    });
+    expect(eightBlocks).toEqual(oneBlock);
+  });
+
+  it("carries the kernels the correction is defined against", () => {
+    // `_blep.ts` is a copied file, so its polynomials are pinned here rather
+    // than trusted: the residual for a unit rising step jumps by exactly -1
+    // across the discontinuity (which is what cancels the naive step), is odd
+    // about it, and vanishes outside its support. The BLAMP is its integral,
+    // so it is even, peaks at 7/30 and is the antiderivative of the residual.
+    expect(blepResidual4(-2)).toBe(0);
+    expect(blepResidual4(2)).toBe(0);
+    expect(blepResidual4(0) - blepResidual4(-1e-12)).toBeCloseTo(-1, 9);
+    for (const t of [0.1, 0.4, 0.9, 1.3, 1.8])
+      expect(blepResidual4(t)).toBeCloseTo(-blepResidual4(-t), 12);
+
+    expect(blampResidual4(2)).toBe(0);
+    expect(blampResidual4(0)).toBeCloseTo(7 / 30, 12);
+    const h = 1e-6;
+    for (const d of [0.3, 0.8, 1.2, 1.7]) {
+      const derivative =
+        (blampResidual4(d + h) - blampResidual4(d - h)) / (2 * h);
+      expect(derivative).toBeCloseTo(blepResidual4(d), 6);
+    }
   });
 });
 

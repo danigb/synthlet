@@ -1,3 +1,6 @@
+import { blampResidual4, blepResidual4 } from "./_blep";
+import { createGateDetector } from "./_gate";
+
 type Inputs = {
   frequency: ArrayLike<number>;
   /**
@@ -9,6 +12,16 @@ type Inputs = {
   // `Float32Array` at a-rate, a one-element array at k-rate, and a plain
   // `number[]` from the tests: `ArrayLike` is what all three have in common.
   morph: ArrayLike<number>;
+  /**
+   * The hard sync gate. **Optional, and its absence is the whole of the
+   * zero-latency path**: a caller with nothing to sync to - every test written
+   * before this feature, and any direct user of the unit - takes the sample
+   * loop exactly as it was, with no ring, no delay and no gate read. The
+   * worklet always supplies it, so every worklet instance carries the two
+   * samples; see the ring below for why that is unconditional rather than
+   * switched on the connection.
+   */
+  sync?: ArrayLike<number>;
 };
 
 /**
@@ -39,6 +52,38 @@ function initialPhase(phase: number | "random" | undefined): number {
   if (phase === "random") return Math.random();
   if (typeof phase !== "number" || !Number.isFinite(phase)) return 0;
   return phase - Math.floor(phase);
+}
+
+/**
+ * How many samples ago the sync gate crossed zero, given the previous sample
+ * and this one - the age in `[0, 1)` the correction is placed at.
+ *
+ * `createGateDetector` says *whether* an edge happened; this is the fraction.
+ * With `g- <= 0` and `g > 0` the crossing lies at `f = -g- / (g - g-)` of the
+ * way from `i-1` to `i`, so it happened `1 - f` samples before sample `i`.
+ * `feat/polyblep`'s arithmetic, and its two guards with it.
+ *
+ * The denominator is `>= g > 0` for every pair the detector reports, so it can
+ * only fail to be positive if one of the samples is a NaN - which reaches here,
+ * because a NaN is neither `> 0` nor `<= 0` and so leaves the detector's state
+ * untouched until a real sample arrives. `rise > 0` catches it and resolves to
+ * an age of 0.
+ *
+ * An age of **exactly 1** is the one value the residual's convention cannot
+ * express - it places the discontinuity on the previous sample, whose value is
+ * the one from *before* the jump - and it is the common case rather than a
+ * knife edge: a gate written with `setValueAtTime` steps 0 -> 1 between two
+ * samples, so `f` is 0 and the age is 1. Reading it as 0 is also the right
+ * answer for that gate, since the first sample at or after the scheduled time
+ * is sample `i`. The test is on the age rather than on `f` because `1 - 1e-17`
+ * is 1 in binary floating point.
+ */
+function crossingAge(previous: number, gate: number): number {
+  const rise = gate - previous;
+  const raw = rise > 0 ? -previous / rise : 1;
+  const fraction = raw > 0 ? (raw < 1 ? raw : 1) : 0;
+  const age = 1 - fraction;
+  return age < 1 ? age : 0;
 }
 
 export function WavetableOscillator(
@@ -92,6 +137,35 @@ export function WavetableOscillator(
   // is what decides whether the mip level is recomputed per sample and whether a
   // level jump is declicked; see updateLevel().
   let pitchARate = false;
+
+  /*
+   * Hard sync.
+   *
+   * `pending` is the output being assembled: four slots in a ring holding
+   * `slot(i - 2)` through `slot(i + 1)`, which is exactly the 4-point kernel's
+   * support, with `write` the index of `slot(i)`. A correction is written
+   * *backwards* into samples that have been computed but not yet emitted, so
+   * the output lags the input by two samples - 45.4 us at 44.1 kHz.
+   *
+   * **The latency is unconditional wherever `sync` is supplied at all**, which
+   * in the worklet is always. Engaging the ring only when something is
+   * connected was considered and rejected: a latency that changes when a cable
+   * is plugged in steps the output by two samples mid-note, which is worse than
+   * a constant one, and this is the same two samples
+   * `polyblep-oscillator/src/dsp.ts` pays, so the library's two oscillators stay
+   * aligned with each other rather than 45 us apart. A caller who passes no
+   * `sync` input keeps the pre-sync path, bit for bit.
+   *
+   * The ring is instance state, not block-local, so a correction whose support
+   * reaches past the end of a render quantum lands in the next one.
+   */
+  const pending = new Float64Array(4);
+  let write = 0;
+  const detectSync = createGateDetector();
+  // Kept separately because the detector deliberately does not carry it: it
+  // answers *whether* an edge happened, and the sub-sample fraction is this
+  // file's own arithmetic. See crossingAge().
+  let previousSync = 0;
 
   // `frequency` is Hz, `detune` is cents. One cycle of the table is `len` samples,
   // so a cycle per second is `len` samples of read position per second of output:
@@ -283,11 +357,11 @@ export function WavetableOscillator(
   // `pf === 0` is both the sparse read and the end-of-axis guard: `pos` is at
   // most `planes - 1`, so `floor(pos) === planes - 1` can only happen when `pos`
   // is exactly that, and then there is nothing to interpolate toward.
-  function readLevel(l: number, p0: number, pf: number) {
+  function readLevel(l: number, p0: number, pf: number, off: number) {
     const p = l * planes + p0;
-    const y0 = interpolateLinear2d($wavetable, len, p, offset);
+    const y0 = interpolateLinear2d($wavetable, len, p, off);
     if (pf === 0) return y0;
-    const y1 = interpolateLinear2d($wavetable, len, p + 1, offset);
+    const y1 = interpolateLinear2d($wavetable, len, p + 1, off);
     return y0 + (y1 - y0) * pf;
   }
 
@@ -303,14 +377,50 @@ export function WavetableOscillator(
   // argument is that what matters is tables read per sample, not tables held:
   // two planes x two mip levels is the budget, and both axes go sparse the
   // moment their fraction is zero.
-  function readPlanes(m: number) {
+  //
+  // The offset is an argument rather than the closure's, which is what hard
+  // sync needs: a reset has to read the table at the position it is leaving and
+  // at the one it is restarting at, both at the *current* morph position and
+  // mip level, so that the step height stays right as those move.
+  function readAt(m: number, off: number) {
     const pos = m * (planes - 1);
     const p0 = Math.floor(pos);
     const pf = pos - p0;
-    const y0 = readLevel(level, p0, pf);
+    const y0 = readLevel(level, p0, pf, off);
     if (levelFrac === 0) return y0;
-    const y1 = readLevel(level + 1, p0, pf);
+    const y1 = readLevel(level + 1, p0, pf, off);
     return y0 + (y1 - y0) * levelFrac;
+  }
+
+  /**
+   * The read trajectory's slope at `off`, **per output sample**, which is the
+   * unit `blampResidual4` is defined against.
+   *
+   * A centred difference over one output sample's worth of table - `inc` table
+   * samples - and not over one table sample scaled by `inc`. The two are the
+   * same thing only while `|inc| <= 1`; at 2640 Hz on a 256-sample table `inc`
+   * is 15.3, and the second spelling overcorrects by exactly that factor -
+   * measured, it produced a peak of 4.80 on a signal bounded by 1.
+   */
+  function slopeAt(m: number, off: number, half: number) {
+    return readAt(m, wrap(off + half)) - readAt(m, wrap(off - half));
+  }
+
+  /**
+   * One step back into range whatever the overshoot, in either direction, plus
+   * the one case the algebra does not cover.
+   *
+   * The floor-based form is load-bearing rather than tidy: through-zero FM runs
+   * the pointer backwards and a sync reset can seek it backwards too. And an
+   * offset that lands a hair below zero wraps to `len - e`, which rounds *up*
+   * to exactly `len` in float64 once e is small enough - at `len === 256`, every
+   * `offset = -2^-k` for k from 46 to 79 does it, 34 distinct values. That is an
+   * index one past the last plane's end, which reads `undefined` and emits NaN
+   * forever.
+   */
+  function wrap(off: number) {
+    const wrapped = off - len * Math.floor(off / len);
+    return wrapped >= len ? 0 : wrapped;
   }
 
   function agen(output: Float32Array, inputs: Inputs) {
@@ -323,6 +433,7 @@ export function WavetableOscillator(
     const frequency = inputs.frequency;
     const detune = inputs.detune ?? NO_DETUNE;
     const morph = inputs.morph;
+    const sync = inputs.sync;
     // The house a-rate check, once per block and once per parameter: a connected
     // AudioParam arrives as one value per sample, an unconnected one as a single
     // value. `state-variable-filter/src/dsp.ts:103-117` is where the idiom comes
@@ -330,6 +441,12 @@ export function WavetableOscillator(
     const fRate = frequency.length === n;
     const dRate = detune.length === n;
     const mRate = morph.length === n;
+    // An absent or zero-length `sync` is "not synced", and it is what skips the
+    // whole path - the gate read, the ring and the two samples of latency -
+    // rather than a flag tested per sample. `polyblep-oscillator/src/dsp.ts`
+    // spells the same test for the same reason.
+    const synced = sync !== undefined && sync.length > 0;
+    const sRate = synced && sync.length === n;
 
     // The pitch moves inside the block only if something driving it does. When
     // neither does, the increment and its mip level are computed once for the
@@ -393,7 +510,61 @@ export function WavetableOscillator(
       if (Math.abs(m - $morph) > jump) declick();
       $morph = m;
 
-      let y = readPlanes(m);
+      if (synced) {
+        const gate = sRate ? sync[i] : sync[0];
+        if (detectSync(gate) === true) {
+          // Kleimola & Valimaki's two rules, in a wavetable.
+          //
+          // **Scale by the actual height.** A wavetable reset has no analytic
+          // jump the way a sawtooth's wrap does: it is whatever the table does
+          // between the phase the slave had reached at the crossing instant and
+          // the phase it restarts at. Both are read here, at the live morph
+          // position and mip level, so the height stays right while those move.
+          //
+          // **And by the actual corner.** The two trajectories have different
+          // slopes as well as different values, and in a wavetable that is the
+          // *common* case rather than the triangle-only exception it is in the
+          // sibling package: at the classic half-integer sync ratios the step
+          // height on a sawtooth table is exactly zero - the reset alternates
+          // between half a cycle and none, and a sawtooth's value at half a
+          // cycle equals its value at zero - so every dB of the correction is
+          // the BLAMP's. Measured at 440 Hz, ratio 1.5, mipmapped: 38.65 dB
+          // with the BLEP alone against 52.86 dB with both.
+          const d = crossingAge(previousSync, gate);
+          const start = phase0 * len;
+          const from = wrap(offset - d * inc);
+          const step = readAt(m, start) - readAt(m, from);
+          const half = inc / 2;
+          const corner = slopeAt(m, start, half) - slopeAt(m, from, half);
+          // `k + d` sweeps [-2,-1], [-1,0], [0,1] and [1,2] - the 4-point
+          // support, and exactly the four live slots. Two resets inside two
+          // samples simply add, so there is no case analysis. `blampResidual4`
+          // is even but is written in `|t|` and does not mirror a negative
+          // argument, so the absolute value is load-bearing.
+          for (let k = -2; k <= 1; k++) {
+            const t = k + d;
+            pending[(write + k + 4) & 3] +=
+              step * blepResidual4(t) + corner * blampResidual4(t < 0 ? -t : t);
+          }
+          // The restart is at the *crossing instant*, not at this sample, so
+          // the read position carries the remaining `d * inc` - forwards, or
+          // backwards under through-zero FM, which the wrap already covers.
+          //
+          // **No declick here, deliberately.** Ticket 09's handoff asked for
+          // one; measured, it is the wrong tool. A 64-sample ramp needs the
+          // next edge to be more than 64 samples away, so above sampleRate/64
+          // - 689 Hz at 44.1 kHz - it never completes and stops being a
+          // declick: at a 1760 Hz master the peak falls from 0.96 to 0.32, a
+          // 9.6 dB level loss, and the alias SNR gets *worse* (14.31 -> 14.36
+          // against 46.81 for the correction) because what survives is no
+          // longer a periodic waveform. The ramp keeps the two jobs it is
+          // actually for, a table swap and a jumped morph position.
+          offset = wrap(start + d * inc);
+        }
+        previousSync = gate;
+      }
+
+      let y = readAt(m, offset);
       if (ramp > 0) {
         ramp--;
         // Hold the pre-jump output and ramp linearly onto the live signal. The
@@ -402,29 +573,23 @@ export function WavetableOscillator(
         // anyway.
         y = held + (y - held) * ((DECLICK - ramp) * IDECLICK);
       }
-      output[i] = y;
+      if (synced) {
+        // `slot(i - 2)` is complete: everything whose support reaches it has
+        // been written. Emit it and hand the freed slot forward as
+        // `slot(i + 2)`. In a four-slot ring `(write + 2) & 3` is both.
+        pending[write] += y;
+        output[i] = pending[(write + 2) & 3];
+        pending[(write + 2) & 3] = 0;
+        write = (write + 1) & 3;
+      } else {
+        output[i] = y;
+      }
       // Read back rather than reusing `y`: `held` has to be the value that was
       // actually emitted, and the write through a Float32Array rounds it.
       last = output[i];
 
-      offset += inc;
-      // One step back into range whatever the overshoot, in either direction;
       // `len` is at least 1 here because agen() returns early on len === 0.
-      //
-      // The floor-based form is load-bearing now rather than merely tidy. Ticket
-      // 01 replaced a pair of one-sided `if`s with it and the `offset < 0` half
-      // was unreachable, because the increment was clamped at zero; through-zero
-      // FM is what makes the pointer run backwards, and this line is the whole of
-      // the wrap it needs.
-      offset -= len * Math.floor(offset / len);
-      // And the one case the algebra does not cover. An `offset + inc` that lands
-      // a hair below zero wraps to `len - ε`, which rounds *up* to exactly `len`
-      // in float64 once ε is small enough — at `len === 256`, every
-      // `offset = -2^-k` for k from 46 to 79 does it, 34 distinct values. That is
-      // an index one past the last plane's end, which reads `undefined` and emits
-      // NaN forever. Only reachable with a negative increment, so it arrives with
-      // this ticket.
-      if (offset >= len) offset = 0;
+      offset = wrap(offset + inc);
     }
   }
 

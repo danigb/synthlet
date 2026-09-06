@@ -60,6 +60,11 @@ describe("the gate contract", () => {
       "euclid",
       "impulse",
       "karplus-strong",
+      // The one consumer that is not an envelope or a clock: `sync`, whose
+      // rising edge restarts the table read. It is also the one that reads the
+      // gate a-rate, because it needs the sub-sample instant of the crossing
+      // and not only the block - see `wavetable-oscillator/src/params.ts`.
+      "wavetable-oscillator",
     ]);
   });
 });
@@ -69,6 +74,29 @@ describe.each(gatePackages)("%s", (pkg) => {
     expect(
       readFileSync(join(root, "packages", pkg, "src/_gate.ts"), "utf8"),
     ).toBe(gateSource);
+  });
+});
+
+// And the band-limiting kernels, under the same rule: the packages that have a
+// discontinuity to correct. `wavetable-oscillator` is the first, for hard sync;
+// `polyblep-oscillator` is the intended next, and adopts them with the ticket
+// that rewrites it on a discontinuity scheduler rather than here.
+const blepSource = readFileSync(join(root, "scripts/_blep.ts"), "utf8");
+const blepPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_blep.ts")),
+);
+
+describe("the band-limiting kernels", () => {
+  it("are shared by every package that corrects a discontinuity", () => {
+    expect(blepPackages).toEqual(["wavetable-oscillator"]);
+  });
+});
+
+describe.each(blepPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_blep.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_blep.ts"), "utf8"),
+    ).toBe(blepSource);
   });
 });
 

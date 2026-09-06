@@ -23,5 +23,12 @@ exports[`WavetableOscillatorWorkletNode has parameter descriptors 1`] = `
     "minValue": 0,
     "name": "morph",
   },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "sync",
+  },
 ]
 `;

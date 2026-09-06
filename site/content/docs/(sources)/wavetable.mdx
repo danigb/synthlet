@@ -5,6 +5,7 @@ description: A morphing wavetable oscillator
 
 import WavetableExample from "../../../examples/WavetableExample";
 import WavetableStackExample from "../../../examples/WavetableStackExample";
+import WavetableSyncExample from "../../../examples/WavetableSyncExample";
 
 `@synthlet/wavetable-oscillator`
 
@@ -47,6 +48,10 @@ osc.frequency.value = 880;
 - `detune`: Detune in cents, `-1200` to `1200`. Default is 0, a-rate.
 - `morph`: The wavetable position, 0 (first plane) to 1 (last plane). Default is 0. a-rate, so an `Lfo` connected to it scans the table at any rate and any
   shape; a position that jumps is ramped over 64 samples rather than clicked.
+- `sync`: Hard sync. A rising edge restarts the table read at `phase`. `0` to
+  `1`, default 0, and **a-rate**, unlike every other gate in the library: the
+  reset is placed at the sub-sample instant the gate crossed zero, which a
+  k-rate gate could only round to the nearest render quantum.
 
 `phase` is a **construction option** rather than a parameter - `number` or
 `"random"` - because it is a one-time initial condition. Three instances built
@@ -64,6 +69,30 @@ const stack = [-7, 0, 7].map((detune) =>
 ```
 
 <WavetableStackExample />
+
+## Hard sync
+
+Patch an oscillator into `sync` and its rising edges restart the table read.
+The note's pitch becomes the master's; sweeping the slave moves a formant
+through it, which is the sound hard sync exists for and something
+`OscillatorNode` cannot make at all.
+
+```ts
+const master = PolyblepOscillator(audioContext, { frequency: 110 });
+const slave = WavetableOscillator(audioContext, {
+  frequency: 275,
+  sync: master,
+});
+```
+
+The restart is a step **and** a corner in the output, and both are band-limited
+with the same 4-point B-spline kernels `@synthlet/polyblep-oscillator` uses —
+worth 17.6 to 33.9 dB of alias rejection over a plain phase-to-zero reset. It is
+also why this node has **two samples of latency** (45 µs at 44.1 kHz, the same
+as `@synthlet/polyblep-oscillator`): a correction is written backwards into
+samples that have been computed but not yet emitted.
+
+<WavetableSyncExample />
 
 ## Loading wavetables
 
