@@ -60,10 +60,15 @@ describe("the gate contract", () => {
       "euclid",
       "impulse",
       "karplus-strong",
-      // The one consumer that is not an envelope or a clock: `sync`, whose
-      // rising edge restarts the table read. It is also the one that reads the
-      // gate a-rate, because it needs the sub-sample instant of the crossing
-      // and not only the block - see `wavetable-oscillator/src/params.ts`.
+      // The two consumers that are neither an envelope nor a clock: both take
+      // a rising edge on `sync` as a hard-sync reset, and both detect it with
+      // the shared detector rather than a second one of their own. They are
+      // also the two that read a gate a-rate, because they need the sub-sample
+      // instant of the crossing and not only the block it fell in - a reset
+      // quantised to a render quantum is 2.9 ms of jitter at 44.1 kHz. The
+      // arithmetic that turns that instant into a phase stays in each
+      // package's own `dsp.ts`.
+      "polyblep-oscillator",
       "wavetable-oscillator",
     ]);
   });
@@ -78,9 +83,11 @@ describe.each(gatePackages)("%s", (pkg) => {
 });
 
 // And the band-limiting kernels, under the same rule: the packages that have a
-// discontinuity to correct. `wavetable-oscillator` is the first, for hard sync;
-// `polyblep-oscillator` is the intended next, and adopts them with the ticket
-// that rewrites it on a discontinuity scheduler rather than here.
+// discontinuity to correct. `wavetable-oscillator` uses them for hard sync;
+// `polyblep-oscillator` adopted them when it was rewritten on a discontinuity
+// scheduler, which is what makes them shared rather than one package's private
+// table. `lfo` is the intended next consumer, and opts in the same way - one
+// `cp` and one entry in the list below.
 const blepSource = readFileSync(join(root, "scripts/_blep.ts"), "utf8");
 const blepPackages = packages.filter((pkg) =>
   existsSync(join(root, "packages", pkg, "src/_blep.ts")),
@@ -88,7 +95,10 @@ const blepPackages = packages.filter((pkg) =>
 
 describe("the band-limiting kernels", () => {
   it("are shared by every package that corrects a discontinuity", () => {
-    expect(blepPackages).toEqual(["wavetable-oscillator"]);
+    expect(blepPackages).toEqual([
+      "polyblep-oscillator",
+      "wavetable-oscillator",
+    ]);
   });
 });
 
@@ -131,9 +141,10 @@ describe.each(delayPackages)("%s", (pkg) => {
 // The measuring instrument is copied the same way, and is the only shared file
 // here that no shipped code imports: it exists so that two packages' alias-SNR
 // and spectrum numbers are comparable. `polyblep-oscillator` is the obvious
-// third consumer and deliberately does not carry a copy yet - it has no
-// spectrum test on this branch, and the opt-in rule above exists precisely so
-// that a package does not get a file nothing imports.
+// third consumer and deliberately does not carry a copy yet: it grew its own
+// `spectrum.ts` in parallel, pinned to the two sawtooth rows its audit
+// published, and adopting this one has to be a deliberate step that re-pins
+// those numbers rather than a `cp` performed by a merge.
 const spectrumSource = readFileSync(join(root, "scripts/_spectrum.ts"), "utf8");
 const spectrumPackages = packages.filter((pkg) =>
   existsSync(join(root, "packages", pkg, "src/_spectrum.ts")),

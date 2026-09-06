@@ -11,6 +11,7 @@ export function Slider({
   valueClassName,
   param,
   units,
+  defaultValue,
 }: {
   label: string;
   min?: number;
@@ -22,6 +23,13 @@ export function Slider({
   inputClassName?: string;
   valueClassName?: string;
   units?: string;
+  /**
+   * Slider position to return to when the reset button is pressed, in the
+   * *input's* units - so it goes through `transform` exactly like a drag does.
+   * Omit it and no button is rendered, which is why every other example is
+   * untouched by this.
+   */
+  defaultValue?: number;
 }) {
   const [value, setValue] = useState(param.value);
 
@@ -46,8 +54,34 @@ export function Slider({
         }}
       />
       <div className={valueClassName}>
-        {transform(value).toFixed(2)}
-        {units}
+        {defaultValue === undefined ? (
+          <>
+            {transform(value).toFixed(2)}
+            {units}
+          </>
+        ) : (
+          <span className="inline-flex items-center gap-2">
+            <span>
+              {transform(value).toFixed(2)}
+              {units}
+            </span>
+            <button
+              type="button"
+              aria-label={`Reset ${label} to default`}
+              title={`Reset to ${transform(defaultValue).toFixed(2)}${units ?? ""}`}
+              className={
+                "border px-2 py-1 rounded bg-fd-secondary leading-none " +
+                (value === defaultValue ? "opacity-40" : "")
+              }
+              onClick={() => {
+                setValue(defaultValue);
+                param.value = transform(defaultValue);
+              }}
+            >
+              ⟲
+            </button>
+          </span>
+        )}
       </div>
     </>
   );

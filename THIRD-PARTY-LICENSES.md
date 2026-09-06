@@ -141,9 +141,75 @@ dedication). No notice is required; the credit is a courtesy.
 
 ### @synthlet/polyblep-oscillator
 
-The PolyBLEP correction follows
-[sndkit](https://paulbatchelor.github.io/sndkit/blep/) by Paul Batchelor, under
-The Unlicense. No notice required.
+This package derives **structure** from one third-party source and **ideas** from
+five papers. The two are recorded separately because they carry different
+obligations: the first owes a notice, the second owes a citation.
+
+**What it cites.** The literature the design follows, and what each paper is
+responsible for:
+
+| What | Citation |
+| --- | --- |
+| The 2-point quadratic PolyBLEP residual | V. Välimäki and A. Huovilainen, *Antialiasing Oscillators in Subtractive Synthesis*, IEEE Signal Process. Mag. 24(2), pp. 116–125, 2007 |
+| The 4-point B-spline order, and the cost/benefit argument | V. Välimäki, J. Pekonen and J. Nam, *Perceptually Informed Synthesis of Bandlimited Classical Waveforms Using Integrated Polynomial Interpolation*, J. Acoust. Soc. Am. 131(1), pp. 974–986, 2012 (Tables VII–IX) |
+| BLAMP — correcting slope discontinuities | J. Kleimola and V. Välimäki, *Reducing Aliasing from Synthetic Audio Signals Using Polynomial Transition Regions*, IEEE Signal Process. Lett. 19(2), pp. 67–70, 2012; F. Esqueda, V. Välimäki and S. Bilbao, *Rounding Corners with BLAMP*, Proc. DAFx-16, pp. 121–128, 2016 |
+| The two rules that make polynomial hard sync work | Kleimola and Välimäki 2012, §IV |
+| The C¹ caution for a synced triangle, and MinBLEP | E. Brandt, *Hard Sync Without Aliasing*, Proc. ICMC, 2001 |
+
+**The residuals were derived, not transcribed.** `src/_blep.ts` obtains its BLEP
+and BLAMP residuals by integrating the centred cardinal B-spline once and twice,
+from the spline's definition; the derivation is in that file's header and
+`src/blep.test.ts` asserts its three characteristic properties (continuity at the
+segment joins, the value at the origin, and zero area). **No coefficient table
+was copied out of any paper.** Välimäki, Pekonen & Nam's own Tables VII–IX were
+deliberately not transcribed: an earlier attempt to implement them from a
+PDF→markdown conversion produced worse-than-naive aliasing, while the same
+framework reproduced a hand-derived residual to the decimal. The
+table above is therefore **intellectual credit, not the provenance of code** — the
+same standing as the `@synthlet/flex-audio-buffer-source` row under
+[Provenance of every other package](#provenance-of-every-other-package). Brandt
+2001 in particular contains no polynomial at all; it is a windowed-sinc table BLEP
+plus MinBLEP, and it is cited here for hard sync, not for the residual.
+
+**Retired: the sndkit credit.** This entry used to read, in full: "The PolyBLEP
+correction follows sndkit by Paul Batchelor, under The Unlicense. No notice
+required." The 2-point correction it described was deleted when the oscillator was
+rewritten on a discontinuity scheduler with 4-point B-spline residuals, so there is
+no longer any code the credit could attach to. sndkit is released under The
+Unlicense, a public domain dedication, so no notice was ever owed and none lapses
+with the removal.
+
+**What it derives from source** is below, and it is the only part of this entry
+that carries a licence obligation.
+
+The oscillator's **scheduling structure** derives from
+[stmlib / eurorack](https://github.com/pichenettes/eurorack) by Mutable
+Instruments — specifically `stages/oscillator.h`, © 2017 Emilie Gillet, under
+the MIT licence. Notice required. See
+[stmlib / eurorack (MIT)](#stmlib--eurorack-mit) below.
+
+What was taken, and it is structure rather than mathematics:
+
+- the `this_sample` / `next_sample` scheme, in which a discontinuity detected on
+  one sample writes a correction into samples already computed but not yet
+  emitted, so the correction is placed from where the phase actually landed
+  rather than predicted from the increment. `src/dsp.ts` generalises the one
+  pending sample to a four-slot ring, because the 4-point kernel's support is
+  ±2 samples rather than ±1;
+- the `high_ ^ (phase_ < pw)` edge test for the discontinuity that does not sit
+  at the cycle boundary (`oscillator.h:187`, `:217`);
+- the `discontinuity = (slope_up + slope_down) * frequency` recipe for scaling a
+  corner correction by the slope change per sample (`oscillator.h:180-215`);
+- the increment cap `kMaxFrequency = 0.25f` (`oscillator.h:53`).
+
+What was **not** taken: the kernels. stmlib's `ThisBlepSample`,
+`NextBlepSample`, `ThisIntegratedBlepSample` and `NextIntegratedBlepSample` are
+not used and are not present. `src/_blep.ts` carries B-spline residuals derived
+by integration, from the definition of the cardinal B-spline — the derivation is
+in that file's header and `src/blep.test.ts` asserts its three characteristic
+properties. The choice is measured, not stylistic: at 2-point order stmlib's
+integrated kernel scores 3–7 dB better than the cubic B-spline, and at 4-point
+order the B-spline beats both by a further 10–20 dB.
 
 ### @synthlet/adsr
 
@@ -226,10 +292,15 @@ brute-force full-rate implementation that exists only for the tests.
 
 **Affirmative statement on the reading list.** The root README links a number of
 open-source synthesis projects — Surge, VCV Rack, the Synthesis ToolKit, stmlib,
-`timowest/analogue` and others. Those are reading and inspiration only. No code
-in this repository derives from any of them. This matters most for
-[`timowest/analogue`](https://github.com/timowest/analogue), which carries no
-licence at all: nothing was taken from it.
+`timowest/analogue` and others. **With one exception, recorded above**, those
+are reading and inspiration only, and no code in this repository derives from
+them. The exception is stmlib: `@synthlet/polyblep-oscillator` takes the
+scheduling structure of `stages/oscillator.h` and is listed under
+[Derivations](#synthletpolyblep-oscillator) with the MIT notice that
+requires.
+Nothing derives from Surge, VCV Rack or the Synthesis ToolKit. This matters most
+for [`timowest/analogue`](https://github.com/timowest/analogue), which carries
+no licence at all: nothing was taken from it.
 
 ---
 
@@ -291,6 +362,32 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+### stmlib / eurorack (MIT)
+
+Applies to `polyblep-oscillator`, whose discontinuity scheduler derives from
+`stages/oscillator.h`. Copyright 2017 Emilie Gillet
+(emilie.o.gillet@gmail.com).
+
+```
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
 ```
 
 ### Common-DSP (MIT)
