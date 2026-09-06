@@ -133,10 +133,13 @@ describe.each(delayPackages)("%s", (pkg) => {
 
 // The measuring instrument is copied the same way, and is the only shared file
 // here that no shipped code imports: it exists so that two packages' alias-SNR
-// and spectrum numbers are comparable. `polyblep-oscillator` is the obvious
-// third consumer and deliberately does not carry a copy yet - it has no
-// spectrum test on this branch, and the opt-in rule above exists precisely so
-// that a package does not get a file nothing imports.
+// and spectrum numbers are comparable. `granite` is the third, and its reading
+// is a new one - the modulation depth of a grain stream, taken from the spectrum
+// of the squared signal - so its FFT and window have to be the same ones the
+// other two are calibrated against. `polyblep-oscillator` is the obvious next
+// consumer and deliberately does not carry a copy yet: it has no spectrum test
+// on this branch, and the opt-in rule above exists precisely so that a package
+// does not get a file nothing imports.
 const spectrumSource = readFileSync(join(root, "scripts/_spectrum.ts"), "utf8");
 const spectrumPackages = packages.filter((pkg) =>
   existsSync(join(root, "packages", pkg, "src/_spectrum.ts")),
@@ -144,7 +147,11 @@ const spectrumPackages = packages.filter((pkg) =>
 
 describe("the measuring instrument", () => {
   it("is shared by every package whose tests measure a spectrum", () => {
-    expect(spectrumPackages).toEqual(["digital-delay", "wavetable-oscillator"]);
+    expect(spectrumPackages).toEqual([
+      "digital-delay",
+      "granite",
+      "wavetable-oscillator",
+    ]);
   });
 });
 

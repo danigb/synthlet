@@ -3,7 +3,8 @@ import type { ParamDescriptor } from "./_worklet";
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `Granite.descriptors`.
 //
-// The order is `update()`'s argument order, so it is load-bearing.
+// The order is `update()`'s argument order, so it is load-bearing. Each spread
+// sits beside the value it spreads.
 //
 // Every one is k-rate, and that is a decision rather than a default. Grains are
 // born at arbitrary sample offsets inside a block, so a-rate would be *honest*
@@ -12,9 +13,40 @@ import type { ParamDescriptor } from "./_worklet";
 // at this parameter count; `pitch` and `position` are the two to revisit if
 // audio-rate modulation of them proves interesting.
 //
-// Two more controls are not here because a parameter cannot resize an
-// allocation: `maxGrains` and `bufferSeconds` are `processorOptions`, fixed at
-// construction. See `dsp.ts`.
+// Three more controls are not here because a parameter cannot resize an
+// allocation or reseed a generator: `maxGrains`, `bufferSeconds` and `seed` are
+// `processorOptions`, fixed at construction. See `dsp.ts`.
+//
+// ---------------------------------------------------------------------------
+// On the spreads, of which there are five.
+//
+// The model is Truax 1994's: "the user specifies the average or minimum value
+// of the control variable and a range within which individual parameter choices
+// may be randomly made." Every one is drawn **once per grain, at activation**,
+// which is EC2's thesis rather than a convenience: "some granular
+// implementations send all generated grains through a common effects chain.
+// This homogenizes the granular texture... it is more interesting from an
+// aesthetic standpoint to articulate heterogeneity at the micro time scale of
+// individual grains."
+//
+// They do not all mean the same shape of range, and the differences are forced
+// rather than chosen. Each is stated again beside its own parameter:
+//
+// - **A total width, centred**: `durationSpread`, `pitchSpread`. A `pitchSpread`
+//   of 12 spans one octave, not two.
+// - **A half width, centred**: `panSpread`. `pan` is already bipolar on +/-1, so
+//   a total width would put the full field out of reach at the knob's top.
+// - **One-sided**: `spray` reaches further back only, `levelSpread` downward
+//   only. Truax's "average *or minimum*", and the two cases where the centre is
+//   an edge rather than a middle.
+//
+// **Every one defaults to 0**, so the module is deterministic out of the box and
+// a user hears clean quasi-synchronous granulation before adding stochasticity
+// deliberately - the `karplus-strong` convention that neutral extras cost
+// nothing until turned up. Here that is exact: at every default the output is
+// bit-identical to the module without this ticket in it, which `dsp.test.ts`
+// checks against digests captured before it was written.
+// ---------------------------------------------------------------------------
 export const PARAMS: readonly ParamDescriptor[] = [
   {
     // Grains per second. This is *emission rate*, which is a separate quantity
@@ -61,6 +93,24 @@ export const PARAMS: readonly ParamDescriptor[] = [
     automationRate: "k-rate",
   },
   {
+    // Per-grain duration randomisation, as **a total width** and a fraction of
+    // `duration`: at 1 the grains run from half to one and a half times it.
+    //
+    // Truax 1986 names what it is for, and it is the reason this ticket exists:
+    // "No variation in grain duration (i.e. duration range equals zero)
+    // produces an amplitude modulated signal, whereas even a small range of
+    // variation results in a stochastic texture."
+    //
+    // A width rather than a half-width because a half-width of 1 would reach 0,
+    // and a grain of no length is not a short grain. It is also the convention
+    // `pitchSpread` is pinned to, so the two read alike.
+    name: "durationSpread",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
     // How far back in the recorded past a grain starts, as a fraction of the
     // buffer it can actually reach. This is Truax's "offset", measured backward
     // from now, and it is what makes the buffer a *time* dimension rather than
@@ -81,6 +131,37 @@ export const PARAMS: readonly ParamDescriptor[] = [
     automationRate: "k-rate",
   },
   {
+    // Per-grain randomisation of the read origin, as a fraction of the
+    // reachable buffer, and **one-sided**: grains reach further back than
+    // `position`, never nearer than it.
+    //
+    // Truax: "Varying the offset from grain to grain by means of the offset
+    // range allows each grain to be different and results in a richer aural
+    // effect." Bencina says the same of the stored-sample case: "Each Source's
+    // initial read position can be modulated by a small random factor to
+    // decorrelate source phases and create a more animated timbre."
+    //
+    // One-sided because `position` is an edge rather than a middle - Truax's
+    // "average **or minimum** value" - and because a deviation centred on the
+    // default `position: 0` could only ever cover half the buffer, where the
+    // point of `spray: 1` is that it covers all of it.
+    //
+    // **It is also what makes the gain law true.** Ticket 02 measured the
+    // consequence of its absence: with `pitch: 0` and no spray every grain
+    // reads the *same* delay, so overlapping grains are the same signal and add
+    // coherently, and the level rose 28.23 dB across a rate sweep where the
+    // decorrelated case held to 3.30. `1/sqrt(n-1)` is a power law; this is the
+    // parameter that gives it decorrelated grains to normalise.
+    //
+    // Named for the deviation and not for the origin, so that
+    // `strata` can carry the same name over an absolute file position.
+    name: "spray",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
     // Per-grain transposition in semitones: the playback rate is `2^(pitch/12)`,
     // so the range is two octaves either way. The single largest capability the
     // module did not have - grains were copied 1:1.
@@ -90,18 +171,59 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // semitones is vibrato at a constant depth across the range.
     //
     // It is not signed *rate*: a signed rate spans zero, and rate 0 is freeze,
-    // which is a different feature. Backwards grains arrive as a per-grain
-    // probability in ticket 03 - the same argument
-    // `flex-audio-buffer-source/src/params.ts` makes for its own `reverse`.
+    // which is a different feature. Backwards grains are `reverse` below - the
+    // same argument `flex-audio-buffer-source/src/params.ts` makes for its own
+    // flag.
     //
     // Reading faster than 1x is the case Bencina warns about ("the non-causal
     // case of trying to read 'future samples'"), and it costs grain length: at
     // `pitch: +24` a grain may be shortened to a sixteenth of the buffer. The
-    // clamp is in `dsp.ts` and the tests assert it at every corner.
+    // clamp is in `dsp.ts`, is applied *after* this and `durationSpread` have
+    // been drawn, and the tests assert it at every corner.
     name: "pitch",
     defaultValue: 0,
     minValue: -24,
     maxValue: 24,
+    automationRate: "k-rate",
+  },
+  {
+    // Per-grain pitch randomisation in semitones, as **a total width** centred
+    // on `pitch`: 12 spans one octave, 24 spans two - which is the same two
+    // octaves `pitch` itself reaches, so the two knobs are in the same units at
+    // their tops.
+    //
+    // Truax's third `(centre, range)` pair, and the one that turns a
+    // transposed stream into a chorused one. Small values are a detune; large
+    // ones are the "magnification" texture, where every grain lands somewhere
+    // else in the octave.
+    name: "pitchSpread",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 24,
+    automationRate: "k-rate",
+  },
+  {
+    // The probability that a grain plays backwards. Not a negative playback
+    // rate: EC2 uses a signed rate over [-32, 32] and synthlet cannot, because
+    // an `AudioParam` range is continuous and would have to include 0 - and
+    // rate 0 is freeze, a different feature with its own semantics.
+    // `flex-audio-buffer-source/src/params.ts` argues this in full for its own
+    // `reverse`, and it is the same argument.
+    //
+    // A probability is also the more granular-idiomatic form, and it is
+    // Truax's own freeze-mode trick: "as long as the direction chosen remains
+    // the same throughout a grain that is less than 50 msec with a symmetrical
+    // envelope, there is no difference between forward and reverse in terms of
+    // the aural result." Which is the point - at short durations it costs
+    // nothing, and at long ones it is the whole texture.
+    //
+    // A reversed grain needs more delay headroom than a forward one, because
+    // its playhead runs *away* from the write head rather than with it. See
+    // `dsp.ts`.
+    name: "reverse",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
     automationRate: "k-rate",
   },
   {
@@ -122,8 +244,79 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // The morph is level-neutral by construction: the envelope's mean square is
     // 3/8 at every setting, so `shape` changes the grain's shape and nothing
     // else. `dsp.ts` derives it and `dsp.test.ts` asserts it.
+    //
+    // It has no spread. Not an oversight: the ticket's table does not have one,
+    // and `durationSpread` already varies the envelope's *duration*, which is
+    // most of what a shape spread would be heard as.
     name: "shape",
     defaultValue: 0.5,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // Where the cloud sits in the stereo field: -1 left, 0 centre, +1 right.
+    //
+    // What it *does* depends on the input, which is Clouds'
+    // `granular_sample_player.h:186-204` split and EC2's Pan semantics: a mono
+    // source is placed with a constant-power law, a stereo one is balanced.
+    // Panning a stereo source with a constant-power law would collapse its
+    // image into a point and then move the point.
+    //
+    // **0 is an exact bypass**, both gains exactly 1 rather than a
+    // constant-power law's 0.7071 - or, once scaled to unity at the centre, its
+    // 1.0000000000000002. A stereo placement control that changes the level
+    // when it is not being used is a level control.
+    name: "pan",
+    defaultValue: 0,
+    minValue: -1,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // Per-grain pan randomisation, as **a half width** in pan units and clamped
+    // to the field: at 1 with `pan` centred, grains land anywhere in it.
+    //
+    // A half width rather than a total one because `pan` is already bipolar on
+    // +/-1 while this is 0 to 1: under the total-width reading the knob's top
+    // would span half the field and the full field would be unreachable.
+    //
+    // This is the parameter that turns a stream into a cloud spatially, and it
+    // is nearly free - the pan gains are drawn into the grain at activation and
+    // the render loop multiplies by them either way.
+    name: "panSpread",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // Per-grain gain, and the ceiling `levelSpread` hangs from. 1 is a bypass.
+    //
+    // It is deliberately not a second `wet`: this multiplies each grain *before*
+    // the overlap sum and the normalisation, so with `levelSpread` up it changes
+    // the texture, where `wet` changes the balance.
+    name: "level",
+    defaultValue: 1,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // Per-grain gain randomisation, **downward from `level`**: at 1, grains are
+    // drawn uniformly over the whole range below it.
+    //
+    // Truax 1988's "Future Directions" names its absence as his own
+    // implementation's limitation - "the current implementation does not
+    // include a maximum amplitude parameter for each grain, only a global
+    // amplitude control" - and `level` is that maximum, which is why this is
+    // one-sided. Spraying upward from a `level` of 1 would put grains past full
+    // scale, and spraying upward from anything else would make the knob a level
+    // control at high settings.
+    //
+    // One multiply, which is Truax's own estimate of the cost.
+    name: "levelSpread",
+    defaultValue: 0,
     minValue: 0,
     maxValue: 1,
     automationRate: "k-rate",

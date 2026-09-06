@@ -2,6 +2,7 @@ import {
   createGranulator,
   DEFAULT_BUFFER_SECONDS,
   DEFAULT_MAX_GRAINS,
+  DEFAULT_SEED,
 } from "./dsp";
 import { PARAMS } from "./params";
 
@@ -24,6 +25,7 @@ export class GraniteProcessor extends AudioWorkletProcessor {
       maxGrains: options?.processorOptions?.maxGrains ?? DEFAULT_MAX_GRAINS,
       bufferSeconds:
         options?.processorOptions?.bufferSeconds ?? DEFAULT_BUFFER_SECONDS,
+      seed: options?.processorOptions?.seed ?? DEFAULT_SEED,
     });
     this.u = update;
     this.g = process;
@@ -37,15 +39,23 @@ export class GraniteProcessor extends AudioWorkletProcessor {
   }
 
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
-    // Every parameter is k-rate, so this is six reads per block and the grains
-    // born inside it all see the same control values - which is also what makes
-    // them identical until ticket 03 gives each one its own draw.
+    // Every parameter is k-rate, so this is fourteen reads per block. The grains
+    // born inside the block all see the same control values; what makes them
+    // differ is the draw each one takes from them in `activate()`.
     this.u(
       params.rate[0],
       params.duration[0],
+      params.durationSpread[0],
       params.position[0],
+      params.spray[0],
       params.pitch[0],
+      params.pitchSpread[0],
+      params.reverse[0],
       params.shape[0],
+      params.pan[0],
+      params.panSpread[0],
+      params.level[0],
+      params.levelSpread[0],
       params.wet[0],
     );
 
@@ -53,11 +63,14 @@ export class GraniteProcessor extends AudioWorkletProcessor {
     const outR = outputs[0][1];
     const input = inputs[0];
     if (silence.length < outL.length) silence = new Float32Array(outL.length);
-    // Mono in feeds both lines; anything wider uses its first two channels.
+    // Mono in feeds both lines; anything wider uses its first two channels. The
+    // flag is what the pan law needs and `process` cannot see: with a mono input
+    // the two lines hold the same signal, so a grain is *placed* in the field
+    // with a constant-power law rather than balanced between two channels.
     const inL = input.length > 0 ? input[0] : silence.subarray(0, outL.length);
     const inR = input.length > 1 ? input[1] : inL;
 
-    this.g(inL, inR, outL, outR);
+    this.g(inL, inR, outL, outR, input.length > 1);
     return this.r;
   }
 

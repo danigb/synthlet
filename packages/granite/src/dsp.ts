@@ -76,19 +76,68 @@ const MIN_RISE = 0.05;
 /** Envelope table resolution. 1024 points plus a guard for the interpolator. */
 const ENVELOPE_POINTS = 1024;
 
+/**
+ * The default seed. Two nodes given the same one produce the same cloud, which
+ * is reproducible by design; `index.ts` says to pass different seeds for a
+ * decorrelated stereo pair.
+ */
+export const DEFAULT_SEED = 0x9e3779b9;
+
+/**
+ * mulberry32: 32 bits of state, a full 2^32 period, and good enough that the
+ * distribution tests can assert deciles rather than eyeball a histogram.
+ *
+ * **The library's idiom is `Math.random()`**, and
+ * `wavetable-oscillator/src/stochastic.ts` argues against a shipped generator in
+ * as many words - "shipping a PRNG here would put it in every user's processor
+ * payload to serve a test". That argument loses here: granite draws six values
+ * per grain at up to 2,000 grains a second, and three of its stated criteria are
+ * *distributions* - uniform across an octave, 50% +/- 3% over 2,000 grains,
+ * coverage to within 5% of the buffer's ends - which a global stub cannot make
+ * reproducible across a suite that renders dozens of clouds. Five lines.
+ */
+function createRandom(seed: number) {
+  let state = seed >>> 0;
+  return function random() {
+    state = (state + 0x6d2b79f5) | 0;
+    let t = Math.imul(state ^ (state >>> 15), 1 | state);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+/**
+ * The house comparison form, and the one ticket 02 already used inline: a NaN
+ * fails both tests and falls through to 0 rather than propagating.
+ */
+const clamp01 = (value: number) => (value < 0 ? 0 : value > 1 ? 1 : value);
+
 export type GranulatorConfig = {
   /** Grains allocated at construction. Default 64. */
   maxGrains?: number;
   /** How far back `position` reaches, in seconds. Default 4. */
   bufferSeconds?: number;
+  /** PRNG seed. Default `DEFAULT_SEED`. */
+  seed?: number;
+  /**
+   * Called with each grain as it is activated. The test surface for everything
+   * that is a *distribution* rather than a level; one predictable branch per
+   * grain, never per sample, and no allocation.
+   */
+  onGrain?: (grain: Readonly<Grain>) => void;
 };
 
 /**
  * One grain's whole state, written by `activate()` and read by the render loop.
  * `delay` is the read distance behind the write head and moves by `delayStep`
- * (`1 - ratio`) each sample; `phase` runs 0 to 1 across the grain and peaks at
- * `peak`, whose two sides need the reciprocals beside it; `gainL`/`gainR` are 1
- * until ticket 03 draws them from `pan` and `panSpread`.
+ * each sample - `1 - ratio` forward, `1 + ratio` reversed; `phase` runs 0 to 1
+ * across the grain and peaks at `peak`, whose two sides need the reciprocals
+ * beside it; `gainL`/`gainR` carry the drawn pan and level.
+ *
+ * `ratio` and `reversed` are here for `onGrain` rather than for the render loop,
+ * which needs only `delayStep`. Every field is written once, at activation, and
+ * none is read from a parameter again - EC2's grain-integrity invariant, and the
+ * reason this ticket is a change to `activate()` and nothing else.
  */
 type Grain = {
   delay: number;
@@ -101,6 +150,8 @@ type Grain = {
   invFall: number;
   gainL: number;
   gainR: number;
+  ratio: number;
+  reversed: boolean;
 };
 
 /**
@@ -108,8 +159,8 @@ type Grain = {
  *
  * ```ts
  * const granite = createGranulator(44100);
- * granite.update(40, 60, 0.3, 12, 0.5, 1); // params.ts order
- * granite.process(inL, inR, outL, outR);
+ * granite.update(...values); // params.ts order, fourteen of them
+ * granite.process(inL, inR, outL, outR, stereo);
  * ```
  */
 export function createGranulator(
@@ -153,6 +204,8 @@ export function createGranulator(
       invFall: 2,
       gainL: 1,
       gainR: 1,
+      ratio: 1,
+      reversed: false,
     });
   }
   // Two index lists rather than a scan over the pool: `free` is a stack of
@@ -166,13 +219,30 @@ export function createGranulator(
   let activeCount = 0;
   for (let i = 0; i < maxGrains; i++) free[i] = i;
 
-  // Control values, read once per block by `update()` and never in the loop.
+  const seed = config.seed ?? DEFAULT_SEED;
+  const onGrain = config.onGrain;
+  let random = createRandom(seed);
+
+  // Control values, read once per block by `update()`, drawn from in
+  // `activate()`, and never touched by the render loop.
   let interonset = Infinity;
-  let durationSamples = 0.06 * sampleRate;
+  let duration = 0.06 * sampleRate;
+  let durationSpread = 0;
   let position = 0;
-  let ratio = 1;
+  let spray = 0;
+  let pitch = 0;
+  let pitchSpread = 0;
+  let reverse = 0;
   let peak = 0.5;
+  let pan = 0;
+  let panSpread = 0;
+  let level = 1;
+  let levelSpread = 0;
   let wet = 1;
+  // `pan === 0 && panSpread === 0`, hoisted out of `activate()`.
+  let centred = true;
+  // Whether the two lines hold different signals, which decides the pan law.
+  let stereoInput = false;
 
   let countdown = 0;
   let gain = WINDOW_GAIN;
@@ -186,12 +256,21 @@ export function createGranulator(
     maxDelay: 0,
   };
 
+  /** `params.ts` order, and it is load-bearing: the worklet unpacks it here. */
   function update(
     rate: number,
-    duration: number,
+    duration_: number,
+    durationSpread_: number,
     position_: number,
-    pitch: number,
+    spray_: number,
+    pitch_: number,
+    pitchSpread_: number,
+    reverse_: number,
     shape: number,
+    pan_: number,
+    panSpread_: number,
+    level_: number,
+    levelSpread_: number,
     wet_: number,
   ) {
     // One sample is the floor, so at most one grain is born per sample and the
@@ -204,12 +283,20 @@ export function createGranulator(
     countdown =
       interonset === Infinity ? Infinity : Math.min(countdown, interonset);
 
-    durationSamples = Math.max(1, (duration / 1000) * sampleRate);
-    position = position_ < 0 ? 0 : position_ > 1 ? 1 : position_;
-    ratio = Math.pow(2, pitch / 12);
-    peak =
-      MIN_RISE + (1 - 2 * MIN_RISE) * (shape < 0 ? 0 : shape > 1 ? 1 : shape);
-    wet = wet_ < 0 ? 0 : wet_ > 1 ? 1 : wet_;
+    duration = Math.max(1, (duration_ / 1000) * sampleRate);
+    durationSpread = clamp01(durationSpread_);
+    position = clamp01(position_);
+    spray = clamp01(spray_);
+    pitch = pitch_;
+    pitchSpread = pitchSpread_ > 0 ? pitchSpread_ : 0;
+    reverse = clamp01(reverse_);
+    peak = MIN_RISE + (1 - 2 * MIN_RISE) * clamp01(shape);
+    pan = pan_ < -1 ? -1 : pan_ > 1 ? 1 : pan_;
+    panSpread = clamp01(panSpread_);
+    level = clamp01(level_);
+    levelSpread = clamp01(levelSpread_);
+    wet = clamp01(wet_);
+    centred = pan === 0 && panSpread === 0;
   }
 
   /**
@@ -226,20 +313,46 @@ export function createGranulator(
    *
    * `available` is what is left once both heads are paid for: the play head
    * eats `grainSize*ratio`, the material it covers, and the record head eats
-   * `grainSize`, what it overwrites while the grain plays. `position` scrubs
-   * the remainder, so its reach shrinks as `duration` and `pitch` rise.
+   * `grainSize`, what it overwrites while the grain plays. `position` scrubs the
+   * remainder, so its reach shrinks as `duration` and `pitch` rise.
    *
    * As a delay rather than an absolute index, `start` is just
    * `position*available + grainSize*ratio`, and `readHermite`'s bounds follow by
    * arithmetic rather than by luck: the delay travels linearly from there to
-   * `position*available + grainSize`, staying inside
-   * `[grainSize, bufferSize - grainSize*min(ratio, 1)]`, a subset of
-   * `[1, size - 4]` because `size - 4 >= bufferSize` and `grainSize >= 1`.
-   * `dsp.test.ts` asserts that against an instrumented read rather than
-   * trusting this paragraph.
+   * `position*available + grainSize`, inside
+   * `[grainSize, bufferSize - grainSize*min(ratio, 1)]` and so inside
+   * `[1, size - 4]`, because `size - 4 >= bufferSize` and `grainSize >= 1`.
+   *
+   * **A reversed grain needs its own arithmetic.** Its read position moves at
+   * `-ratio` while the write head still moves at `+1`, so its delay *grows* by
+   * `1 + ratio` where a forward grain's moves by `1 - ratio` - the heads run
+   * apart rather than together, and it needs that much more room:
+   *
+   *     availableReverse = bufferSize - grainSize - (1 + ratio)*samples
+   *     delay            = grainSize + position*availableReverse
+   *
+   * runs from `grainSize` up to `bufferSize - (1 + ratio)`, and stays positive
+   * because the quarter-buffer clamp caps `(2 + ratio)*grainSize` at three
+   * quarters of the buffer. It is written against the *rounded* length: rounding
+   * up by half a sample against a step of up to 17 is eight samples of
+   * overshoot, and there are only four to spare. `dsp.test.ts` asserts the whole
+   * bound against an instrumented read rather than trusting this paragraph.
    */
   function activate() {
     stats.activations++;
+
+    // The six draws happen whether or not their spreads are turned on, always in
+    // this order, and even for a grain about to be dropped - so the stream is a
+    // function of the activation index alone rather than of which spreads are up
+    // or how full the pool is. That is what lets a test hold one parameter's
+    // draws fixed while it sweeps another's.
+    const uDuration = random();
+    const uPitch = random();
+    const uReverse = random();
+    const uSpray = random();
+    const uPan = random();
+    const uLevel = random();
+
     if (freeCount === 0) {
       // **Overflow policy: no free grain, no grain.** No playing grain is
       // stolen - that would break grain integrity, the one invariant this
@@ -249,37 +362,88 @@ export function createGranulator(
       return;
     }
 
-    let grainSize = durationSamples;
+    // Truax's `(centre, range)` model. Both of these are total widths centred on
+    // their parameter, and both are drawn *before* the clamp below, which is the
+    // order the ticket requires: a grain that drew a long duration and a high
+    // pitch is the one the clamp exists for.
+    let grainSize = duration * (1 + durationSpread * (uDuration - 0.5));
+    const ratio = Math.pow(2, (pitch + pitchSpread * (uPitch - 0.5)) / 12);
+    const reversed = uReverse < reverse;
+
     if (ratio > 1) grainSize = Math.min(grainSize, (bufferSize * 0.25) / ratio);
     // And unconditionally, which Clouds does not need and this does: its buffer
     // is fixed where `bufferSeconds` is an option, so a short buffer with a long
     // `duration` would drive `available` negative. At the default it never bites
     // - `duration.maxValue` *is* this quarter.
     grainSize = Math.max(1, Math.min(grainSize, bufferSize * 0.25));
-
-    const available = bufferSize - grainSize * ratio - grainSize;
-    const delay = position * available + grainSize * ratio;
     const samples = Math.max(1, Math.round(grainSize));
+
+    // `spray` reaches further back only: `position` is the near edge of the
+    // cloud, not its middle - Truax's "average *or minimum* value".
+    const origin = clamp01(position + spray * uSpray);
+
+    let delay: number;
+    let delayStep: number;
+    if (reversed) {
+      delay =
+        grainSize + origin * (bufferSize - grainSize - (1 + ratio) * samples);
+      delayStep = 1 + ratio;
+    } else {
+      delay =
+        origin * (bufferSize - grainSize * ratio - grainSize) +
+        grainSize * ratio;
+      delayStep = 1 - ratio;
+    }
+
+    // `level` is Truax's per-grain *maximum* amplitude, so its spread is
+    // one-sided: grains are drawn below it, never above.
+    const grainLevel = level * (1 - levelSpread * uLevel);
+    let gainL = grainLevel;
+    let gainR = grainLevel;
+    if (!centred) {
+      // Clouds' split (`granular_sample_player.h:186-204`), which is also EC2's
+      // Pan semantics: a mono source is *placed* with a constant-power law, a
+      // stereo one *balanced* - panning a stereo source with a constant-power
+      // law would collapse its image to a point and then move the point.
+      //
+      // The law is scaled by sqrt(2) so the centre is unity rather than -3 dB,
+      // which is also why `centred` bypasses it: `sqrt(2)*cos(pi/4)` is
+      // 1.0000000000000002, one ulp off, and a stereo control that moves every
+      // sample when it is not in use is not neutral.
+      const drawn = pan + panSpread * (2 * uPan - 1);
+      const placed = drawn < -1 ? -1 : drawn > 1 ? 1 : drawn;
+      if (stereoInput) {
+        gainL = grainLevel * (placed > 0 ? 1 - placed : 1);
+        gainR = grainLevel * (placed < 0 ? 1 + placed : 1);
+      } else {
+        const theta = (placed + 1) * (Math.PI / 4);
+        gainL = grainLevel * Math.SQRT2 * Math.cos(theta);
+        gainR = grainLevel * Math.SQRT2 * Math.sin(theta);
+      }
+    }
 
     const index = free[--freeCount];
     const g = grains[index];
     g.delay = delay;
-    g.delayStep = 1 - ratio;
+    g.delayStep = delayStep;
     g.remaining = samples;
     g.phase = 0;
     g.phaseInc = 1 / samples;
     g.peak = peak;
     g.invRise = 1 / peak;
     g.invFall = 1 / (1 - peak);
-    g.gainL = 1;
-    g.gainR = 1;
+    g.gainL = gainL;
+    g.gainR = gainR;
+    g.ratio = ratio;
+    g.reversed = reversed;
     active[activeCount++] = index;
 
     // The delay is linear in time, so its two endpoints are its extremes.
-    const end = delay + g.delayStep * (samples - 1);
+    const end = delay + delayStep * (samples - 1);
     stats.minDelay = Math.min(stats.minDelay, delay, end);
     stats.maxDelay = Math.max(stats.maxDelay, delay, end);
     stats.peakActive = Math.max(stats.peakActive, activeCount);
+    if (onGrain) onGrain(g);
   }
 
   /**
@@ -293,7 +457,14 @@ export function createGranulator(
     inR: Float32Array,
     outL: Float32Array,
     outR: Float32Array,
+    /**
+     * Whether the two inputs are different signals. `process` cannot tell -
+     * `worklet.ts` feeds a mono input to both lines - and the pan law needs to
+     * know, so the caller says. Read at activation, never in the loop.
+     */
+    stereo = false,
   ) {
+    stereoInput = stereo;
     const lineL = lines[0];
     const lineR = lines[1];
 
@@ -342,9 +513,17 @@ export function createGranulator(
 
       // Clouds' normalisation: `1/sqrt(n-1)`, the power law for grains that do
       // not correlate with each other, smoothed so a change in the count is not
-      // a step in level. It is off below three grains, which is Clouds' rule and
-      // costs +3 dB at exactly two overlaps - measured, and recorded in
-      // `dsp.test.ts` beside the criterion it is the only miss against.
+      // a step in level. `spray` and `pitchSpread` are what give it decorrelated
+      // grains to normalise - ticket 02 measured 28.23 dB of drift across a rate
+      // sweep without them and 3.30 with, and `dsp.test.ts` measures the
+      // collapse.
+      //
+      // **`> 2` rather than `> 1` is an open question, and Clouds' answer.** The
+      // clause switches the law off at exactly two grains of overlap, where two
+      // decorrelated grains carry twice the power of one - +3.01 dB, which is
+      // the whole of the 0.30 dB by which ticket 02 misses its own rate-sweep
+      // threshold. Changing it would meet that number and depart from the
+      // reference implementation, so it needs a ticket rather than a commit.
       const target =
         activeCount > 2
           ? WINDOW_GAIN / Math.sqrt(activeCount - 1)
@@ -365,6 +544,9 @@ export function createGranulator(
     activeCount = 0;
     countdown = 0;
     gain = WINDOW_GAIN;
+    // Reseeded, not continued: a reset that left the generator where it was
+    // would make two runs of the same render differ.
+    random = createRandom(seed);
     stats.activations = 0;
     stats.dropped = 0;
     stats.peakActive = 0;

@@ -13,12 +13,28 @@ export type GraniteInputs = {
   rate?: ParamInput;
   /** Grain duration in milliseconds, 1 to 1000. Independent of `rate`. */
   duration?: ParamInput;
+  /** Per-grain duration randomisation, 0 to 1, as a total width. */
+  durationSpread?: ParamInput;
   /** How far back grains start, 0 (freshest) to 1 (the reachable end). */
   position?: ParamInput;
+  /** Per-grain read origin randomisation, 0 to 1. Reaches back from `position`. */
+  spray?: ParamInput;
   /** Per-grain transposition in semitones, -24 to +24. */
   pitch?: ParamInput;
+  /** Per-grain pitch randomisation in semitones, 0 to 24, as a total width. */
+  pitchSpread?: ParamInput;
+  /** Probability a grain plays backwards, 0 to 1. */
+  reverse?: ParamInput;
   /** Envelope asymmetry: 0 expodec, 0.5 a symmetric bell, 1 reversed expodec. */
   shape?: ParamInput;
+  /** Stereo centre, -1 to +1. Constant power for mono in, balance for stereo. */
+  pan?: ParamInput;
+  /** Per-grain pan randomisation, 0 to 1, as a half width. */
+  panSpread?: ParamInput;
+  /** Grain gain, 0 to 1. The ceiling `levelSpread` hangs from. */
+  level?: ParamInput;
+  /** Per-grain gain randomisation, 0 to 1. Downward from `level`. */
+  levelSpread?: ParamInput;
   /** Dry/wet, 0 to 1. 0 is an exact bypass. */
   wet?: ParamInput;
   /**
@@ -34,14 +50,30 @@ export type GraniteInputs = {
    * longest grain.
    */
   bufferSeconds?: number;
+  /**
+   * Seed for the per-grain randomisation (default `0x9e3779b9`). Not an
+   * `AudioParam`: it seeds a generator at construction. Two nodes given the same
+   * seed and the same parameters produce the same cloud, which is reproducible
+   * by design - pass different seeds to two nodes to double a source without
+   * correlating them.
+   */
+  seed?: number;
 };
 
 export type GraniteWorkletNode = AudioWorkletNode & {
   rate: AudioParam;
   duration: AudioParam;
+  durationSpread: AudioParam;
   position: AudioParam;
+  spray: AudioParam;
   pitch: AudioParam;
+  pitchSpread: AudioParam;
+  reverse: AudioParam;
   shape: AudioParam;
+  pan: AudioParam;
+  panSpread: AudioParam;
+  level: AudioParam;
+  levelSpread: AudioParam;
   wet: AudioParam;
   dispose(): void;
 };
@@ -50,8 +82,17 @@ export type GraniteWorkletNode = AudioWorkletNode & {
  * A granular delay: a cloud of overlapping, windowed, pitch-shifted reads of
  * the last few seconds of its input.
  *
+ * Every per-grain quantity is a `(centre, spread)` pair, drawn once per grain -
+ * Truax's control model. Every spread defaults to 0, where the module is
+ * deterministic and every grain is identical; turning them up is what makes a
+ * cloud out of a stream.
+ *
  * ```ts
  * const granite = Granite(ac, { rate: 40, duration: 60, pitch: 12 });
+ * const cloud = Granite(ac, {
+ *   rate: 80, duration: 40, durationSpread: 0.4,
+ *   spray: 0.3, pitchSpread: 7, panSpread: 1,
+ * });
  * source.connect(granite).connect(ac.destination);
  * ```
  */
@@ -68,6 +109,7 @@ export const Granite = createWorkletConstructor<
     processorOptions: {
       maxGrains: inputs.maxGrains,
       bufferSeconds: inputs.bufferSeconds,
+      seed: inputs.seed,
     },
   }),
 });

@@ -7,6 +7,7 @@ import {
   DEFAULT_MAX_GRAINS,
   type GranulatorConfig,
 } from "./dsp";
+import { magnitudes } from "./_spectrum";
 import { PARAMS } from "./params";
 
 // The first tests this package has had, and the argument that the rewrite
@@ -29,16 +30,39 @@ const DEFAULTS = Object.fromEntries(
 type Settings = {
   rate: number;
   duration: number;
+  durationSpread: number;
   position: number;
+  spray: number;
   pitch: number;
+  pitchSpread: number;
+  reverse: number;
   shape: number;
+  pan: number;
+  panSpread: number;
+  level: number;
+  levelSpread: number;
   wet: number;
 };
 
 /** Parameters in `update()` order. */
 const values = (over: Partial<Settings> = {}) => {
   const s = { ...DEFAULTS, ...over };
-  return [s.rate, s.duration, s.position, s.pitch, s.shape, s.wet] as const;
+  return [
+    s.rate,
+    s.duration,
+    s.durationSpread,
+    s.position,
+    s.spray,
+    s.pitch,
+    s.pitchSpread,
+    s.reverse,
+    s.shape,
+    s.pan,
+    s.panSpread,
+    s.level,
+    s.levelSpread,
+    s.wet,
+  ] as const;
 };
 
 // ---------------------------------------------------------------------------
@@ -87,9 +111,11 @@ function render(
   input: Float32Array,
   over: Partial<Settings> = {},
   config: GranulatorConfig = {},
+  rightInput?: Float32Array,
 ) {
   const dsp = createGranulator(SAMPLE_RATE, config);
   const args = values(over);
+  const source = rightInput ?? input;
   const left = new Float32Array(input.length);
   const right = new Float32Array(input.length);
   for (let n = 0; n < input.length; n += BLOCK) {
@@ -97,9 +123,10 @@ function render(
     dsp.update(...args);
     dsp.process(
       input.subarray(n, n + size),
-      input.subarray(n, n + size),
+      source.subarray(n, n + size),
       left.subarray(n, n + size),
       right.subarray(n, n + size),
+      rightInput !== undefined,
     );
   }
   return { left, right, dsp };
@@ -692,5 +719,568 @@ describe("createGranulator configuration", () => {
     dsp.update(...values({ rate: 0 }));
     dsp.process(silent, silent, left, right);
     expect(rms(left)).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Ticket 03: the per-grain draws.
+// ---------------------------------------------------------------------------
+
+/** FNV-1a over the raw float32 bytes: changes if any bit of any sample does. */
+function digest(...signals: Float32Array[]) {
+  let hash = 0x811c9dc5;
+  for (const signal of signals) {
+    const bytes = new Uint8Array(
+      signal.buffer,
+      signal.byteOffset,
+      signal.byteLength,
+    );
+    for (let i = 0; i < bytes.length; i++) {
+      hash = Math.imul(hash ^ bytes[i], 0x01000193) >>> 0;
+    }
+  }
+  return hash >>> 0;
+}
+
+/**
+ * Modulation depth at `hz`, in dB relative to DC.
+ *
+ * A grain stream over steady noise has no spectral *line* at the grain rate to
+ * read: with every grain reading the same delay the output is `x(t - d)` times a
+ * periodic envelope, which is a broadband signal times a periodic one, so the
+ * periodicity lives in the amplitude and not in the spectrum. Squaring
+ * demodulates it - the envelope's own spectrum then appears around DC - and
+ * normalising by the DC bin makes the reading a depth rather than a level.
+ */
+function modulationDepth(signal: Float32Array, hz: number) {
+  const squared = new Float32Array(signal.length);
+  for (let i = 0; i < signal.length; i++) squared[i] = signal[i] * signal[i];
+  const spectrum = magnitudes(squared);
+  const bin = Math.round((hz * spectrum.length * 2) / SAMPLE_RATE);
+  let peak = 0;
+  for (let i = bin - 3; i <= bin + 3; i++) peak = Math.max(peak, spectrum[i]);
+  return db(peak / spectrum[0]);
+}
+
+/** Collects every grain the render activates, through the `onGrain` hook. */
+function grainsOf(
+  input: Float32Array,
+  over: Partial<Settings>,
+  config: GranulatorConfig = {},
+) {
+  const collected: {
+    ratio: number;
+    delay: number;
+    reversed: boolean;
+    gainL: number;
+    gainR: number;
+  }[] = [];
+  render(input, over, {
+    ...config,
+    onGrain: (g) =>
+      collected.push({
+        ratio: g.ratio,
+        delay: g.delay,
+        reversed: g.reversed,
+        gainL: g.gainL,
+        gainR: g.gainR,
+      }),
+  });
+  return collected;
+}
+
+describe("createGranulator neutrality at every spread of 0", () => {
+  // The first Success Criterion, and the one that protects every measurement
+  // ticket 02 made: with all spreads at their defaults the module must be the
+  // module ticket 02 shipped, bit for bit.
+  //
+  // These are not a self-comparison. Each digest is an FNV-1a hash of the raw
+  // float32 bytes of both output channels, captured from commit 3726675 - the
+  // ticket 02 engine - **before this ticket was written**, over 3 s of the LCG
+  // noise below, mono, in 128-sample blocks at 44.1 kHz. The two sample values
+  // beside each are there to say *how* a failure differs, since a hash cannot.
+  const REFERENCE = [
+    {
+      settings: {
+        rate: 20,
+        duration: 60,
+        position: 0,
+        pitch: 0,
+        shape: 0.5,
+        wet: 1,
+      },
+      hash: 98656005,
+      left: -0.602084755897522,
+      right: -0.8468283414840698,
+    },
+    {
+      settings: {
+        rate: 200,
+        duration: 37,
+        position: 0.4,
+        pitch: 7,
+        shape: 0.3,
+        wet: 0.8,
+      },
+      hash: 3286732113,
+      left: 0.822606086730957,
+      right: -0.198823481798172,
+    },
+    {
+      settings: {
+        rate: 800,
+        duration: 12,
+        position: 0.25,
+        pitch: -13,
+        shape: 0.9,
+        wet: 1,
+      },
+      hash: 159130593,
+      left: -0.7767186164855957,
+      right: 0.6823664903640747,
+    },
+  ];
+
+  it.each(REFERENCE)(
+    "reproduces ticket 02 exactly at $settings.rate grains/s",
+    ({ settings, hash, left, right }) => {
+      const rendered = render(noise(SAMPLE_RATE * 3), settings);
+      expect([
+        digest(rendered.left, rendered.right),
+        rendered.left[100000],
+        rendered.right[120000],
+      ]).toEqual([hash, left, right]);
+    },
+  );
+
+  it("draws the same stream whatever the spreads are set to", () => {
+    // The draws are unconditional and ordered, so the sequence a grain sees is a
+    // function of its activation index alone. Two renders that differ only in
+    // which spread is turned up therefore draw the same numbers, which is what
+    // makes the measurements below comparable to each other.
+    const settings = { rate: 200, spray: 0.5 };
+    const a = grainsOf(noise(SAMPLE_RATE), settings);
+    const b = grainsOf(noise(SAMPLE_RATE), { ...settings, levelSpread: 1 });
+    expect(a.map((g) => g.delay)).toEqual(b.map((g) => g.delay));
+  });
+});
+
+describe("createGranulator durationSpread", () => {
+  // Truax 1986 is the claim under test: "No variation in grain duration (i.e.
+  // duration range equals zero) produces an amplitude modulated signal, whereas
+  // even a small range of variation results in a stochastic texture."
+  //
+  // It is *half* true here, and the half that is not is worth stating, because
+  // the difference is architectural rather than a defect. **In Truax's
+  // implementation the emission rate was derived from the grain duration** -
+  // "the program calculates an average delay time based on the average grain
+  // duration and number of simultaneous grain streams" - so varying the duration
+  // varied the *onsets* too. granite separates the two, which is Bencina's
+  // structural point and the reason `rate` and `duration` are independent
+  // parameters. So `durationSpread` varies the envelopes over a grid of onsets
+  // that stays exactly periodic, and the periodic component that survives is
+  // what ticket 04's `jitter` exists to remove - its own criterion, a >= 15 dB
+  // drop at the same 100 Hz, is the one aimed at this.
+  const SECONDS = 4;
+  const input = noise(SAMPLE_RATE * SECONDS);
+  const STEADY = SAMPLE_RATE;
+
+  const depth = (duration: number, durationSpread: number, spray = 0) => {
+    const rendered = render(input, {
+      rate: 100,
+      duration,
+      durationSpread,
+      spray,
+    });
+    return {
+      modulation: modulationDepth(rendered.left.subarray(STEADY), 100),
+      level: db(rms(rendered.left, STEADY)),
+    };
+  };
+
+  it("has nothing to remove at the ticket's own operating point, and says why", () => {
+    // `rate: 100` with `duration: 20` ms is a hop of exactly half a grain, and
+    // the envelope at `shape: 0.5` is exactly a Hann window. **Hann is COLA at
+    // 50% overlap**: the overlap-add sum is constant, so ticket 02 already emits
+    // no modulation there. Measured at `durationSpread: 0`: **-36.63 dB**
+    // relative to DC, which is the numerical floor, against -18.01 dB at
+    // `duration: 23` and -10.05 dB at `duration: 15`, neither of which is an
+    // integer overlap.
+    //
+    // The ticket asks for a 12 dB drop from there. There is no 12 dB to drop,
+    // and breaking the COLA condition can only raise it: measured **-17.09 dB**
+    // at `durationSpread: 0.5`, which is 19.54 dB the other way.
+    const flat = depth(20, 0);
+    const sprayed = depth(20, 0.5);
+    console.log(
+      `durationSpread at rate 100/dur 20: 0 -> ${flat.modulation.toFixed(2)}, ` +
+        `0.5 -> ${sprayed.modulation.toFixed(2)} dB`,
+    );
+    expect(flat.modulation).toBeLessThan(-30);
+    expect(sprayed.modulation).toBeGreaterThan(flat.modulation);
+  });
+
+  it("decorrelates what it can where there is modulation to decorrelate", () => {
+    // `duration: 15` is 1.5 grains of overlap, so no COLA and a real -10.05 dB
+    // of modulation to work on. Measured across the knob: -10.05, -8.94, -10.63,
+    // -13.26, **-17.08** dB at 0, 0.25, 0.5, 0.75, 1 - a **7.03 dB** drop at the
+    // top, and 0.58 dB at the 0.5 the ticket names. Not the 12 dB it asks for,
+    // and the reason is in this block's header: the onsets stay periodic.
+    const levels = [0, 0.25, 0.5, 0.75, 1].map((spread) => depth(15, spread));
+    console.log(
+      `durationSpread at rate 100/dur 15: ${levels
+        .map((l) => l.modulation.toFixed(2))
+        .join(", ")} dB`,
+    );
+    expect(levels[0].modulation - levels[4].modulation).toBeGreaterThan(6);
+    // Monotone once past the quarter point, which is the shape of the effect.
+    expect(levels[4].modulation).toBeLessThan(levels[3].modulation);
+    expect(levels[3].modulation).toBeLessThan(levels[2].modulation);
+  });
+
+  it("leaves the broadband level alone, once the grains are decorrelated", () => {
+    // The ticket's second clause: broadband RMS must move by less than 1 dB
+    // across the sweep. It does - **0.62 dB** at every duration measured - but
+    // only with a little `spray` in. At `spray: 0` it moves **2.44 dB**, and
+    // that is ticket 02's coherent case again rather than anything to do with
+    // duration: with every grain reading the same delay the overlap sum is an
+    // amplitude sum, so changing the envelopes changes the level. It is the same
+    // root cause as the 28.23 dB rate sweep, and it has the same fix.
+    const coherent = [0, 0.25, 0.5, 0.75, 1].map((sp) => depth(20, sp).level);
+    const decorrelated = [0, 0.25, 0.5, 0.75, 1].map(
+      (sp) => depth(20, sp, 0.25).level,
+    );
+    const swing = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
+    console.log(
+      `durationSpread level swing: spray 0 -> ${swing(coherent).toFixed(2)} dB, ` +
+        `spray 0.25 -> ${swing(decorrelated).toFixed(2)} dB`,
+    );
+    expect(swing(decorrelated)).toBeLessThan(1);
+  });
+
+  it("is neutral at 0: every grain is exactly `duration` long", () => {
+    const grains = grainsOf(noise(SAMPLE_RATE), { rate: 500, duration: 37 });
+    const expected = Math.round((37 / 1000) * SAMPLE_RATE);
+    const dsp = createGranulator(SAMPLE_RATE);
+    expect(dsp.bufferSize).toBeGreaterThan(expected);
+    expect(new Set(grains.map((g) => g.delay)).size).toBe(1);
+  });
+});
+
+describe("createGranulator pitchSpread", () => {
+  it("spans one octave at 12 semitones, uniformly", () => {
+    // `duration: 20` is 40 grains of overlap against the pool of 64, so all 2,000
+    // are emitted and none is dropped - the density criterion's own setting.
+    const grains = grainsOf(noise(SAMPLE_RATE), {
+      rate: 2000,
+      duration: 20,
+      pitchSpread: 12,
+    });
+    expect(grains.length).toBeGreaterThan(1900);
+
+    // The spread is a *total width* centred on `pitch`, which is what makes 12
+    // one octave rather than two - the ticket's own criterion pins it.
+    const ratios = grains.map((g) => g.ratio);
+    const span = Math.max(...ratios) / Math.min(...ratios);
+    console.log(
+      `pitchSpread 12: ratio span ${span.toFixed(4)} (one octave is 2)`,
+    );
+    expect(span).toBeGreaterThan(2 * 0.95);
+    expect(span).toBeLessThan(2 * 1.05);
+
+    // Uniform in **semitones**, which is the unit the parameter is in; ratios
+    // are then log-uniform. Asserted by decile occupancy rather than by eye.
+    const deciles = new Array(10).fill(0);
+    for (const ratio of ratios) {
+      const semitones = 12 * Math.log2(ratio); // -6 .. +6
+      deciles[Math.min(9, Math.floor(((semitones + 6) / 12) * 10))]++;
+    }
+    const expected = grains.length / 10;
+    console.log(
+      `pitchSpread deciles: ${deciles.join(", ")} (expected ${expected})`,
+    );
+    // Measured worst decile: 172 against 200, 14.0% off. The generator is
+    // seeded and the input is fixed, so this number does not move between runs -
+    // the margin is for a future change to the draw order, not for chance.
+    for (const count of deciles) {
+      expect(Math.abs(count - expected) / expected).toBeLessThan(0.15);
+    }
+  });
+
+  it("is neutral at 0: every grain takes the centre exactly", () => {
+    const grains = grainsOf(noise(SAMPLE_RATE), { rate: 500, pitch: 7 });
+    const expected = Math.pow(2, 7 / 12);
+    expect(grains.every((g) => g.ratio === expected)).toBe(true);
+  });
+});
+
+describe("createGranulator spray", () => {
+  it("reaches both ends of the buffer at 1, from the default position", () => {
+    // One-sided, so `spray: 1` covers the whole reachable buffer from
+    // `position: 0`. A symmetric deviation centred on one end could not.
+    const grains = grainsOf(noise(SAMPLE_RATE * 2), {
+      rate: 500,
+      spray: 1,
+    });
+    const dsp = createGranulator(SAMPLE_RATE);
+
+    const grainSize = (60 / 1000) * SAMPLE_RATE;
+    const available = dsp.bufferSize - grainSize - grainSize; // ratio 1
+    const origins = grains.map((g) => (g.delay - grainSize) / available);
+    const low = Math.min(...origins);
+    const high = Math.max(...origins);
+    console.log(
+      `spray 1: origins cover [${low.toFixed(4)}, ${high.toFixed(4)}] of the buffer`,
+    );
+    expect(low).toBeLessThan(0.05);
+    expect(high).toBeGreaterThan(0.95);
+  });
+
+  it("is neutral at 0: every grain starts at the same delay", () => {
+    const grains = grainsOf(noise(SAMPLE_RATE), { rate: 500, position: 0.3 });
+    expect(new Set(grains.map((g) => g.delay)).size).toBe(1);
+  });
+
+  it("violates no causality bound at any corner of the spreads", () => {
+    // Ticket 02's instrumented read, re-run over the corners this ticket adds.
+    const problems: unknown[] = [];
+    let reads = 0;
+    for (const pitch of [-24, 0, 24])
+      for (const pitchSpread of [0, 24])
+        for (const durationSpread of [0, 1])
+          for (const spray of [0, 1])
+            for (const reverse of [0, 1])
+              for (const [position, duration] of [
+                [0, 1],
+                [1, 1000],
+                [0.5, 60],
+              ]) {
+                const dsp = createGranulator(SAMPLE_RATE, {
+                  bufferSeconds: position === 0.5 ? 0.25 : undefined,
+                });
+                const limit = dsp.lines[0].size - 4;
+                for (const line of dsp.lines) {
+                  const original = line.readHermite;
+                  line.readHermite = (delay: number) => {
+                    reads++;
+                    if (!(delay >= 1 && delay <= limit)) {
+                      problems.push([
+                        pitch,
+                        duration,
+                        position,
+                        reverse,
+                        delay,
+                      ]);
+                    }
+                    return original(delay);
+                  };
+                }
+                const args = values({
+                  rate: 500,
+                  duration,
+                  durationSpread,
+                  position,
+                  spray,
+                  pitch,
+                  pitchSpread,
+                  reverse,
+                });
+                const block = noise(BLOCK);
+                const left = new Float32Array(BLOCK);
+                const right = new Float32Array(BLOCK);
+                for (let i = 0; i < SAMPLE_RATE / BLOCK; i++) {
+                  dsp.update(...args);
+                  dsp.process(block, block, left, right);
+                }
+                if (dsp.stats.minDelay < 1 || dsp.stats.maxDelay > limit) {
+                  problems.push([
+                    "stats",
+                    dsp.stats.minDelay,
+                    dsp.stats.maxDelay,
+                  ]);
+                }
+              }
+    console.log(`causality with spreads: ${reads} reads`);
+    expect(problems).toEqual([]);
+    expect(reads).toBeGreaterThan(1e6);
+  });
+});
+
+describe("createGranulator reverse", () => {
+  const share = (reverse: number) => {
+    const grains = grainsOf(noise(SAMPLE_RATE), {
+      rate: 2000,
+      duration: 20,
+      reverse,
+    });
+    expect(grains.length).toBeGreaterThan(1900);
+    return grains.filter((g) => g.reversed).length / grains.length;
+  };
+
+  it("is a probability", () => {
+    const half = share(0.5);
+    console.log(`reverse 0.5: ${(half * 100).toFixed(2)}% of grains backwards`);
+    expect(Math.abs(half - 0.5)).toBeLessThan(0.03);
+    expect(share(0)).toBe(0);
+    expect(share(1)).toBe(1);
+  });
+
+  it("runs a reversed grain's delay the other way", () => {
+    // The delay *grows* by `1 + ratio` where a forward grain's moves by
+    // `1 - ratio`: the two heads run apart rather than together.
+    const grains = grainsOf(noise(SAMPLE_RATE), { rate: 100, reverse: 1 });
+    expect(grains.every((g) => g.reversed)).toBe(true);
+    const forward = grainsOf(noise(SAMPLE_RATE), { rate: 100 });
+    expect(forward.every((g) => !g.reversed)).toBe(true);
+  });
+
+  it("stays bounded and finite with everything turned up", () => {
+    const rendered = render(noise(SAMPLE_RATE * 2), {
+      rate: 1000,
+      duration: 40,
+      durationSpread: 1,
+      spray: 1,
+      pitch: 12,
+      pitchSpread: 24,
+      reverse: 0.5,
+      panSpread: 1,
+      levelSpread: 1,
+    });
+    let peak = 0;
+    for (const sample of rendered.left) {
+      expect(Number.isFinite(sample)).toBe(true);
+      peak = Math.max(peak, Math.abs(sample));
+    }
+    console.log(`everything up: peak ${peak.toFixed(3)}`);
+    expect(peak).toBeLessThan(4);
+  });
+});
+
+describe("createGranulator pan", () => {
+  it("is constant power for a mono source, across the range", () => {
+    const powers: number[] = [];
+    for (const pan of [-1, -0.75, -0.5, -0.25, 0, 0.25, 0.5, 0.75, 1]) {
+      const grains = grainsOf(noise(SAMPLE_RATE), { rate: 200, pan });
+      const power = grains[0].gainL ** 2 + grains[0].gainR ** 2;
+      powers.push(db(power));
+    }
+    console.log(`pan power: ${powers.map((p) => p.toFixed(3)).join(", ")} dB`);
+    expect(Math.max(...powers) - Math.min(...powers)).toBeLessThan(0.5);
+  });
+
+  it("places a mono source, and is exactly neutral at the centre", () => {
+    const centre = grainsOf(noise(SAMPLE_RATE), { rate: 200 })[0];
+    expect([centre.gainL, centre.gainR]).toEqual([1, 1]);
+    const left = grainsOf(noise(SAMPLE_RATE), { rate: 200, pan: -1 })[0];
+    expect(left.gainL).toBeCloseTo(Math.SQRT2, 10);
+    expect(left.gainR).toBeCloseTo(0, 10);
+  });
+
+  it("balances a stereo source instead of placing it", () => {
+    const input = noise(SAMPLE_RATE);
+    const other = noise(SAMPLE_RATE, 99);
+    const collected: { gainL: number; gainR: number }[] = [];
+    render(
+      input,
+      { rate: 200, pan: -1 },
+      {
+        onGrain: (g) => collected.push({ gainL: g.gainL, gainR: g.gainR }),
+      },
+      other,
+    );
+    // Balance, not constant power: hard left leaves L untouched and closes R.
+    expect([collected[0].gainL, collected[0].gainR]).toEqual([1, 0]);
+  });
+
+  it("spreads grains across the field at panSpread 1", () => {
+    const grains = grainsOf(noise(SAMPLE_RATE), {
+      rate: 2000,
+      duration: 20,
+      panSpread: 1,
+    });
+    const ratios = grains.map((g) => Math.atan2(g.gainR, g.gainL));
+    console.log(
+      `panSpread 1: angles ${Math.min(...ratios).toFixed(3)} to ${Math.max(...ratios).toFixed(3)} rad (0 to pi/2 is the field)`,
+    );
+    expect(Math.min(...ratios)).toBeLessThan(0.05);
+    expect(Math.max(...ratios)).toBeGreaterThan(Math.PI / 2 - 0.05);
+  });
+});
+
+describe("createGranulator level", () => {
+  it("spreads downward from level, never above it", () => {
+    const grains = grainsOf(noise(SAMPLE_RATE), {
+      rate: 2000,
+      duration: 20,
+      level: 0.8,
+      levelSpread: 1,
+    });
+    const gains = grains.map((g) => g.gainL);
+    console.log(
+      `levelSpread 1 at level 0.8: [${Math.min(...gains).toFixed(4)}, ${Math.max(...gains).toFixed(4)}]`,
+    );
+    expect(Math.max(...gains)).toBeLessThanOrEqual(0.8);
+    expect(Math.min(...gains)).toBeLessThan(0.8 * 0.02);
+    expect(Math.max(...gains)).toBeGreaterThan(0.8 * 0.98);
+  });
+
+  it("is a plain gain at levelSpread 0", () => {
+    const grains = grainsOf(noise(SAMPLE_RATE), { rate: 200, level: 0.5 });
+    expect(grains.every((g) => g.gainL === 0.5 && g.gainR === 0.5)).toBe(true);
+  });
+});
+
+describe("createGranulator decorrelation, the ticket 02 follow-up", () => {
+  it("collapses the coherent rate sweep once spray is dialled in", () => {
+    // Ticket 02 measured a 28.23 dB drift across a `pitch: 0` rate sweep,
+    // because with no spray every grain reads the *same* delay: overlapping
+    // grains are the same signal and add in amplitude rather than in power, and
+    // `1/sqrt(n-1)` is a power law. This is the measurement that says `spray` is
+    // what makes that law true, and it is the empirical argument for ticket 02's
+    // gain staging.
+    const input = noise(SAMPLE_RATE * 4);
+    const STEADY = SAMPLE_RATE;
+    const reference = rms(input, STEADY, input.length);
+    const rates = [1, 17, 33, 100, 300, 1000];
+
+    const sweep = (spray: number) =>
+      rates.map((rate) =>
+        db(
+          rms(render(input, { rate, duration: 60, spray }).left, STEADY) /
+            reference,
+        ),
+      );
+
+    // The sparse end can never be flat and no gain law can make it so: at
+    // `rate: 1` with 60 ms grains the stream has a 6% duty cycle, so 94% of the
+    // measurement window is silence. So the sweep is read twice - across all six
+    // rates, and across the five from one grain of overlap upward, which is
+    // where "holds its level" is a claim about the gain law rather than about
+    // arithmetic.
+    const dense: Record<string, number> = {};
+    const all: Record<string, number> = {};
+    for (const spray of [0, 0.02, 0.05, 0.1, 0.25, 1]) {
+      const levels = sweep(spray);
+      const swing = (xs: number[]) => Math.max(...xs) - Math.min(...xs);
+      all[spray] = swing(levels);
+      dense[spray] = swing(levels.slice(1));
+      console.log(
+        `spray ${spray}: ${levels.map((l) => l.toFixed(2)).join(", ")} dB - ` +
+          `full ${all[spray].toFixed(2)}, from one overlap ${dense[spray].toFixed(2)}`,
+      );
+    }
+
+    // Measured, from one grain of overlap upward: **16.00 dB at `spray: 0`**,
+    // and **2.92 dB at a spray of 0.02** - two per cent of the buffer is enough
+    // to decorrelate the grains completely, because a grain only has to differ
+    // from its neighbour by more than its own length to be reading somewhere
+    // else. It stays at 2.8-2.9 dB all the way to `spray: 1`, and that residual
+    // is the `active > 2` clause's +3.01 dB at exactly two overlaps and nothing
+    // else - the same number ticket 02 measured on a finer grid with `pitch: 12`
+    // doing the decorrelating instead.
+    expect(dense[0]).toBeGreaterThan(15);
+    for (const spray of [0.02, 0.05, 0.1, 0.25, 1]) {
+      expect(dense[spray]).toBeLessThan(3.1);
+    }
   });
 });
