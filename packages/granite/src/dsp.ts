@@ -19,6 +19,12 @@ import { createDelayLine } from "./_delay";
 // `write()`, the same expression with `-r` is freeze - no special addressing
 // mode, and no branch here today.
 //
+// **The randomness lives in two places, and they are different kinds.** Six
+// draws per *grain* in `activate()` make every grain different (ticket 03); two
+// draws per scheduled *onset* in the loop below scatter the stream in time
+// (ticket 04). They have separate generators, because a grain's draws must not
+// move when a scheduler parameter does - see `scheduleRandom`.
+//
 // **Grain integrity is the data-layout rule**, and it is EC2's: "a grain is
 // immutable after emission; it will play through entirely and it will not skip
 // from one position in the source sound file to another discontinuously." Every
@@ -159,7 +165,7 @@ type Grain = {
  *
  * ```ts
  * const granite = createGranulator(44100);
- * granite.update(...values); // params.ts order, fourteen of them
+ * granite.update(...values); // params.ts order, sixteen of them
  * granite.process(inL, inR, outL, outR, stereo);
  * ```
  */
@@ -222,10 +228,35 @@ export function createGranulator(
   const seed = config.seed ?? DEFAULT_SEED;
   const onGrain = config.onGrain;
   let random = createRandom(seed);
+  /**
+   * A **second** generator, for the scheduler alone: one skip roll and one
+   * jitter draw per scheduled onset, where `random` above serves the six
+   * per-grain draws.
+   *
+   * Two more draws from `random` would displace every grain's draws by two and
+   * change every sample of the output at *every* setting, including at
+   * `jitter: 0, intermittency: 0` where ticket 04 requires bit-identity with
+   * ticket 03. Drawing conditionally would fix that by abandoning ticket 03's
+   * rule that draws are unconditional and ordered. A second generator keeps
+   * both, and adds a third property worth more than either: the *n*th scheduled
+   * onset sees the same `uSkip` whatever `jitter` is set to, so the set of
+   * skipped grains is *identical* at `jitter: 0` and `jitter: 1` and the two
+   * parameters are independent by construction rather than statistically.
+   *
+   * `seed ^ 0x5bf03635` (murmur3's third finalizer constant) rather than
+   * `seed + k`: mulberry32 steps its state by a fixed odd increment, so *any*
+   * two seeds walk the same cycle at some offset - the question is only how far
+   * apart. An XOR puts that offset at no small integer; the expected distance is
+   * of order 2^31 draws, about thirteen days of audio at the module's maximum
+   * 2,000 onsets per second.
+   */
+  let scheduleRandom = createRandom(seed ^ 0x5bf03635);
 
   // Control values, read once per block by `update()`, drawn from in
   // `activate()`, and never touched by the render loop.
   let interonset = Infinity;
+  let jitter = 0;
+  let intermittency = 0;
   let duration = 0.06 * sampleRate;
   let durationSpread = 0;
   let position = 0;
@@ -250,6 +281,9 @@ export function createGranulator(
   /** Instrumentation. Read by the tests; nothing in the DSP branches on it. */
   const stats = {
     activations: 0,
+    /** Onsets `intermittency` rolled away. `activations + skipped` is the
+     * scheduled count, which `jitter` preserves and this one does not. */
+    skipped: 0,
     dropped: 0,
     peakActive: 0,
     minDelay: Infinity,
@@ -259,6 +293,8 @@ export function createGranulator(
   /** `params.ts` order, and it is load-bearing: the worklet unpacks it here. */
   function update(
     rate: number,
+    jitter_: number,
+    intermittency_: number,
     duration_: number,
     durationSpread_: number,
     position_: number,
@@ -276,12 +312,25 @@ export function createGranulator(
     // One sample is the floor, so at most one grain is born per sample and the
     // scheduler needs no inner loop. 2,000 grains/s is 22 samples.
     interonset = rate > 0 ? Math.max(1, sampleRate / rate) : Infinity;
+    jitter = clamp01(jitter_);
+    intermittency = clamp01(intermittency_);
     // `rate: 0` is silence, and an infinite countdown is how the render loop
     // says so without a branch of its own. Otherwise a rate that has just risen
     // takes effect now rather than after the interval it was set during - which
     // is also what lets `rate` come back from 0.
+    //
+    // **The ceiling is the largest interval the parameters can now issue, not
+    // the mean**, and that is Bencina's clause read literally: preempt when the
+    // strategy's parameters are "reduced below the value previously issued by
+    // `nextInteronset()`". With `jitter` up, a legitimate draw runs to
+    // `2*mean`, and clamping it to `mean` at the next block boundary - this
+    // function runs every 128 samples - would cap every above-mean interval and
+    // raise the density by about a third. At `jitter: 0` the factor is exactly
+    // 1, so this is `Math.min(countdown, interonset)` sample for sample.
     countdown =
-      interonset === Infinity ? Infinity : Math.min(countdown, interonset);
+      interonset === Infinity
+        ? Infinity
+        : Math.min(countdown, interonset * (1 + jitter));
 
     duration = Math.max(1, (duration_ / 1000) * sampleRate);
     durationSpread = clamp01(durationSpread_);
@@ -474,9 +523,46 @@ export function createGranulator(
       lineL.write(dryL);
       lineR.write(dryR);
 
+      // Bencina's `nextOnset` counter, with his `nextInteronset()` no longer a
+      // constant:
+      //
+      //     if( --nextOnset == 0 ){
+      //            activateGrain( sequenceStrategy.nextDuration() );
+      //            nextOnset += sequenceStrategy.nextInteronset();
+      //     }
+      //
+      // Both draws happen before either is used, and both happen whatever the
+      // two parameters are set to, so the *pair* is a function of the scheduled
+      // index alone - the same discipline `activate()`'s six draws follow, and
+      // what makes the set of skipped onsets identical at every `jitter`.
       if (--countdown <= 0) {
-        activate();
-        countdown += interonset;
+        const uSkip = scheduleRandom();
+        const uJitter = scheduleRandom();
+
+        // `>=` rather than `<` on the complement, so both endpoints are exact:
+        // `uSkip` is on [0, 1), so 0 never skips and 1 always does. The skip
+        // returns before `activate()`, so it consumes no pool slot, renders no
+        // silent grain and takes none of the six per-grain draws - EC2's
+        // "computational demand varies in proportion to the number of
+        // concurrently active grains rather than grains per second".
+        if (uSkip >= intermittency) activate();
+        else stats.skipped++;
+
+        // Bencina's Direct Interonset Specification over Truax's mean-preserving
+        // range: uniform on `[mean*(1 - jitter), mean*(1 + jitter)]`, which at
+        // `jitter: 1` is his "between zero and twice the average value". The
+        // mean of a uniform draw is its centre, so `rate` still means grains per
+        // second - EC2's "grain density is the same whether the stream is
+        // synchronous or asynchronous", and the whole reason for this form
+        // rather than a one-sided one.
+        //
+        // One sample is the floor, as it is on `interonset` itself, so the
+        // scheduler still needs no inner loop. It is inert at `jitter: 0`, where
+        // the factor is exactly 1 and `interonset` is already at least 1. At the
+        // top of the `rate` range it costs 0.05% of density: at 2,000 grains/s
+        // the mean is 22.05 samples, so at `jitter: 1` about 2.3% of draws land
+        // below one sample and are lifted to it.
+        countdown += Math.max(1, interonset * (1 + jitter * (2 * uJitter - 1)));
       }
 
       let sumL = 0;
@@ -547,7 +633,9 @@ export function createGranulator(
     // Reseeded, not continued: a reset that left the generator where it was
     // would make two runs of the same render differ.
     random = createRandom(seed);
+    scheduleRandom = createRandom(seed ^ 0x5bf03635);
     stats.activations = 0;
+    stats.skipped = 0;
     stats.dropped = 0;
     stats.peakActive = 0;
     stats.minDelay = Infinity;

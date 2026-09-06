@@ -11,6 +11,17 @@ export const registerGraniteWorklet = createRegistrar("GRANITE", PROCESSOR);
 export type GraniteInputs = {
   /** Grains per second, 0 to 2000. 0 emits none. */
   rate?: ParamInput;
+  /**
+   * Onset randomisation, 0 to 1. Each interval is drawn from
+   * `mean * (1 +- jitter)`, so the density is unchanged and only the grid
+   * dissolves. 0 is a metronomic stream.
+   */
+  jitter?: ParamInput;
+  /**
+   * Probability a scheduled grain is skipped, 0 to 1. Unlike `jitter` this
+   * lowers the density; 0.1 to 0.2 is the erratic-contact texture.
+   */
+  intermittency?: ParamInput;
   /** Grain duration in milliseconds, 1 to 1000. Independent of `rate`. */
   duration?: ParamInput;
   /** Per-grain duration randomisation, 0 to 1, as a total width. */
@@ -62,6 +73,8 @@ export type GraniteInputs = {
 
 export type GraniteWorkletNode = AudioWorkletNode & {
   rate: AudioParam;
+  jitter: AudioParam;
+  intermittency: AudioParam;
   duration: AudioParam;
   durationSpread: AudioParam;
   position: AudioParam;
@@ -87,11 +100,16 @@ export type GraniteWorkletNode = AudioWorkletNode & {
  * deterministic and every grain is identical; turning them up is what makes a
  * cloud out of a stream.
  *
+ * `jitter` and `intermittency` are the two that randomise the *stream* rather
+ * than a grain: the first scatters the onsets without changing the density, the
+ * second drops grains and lowers it.
+ *
  * ```ts
  * const granite = Granite(ac, { rate: 40, duration: 60, pitch: 12 });
  * const cloud = Granite(ac, {
  *   rate: 80, duration: 40, durationSpread: 0.4,
  *   spray: 0.3, pitchSpread: 7, panSpread: 1,
+ *   jitter: 0.8, intermittency: 0.15,
  * });
  * source.connect(granite).connect(ac.destination);
  * ```

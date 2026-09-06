@@ -40,6 +40,14 @@ import type { ParamDescriptor } from "./_worklet";
 //   only. Truax's "average *or minimum*", and the two cases where the centre is
 //   an edge rather than a middle.
 //
+// **`jitter` and `intermittency` are not among them**, and the difference is
+// worth stating here because they sit next to `rate` like a sixth and seventh
+// spread. They randomise the *stream* rather than a grain: they are drawn once
+// per scheduled onset rather than once per grain, they are the only two that a
+// grain never carries, and they draw from a second generator so that turning
+// either up leaves every grain's own draws untouched. `dsp.ts` gives the
+// reasoning; the shape of their randomness is stated beside each.
+//
 // **Every one defaults to 0**, so the module is deterministic out of the box and
 // a user hears clean quasi-synchronous granulation before adding stochasticity
 // deliberately - the `karplus-strong` convention that neutral extras cost
@@ -70,6 +78,70 @@ export const PARAMS: readonly ParamDescriptor[] = [
     defaultValue: 20,
     minValue: 0,
     maxValue: 2000,
+    automationRate: "k-rate",
+  },
+  {
+    // How far each onset may wander from the grid, as a fraction of the mean
+    // interval: the next interonset is drawn from `mean * (1 +- jitter)`, so at
+    // 1 it is uniform on `[0, 2*mean]` and at 0 the stream is metronomic.
+    //
+    // This is Bencina's **Direct Interonset Specification** - "interonset =
+    // minInteronset + ( frandom() * (maxInteronset - minInteronset) )" - with
+    // the range written as a centre and a width rather than as a pair, and it
+    // is his own description of both endpoints: equal minimum and maximum
+    // schedule grains periodically, "creating interesting amplitude-modulation
+    // style spectral effects", and a bounded range gives "subjectively
+    // 'smoother' fused textures" than the unbounded `-log(frandom())/D` he
+    // offers beside it. The exponential form is the other paper-sourced option
+    // and is deliberately not this parameter: one draw can stall the stream for
+    // seconds.
+    //
+    // **The `[0, 2*mean]` bound is Truax's, and it is why density is
+    // preserved**: "chooses a random value for the delay of each grain between
+    // zero and twice the average value." A uniform draw centred on the mean has
+    // the mean, so `rate` still means grains per second at every setting - EC2's
+    // separation of this parameter from `intermittency` in as many words, "grain
+    // density is the same whether the stream is synchronous or asynchronous".
+    // `dsp.test.ts` measures it at 0.4%.
+    //
+    // Not a per-grain spread: it is the only randomisation in the module that is
+    // a property of the *stream* rather than of a grain, which is why it draws
+    // from a second generator. See `dsp.ts`.
+    name: "jitter",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "k-rate",
+  },
+  {
+    // The probability that a scheduled grain is not emitted. Roads 2001's
+    // stochastic masking: "we have implemented stochastic masking as a weighted
+    // probability that a pulsar will be emitted at a particular point in a
+    // pulsar train... values between 0.9 and 0.8 produce an interesting
+    // analog-like intermittency, as if there were an erratic contact in the
+    // synthesis circuit."
+    //
+    // **His polarity is the emission probability and this is its complement**,
+    // so his sweet spot is 0.1 to 0.2 here. The parameter is named for the
+    // effect and defaults to 0 with the rest of the module's stochasticity,
+    // which a probability of emission could not do.
+    //
+    // The counterpart to `jitter` and the reason the two are separate
+    // parameters, which is EC2's distinction: "degree of interruption of the
+    // grain stream, independent of whether the stream is synchronous or
+    // asynchronous. **High intermittency lowers grain density.**" So this one
+    // lowers density by construction where `jitter` preserves it, and its
+    // Figure 6 makes exactly that point with four streams at one rate.
+    //
+    // The skip is rolled at the moment of activation and skips the
+    // *activation*: no pool slot is taken and no silent grain is rendered, so
+    // the saving is real - EC2 again, "computational demand varies in
+    // proportion to the number of concurrently active grains rather than grains
+    // per second".
+    name: "intermittency",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
     automationRate: "k-rate",
   },
   {
