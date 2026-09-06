@@ -11,6 +11,7 @@ import {
   HiHatDrum,
   KickDrum,
   MaracasDrum,
+  MembraneDrum,
   SnareDrum,
   TomDrum,
 } from "synthlet";
@@ -36,6 +37,7 @@ const INSTRUMENTS: Record<string, typeof KickDrum> = {
   HandclapDrum,
   TomDrum,
   CongaDrum,
+  MembraneDrum,
 } as const;
 
 type Named<T> = T & { name: string };

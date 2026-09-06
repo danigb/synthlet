@@ -1,31 +1,217 @@
 ---
 title: Karplus-Strong
-description: A Karplus-Strong source node
+description: An extended Karplus-Strong plucked string with a shaped excitation, dispersion, two polarizations and a damping hand
+package: karplus-strong
 ---
-
-`@synthlet/karplus-strong`
 
 import KsExample from "../../../examples/KsExample";
 
-A (currently) very simple Karplus-Strong source node:
+A plucked string is a delay line with a loss in it. What comes back round the
+loop each period is a little quieter and a little darker than what went in, which
+is why a real string's high partials die first and its low ones ring on. That is
+what `KarplusStrong` is, in the sense Karjalainen, Välimäki and Tolonen mean by a
+**single delay loop**: Bank and Välimäki write its loop filter as
+`Hl(z) = Hloss(z)·Hdisp(z)·Hfd(z)`, three independent blocks, and each one is a
+parameter here. `decay` and `brightness` are the loss, `stiffness` is the
+dispersion, and a fourth-order Lagrange fractional read puts the loop at the
+right length without colouring it.
+
+**You do not have to learn fifteen knobs.** The defaults are a plucked steel
+string, and six of the parameters — `stretch`, `blend`, `stiffness`,
+`polarization`, `tension` and `damp` — are neutral at theirs, each one
+bit-identical to the module without that feature and costing nothing until it is
+turned up.
 
 ```ts
-import { registerKarplusStrongWorklet, KarplusStrong } from "synthlet";
+import { KarplusStrong, registerKarplusStrongWorklet } from "synthlet";
 
 const audioContext = new AudioContext();
 await registerKarplusStrongWorklet(audioContext);
 
-const osc = KarplusStrong(audioContext, {});
-osc.connect(audioContext.destination);
+const string = KarplusStrong(audioContext, {
+  frequency: 220, // Hz
+  decay: 2, // seconds to fall 60 dB
+  brightness: 0.6,
+  level: 0.7, // how hard it is plucked
+});
+string.connect(audioContext.destination);
 
-// Trigger the source
-osc.trigger.value = 1;
+// Pluck it: a rising edge on `trigger`
+string.trigger.value = 1;
+string.trigger.value = 0;
 ```
 
 <KsExample />
 
+Pluck it, then drag `Damp` up while it is still ringing, or drag `Frequency` for
+a bend. Neither of those used to do anything, and neither can be shown in a
+screenshot.
+
 ## Parameters
 
-- `trigger`: Plucks the string on the rising edge, when it goes from 0 (or below) to a positive value. Move it back to 0 before plucking again. See [Gates and triggers](/docs/gates-and-triggers).
-- `frequency`: The frequency of the generated sound.
-- `decay`: The decay time of the generated sound.
+- `trigger`: plucks the string on the rising edge, when it goes from 0 (or below)
+  to a positive value. Move it back to 0 before plucking again. See
+  [Gates and triggers](/docs/gates-and-triggers)
+- `frequency`: pitch in Hz [20, 5000], **a-rate** — it moves while the string
+  rings, so a `Param` ramp is portamento and an `Lfo` connected to it is vibrato.
+  The top is measured rather than declared; see below
+- `decay`: **seconds** to fall 60 dB [0.01, 5], the same at every pitch. It used
+  to be a count of periods, and that is a breaking change
+- `brightness`: the loop filter's tilt [0, 1], not its overall loss. 1 is the
+  brightest the loop can be — the damping filter degenerates to a plain delay and
+  only `decay` is left — and 0 is the most a three-tap symmetric filter can damp,
+  a zero at Nyquist
+- `level`: how hard it is plucked [0, 1], as a plain amplitude on the burst. A
+  default pluck peaks at about −13 dBFS; it used to be unconditionally 0 dBFS
+- `dynamics`: the dynamic-level filter [0, 1] — soft plucks are darker, because
+  "the spectral centroid typically rises as plucking becomes more energetic".
+  Sweeping it moves the attack's centroid from 4208 Hz to 1395 Hz at A4. 1
+  bypasses it
+- `position`: where along the string it is plucked [0, 0.5], as a fraction, with
+  0 at the bridge. The comb's first notch lands at `frequency/position`. **0
+  bypasses it**
+- `pickAngle`: pick direction [0, 0.9], a one-pole on the attack. At 0.9 it takes
+  10.3 dB out of the first 5 ms above 5 kHz
+- `stretch`: Karplus and Strong's decay stretching [1, 20] — the high partials
+  ring longer, without moving. 1 is the plain algorithm
+- `blend`: Karplus and Strong's drum algorithm [0, 1]. 1 is the plucked string;
+  1/2 is "drumlike", and there `frequency` stops being a pitch and becomes a drum
+  size; 0 is their "harplike" case, an octave down with only odd harmonics.
+  Below 1, set `position: 0` — the pick-position comb is a string filter
+- `stiffness`: dispersion [0, 1]. A real string is stiff, so partial `k` sits at
+  `k·f₀·√(1+B·k²)` rather than at `k·f₀` — piano, clavinet, steel-string. It
+  moves no decay time and no pitch, and 0 bypasses it exactly
+- `detune`: how far the second polarization is mistuned [0, 1], spanning **0 to
+  10 cents**. Cents rather than Hz, because the mechanism is a difference in
+  effective length, so the beat rate follows the pitch as a real string's does.
+  It does nothing while `polarization` is 0
+- `polarization`: the second polarization's amplitude relative to the first
+  [0, 1], so the value _is_ the level difference, `−20·log10(p)` dB. It is one
+  knob for both beating and the two-stage decay on purpose: made equally strong,
+  the two-stage decay cannot exist. 0 is one string, and free
+- `tension`: the initial pitch glide [0, 1], driven by the pluck's own energy and
+  scaling with `level²`, so a hard pluck bends and a soft one does not. It is a
+  **pitch glide, not a tension-modulation model**: the nonlinearity also couples
+  harmonic modes, and the quasi-static energy approximation this rests on
+  reproduces only the glide. Default 0, because a physically-scaled glide sits
+  near the threshold at which listeners detect one at all
+- `damp`: the other hand [0, 1]. 1 mutes a ringing note in 50 ms, and it does it
+  by **raising the loop's loss** rather than pulling down the output — so a
+  damped string keeps its own spectral tilt on the way down and dies dark, where
+  a fader would take every frequency down together
+
+## `decay` is seconds now
+
+That is a breaking change, and the only one you have to act on. The old knob was
+a count of periods, so one position rang for 3.2 s at 110 Hz and 0.22 s at
+1760 Hz. Convert an existing patch at the pitch you wrote it for:
+
+```ts
+decay * 0.1 * (sampleRate / frequency); // old knob -> seconds
+// decay: 0.1 at A4 and 44.1 kHz was about 1.0 s
+```
+
+The other breaking change needs nothing from you unless you want the old sound
+back: the excitation is no longer an unconditional full-scale noise burst.
+`level: 1, dynamics: 1, position: 0` switches every stage of the excitation
+chain off — the comb, the pick-angle filter and the dynamics filter are all
+pass-throughs at those values — so what is left is the old burst with one
+deliberate difference: it is zero-mean now, which costs about 5% of its RMS.
+
+That difference is not cosmetic and is why it was made. The damping filter's
+taps sum to exactly 1 at every `brightness`, so any DC offset in the excitation
+decayed at exactly the loop gain and outlived every partial. A burst of
+`Math.random() * 2 - 1` has a mean of order `1/√P`, so every pluck left one
+behind: at 1760 Hz the audible tone was gone in 0.33 s while the note's measured
+decay read 0.89 s, because what it was timing was the residue.
+
+## Where `decay` stops being the length of the note
+
+Three places, all of them real and none of them obvious.
+
+**`polarization` outlasts it.** The second polarization is quieter and rings
+three times as long, which is the two-stage decay the feature exists for — so the
+note runs 2.3× past `decay` at a useful mix and 2.7× at equal strength. `decay`
+is the _prompt_ sound's time, which is the component it is applied to.
+
+**`damp` overrides it downward**, geometrically: `decay^(1−damp) · 0.05^damp`.
+
+**And there is a ceiling at high pitch and low brightness.** The loop gain `ρ` is
+derived from the loop's gain at the fundamental, and a symmetric three-tap
+filter's gain there, `G(ω₀) = h₀ + 2h₁·cos ω₀`, is below 1 for every `brightness`
+below 1. Asking for a longer decay than the filter alone can deliver would mean a
+loop gain above 1 at DC, which is an unbounded loop — so the request is
+**clamped rather than approximated**, and the longest reachable decay is
+
+```
+t60max = ln(0.001) / (f₀ · ln(1/G(ω₀)))
+```
+
+At `brightness: 0.5` that is **2045 s at 110 Hz, 32 s at 440, 0.50 s at 1760 and
+22 ms at 5 kHz**. At `brightness: 1` there is no ceiling at all, because the
+filter is then a plain delay. This is a property of a three-tap symmetric filter
+rather than a defect — its gain at ω₀ is 1 only when `h₁ = 0` — and closing the
+gap needs a loop filter designed per note, which this module does not have.
+
+## Why `frequency` stops at 5000 Hz
+
+Because that is where the pitch stops being reliable, measured. 5 kHz is 8.8
+samples of delay: the loop holds four partials, and the worst of sixteen plucks
+lands 2.1 cents out. At 5500 Hz that is 8.3 cents, and at 6000 Hz 21. The 20 kHz
+this module used to declare was 2.2 samples of delay, which is not a string —
+and 2.3 octaves at the bottom of the range were unreachable anyway, because the
+delay line was sized for 100 Hz.
+
+## `stretch`, `stiffness`, and the difference
+
+They get described as the same thing and they are not.
+
+`stretch` lengthens the **decay** of the high partials: the third partial of a
+1760 Hz string decays 3.5× more slowly at `stretch: 4`, and every partial stays
+exactly where it was — measured spread across `stretch: 1…20` is under 0.8 cents.
+
+`stiffness` moves the partial **frequencies** and changes no decay time at all,
+because an allpass cannot. On a 110 Hz string, cents sharp of the harmonic
+series: the 16th partial is 19.6 cents sharp at `stiffness: 0.5` and 91.8 at 1,
+while the fundamental moves 0.004 cents across the whole knob.
+
+Both ship, and they compose.
+
+## What it deliberately isn't
+
+There is no body resonance, no sympathetic coupling, no distortion or amplifier
+feedback, and no per-note loop-filter design. `brightness` is the low-order knob
+in place of the last of those, and the decay ceiling above is its price. A
+solid-body electric guitar needs no body model, which is what this currently is.
+
+For the drum half of Karplus and Strong's paper, turn `blend` to 1/2 — or use
+[`MembraneDrum`](/docs/synths#drums), which is this module with `blend` at 1/2
+and the string filters turned off.
+
+## References
+
+- Karplus & Strong,
+  [_Digital Synthesis of Plucked-String and Drum Timbres_](https://users.soe.ucsc.edu/~karplus/papers/digitar.pdf),
+  CMJ 7(2), 1983 — the algorithm, and `stretch` and `blend` are its own two
+  probabilistic variants
+- Jaffe & Smith,
+  [_Extensions of the Karplus-Strong Plucked-String Algorithm_](https://www.jaffe.com/s/Jaffe-Smith-Extensions-CMJ-1983.pdf),
+  CMJ 7(2), 1983
+- Smith,
+  [_Making Virtual Electric Guitars and Associated Effects Using Faust_](https://ccrma.stanford.edu/realsimple/faust_strings/faust_strings.pdf),
+  CCRMA — the two-zero damping filter, `ρ` from a decay time, and the excitation
+  chain the four pluck parameters are
+- Karjalainen, Välimäki & Tolonen,
+  [_Plucked-String Models: From the Karplus-Strong Algorithm to Digital Waveguides and Beyond_](http://users.spa.aalto.fi/vpv/publications/cmj98.pdf),
+  CMJ 22(3), 1998 — the single-delay-loop structure and dual polarization
+- Bank & Välimäki,
+  [_Robust Loss Filter Design for Digital Waveguide Synthesis of String Tones_](https://home.mit.bme.hu/~bank/publist/spl03.pdf),
+  IEEE SPL 10(1), 2003 — the `Hloss·Hdisp·Hfd` factorisation
+- Rauhala & Välimäki, _Tunable Dispersion Filter Design for Piano Synthesis_,
+  IEEE SPL 13(5), 2006 — `stiffness`
+- Avanzini, Marogna & Bank,
+  [_Efficient Synthesis of Tension Modulation in Strings and Membranes Based on Energy Estimation_](https://home.mit.bme.hu/~bank/publist/jasa12.pdf),
+  JASA 131(1), 2012 — `tension`
+- Järveläinen & Tolonen 2001, Järveläinen & Välimäki 2001, and Järveläinen &
+  Karjalainen 2002 — the listening tests that set this module's tolerances, its
+  `tension` default and `polarization`'s two findings

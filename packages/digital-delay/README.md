@@ -22,8 +22,9 @@ filters or quirks are simulated. Its defining behaviour is that **changing
 `time` preserves pitch**: the read head hands over to a second head and
 crossfades rather than gliding. The other half — tape and bucket-brigade, where
 moving the knob bends pitch because time and bandwidth are physically coupled —
-is a different instrument with a different parameter surface, and is planned as
-`analog-delay`. If you came here wanting tape echo, that is the one to wait for.
+is a different instrument with a different parameter surface, and it is
+[`@synthlet/analog-delay`](https://github.com/danigb/synthlet/tree/main/packages/analog-delay).
+If you came here wanting tape echo, that is the one.
 
 ## Install
 

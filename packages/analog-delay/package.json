@@ -1,15 +1,24 @@
 {
-  "name": "@synthlet/karplus-strong",
-  "version": "0.1.0",
-  "description": "An extended Karplus-Strong plucked string audio worklet",
+  "name": "@synthlet/analog-delay",
+  "version": "0.0.0",
+  "description": "A glide-based tape and bucket-brigade echo with multi-tap heads and a single wear control, as an audio worklet",
   "keywords": [
-    "karplus-strong",
-    "plucked-string",
-    "physical-modeling",
+    "analog",
+    "bbd",
+    "bucket-brigade",
+    "delay",
+    "echo",
     "modular",
     "synthesis",
-    "synthlet"
+    "synthlet",
+    "tape"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/analog-delay"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/analog-delay",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
@@ -27,11 +36,13 @@
     "ts-jest": "^29.1.1"
   },
   "jest": {
-    "preset": "ts-jest"
+    "preset": "ts-jest",
+    "testEnvironment": "node"
   },
   "scripts": {
     "worklet": "esbuild src/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/processor.ts",
     "lib": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
-    "build": "npm run worklet && npm run lib"
+    "build": "npm run worklet && npm run lib",
+    "test": "jest"
   }
 }

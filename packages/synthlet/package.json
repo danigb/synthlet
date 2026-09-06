@@ -22,6 +22,7 @@
   "dependencies": {
     "@synthlet/ad": "^0.1.0",
     "@synthlet/adsr": "^0.1.0",
+    "@synthlet/analog-delay": "^0.0.0",
     "@synthlet/arp": "^0.1.0",
     "@synthlet/chorus": "^0.1.0",
     "@synthlet/clip-amp": "^0.1.0",
@@ -33,16 +34,16 @@
     "@synthlet/granite": "^0.1.0",
     "@synthlet/impulse": "^0.1.0",
     "@synthlet/karplus-strong": "^0.1.0",
+    "@synthlet/level-meter": "^0.1.0",
     "@synthlet/lfo": "^0.1.0",
     "@synthlet/lookahead-limiter": "^0.1.0",
-    "@synthlet/level-meter": "^0.1.0",
     "@synthlet/noise": "^0.1.0",
     "@synthlet/param": "^0.1.0",
     "@synthlet/polyblep-oscillator": "^0.2.0",
     "@synthlet/reverb-delay": "^0.1.0",
     "@synthlet/state-variable-filter": "^0.2.0",
     "@synthlet/virtual-analog-filter": "^0.1.0",
-    "@synthlet/wavetable-oscillator": "^0.1.0"
+    "@synthlet/wavetable-oscillator": "^0.2.0"
   },
   "scripts": {
     "build": "tsup src/index.ts --sourcemap --dts --format esm,cjs",

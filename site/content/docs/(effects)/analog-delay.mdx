@@ -1,0 +1,117 @@
+---
+title: Analog Delay
+description: A glide-based tape and bucket-brigade echo with multi-tap heads and one wear control
+package: analog-delay
+---
+
+import AnalogDelayExample from "../../../examples/AnalogDelayExample";
+
+Moving the delay time on a tape or bucket-brigade machine **bends the pitch of
+everything already in the line**. The Space Echo's Repeat Rate knob is a
+performance control precisely because of that, and the Echoplex's sliding head
+is the same effect made mechanical. `AnalogDelay`'s read head travels to its new
+position rather than handing over to a second one, so it resamples the buffer on
+the way.
+
+There is a second difference that matters more for the model's honesty. In a
+clean digital delay, `time` and `tone` are independent. **In real analog
+hardware they are not.** A bucket-brigade's delay is its stage count over its
+clock rate, so lengthening the delay lowers the clock, which drags the
+anti-alias and reconstruction filters down with it, which darkens every repeat.
+Tape does the same through head gap and transport speed. So there is **no
+`tone` parameter**: bandwidth is derived from `time` and `age`.
+
+```ts
+import { AnalogDelay, AnalogDelayMode } from "synthlet";
+
+const delay = AnalogDelay(audioContext, {
+  time: 0.3, // seconds
+  feedback: 0.6,
+  mix: 0.4,
+  taps: 0.7, // more heads open
+  age: 0.4, // wobblier, dirtier, darker, hissier
+  mode: AnalogDelayMode.Tape,
+});
+
+source.connect(delay).connect(audioContext.destination);
+```
+
+<AnalogDelayExample />
+
+Drag `Time` while it is repeating. That is the whole point, and no screenshot
+can show it.
+
+## Parameters
+
+- `time`: record head to first playback head, in seconds [0.02, 1.5]. **Moving
+  it bends pitch.** The range is narrower than `DigitalDelay`'s because the
+  hardware is: an MN3005 tops out at 204.8 ms and an EP-3 at roughly 800 ms
+- `feedback`: loop gain [0, 1.2] — the Space Echo's _Intensity_. Above 1
+  self-oscillates, bounded by the loop's soft limiter
+- `mix`: dry/wet [0, 1]
+- `taps`: level envelope across the mode's tap positions [0, 1]. 0 is the first
+  head only; later heads fade in as it rises
+- `age`: one composite wear control [0, 1] — more wobble, more saturation, less
+  bandwidth, more hiss, all on one curve
+- `wobble`: wow and flutter depth [0, 1], scaling on top of whatever `age`
+  implies. A well-maintained machine with an eccentric capstan is a real
+  combination that one knob cannot express
+- `spread`: L/R time offset as a ratio [0, 1] — two machines, lightly apart. 0
+  is mono-compatible
+- `mode`: `AnalogDelayMode`, 0 Tape and 1 BBD. Intermediate values wipe between
+  them rather than snapping
+
+One construction option, `maxTime` (default 1.5 s), sizes the buffers.
+
+## Why the mode enum is worth its slot
+
+The two modes read the **same** delay line at different tap positions. Tape's
+are integer multiples of `time` — 1 : 2 : 3, which Roland's own RE-202 manual
+confirms for the RE-201's heads, and 1 : 2 : 3 : 4 for the Echorec's drum by
+geometry — so opening more heads gives **rhythmic subdivisions**. The MN3011's
+six taps sit at stages 396 / 662 / 1194 / 1726 / 2790 / 3328, giving ratios of
+1 : 1.67 : 3.01 : 4.36 : 7.05 : 8.40 — deliberately irrational, and its
+datasheet says why: mixing them yields a "natural reverberation effect". So the
+same `taps` control gives a **diffuse wash** there. Both are physically true,
+and the difference is measured rather than asserted: the envelope's
+autocorrelation at the tap period reads 0.78 on Tape and 0.02 on BBD.
+
+## What it deliberately isn't
+
+There is no `tone`, no `cross`, no tempo sync, no pitch shift, no freeze and no
+reverse. Tape hysteresis, head bump, print-through and dropout are all real and
+all modelled somewhere in the literature, and none of them are here: `age` as a
+single composite curve is the mechanism that keeps the scope bounded.
+
+The other half of the delay space — precise, clean, pitch-preserving — is
+[`DigitalDelay`](/docs/digital-delay). One question tells you which you want:
+character and drift, or precision?
+
+## Sourced numbers
+
+The provenance here is datasheets and service manuals rather than papers, and
+some of it is not sourced at all. The **wow and flutter depths, the flutter
+rate, the tape gap-loss constant, the `age` curve and the compander's constants
+are chosen by ear**, and labelled as chosen in the source. No sourced
+wow/flutter figure exists for the RE-201, EP-3 or Echorec; studio-deck standards
+(DIN 0.2%) are explicitly not applicable, because tape echoes are widely
+described as far worse and nobody quantifies it. The one derived figure is the
+**1.2 Hz wow rate**, which is the Echorec's 71 RPM drum: wow is
+once-per-revolution eccentricity, so the rotation rate is the wow rate.
+
+## References
+
+- Zavalishin & Parker, [_Tape-like Delay Modulation_](https://www.dafx.de/paper-archive/2018/papers/DAFx2018_paper_23.pdf),
+  DAFx-18 — the glide, done without CPU proportional to tape speed
+- Raffel & Smith, [_Practical Modeling of Bucket-Brigade Device Circuits_](https://www.dafx.de/paper-archive/2010/DAFx10/RaffelSmith_DAFx10_P42.pdf),
+  DAFx-10 — the BBD stage, its filters and its compander
+- Holters & Parker, [_A Combined Model for a Bucket Brigade Device and its Input and Output Filters_](https://www.dafx.de/paper-archive/2018/papers/DAFx2018_paper_20.pdf),
+  DAFx-18 — the efficient variable-rate formulation
+- [MN3011 datasheet](https://www.experimentalistsanonymous.com/diy/Datasheets/MN3011.pdf)
+  — the six tap positions
+- [MN3005 datasheet](https://www.experimentalistsanonymous.com/diy/Datasheets/MN3005.pdf)
+  — 4096 stages and the 10–100 kHz clock range
+- [Roland RE-202 reference manual](https://static.roland.com/manuals/re-202_reference/eng/25633275.html)
+  — the head combinations, primary
+- [Binson Echorec memory system](https://www.effectrode.com/knowledge-base/binson-echorec-memory-system/)
+  — the drum geometry behind the wow rate
