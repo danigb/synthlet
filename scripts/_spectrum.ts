@@ -1,20 +1,30 @@
 /**
- * Measurement, used only by this package's tests.
+ * Measurement, used only by tests. **`scripts/_spectrum.ts` is the only
+ * editable copy**; `scripts/copy_files.sh` writes the rest, and
+ * `packages/synthlet/src/worklet-copies.test.ts` fails if one drifts.
  *
- * Deliberately private, for the reason `polyblep-oscillator/src/spectrum.ts`
- * gives: a metric shared with the thing it measures stops being independent
- * evidence. Shipped DSP duplication is a bug factory; measurement duplication
- * is how this repository keeps its checkers honest - see
- * `lookahead-limiter/src/true-peak-oracle.ts`.
+ * It lived in `digital-delay/src/spectrum.ts` until a second package wanted
+ * the same metric, which is the condition its old header set for moving it.
+ * Note what it is not: `_worklet.ts`, `_gate.ts` and `_delay.ts` are runtime
+ * contracts, shared so that two packages cannot disagree about behaviour a
+ * user can observe. This is a measuring instrument, shared so that two
+ * packages' numbers are comparable. Duplicating shipped DSP is a bug factory;
+ * duplicating a metric is how this repository keeps its checkers honest -
+ * `lookahead-limiter/src/true-peak-oracle.ts` is still deliberately its own.
+ * A metric earns a place here only once its readings have to line up across
+ * packages, which is why it took two of them.
  *
- * `index.ts` does not import it, so `tsup` never bundles it and `esbuild`
- * never sees it: the assertion that it stays out of `processor.ts` is in
- * `spectrum.test.ts`.
+ * No `index.ts` imports it, so `tsup` never bundles it and `esbuild` never
+ * sees it: the assertion that it stays out of `processor.ts` is in each
+ * consumer's tests.
  *
  * Nothing here is fast. Every function is written for legibility against its
  * textbook definition, because the tests that read it are the argument that
  * the module works.
  */
+
+/** Bins either side of a harmonic counted as signal rather than as noise. */
+export const HARMONIC_BINS = 10;
 
 /** In-place radix-2 Cooley-Tukey FFT. `re` and `im` must be a power of two. */
 export function fft(re: Float64Array, im: Float64Array) {
@@ -58,8 +68,16 @@ export function fft(re: Float64Array, im: Float64Array) {
   }
 }
 
-/** Four-term Blackman-Harris window: -92 dB sidelobes, so leakage is not the story. */
+const WINDOWS = new Map<number, Float64Array>();
+
+/**
+ * Four-term Blackman-Harris window: -92 dB sidelobes, so leakage is not the
+ * story. Memoised, because a suite windows dozens of renders of one length.
+ */
 export function blackmanHarris(length: number) {
+  const cached = WINDOWS.get(length);
+  if (cached) return cached;
+
   const window = new Float64Array(length);
   for (let i = 0; i < length; i++) {
     const x = (2 * Math.PI * i) / (length - 1);
@@ -69,6 +87,7 @@ export function blackmanHarris(length: number) {
       0.14128 * Math.cos(2 * x) -
       0.01168 * Math.cos(3 * x);
   }
+  WINDOWS.set(length, window);
   return window;
 }
 
@@ -92,6 +111,102 @@ export function magnitudes(signal: ArrayLike<number>) {
   const out = new Float64Array(half);
   for (let i = 0; i < half; i++) out[i] = Math.hypot(re[i], im[i]);
   return out;
+}
+
+/**
+ * Frequency in Hz of the largest magnitude bin above DC, refined by a parabola
+ * through the peak and its two neighbours so the answer is not quantised to
+ * whole bins.
+ *
+ * `fundamental` answers the same question better for a periodic signal, but it
+ * is an autocorrelation bounded to a plausible musical range; this reads
+ * whatever is loudest, which is what a test of a *broken* pitch has to do.
+ */
+export function peakFrequency(signal: ArrayLike<number>, sampleRate: number) {
+  const spectrum = magnitudes(signal);
+  let best = 1;
+  for (let i = 1; i < spectrum.length; i++) {
+    if (spectrum[i] > spectrum[best]) best = i;
+  }
+
+  const a = spectrum[best - 1] ?? 0;
+  const b = spectrum[best];
+  const c = spectrum[best + 1] ?? 0;
+  const denominator = a - 2 * b + c;
+  const refined =
+    denominator !== 0 ? best + (0.5 * (a - c)) / denominator : best;
+  return (refined * sampleRate) / (spectrum.length * 2);
+}
+
+/** The largest absolute sample. */
+export function peak(signal: ArrayLike<number>) {
+  let max = 0;
+  for (let i = 0; i < signal.length; i++) {
+    const value = Math.abs(signal[i]);
+    if (value > max) max = value;
+  }
+  return max;
+}
+
+/**
+ * Signal-to-alias ratio in dB: everything within `HARMONIC_BINS` of a harmonic
+ * of `f0` below Nyquist is signal, every other bin in `[0, N/2)` is noise.
+ *
+ * This is the metric the oscillator audits used to rank correction methods
+ * (`thoughts/research/2026-09-03_18-01-26_polyblep-oscillator-audit.md` and
+ * `..._18-14-54_wavetable-oscillator-audit.md`). **It is not any paper's
+ * metric**, so absolute values are comparable within this repository and only
+ * indicative against published figures. What it is, is reproducible to the
+ * decimal: both oscillator packages pin it against their audit's published
+ * rows, and drifting off those makes every floor they assert meaningless.
+ *
+ * `removeDC` subtracts the mean before windowing. Bin 0 is noise by the rule
+ * above, so a waveform with a legitimate DC component - a pulse wave, whose
+ * mean is `2 * width - 1` - reads far worse than it is without it: measured, a
+ * 0.3 offset takes a sine from 149 dB to 5.7 dB. **Leave it off otherwise.**
+ * The mean it subtracts is the unwindowed one, so on a signal with no DC but a
+ * fractional number of cycles in the window it plants a windowed constant at
+ * bin 0 and costs 27 dB. `spectrum.test.ts` pins both halves of that.
+ */
+export function aliasSnr(
+  signal: ArrayLike<number>,
+  f0: number,
+  sampleRate: number,
+  options: { removeDC?: boolean } = {},
+) {
+  const n = signal.length;
+  if (!(f0 > 0)) throw Error(`aliasSnr: f0 must be positive, got ${f0}`);
+
+  let offset = 0;
+  if (options.removeDC) {
+    for (let i = 0; i < n; i++) offset += signal[i];
+    offset /= n;
+  }
+
+  const window = blackmanHarris(n);
+  const re = new Float64Array(n);
+  const im = new Float64Array(n);
+  for (let i = 0; i < n; i++) re[i] = (signal[i] - offset) * window[i];
+  fft(re, im);
+
+  const half = n / 2;
+  const binWidth = sampleRate / n;
+  const isSignal = new Uint8Array(half);
+  for (let h = 1; h * f0 < sampleRate / 2; h++) {
+    const center = Math.round((h * f0) / binWidth);
+    const from = Math.max(0, center - HARMONIC_BINS);
+    const to = Math.min(half - 1, center + HARMONIC_BINS);
+    for (let k = from; k <= to; k++) isSignal[k] = 1;
+  }
+
+  let signalPower = 0;
+  let noisePower = 0;
+  for (let k = 0; k < half; k++) {
+    const power = re[k] * re[k] + im[k] * im[k];
+    if (isSignal[k]) signalPower += power;
+    else noisePower += power;
+  }
+  return 10 * Math.log10(signalPower / noisePower);
 }
 
 /**

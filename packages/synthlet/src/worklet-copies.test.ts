@@ -60,6 +60,11 @@ describe("the gate contract", () => {
       "euclid",
       "impulse",
       "karplus-strong",
+      // The one consumer that is not an envelope or a clock: `sync`, whose
+      // rising edge restarts the table read. It is also the one that reads the
+      // gate a-rate, because it needs the sub-sample instant of the crossing
+      // and not only the block - see `wavetable-oscillator/src/params.ts`.
+      "wavetable-oscillator",
     ]);
   });
 });
@@ -69,6 +74,29 @@ describe.each(gatePackages)("%s", (pkg) => {
     expect(
       readFileSync(join(root, "packages", pkg, "src/_gate.ts"), "utf8"),
     ).toBe(gateSource);
+  });
+});
+
+// And the band-limiting kernels, under the same rule: the packages that have a
+// discontinuity to correct. `wavetable-oscillator` is the first, for hard sync;
+// `polyblep-oscillator` is the intended next, and adopts them with the ticket
+// that rewrites it on a discontinuity scheduler rather than here.
+const blepSource = readFileSync(join(root, "scripts/_blep.ts"), "utf8");
+const blepPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_blep.ts")),
+);
+
+describe("the band-limiting kernels", () => {
+  it("are shared by every package that corrects a discontinuity", () => {
+    expect(blepPackages).toEqual(["wavetable-oscillator"]);
+  });
+});
+
+describe.each(blepPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_blep.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_blep.ts"), "utf8"),
+    ).toBe(blepSource);
   });
 });
 
@@ -97,5 +125,30 @@ describe.each(delayPackages)("%s", (pkg) => {
     expect(
       readFileSync(join(root, "packages", pkg, "src/_delay.ts"), "utf8"),
     ).toBe(delaySource);
+  });
+});
+
+// The measuring instrument is copied the same way, and is the only shared file
+// here that no shipped code imports: it exists so that two packages' alias-SNR
+// and spectrum numbers are comparable. `polyblep-oscillator` is the obvious
+// third consumer and deliberately does not carry a copy yet - it has no
+// spectrum test on this branch, and the opt-in rule above exists precisely so
+// that a package does not get a file nothing imports.
+const spectrumSource = readFileSync(join(root, "scripts/_spectrum.ts"), "utf8");
+const spectrumPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_spectrum.ts")),
+);
+
+describe("the measuring instrument", () => {
+  it("is shared by every package whose tests measure a spectrum", () => {
+    expect(spectrumPackages).toEqual(["digital-delay", "wavetable-oscillator"]);
+  });
+});
+
+describe.each(spectrumPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_spectrum.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_spectrum.ts"), "utf8"),
+    ).toBe(spectrumSource);
   });
 });

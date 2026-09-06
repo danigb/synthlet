@@ -76,18 +76,25 @@ describe("descriptors", () => {
   // One gate/trigger contract means one shape for the param that carries it:
   // if these drifted apart, the same signal would drive some modules and not
   // others - which is exactly the bug the shared detector removed.
+  //
+  // The rate is the one thing that is *not* part of the contract, so it is a
+  // column rather than a constant. Every gate in the library only has to decide
+  // which block it fired in, and is k-rate; `WavetableOscillator`'s `sync` has
+  // to decide where inside a *sample*, because a reset quantised to a render
+  // quantum is 2.9 ms of jitter at 44.1 kHz and costs 20 dB of alias rejection.
   it("declares every trigger-like param the same way", () => {
-    const TRIGGERS: [string, string][] = [
-      ["AdAmp", "trigger"],
-      ["AdEnv", "trigger"],
-      ["AdsrAmp", "gate"],
-      ["AdsrEnv", "gate"],
-      ["Arp", "trigger"],
-      ["Impulse", "trigger"],
-      ["KarplusStrong", "trigger"],
+    const TRIGGERS: [string, string, AutomationRate][] = [
+      ["AdAmp", "trigger", "k-rate"],
+      ["AdEnv", "trigger", "k-rate"],
+      ["AdsrAmp", "gate", "k-rate"],
+      ["AdsrEnv", "gate", "k-rate"],
+      ["Arp", "trigger", "k-rate"],
+      ["Impulse", "trigger", "k-rate"],
+      ["KarplusStrong", "trigger", "k-rate"],
+      ["WavetableOscillator", "sync", "a-rate"],
     ];
 
-    for (const [name, param] of TRIGGERS) {
+    for (const [name, param, automationRate] of TRIGGERS) {
       const factory = (synthlet as any)[name] as Factory;
       const descriptor = factory.descriptors.find((d) => d.name === param);
       expect([name, descriptor]).toEqual([
@@ -97,7 +104,7 @@ describe("descriptors", () => {
           defaultValue: 0,
           minValue: 0,
           maxValue: 1,
-          automationRate: "k-rate",
+          automationRate,
         },
       ]);
     }
@@ -108,6 +115,89 @@ describe("descriptors", () => {
       (d) => d.automationRate === "a-rate",
     );
     expect(aRate.map((d) => d.name)).toEqual(["frequency"]);
+  });
+
+  // Scanning a wavetable at audio rate is one of the format's signature sounds,
+  // and a k-rate position quantises it to one step per render quantum. It is
+  // also normalized 0..1 rather than a plane index, so a modulator patched into
+  // it does not have to know the current table's plane count.
+  //
+  // `frequency` and `detune` joined it at a-rate: all three are one expression,
+  // `frequency * 2^(detune/1200) * len / sampleRate`, and a k-rate pitch
+  // quantises FM to 2.9 ms at 44.1 kHz, which aliases for any modulator above
+  // about 172 Hz.
+  it("keeps WavetableOscillator's eight signals at a-rate", () => {
+    // Ticket 11's four stochastic barriers and step sizes joined them. They are
+    // *read* once per wave cycle, because a bounded random walk is a per-cycle
+    // process and sampling its parameters faster would not make it move faster;
+    // a-rate is what decides *which* value the boundary gets - the one at its
+    // own sample rather than the one at the top of the render quantum. The
+    // segment count is the exception and is k-rate: Radna 2.1 makes it
+    // "variable at runtime" but it is a structure and not a signal.
+    const aRate = synthlet.WavetableOscillator.descriptors.filter(
+      (d) => d.automationRate === "a-rate",
+    );
+    expect(aRate.map((d) => d.name)).toEqual([
+      "frequency",
+      "detune",
+      "morph",
+      "sync",
+      "pitchChaos",
+      "pitchSpread",
+      "ampChaos",
+      "ampSpread",
+    ]);
+    expect(aRate[2]).toEqual({
+      name: "morph",
+      defaultValue: 0,
+      minValue: 0,
+      maxValue: 1,
+      automationRate: "a-rate",
+    });
+  });
+
+  // `AudioParam` sums its inputs with the intrinsic value, so a node connected
+  // to a frequency is linear FM by construction - and a range that starts at 0
+  // half-wave rectifies the modulator, which does not tame the spectrum, it
+  // makes it the spectrum of a *different* modulator. Bipolar is what makes it
+  // through-zero: the read pointer runs backwards.
+  it("keeps WavetableOscillator's frequency bipolar", () => {
+    const frequency = synthlet.WavetableOscillator.descriptors.find(
+      (d) => d.name === "frequency",
+    );
+    expect(frequency).toEqual({
+      name: "frequency",
+      defaultValue: 440,
+      minValue: -20000,
+      maxValue: 20000,
+      automationRate: "a-rate",
+    });
+  });
+
+  // Ticket 11's stage is off by default and exactly inert when off - the DSP
+  // test asserts sample-for-sample identity against the same patch without it -
+  // and the property that makes that reachable is that **both barriers default
+  // to 0**. Radna 2.3: "reducing both barrier position parameters to zero
+  // reproduces the input wavetable at a constant pitch". If a default ever
+  // moves, every alias floor this package publishes moves with it.
+  //
+  // `segments` carries `minValue: 0` where 1 would be natural, and that is this
+  // library's standing decision rather than a slip: `connectParams` writes
+  // `param.value = 0` for every connected input, so a positive minimum makes
+  // Chrome clamp that write and warn. 0 and 1 are both one segment in the DSP.
+  it("keeps WavetableOscillator's stochastic mode off by default", () => {
+    const byName = Object.fromEntries(
+      synthlet.WavetableOscillator.descriptors.map((d) => [d.name, d]),
+    );
+    expect(byName.pitchSpread.defaultValue).toBe(0);
+    expect(byName.ampSpread.defaultValue).toBe(0);
+    expect(byName.segments).toEqual({
+      name: "segments",
+      defaultValue: 8,
+      minValue: 0,
+      maxValue: 256,
+      automationRate: "k-rate",
+    });
   });
 });
 

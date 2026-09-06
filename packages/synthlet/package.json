@@ -43,7 +43,7 @@
     "@synthlet/reverb-delay": "^0.1.0",
     "@synthlet/state-variable-filter": "^0.2.0",
     "@synthlet/virtual-analog-filter": "^0.1.0",
-    "@synthlet/wavetable-oscillator": "^0.1.0"
+    "@synthlet/wavetable-oscillator": "^0.2.0"
   },
   "scripts": {
     "build": "tsup src/index.ts --sourcemap --dts --format esm,cjs",

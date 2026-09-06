@@ -11,7 +11,7 @@ import {
   maxAbsoluteDifference,
   render,
   rt60,
-} from "./spectrum";
+} from "./_spectrum";
 
 // Every threshold here is a measured value with a stated margin, and the raw
 // measurement is in a comment beside it. A number with no measurement behind
