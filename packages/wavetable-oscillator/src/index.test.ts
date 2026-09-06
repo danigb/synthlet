@@ -290,6 +290,7 @@ describe("WavetableOscillator", () => {
     // this property, so the wrapper has to carry it.
     expect(WavetableOscillator.descriptors.map((d) => d.name)).toEqual([
       "frequency",
+      "detune",
       "morph",
     ]);
   });
@@ -299,5 +300,24 @@ describe("WavetableOscillator", () => {
     expect(processorName).toBe("WavetableOscillatorWorkletProcessor");
     expect(options.numberOfInputs).toBe(0);
     expect(options.numberOfOutputs).toBe(1);
+  });
+
+  it("sends the initial phase to the processor", () => {
+    // `phase` is not an `AudioParam` - `"random"` is not a `ParamInput`, and it
+    // is a one-time initial condition rather than a continuously meaningful
+    // signal - so it travels in `processorOptions` and is read once in the
+    // processor constructor. This is the whole of the wiring; what it does when
+    // it gets there is `dsp.test.ts`'s `it("starts where phase says")`.
+    expect(
+      created(WavetableOscillator(context)).options.processorOptions,
+    ).toEqual({ phase: 0 });
+    expect(
+      created(WavetableOscillator(context, { phase: 0.25 })).options
+        .processorOptions,
+    ).toEqual({ phase: 0.25 });
+    expect(
+      created(WavetableOscillator(context, { phase: "random" })).options
+        .processorOptions,
+    ).toEqual({ phase: "random" });
   });
 });

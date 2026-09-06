@@ -4,6 +4,7 @@ description: A morphing wavetable oscillator
 ---
 
 import WavetableExample from "../../../examples/WavetableExample";
+import WavetableStackExample from "../../../examples/WavetableStackExample";
 
 `@synthlet/wavetable-oscillator`
 
@@ -39,9 +40,30 @@ osc.frequency.value = 880;
 
 ## Parameters
 
-- `frequency`: The frequency of the oscillator in Hz. Default is 440.
+- `frequency`: The frequency of the oscillator in Hz. Default is 440. a-rate and
+  **bipolar**, `-20000` to `20000`: an oscillator connected here is linear FM,
+  and the negative half runs the read pointer backwards rather than half-wave
+  rectifying the modulator, which is through-zero FM.
+- `detune`: Detune in cents, `-1200` to `1200`. Default is 0, a-rate.
 - `morph`: The wavetable position, 0 (first plane) to 1 (last plane). Default is 0. a-rate, so an `Lfo` connected to it scans the table at any rate and any
   shape; a position that jumps is ramped over 64 samples rather than clicked.
+
+`phase` is a **construction option** rather than a parameter - `number` or
+`"random"` - because it is a one-time initial condition. Three instances built
+at the default phase 0 begin phase-locked and comb through their attack;
+`phase: "random"` is what stops them:
+
+```ts
+const stack = [-7, 0, 7].map((detune) =>
+  WavetableOscillator(audioContext, {
+    frequency: 220,
+    detune,
+    phase: "random",
+  }),
+);
+```
+
+<WavetableStackExample />
 
 ## Loading wavetables
 

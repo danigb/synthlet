@@ -112,16 +112,39 @@ describe("descriptors", () => {
   // and a k-rate position quantises it to one step per render quantum. It is
   // also normalized 0..1 rather than a plane index, so a modulator patched into
   // it does not have to know the current table's plane count.
-  it("keeps WavetableOscillator's morph at a-rate, normalized 0..1", () => {
+  //
+  // `frequency` and `detune` joined it at a-rate: all three are one expression,
+  // `frequency * 2^(detune/1200) * len / sampleRate`, and a k-rate pitch
+  // quantises FM to 2.9 ms at 44.1 kHz, which aliases for any modulator above
+  // about 172 Hz.
+  it("keeps WavetableOscillator's three signals at a-rate", () => {
     const aRate = synthlet.WavetableOscillator.descriptors.filter(
       (d) => d.automationRate === "a-rate",
     );
-    expect(aRate.map((d) => d.name)).toEqual(["morph"]);
-    expect(aRate[0]).toEqual({
+    expect(aRate.map((d) => d.name)).toEqual(["frequency", "detune", "morph"]);
+    expect(aRate[2]).toEqual({
       name: "morph",
       defaultValue: 0,
       minValue: 0,
       maxValue: 1,
+      automationRate: "a-rate",
+    });
+  });
+
+  // `AudioParam` sums its inputs with the intrinsic value, so a node connected
+  // to a frequency is linear FM by construction - and a range that starts at 0
+  // half-wave rectifies the modulator, which does not tame the spectrum, it
+  // makes it the spectrum of a *different* modulator. Bipolar is what makes it
+  // through-zero: the read pointer runs backwards.
+  it("keeps WavetableOscillator's frequency bipolar", () => {
+    const frequency = synthlet.WavetableOscillator.descriptors.find(
+      (d) => d.name === "frequency",
+    );
+    expect(frequency).toEqual({
+      name: "frequency",
+      defaultValue: 440,
+      minValue: -20000,
+      maxValue: 20000,
       automationRate: "a-rate",
     });
   });

@@ -9,9 +9,17 @@ export class WavetableOscillatorWorkletProcessor extends AudioWorkletProcessor {
   u: ReturnType<typeof WavetableOscillator>; // unit
   r: boolean; // running
 
-  constructor() {
+  // `phase` travels in `processorOptions` rather than as an `AudioParam`: it is
+  // a one-time initial condition, and an `AudioParam` would promise it means
+  // something continuously. Read once, here, so `"random"` is drawn per
+  // instance — which is the point of it.
+  constructor(options?: AudioWorkletNodeOptions) {
     super();
-    this.u = WavetableOscillator(sampleRate);
+    this.u = WavetableOscillator(
+      sampleRate,
+      (options?.processorOptions as { phase?: number | "random" } | undefined)
+        ?.phase,
+    );
     this.r = true;
     this.port.onmessage = (event) => {
       switch (event.data.type) {

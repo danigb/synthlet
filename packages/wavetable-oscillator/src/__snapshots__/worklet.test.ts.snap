@@ -3,11 +3,18 @@
 exports[`WavetableOscillatorWorkletNode has parameter descriptors 1`] = `
 [
   {
-    "automationRate": "k-rate",
+    "automationRate": "a-rate",
     "defaultValue": 440,
     "maxValue": 20000,
-    "minValue": 0,
+    "minValue": -20000,
     "name": "frequency",
+  },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 1200,
+    "minValue": -1200,
+    "name": "detune",
   },
   {
     "automationRate": "a-rate",

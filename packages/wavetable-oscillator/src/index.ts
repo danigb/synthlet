@@ -65,10 +65,28 @@ export type { BuiltInShape, TrigTable } from "./wavetable-builder";
 
 export type WavetableInputs = {
   frequency?: ParamInput;
+  detune?: ParamInput;
   morph?: ParamInput;
 };
 
 export type WavetableOscillatorOptions = WavetableInputs & {
+  /**
+   * Where the read position starts, as a fraction of one cycle: `0.25` is a
+   * quarter of the way into the table, `"random"` draws once for this instance.
+   *
+   * A construction option rather than an `AudioParam`, because it is a one-time
+   * initial condition and not a continuously meaningful signal. It is what stops
+   * a stack of oscillators combing: three instances built at phase 0 begin
+   * phase-locked, and the first few hundred milliseconds of every note are the
+   * same comb filter.
+   *
+   * ```ts
+   * const stack = [-7, 0, 7].map((cents) =>
+   *   WavetableOscillator(ac, { frequency, detune: cents, phase: "random" }),
+   * );
+   * ```
+   */
+  phase?: number | "random";
   /**
    * Where `loadWavetable` and `fetchWavetableNames` resolve bare names. A
    * string is shorthand for `waveditCatalog(baseUrl)`; a `WavetableCatalog`
@@ -96,7 +114,21 @@ export type LoadWavetableOptions = {
 };
 
 export type WavetableOscillatorWorkletNode = AudioWorkletNode & {
+  /**
+   * The pitch in Hz, a-rate and **bipolar**: `[-20000, 20000]`.
+   *
+   * `AudioParam` sums its inputs with the intrinsic value, so a node connected
+   * here is linear FM by construction, and the negative half is what makes it
+   * *through-zero* FM — the read pointer runs backwards rather than the
+   * modulator being half-wave rectified at the bottom of the range.
+   */
   frequency: AudioParam;
+  /**
+   * Detune in cents, a-rate: ±1 octave, applied as a multiply on the increment.
+   * Stack three instances a few cents apart, give each `phase: "random"`, and
+   * that is a supersaw.
+   */
+  detune: AudioParam;
   /**
    * The wavetable position in `[0, 1]`: 0 is the first plane, 1 is the last,
    * and everything between crossfades the two planes either side of it.
@@ -171,9 +203,17 @@ const create = createWorkletConstructor<
 >({
   processorName: "WavetableOscillatorWorkletProcessor",
   descriptors: PARAMS,
-  workletOptions: () => ({
+  // `phase` is not a `ParamInput` — `"random"` is not one — so it cannot be a
+  // member of `WavetableInputs`, whose values `connectParams` walks. But the
+  // construction options are handed to `workletOptions` whole, which is how it
+  // reaches the processor, read once there in the constructor. Widening this
+  // parameter rather than casting inside the body type-checks because every
+  // member is optional, so `Partial<WavetableInputs>` is assignable to
+  // `Partial<WavetableOscillatorOptions>`.
+  workletOptions: (inputs: Partial<WavetableOscillatorOptions>) => ({
     numberOfInputs: 0,
     numberOfOutputs: 1,
+    processorOptions: { phase: inputs.phase ?? 0 },
   }),
   postCreate(node) {
     node.setWavetable = (wavetable, options) => {
@@ -245,6 +285,8 @@ const create = createWorkletConstructor<
  *
  * ```ts
  * const osc = WavetableOscillator(ac, { frequency: 440, morph: 0.5 });
+ * // detuned and started somewhere of its own, which is how a stack is built:
+ * const up = WavetableOscillator(ac, { detune: 7, phase: "random" });
  * // and, to fetch from your own mirror rather than a third party's:
  * const own = WavetableOscillator(ac, { catalog: "/wavetables" });
  * ```
@@ -252,7 +294,8 @@ const create = createWorkletConstructor<
  * The wrapper around `createWorkletConstructor` exists for `catalog` alone:
  * `postCreate` does not see the construction inputs, so an input-dependent
  * property is attached here instead — `lookahead-limiter/src/index.ts:61-80`'s
- * idiom. `Object.assign` keeps `descriptors` on the factory.
+ * idiom. `Object.assign` keeps `descriptors` on the factory. (`phase` needs no
+ * wrapper: `workletOptions` does see them.)
  */
 export const WavetableOscillator = Object.assign(
   (context: AudioContext, options: WavetableOscillatorOptions = {}) => {

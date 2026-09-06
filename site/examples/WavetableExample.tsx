@@ -147,6 +147,15 @@ function WavetableExample() {
           param={synth.osc.morph}
         />
         <Slider
+          label="Detune"
+          labelClassName="text-right"
+          inputClassName="col-span-2"
+          min={-1200}
+          max={1200}
+          units=" cents"
+          param={synth.osc.detune}
+        />
+        <Slider
           label="Morph LFO rate"
           labelClassName="text-right"
           inputClassName="col-span-2"

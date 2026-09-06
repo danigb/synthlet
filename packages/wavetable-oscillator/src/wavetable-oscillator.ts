@@ -1,5 +1,11 @@
 type Inputs = {
   frequency: ArrayLike<number>;
+  /**
+   * In cents. Optional because the worklet always supplies it and a caller
+   * reaching this unit directly rarely wants it; `agen()` substitutes zero once
+   * per block rather than testing for it once per sample.
+   */
+  detune?: ArrayLike<number>;
   // `Float32Array` at a-rate, a one-element array at k-rate, and a plain
   // `number[]` from the tests: `ArrayLike` is what all three have in common.
   morph: ArrayLike<number>;
@@ -14,8 +20,42 @@ type Inputs = {
 const DECLICK = 64;
 const IDECLICK = 1 / DECLICK;
 
-export function WavetableOscillator(sampleRate: number) {
+/** Substituted for an absent `detune` input, once per block. */
+const NO_DETUNE = [0];
+
+/**
+ * Where the read position starts, as a fraction of one cycle.
+ *
+ * A construction option rather than an `AudioParam`, which was ticket 06 of the
+ * sibling package's decision and holds here for the same reason: it is a
+ * one-time initial condition, not a continuously meaningful signal. `"random"`
+ * draws once per instance, which is what stops three stacked oscillators
+ * beginning phase-locked and combing through their attack.
+ *
+ * Anything else - a number outside 0..1, a NaN, an Infinity - normalises rather
+ * than reaching `offset`, where a non-finite value never comes back.
+ */
+function initialPhase(phase: number | "random" | undefined): number {
+  if (phase === "random") return Math.random();
+  if (typeof phase !== "number" || !Number.isFinite(phase)) return 0;
+  return phase - Math.floor(phase);
+}
+
+export function WavetableOscillator(
+  sampleRate: number,
+  phase?: number | "random",
+) {
+  // Drawn once, at construction, and re-applied by every `set()` that changes
+  // the table length - the only event that makes a read position meaningless.
+  const phase0 = initialPhase(phase);
+
   let $frequency = 440;
+  // The detune in cents and the ratio it produces. `Math.pow` is the expensive
+  // half and the value is constant for whole seconds at a time, so it is cached
+  // against the cents rather than recomputed - `polyblep-oscillator/src/dsp.ts`
+  // caches it the same way, one level up.
+  let $detune = 0;
+  let ratio = 1;
   // The previous sample's morph position, and NaN until there is one: every
   // comparison against NaN is false, so the jump detector below cannot fire on
   // the first sample of the first block.
@@ -48,25 +88,52 @@ export function WavetableOscillator(sampleRate: number) {
   let held = 0;
   let ramp = 0;
 
-  // `frequency` is Hz. One cycle of the table is `len` samples, so a cycle per
-  // second is `len` samples of read position per second of output: the increment
-  // is `frequency * len / sampleRate`. Both of those live in here — `sampleRate` is
-  // the worklet global, `len` arrives with the table — which is why there is no
-  // `baseFrequency` parameter for a caller to get wrong, and why set() has to call
-  // this too.
+  // Whether the pitch moves inside the block, set once per block by agen(). It
+  // is what decides whether the mip level is recomputed per sample and whether a
+  // level jump is declicked; see updateLevel().
+  let pitchARate = false;
+
+  // `frequency` is Hz, `detune` is cents. One cycle of the table is `len` samples,
+  // so a cycle per second is `len` samples of read position per second of output:
+  // the increment is `frequency * 2^(detune/1200) * len / sampleRate`. `sampleRate`
+  // is the worklet global and `len` arrives with the table — which is why there is
+  // no `baseFrequency` parameter for a caller to get wrong, and why set() has to
+  // call this too.
   //
-  // The ceiling is Nyquist: one table cycle every two output samples. It clamps
-  // nothing inside `frequency`'s declared 0..20000 at any real sample rate, so
-  // "frequency is Hz" holds across the whole declared range — a lower ceiling
-  // silently mistunes the top of it. The comparison form is what resolves NaN to 0
-  // rather than letting it into `offset`, where it never comes back; the divide
-  // that used to make Infinity reachable went with the parameter. The `> 0` half
-  // freezes the phase on a negative frequency, matching minValue 0, and ticket 09's
-  // through-zero FM is what lifts it.
-  function updateInc() {
-    const raw = $frequency * len * isr;
+  // The ceiling is Nyquist: one table cycle every two output samples, and it is
+  // now symmetric about zero. It clamps nothing inside `frequency`'s declared
+  // ±20000 at any real sample rate, so "frequency is Hz" holds across the whole
+  // declared range — a lower ceiling silently mistunes the top of it.
+  //
+  // The comparison form rather than `Math.min`/`Math.max` is deliberate and is
+  // what resolves NaN to 0: `Math.min(max, Math.max(-max, NaN))` is NaN, and one
+  // NaN increment reaches `offset`, which is absorbing. NaN fails every
+  // comparison here and falls through both arms to the literal 0, and so does a
+  // raw of exactly 0.
+  //
+  // A negative increment is no longer clamped away. The read pointer simply
+  // decrements and the floor-based wrap in agen() carries it round the other way,
+  // which is the whole of through-zero FM in a wavetable: the sibling package
+  // needed a discontinuity scheduler rewritten around a signed increment for the
+  // same feature.
+  function updateInc(frequency: number, cents: number) {
+    $frequency = frequency;
+    if (cents !== $detune) {
+      $detune = cents;
+      ratio = Math.pow(2, cents / 1200);
+    }
+    const raw = frequency * ratio * len * isr;
     const max = len / 2;
-    inc = raw > 0 ? (raw < max ? raw : max) : 0;
+    inc =
+      raw > 0
+        ? raw < max
+          ? raw
+          : max
+        : raw < 0
+          ? raw > -max
+            ? raw
+            : -max
+          : 0;
     updateLevel();
   }
 
@@ -97,8 +164,15 @@ export function WavetableOscillator(sampleRate: number) {
   // below the table's natural pitch are one read rather than two. `Math.log2(0)`
   // is -Infinity, which the `>= 0` comparison resolves the way updateInc()'s
   // resolves NaN.
+  //
+  // `Math.abs(inc)` because a mip level is about how fast the table is being
+  // read, not which way: through-zero FM hands this a negative increment, and
+  // `Math.log2` of one is NaN. NaN would fall through `!(i >= 0)` to level 0,
+  // which is safe in the sense of finite and wrong in the sense that matters —
+  // level 0 is full bandwidth, so a fast negative sweep would alias exactly as
+  // hard as an unmipmapped table.
   function updateLevel() {
-    const x = Math.log2(inc);
+    const x = Math.log2(inc < 0 ? -inc : inc);
     const i = Math.floor(x) + 1;
     let next: number;
     if (!(i >= 0)) {
@@ -121,21 +195,35 @@ export function WavetableOscillator(sampleRate: number) {
     // coming into use is a table coming into use — Mohr 2005 §1 — and on a plane
     // whose energy sits above a level's limit the step across one is full scale.
     //
-    // `frequency` is k-rate, so the level moves only at block boundaries and this
-    // reads as: a pitch jump of more than half an octave inside one render
-    // quantum is ramped. A ±1 semitone vibrato is 0.083 of a level and a
-    // one-second portamento across an octave is 0.003 of one per block; both pass
-    // through untouched. Ticket 09's a-rate frequency applies the same rule per
-    // sample with no change of form.
-    if (Math.abs(next - $level) > 0.5) declick();
+    // With a k-rate pitch the level moves only at block boundaries and this reads
+    // as: a pitch jump of more than half an octave inside one render quantum is
+    // ramped. A ±1 semitone vibrato is 0.083 of a level and a one-second
+    // portamento across an octave is 0.003 of one per block; both pass through
+    // untouched.
+    //
+    // **Suppressed when the pitch is a-rate**, which is the one place this rule
+    // does not survive contact with ticket 09. `next` is a continuous function of
+    // `log2|inc|`, so half a level per sample is a pitch moving by a factor of
+    // √2 in one sample — not a rare event under audio-rate FM but what happens
+    // every time the modulator carries the increment past the bottom of the
+    // pyramid, and once it starts happening it does not stop.
+    //
+    // Measured on a 440 Hz carrier modulated at 200 Hz, counting how often the
+    // threshold fires and how much of the second the 64-sample ramp then covers:
+    // nothing at all at ±50, ±200, ±500 and ±1000 Hz of depth, and at ±3000 Hz
+    // 1600 fires per 44100 samples with the ramp **running for 62.4 % of them**.
+    // So ordinary vibrato, portamento and moderate FM lose nothing, and past
+    // that point the declick has stopped being a declick: it is a permanent slew
+    // across the sweep the caller asked for, which costs 0.85 dB of RMS
+    // (−5.27 vs −6.13) and 434 Hz of spectral centroid (4748 vs 4314), with the
+    // peak unchanged at 1.0963 either way. At a-rate the two-level crossfade is
+    // left to represent the movement on its own, which is what it is for.
+    //
+    // The k-rate rule is untouched and still fires: a 110 → 7040 Hz step at a
+    // block boundary measures 0.00169 through this path against 0.10784 through
+    // the a-rate one, which is the 64× a 64-sample ramp is supposed to give.
+    if (!pitchARate && Math.abs(next - $level) > 0.5) declick();
     $level = next;
-  }
-
-  function read(inputs: Inputs) {
-    if (inputs.frequency[0] !== $frequency) {
-      $frequency = inputs.frequency[0];
-      updateInc();
-    }
   }
 
   function set(wavetable: Float32Array, length: number, mipLevels = 1) {
@@ -155,8 +243,11 @@ export function WavetableOscillator(sampleRate: number) {
     // The read position survives a table of the same length, so a swap mid-note
     // keeps its place in the cycle and the ramp below has less to bridge. A
     // different length makes it meaningless, and out of range for a shorter
-    // table, where it reads undefined and emits NaN until it walks back.
-    if (len !== had) offset = 0;
+    // table, where it reads undefined and emits NaN until it walks back — so it
+    // is restated, at the phase this instance was constructed with. That is also
+    // the first table's case: `had === 0`, so the very first `set()` is what puts
+    // a `phase: "random"` instance where it asked to start.
+    if (len !== had) offset = phase0 * len;
     // Mohr 2005 §1: a table coming into use has to be faded in, "since audible
     // clicks and spectral discontinuities would result from the sudden change of
     // wavetables". Ticket 01 zeroed the state instead, which made the step across
@@ -167,7 +258,7 @@ export function WavetableOscillator(sampleRate: number) {
     // fade-in the caller did not ask for and cannot switch off. Amp envelopes
     // own that.
     if (had !== 0) declick();
-    updateInc();
+    updateInc($frequency, $detune);
     // Same rule as the fade above, on the level axis: on the *first* table there
     // is nothing to fade from, so the level the default frequency happens to
     // select must not count as a jump when the caller's first real frequency
@@ -228,11 +319,46 @@ export function WavetableOscillator(sampleRate: number) {
       return;
     }
 
-    read(inputs);
+    const n = output.length;
+    const frequency = inputs.frequency;
+    const detune = inputs.detune ?? NO_DETUNE;
     const morph = inputs.morph;
-    // The house a-rate check, once per block: a connected AudioParam arrives as
-    // one value per sample, an unconnected one as a single value.
-    const aRate = morph.length === output.length;
+    // The house a-rate check, once per block and once per parameter: a connected
+    // AudioParam arrives as one value per sample, an unconnected one as a single
+    // value. `state-variable-filter/src/dsp.ts:103-117` is where the idiom comes
+    // from; hoisting the length tests is the whole of it.
+    const fRate = frequency.length === n;
+    const dRate = detune.length === n;
+    const mRate = morph.length === n;
+
+    // The pitch moves inside the block only if something driving it does. When
+    // neither does, the increment and its mip level are computed once for the
+    // whole block, exactly as they were before this ticket, and the `Math.log2`
+    // and `Math.pow` never enter the sample loop.
+    //
+    // When one does, they are recomputed **per sample** rather than once from
+    // the block's peak |inc|, which is ticket 06's open question and was settled
+    // by measuring both against the same signal rendered a sample at a time —
+    // at `block === 1` the two arms are by definition the same thing, so that
+    // render is the ground truth. Per sample reproduces it exactly (RMS error 0
+    // at any block size); the per-block level misses it by 2.3e-2, 27.5 dB below
+    // the signal, and loses 110 Hz of spectral centroid because it plays the
+    // whole block at the darkest level any sample in it needed.
+    //
+    // What disqualifies the per-block level is not the dullness, though — it is
+    // that **it is a function of the block**. The same automation renders
+    // differently at 128 and at 1024 frames (RMS difference 1.9e-1), which is
+    // exactly what `it("does not depend on the block size")` exists to forbid.
+    // A level too dark never aliases, so the per-block choice is safe in the
+    // narrow sense; it is just not the same oscillator twice.
+    //
+    // It costs 64 % on the sample loop — 0.5574 µs/sample k-rate against 0.9152
+    // per-sample a-rate, 2.5 % to 4.0 % of a 44.1 kHz realtime budget — paid
+    // only by instances that actually have something connected.
+    pitchARate = fRate || dRate;
+    if (!pitchARate && (frequency[0] !== $frequency || detune[0] !== $detune)) {
+      updateInc(frequency[0], detune[0]);
+    }
     // Half a plane per sample is the plane axis's Nyquist rate, and it is the
     // line between a position that is scanning the table and a position that is
     // jumping across it. Below it the two-plane read can represent the movement
@@ -253,8 +379,14 @@ export function WavetableOscillator(sampleRate: number) {
     // a jump.
     const jump = planes > 1 ? 0.5 / (planes - 1) : Infinity;
 
-    for (let i = 0; i < output.length; i++) {
-      const raw = aRate ? morph[i] : morph[0];
+    for (let i = 0; i < n; i++) {
+      if (pitchARate) {
+        updateInc(
+          fRate ? frequency[i] : frequency[0],
+          dRate ? detune[i] : detune[0],
+        );
+      }
+      const raw = mRate ? morph[i] : morph[0];
       // The comparison form updateInc() uses, for the same reason: NaN resolves
       // to 0 rather than reaching `pos`, where it would take the block with it.
       const m = raw > 0 ? (raw < 1 ? raw : 1) : 0;
@@ -276,9 +408,23 @@ export function WavetableOscillator(sampleRate: number) {
       last = output[i];
 
       offset += inc;
-      // One step back into range whatever the overshoot; `len` is at least 1 here
-      // because agen() returns early on len === 0.
+      // One step back into range whatever the overshoot, in either direction;
+      // `len` is at least 1 here because agen() returns early on len === 0.
+      //
+      // The floor-based form is load-bearing now rather than merely tidy. Ticket
+      // 01 replaced a pair of one-sided `if`s with it and the `offset < 0` half
+      // was unreachable, because the increment was clamped at zero; through-zero
+      // FM is what makes the pointer run backwards, and this line is the whole of
+      // the wrap it needs.
       offset -= len * Math.floor(offset / len);
+      // And the one case the algebra does not cover. An `offset + inc` that lands
+      // a hair below zero wraps to `len - ε`, which rounds *up* to exactly `len`
+      // in float64 once ε is small enough — at `len === 256`, every
+      // `offset = -2^-k` for k from 46 to 79 does it, 34 distinct values. That is
+      // an index one past the last plane's end, which reads `undefined` and emits
+      // NaN forever. Only reachable with a negative increment, so it arrives with
+      // this ticket.
+      if (offset >= len) offset = 0;
     }
   }
 

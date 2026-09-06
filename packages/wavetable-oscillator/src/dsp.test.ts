@@ -2,6 +2,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import {
   aliasSnr,
+  centroid,
   maxAbsoluteDifference,
   peak,
   peakFrequency,
@@ -44,19 +45,27 @@ const BLOCK = 128;
 /** The gap between two adjacent float32 values at full scale. */
 const FLOAT32_STEP = 1.1920929e-7;
 
+/**
+ * A number for the k-rate case - one value for the whole block, which is how an
+ * unconnected `AudioParam` arrives - or a function of the absolute sample index
+ * for the a-rate one, which `render` fills into a block-sized `Float32Array`
+ * the way a connected one arrives.
+ *
+ * All three of this oscillator's parameters take both forms, and which one a
+ * test picks is itself part of what it measures: ticket 09 made the pitch path
+ * choose between a per-block and a per-sample increment on exactly this test.
+ */
+type Rate = number | ((index: number) => number);
+
 type Params = {
-  frequency?: number;
-  /**
-   * A number for the k-rate case - one value for the whole block, which is how
-   * an unconnected `AudioParam` arrives - or a function of the absolute sample
-   * index for the a-rate one, which `render` fills into a block-sized
-   * `Float32Array` the way a connected one arrives.
-   */
-  morph?: number | ((index: number) => number);
+  frequency?: Rate;
+  detune?: Rate;
+  morph?: Rate;
 };
 
 const inputsOf = (params: Params) => ({
-  frequency: [params.frequency ?? 440],
+  frequency: [typeof params.frequency === "number" ? params.frequency : 440],
+  detune: [typeof params.detune === "number" ? params.detune : 0],
   // Plane 0 unless a test is about the morph: a crossfade in the middle of a
   // spectrum measurement would make it a measurement of two planes at once.
   morph: [typeof params.morph === "number" ? params.morph : 0],
@@ -82,6 +91,12 @@ function render(
      * un-mipmapped column below stay in this file as a calibration row.
      */
     levels?: number;
+    /**
+     * The initial read position, ticket 09's construction option. `"random"`
+     * draws once per instance, so a test that uses it renders twice and
+     * compares rather than pinning a value.
+     */
+    phase?: number | "random";
   } = {},
 ) {
   const length = options.length ?? ANALYSIS_LENGTH;
@@ -89,28 +104,37 @@ function render(
   const warmup = options.warmup ?? 0;
   const sampleRate = options.sampleRate ?? SAMPLE_RATE;
 
-  const osc = WavetableOscillator(sampleRate);
+  const osc = WavetableOscillator(sampleRate, options.phase);
   osc.set(table, len, options.levels ?? 1);
 
   const out = new Float32Array(warmup + length);
   const buffer = new Float32Array(block);
   const inputs: {
-    frequency: number[];
+    frequency: ArrayLike<number>;
+    detune: ArrayLike<number>;
     morph: ArrayLike<number>;
   } = inputsOf(params);
-  const morphAt = typeof params.morph === "function" ? params.morph : null;
-  const morphBuffer = new Float32Array(block);
+  // One buffer per parameter that arrives a-rate, refilled per block because
+  // that is how a connected `AudioParam` arrives.
+  const aRate = (["frequency", "detune", "morph"] as const)
+    .map((name) => {
+      const at = params[name];
+      return typeof at === "function"
+        ? { name, at, buffer: new Float32Array(block) }
+        : null;
+    })
+    .filter((entry) => entry !== null);
 
   for (let at = 0; at < out.length; at += block) {
     const size = Math.min(block, out.length - at);
     const view = size === block ? buffer : buffer.subarray(0, size);
-    if (morphAt) {
+    for (const param of aRate) {
       // Same length as the output, which is what makes the unit read it per
-      // sample, and refilled per block because that is how it arrives.
-      const morph =
-        size === block ? morphBuffer : morphBuffer.subarray(0, size);
-      for (let i = 0; i < size; i++) morph[i] = morphAt(at + i);
-      inputs.morph = morph;
+      // sample rather than taking element 0 for the whole block.
+      const values =
+        size === block ? param.buffer : param.buffer.subarray(0, size);
+      for (let i = 0; i < size; i++) values[i] = param.at(at + i);
+      inputs[param.name] = values;
     }
     osc.agen(view, inputs);
     out.set(view, at);
@@ -506,6 +530,319 @@ describe("the pitch", () => {
   });
 });
 
+describe("the pitch inputs", () => {
+  /**
+   * Ticket 09's four additions, which are one expression:
+   *
+   *     inc = frequency * 2^(detune/1200) * len / sampleRate
+   *
+   * a-rate on both terms, signed, and with `phase` seeding the read position it
+   * accumulates into. The sign is the whole of through-zero FM here - the read
+   * pointer decrements and ticket 01's floor-based wrap carries it round the
+   * other way - against a discontinuity scheduler rewritten around a signed
+   * increment in the sibling package.
+   */
+
+  const len = 256;
+  const saw = sawTable(len);
+  const pyramid = mipmapWavetable({ data: saw, length: len });
+  const levels = pyramid.levels ?? 1;
+
+  /** A ramp plane: the read position is readable straight off the output. */
+  const rampTable = Float32Array.from({ length: len }, (_, i) => i / len);
+
+  it.each([-1200, -700, -5, 0, 5, 700, 1200])(
+    "detunes by the cents it is given: %p",
+    (cents) => {
+      // Success criterion 4. The tolerance is the ticket's 2 cents; the measured
+      // worst case over these seven rows is 0.231 cents, at -700, and it is the
+      // instrument rather than the ratio - 32768 bins at 44.1 kHz are 1.35 Hz
+      // apart, which at 293 Hz is 8 cents before the parabolic refinement.
+      const f0 = 440 * Math.pow(2, cents / 1200);
+      const measured = peakFrequency(
+        render(
+          sineTable(len),
+          len,
+          { frequency: 440, detune: cents },
+          { warmup: WARMUP },
+        ),
+        SAMPLE_RATE,
+      );
+      expect(centsFrom(measured, f0)).toBeLessThan(2);
+    },
+  );
+
+  it("takes the detune a-rate", () => {
+    // The same ratio applied per sample rather than per block. A detune held
+    // constant but *delivered* a-rate must be the same signal as the k-rate one,
+    // sample for sample: the two paths compute the same increment and the a-rate
+    // one must not accumulate anything extra on the way.
+    const kRate = render(
+      sineTable(len),
+      len,
+      { frequency: 440, detune: 700 },
+      { length: 2048 },
+    );
+    const aRate = render(
+      sineTable(len),
+      len,
+      { frequency: 440, detune: () => 700 },
+      { length: 2048 },
+    );
+    expect(Array.from(aRate)).toEqual(Array.from(kRate));
+  });
+
+  it("tracks an a-rate frequency", () => {
+    // Success criterion 1 at the DSP boundary. A chirp from 200 to 3200 Hz over
+    // 4096 samples, a new frequency every sample and 32 block boundaries
+    // crossed: finite, in range, and continuous - the largest sample step is
+    // 0.9941, which is the band-limited sawtooth's own reset and not an artifact
+    // of the sweep.
+    const signal = render(
+      pyramid.data,
+      len,
+      { frequency: (i) => 200 + (i * 3000) / 4095 },
+      { length: 4096, levels },
+    );
+    for (const sample of signal) {
+      expect(Number.isFinite(sample)).toBe(true);
+      expect(Math.abs(sample)).toBeLessThanOrEqual(1.2);
+    }
+    expect(maxAbsoluteDifference(signal)).toBeLessThan(1);
+    // And it really swept: a chirp that stalled would satisfy the bounds too.
+    expect(peak(signal)).toBeGreaterThan(0.9);
+  });
+
+  it("runs the phase backwards", () => {
+    // Success criterion 2, and it is exact rather than close. At
+    // `frequency = sampleRate / len` the increment is exactly 1, so a forward
+    // render walks the table one sample at a time and a backward one walks it
+    // the other way from the same start: `bwd[k]` is `fwd[(len - k) mod len]`,
+    // measured to a worst error of 0 over the whole cycle.
+    //
+    // The plane is deliberately asymmetric - a pulse then a ramp - because a
+    // symmetric one is its own time-reverse and would pass whatever the sign did.
+    const f0 = SAMPLE_RATE / len;
+    const table = Float32Array.from({ length: len }, (_, i) =>
+      i < len / 4 ? 1 : -0.25 + i / len,
+    );
+    const forward = render(table, len, { frequency: f0 }, { length: len });
+    const backward = render(table, len, { frequency: -f0 }, { length: len });
+    for (let k = 0; k < len; k++)
+      expect(backward[k]).toBe(forward[(len - k) % len]);
+  });
+
+  it("survives frequency crossing zero", () => {
+    // Success criterion 3. A modulator sweeping the full declared range inside
+    // one 128-frame block, over and over: nothing is rectified at the bottom,
+    // nothing is non-finite, and the peak stays at 0.8671.
+    const fast = render(
+      pyramid.data,
+      len,
+      { frequency: (i) => -20000 + (40000 * (i % BLOCK)) / (BLOCK - 1) },
+      { length: 4096, levels },
+    );
+    for (const sample of fast) {
+      expect(Number.isFinite(sample)).toBe(true);
+      expect(Math.abs(sample)).toBeLessThanOrEqual(1.2);
+    }
+
+    // And the crossing itself costs nothing. A slow sweep from -50 to +50 Hz
+    // takes its largest sample step *at* the crossing only in the sense that it
+    // takes it everywhere: 0.339928 against 0.339928 for a steady render at
+    // either sign. That is the waveform's own slope at that read speed, which is
+    // the ticket's "no discontinuity beyond one increment" made exact - the
+    // sweep is not allowed to be rougher than standing still is.
+    const slow = render(
+      pyramid.data,
+      len,
+      { frequency: (i) => -50 + (100 * i) / 4095 },
+      { length: 4096, levels },
+    );
+    const steady = Math.max(
+      maxAbsoluteDifference(
+        render(pyramid.data, len, { frequency: 50 }, { length: 4096, levels }),
+      ),
+      maxAbsoluteDifference(
+        render(pyramid.data, len, { frequency: -50 }, { length: 4096, levels }),
+      ),
+    );
+    expect(maxAbsoluteDifference(slow)).toBeLessThanOrEqual(steady);
+    for (const sample of slow) expect(Number.isFinite(sample)).toBe(true);
+  });
+
+  it("starts where phase says", () => {
+    // Success criterion 5. On a ramp plane the read position *is* the output, so
+    // a phase of 0.25 emits 0.25 first. Held there by `frequency: 0`, which
+    // freezes the pointer, so the assertion is about the seed and nothing else.
+    for (const [phase, expected] of [
+      [0, 0],
+      [0.25, 0.25],
+      [0.5, 0.5],
+      // Taken modulo 1, so both of these are the same quarter turn.
+      [1.25, 0.25],
+      [-0.75, 0.25],
+    ] as const) {
+      const signal = render(
+        rampTable,
+        len,
+        { frequency: 0 },
+        { length: 4, phase },
+      );
+      expect(signal[0]).toBe(Math.fround(expected));
+    }
+
+    // Anything that is not a phase is 0 rather than reaching `offset`, which is
+    // absorbing: a NaN read position never comes back.
+    for (const phase of [NaN, Infinity, -Infinity]) {
+      const signal = render(
+        rampTable,
+        len,
+        { frequency: 0 },
+        { length: 4, phase },
+      );
+      expect(signal[0]).toBe(0);
+    }
+  });
+
+  it("draws a different phase per instance for 'random'", () => {
+    // The other half of criterion 5, and the whole reason the option exists:
+    // three oscillators built at phase 0 begin phase-locked and comb through
+    // their attack. Two draws colliding on a 256-sample table is a 1-in-2^52
+    // event rather than a 1-in-256 one - the draw is a float, and `offset` is
+    // seeded before the read quantises it.
+    const draws = new Set(
+      Array.from(
+        { length: 8 },
+        () =>
+          render(
+            rampTable,
+            len,
+            { frequency: 0 },
+            { length: 4, phase: "random" },
+          )[0],
+      ),
+    );
+    expect(draws.size).toBe(8);
+  });
+
+  it("keeps the initial phase across a table of a different length", () => {
+    // `set()` restates the read position whenever the length changes, because a
+    // position into a 2048-sample table means nothing in a 64-sample one. It
+    // restates it at *this instance's* phase rather than at zero, which is what
+    // makes `phase: "random"` survive a `loadWavetable` from the dropdown.
+    const osc = WavetableOscillator(SAMPLE_RATE, 0.25);
+    const buffer = new Float32Array(4);
+    const inputs = inputsOf({ frequency: 0 });
+    osc.set(rampTable, len);
+    osc.agen(buffer, inputs);
+    expect(buffer[0]).toBe(0.25);
+
+    const short = Float32Array.from({ length: 64 }, (_, i) => i / 64);
+    osc.set(short, 64);
+    // 64 samples of declick from the table swap, then the new table read
+    // straight - at the same quarter turn, 0.25.
+    const after = new Float32Array(128);
+    osc.agen(after, inputs);
+    expect(after[127]).toBe(0.25);
+  });
+
+  it("survives detune at both extremes", () => {
+    // Success criterion 6's totality half: an octave of detune either way
+    // against a frequency of zero and both ends of the declared range. The
+    // corner worth naming is `frequency: 20000, detune: 1200` - 40 kHz, whose
+    // increment clamps to Nyquist, `len / 2`. Reading a 256-sample table every
+    // 128 samples at the top mip level, which holds one harmonic, lands on that
+    // harmonic's zero crossings: the output is exact silence, which is the right
+    // answer rather than a defect.
+    for (const frequency of [0, 20000, -20000, NaN]) {
+      for (const detune of [-1200, 0, 1200, NaN]) {
+        const osc = WavetableOscillator(SAMPLE_RATE);
+        osc.set(pyramid.data, len, levels);
+        const buffer = new Float32Array(256);
+        osc.agen(buffer, {
+          frequency: [frequency],
+          detune: [detune],
+          morph: [0.5],
+        });
+        for (const sample of buffer) {
+          expect(Number.isFinite(sample)).toBe(true);
+          expect(Math.abs(sample)).toBeLessThanOrEqual(1.2);
+        }
+        // And it recovers, which is what the comparison-form clamp is for: a NaN
+        // increment would have reached `offset` and stayed there forever.
+        osc.agen(buffer, { frequency: [440], detune: [0], morph: [0.5] });
+        for (const sample of buffer) expect(Number.isFinite(sample)).toBe(true);
+        expect(peak(buffer)).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("declicks a stepped k-rate pitch and not an a-rate one", () => {
+    // Ticket 06 handed this ticket a question: the level-jump declick's
+    // threshold, `|level| > 0.5`, is per-sample-shaped, so at a-rate it fires
+    // per sample and degrades to a permanent 64-sample slew. Measured on a
+    // 440 Hz carrier at 200 Hz of modulation it never fires at all below
+    // +-1000 Hz of depth, and at +-3000 Hz it fires 1600 times per second with
+    // the ramp running for 62.4 % of the samples - which is a lowpass on the
+    // sweep the caller asked for, worth 0.85 dB of RMS and 434 Hz of spectral
+    // centroid. **So it is suppressed when the pitch is a-rate**, and the
+    // two-level crossfade is left to represent the movement, which is what it
+    // is for.
+    //
+    // Both halves of that, on one signal: 110 -> 7040 Hz, five mip levels,
+    // stepped at a block boundary. Through the k-rate path the step measures
+    // 0.001685; through the a-rate path 0.107845, which is 64x it, exactly the
+    // ratio a 64-sample linear ramp gives.
+    const stepped = (i: number) => (i < 512 ? 110 : 7040);
+
+    const osc = WavetableOscillator(SAMPLE_RATE);
+    osc.set(pyramid.data, len, levels);
+    const kRate = new Float32Array(1024);
+    const buffer = new Float32Array(BLOCK);
+    for (let at = 0; at < 1024; at += BLOCK) {
+      osc.agen(buffer, {
+        frequency: [stepped(at)],
+        detune: [0],
+        morph: [0],
+      });
+      kRate.set(buffer, at);
+    }
+    const aRate = render(
+      pyramid.data,
+      len,
+      { frequency: stepped },
+      { length: 1024, levels },
+    );
+
+    const kStep = Math.abs(kRate[512] - kRate[511]);
+    const aStep = Math.abs(aRate[512] - aRate[511]);
+    expect(kStep).toBeLessThan(0.002);
+    expect(aStep).toBeGreaterThan(0.1);
+    expect(aStep / kStep).toBeGreaterThan(60);
+  });
+
+  it("stays bright under deep audio-rate FM", () => {
+    // The audible consequence of the decision above, pinned as a number. The
+    // patch is the one it was measured on: a 440 Hz carrier, +-3000 Hz at
+    // 200 Hz, on the mipmapped sawtooth. Suppressed, the spectral centroid is
+    // 4748.4 Hz; with the ramp left running it is 4314.2 Hz. If the suppression
+    // is ever removed this drops by 434 Hz and this assertion is what says so.
+    const signal = render(
+      pyramid.data,
+      len,
+      {
+        frequency: (i) =>
+          440 + 3000 * Math.sin((2 * Math.PI * 200 * i) / SAMPLE_RATE),
+      },
+      { length: ANALYSIS_LENGTH, levels },
+    );
+    const measured = centroid(signal, SAMPLE_RATE);
+    expect(measured).toBeGreaterThan(4600);
+    expect(Math.abs(measured - 4748.4)).toBeLessThan(1);
+  });
+});
+
 describe("aliasing", () => {
   // A 256-sample table holding a full-bandwidth saw, played at its natural
   // pitch multiplied up, with the mipmap pyramid ticket 06 built for it.
@@ -553,6 +890,37 @@ describe("aliasing", () => {
 
     expect(measured).toBeGreaterThan(floorDb);
     expect(Math.abs(measured - measuredDb)).toBeLessThan(0.15);
+  });
+
+  it.each([
+    [110, 59.26],
+    [220, 48.39],
+    [440, 57.4],
+    [880, 66.14],
+    [1760, 74.49],
+    [3520, 82.13],
+  ])("holds %p Hz's floor through the a-rate path too: %p dB", (f0, db) => {
+    // Ticket 09 made `frequency` a-rate, which moved the increment and its mip
+    // level from once per block to once per sample. The rows above drive it
+    // k-rate - a one-element array, which is how an unconnected `AudioParam`
+    // arrives - and this one drives the same six pitches through the per-sample
+    // path with a constant a-rate array, which is how a connected one arrives.
+    //
+    // **They agree to the printed precision at every pitch.** The mip level is a
+    // function of the increment and of nothing else, so computing it per sample
+    // cannot change a constant-pitch render; if it ever does, some per-block
+    // state has leaked into the loop and this is the row that catches it.
+    const measured = aliasSnr(
+      render(
+        pyramid.data,
+        len,
+        { frequency: () => f0 },
+        { warmup: WARMUP, levels: pyramid.levels },
+      ),
+      f0,
+      SAMPLE_RATE,
+    );
+    expect(Math.abs(measured - db)).toBeLessThan(0.15);
   });
 
   it.each([
@@ -749,11 +1117,12 @@ describe("totality", () => {
   // package can be handed, plus the two that are outside it. There is no divisor
   // any more - ticket 03 replaced `frequency / baseFrequency` with
   // `frequency * len / sampleRate`, so `Infinity` is no longer reachable at all
-  // - and the clamp that survives is there for exactly these last two rows: a
-  // caller reaching the DSP unit directly with a negative or non-finite
-  // frequency. `-440` freezes the phase (matching `minValue: 0`; ticket 09's
-  // through-zero FM is what lifts it) and `NaN` resolves to a stopped
-  // oscillator rather than poisoning `offset`, which is absorbing.
+  // - and the clamp that survives is there for exactly these last two rows.
+  // `-440` is inside the declared range since ticket 09 made it bipolar: it runs
+  // the read pointer backwards, which is measured properly in
+  // `describe("the pitch inputs")` above and is here only for totality. `NaN`
+  // resolves to a stopped oscillator rather than poisoning `offset`, which is
+  // absorbing.
   const frequencies = [0, 1e-9, 440, 20000, -440, NaN];
   const lengths = [0, 1, 64, 2048];
 
@@ -908,6 +1277,46 @@ describe("the render loop", () => {
     });
     const oneBlock = render(table, len, params, { length: 1024, block: 1024 });
     expect(eightBlocks).toEqual(oneBlock);
+  });
+
+  it("does not depend on the block size with an a-rate frequency", () => {
+    // The morph's twin, and the assertion that decided ticket 06's open question
+    // about the mip level. `updateLevel()` costs a `Math.log2`, so an a-rate
+    // pitch could take it once per block from the block's peak |increment|
+    // instead of once per sample - safe, in that a level too dark never aliases,
+    // and 62 % cheaper.
+    //
+    // **It is not the same oscillator twice.** A level chosen from the block is
+    // a function of the block: rendered at 128 and at 1024 frames the per-block
+    // arm differs by 1.9e-1 RMS on this very signal, and against the same signal
+    // rendered a sample at a time - where the two are by definition identical -
+    // it misses by 2.3e-2, 27.5 dB below the signal, losing 110 Hz of spectral
+    // centroid because the whole block plays at the darkest level any sample in
+    // it needed. The per-sample level reproduces the sample-at-a-time render
+    // exactly, at any block size, which is what this reads.
+    const len = 256;
+    const table = sawTable(len);
+    const pyramid = mipmapWavetable({ data: table, length: len });
+    // Continuous across most of it, then a five-level jump at 700, deliberately
+    // not on a 128-sample boundary.
+    const params = {
+      frequency: (i: number) => (i < 700 ? 110 + (i * 5000) / 1023 : 7040),
+    };
+    const options = { levels: pyramid.levels, length: 1024 };
+    const eightBlocks = render(pyramid.data, len, params, {
+      ...options,
+      block: 128,
+    });
+    const oneBlock = render(pyramid.data, len, params, {
+      ...options,
+      block: 1024,
+    });
+    const sampleAtATime = render(pyramid.data, len, params, {
+      ...options,
+      block: 1,
+    });
+    expect(eightBlocks).toEqual(oneBlock);
+    expect(eightBlocks).toEqual(sampleAtATime);
   });
 });
 
