@@ -15,12 +15,36 @@ export type KarplusStrongInputs = {
   trigger: ParamInput;
   frequency: ParamInput;
   decay: ParamInput;
+  brightness: ParamInput;
+  level: ParamInput;
+  dynamics: ParamInput;
+  position: ParamInput;
+  pickAngle: ParamInput;
+  stretch: ParamInput;
+  blend: ParamInput;
+  stiffness: ParamInput;
+  detune: ParamInput;
+  polarization: ParamInput;
+  tension: ParamInput;
+  damp: ParamInput;
 };
 
 export type KarplusStrongWorkletNode = AudioWorkletNode & {
   trigger: AudioParam;
   frequency: AudioParam;
   decay: AudioParam;
+  brightness: AudioParam;
+  level: AudioParam;
+  dynamics: AudioParam;
+  position: AudioParam;
+  pickAngle: AudioParam;
+  stretch: AudioParam;
+  blend: AudioParam;
+  stiffness: AudioParam;
+  detune: AudioParam;
+  polarization: AudioParam;
+  tension: AudioParam;
+  damp: AudioParam;
   dispose(): void;
 };
 

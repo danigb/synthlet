@@ -1,9 +1,11 @@
 {
   "name": "@synthlet/karplus-strong",
   "version": "0.1.0",
-  "description": "Karplus Strong generator audio worklet",
+  "description": "An extended Karplus-Strong plucked string audio worklet",
   "keywords": [
-    "karplus-strong-oscillator",
+    "karplus-strong",
+    "plucked-string",
+    "physical-modeling",
     "modular",
     "synthesis",
     "synthlet"
