@@ -21,8 +21,8 @@ function measure(type: SvfType, f: number) {
     input[n] = Math.sin((2 * Math.PI * f * n) / SAMPLE_RATE);
   }
 
-  const filter = createFilter(SAMPLE_RATE);
-  filter(input, output, type, frequency, Q);
+  const { filter } = createFilter(SAMPLE_RATE);
+  filter(input, output, type, frequency, new Float32Array([Q]));
 
   let i = 0;
   let q = 0;

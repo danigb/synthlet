@@ -135,11 +135,15 @@ describe("descriptors", () => {
     }
   });
 
-  it("keeps Svf's frequency at a-rate", () => {
+  it("keeps Svf's frequency and Q at a-rate", () => {
+    // `Q` joined `frequency` when the state variable filter's resonance went
+    // a-rate: it opens with the envelope and tracks velocity, the same argument
+    // `virtual-analog-filter` made for `resonance`. `type` stays k-rate - it is
+    // an index into a set of output mixes, not a point on a continuum.
     const aRate = synthlet.Svf.descriptors.filter(
       (d) => d.automationRate === "a-rate",
     );
-    expect(aRate.map((d) => d.name)).toEqual(["frequency"]);
+    expect(aRate.map((d) => d.name)).toEqual(["frequency", "Q"]);
   });
 
   it("keeps PolyblepOscillator's frequency, detune, width and sync at a-rate", () => {
