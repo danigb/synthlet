@@ -4,11 +4,15 @@ import type { ParamDescriptor } from "./_worklet";
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 export const PARAMS: readonly ParamDescriptor[] = [
   {
+    // The note. a-rate for the same reason as `adsr`'s gate: the sample a
+    // percussive envelope fires on is the thing it is for, and k-rate rounded
+    // it to the top of a render quantum. The read in `worklet.ts` already
+    // handles both shapes.
     name: "trigger",
     defaultValue: 0,
     minValue: 0,
     maxValue: 1,
-    automationRate: "k-rate",
+    automationRate: "a-rate",
   },
   {
     name: "attack",

@@ -77,23 +77,26 @@ describe("descriptors", () => {
   // if the ranges drifted apart, the same signal would drive some modules and
   // not others - which is exactly the bug the shared detector removed.
   //
-  // The **rate** is not part of that contract, and each entry declares its own.
-  // Every module here but two only has to decide which 128-frame block a
-  // trigger fired in, and k-rate says so. The two `sync` params have to decide
-  // where *inside a sample*: it is hard sync, the reset is placed at the
-  // interpolated crossing instant, and a value read once per quantum would
-  // quantise it to 2.9 ms at 44.1 kHz - 20 dB of alias rejection. That is a
-  // per-module decision about resolution, not a weakening of the shared shape,
-  // which is why the shape below is still asserted whole.
+  // The **rate** is part of it too, now. Every trigger-like param in the
+  // library is a-rate as of automation-rate ticket 03: a gate scheduled at an
+  // exact sample takes effect at that sample, rather than at the top of the
+  // next 128-frame quantum - up to 2.9 ms late at 44.1 kHz, and by a different
+  // amount for every event, so a repeated pattern did not even swing
+  // consistently. The two `sync` params were already there, because hard sync
+  // has to place a reset *inside* a sample and quantising it costs 20 dB of
+  // alias rejection; the rest have caught up.
+  //
+  // This list is the whole of it, so a new module declaring a k-rate trigger
+  // fails here rather than shipping a quantised one.
   it("declares every trigger-like param the same way", () => {
     const TRIGGERS: [string, string, ParamDescriptor["automationRate"]][] = [
-      ["AdAmp", "trigger", "k-rate"],
-      ["AdEnv", "trigger", "k-rate"],
-      ["AdsrAmp", "gate", "k-rate"],
-      ["AdsrEnv", "gate", "k-rate"],
-      ["Arp", "trigger", "k-rate"],
-      ["Impulse", "trigger", "k-rate"],
-      ["KarplusStrong", "trigger", "k-rate"],
+      ["AdAmp", "trigger", "a-rate"],
+      ["AdEnv", "trigger", "a-rate"],
+      ["AdsrAmp", "gate", "a-rate"],
+      ["AdsrEnv", "gate", "a-rate"],
+      ["Arp", "trigger", "a-rate"],
+      ["Impulse", "trigger", "a-rate"],
+      ["KarplusStrong", "trigger", "a-rate"],
       ["PolyblepOscillator", "sync", "a-rate"],
       ["WavetableOscillator", "sync", "a-rate"],
     ];

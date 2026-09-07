@@ -138,9 +138,9 @@ describe("AdsrWorkletNode", () => {
       expect(closed[closed.length - 1]).toBe(0);
     });
 
-    // Ticket 05: the gate is read per sample when it is a-rate, so a caller
-    // who opts in gets sample-accurate sequencing instead of one quantised to
-    // the 128-frame block boundary (up to 2.9 ms at 44.1 kHz).
+    // The gate is read per sample. Envelopes 05 made the read rate-agnostic
+    // behind an opt-in; automation-rate 03 declared the parameter a-rate, so
+    // this is what every caller gets rather than what an expert can ask for.
     it("opens at the sample an a-rate gate rises, not at index 0", () => {
       const EDGE = 40;
       const aRate = new Float32Array(200);

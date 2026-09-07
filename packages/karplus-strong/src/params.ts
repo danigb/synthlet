@@ -4,11 +4,15 @@ import type { ParamDescriptor } from "./_worklet";
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 export const PARAMS: readonly ParamDescriptor[] = [
   {
+    // The pluck. a-rate because `dsp.ts` already renders the block in segments
+    // split at each rising edge, so a pluck scheduled mid-block starts
+    // mid-block and two plucks inside one quantum are two plucks. All of that
+    // was reachable only by a caller who knew to set the rate by hand.
     name: "trigger",
     defaultValue: 0,
     minValue: 0,
     maxValue: 1,
-    automationRate: "k-rate",
+    automationRate: "a-rate",
   },
   {
     // The top is measured, not declared. Above about 5 kHz the loop is under

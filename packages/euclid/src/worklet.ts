@@ -3,7 +3,7 @@ import { PARAMS } from "./params";
 
 type GenerateFn = (
   output: Float32Array,
-  clock: number,
+  clock: Float32Array,
   subdivision: number,
   pulseWidth: number,
 ) => void;
@@ -34,7 +34,7 @@ export class EuclidProcessor extends AudioWorkletProcessor {
     this.u(params.steps[0], params.beats[0], params.rotation[0]);
     this.g(
       outputs[0][0],
-      params.clock[0],
+      params.clock,
       params.subdivision[0],
       params.pulseWidth[0],
     );
@@ -59,23 +59,36 @@ function createEuclid(): [GenerateFn, UpdateFn] {
   let prevClock = 0;
   let current = 0;
 
-  function generate(
-    output: Float32Array,
-    clock: number,
-    subdivision: number,
-    pulseWidth: number,
-  ) {
+  // A hit is a *pulse* over the first `pulseWidth` of its step, not the step's
+  // level held to the next step. Held levels merge adjacent hits - there is no
+  // falling edge between them, so no rising edge for the second, and a 4/4
+  // pattern used to fire exactly once, ever.
+  function step(clock: number, subdivision: number, pulseWidth: number) {
     let currentClock = clock * subdivision;
     while (currentClock > 1) currentClock -= 1;
     const gate = currentClock < prevClock;
     prevClock = currentClock;
     // Advance the pattern
     if (gate) current = (current + 1) % pattern.length;
-    // A hit is a *pulse* over the first `pulseWidth` of its step, not the
-    // step's level held to the next step. Held levels merge adjacent hits -
-    // there is no falling edge between them, so no rising edge for the second,
-    // and a 4/4 pattern used to fire exactly once, ever.
-    output.fill(pattern[current] * gatePulse(currentClock, pulseWidth));
+    return pattern[current] * gatePulse(currentClock, pulseWidth);
+  }
+
+  function generate(
+    output: Float32Array,
+    clock: Float32Array,
+    subdivision: number,
+    pulseWidth: number,
+  ) {
+    // The house a-rate check, hoisted. An unautomated `clock` arrives as one
+    // value and the whole block is one step of the ramp, which is what this
+    // did before and costs the same.
+    if (clock.length > 1) {
+      for (let i = 0; i < output.length; i++) {
+        output[i] = step(clock[i], subdivision, pulseWidth);
+      }
+    } else {
+      output.fill(step(clock[0], subdivision, pulseWidth));
+    }
   }
 
   function update(steps: number, beats: number, rotation: number) {

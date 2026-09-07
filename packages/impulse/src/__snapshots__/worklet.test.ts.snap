@@ -3,7 +3,7 @@
 exports[`ImpulseProcessor has parameter descriptors 1`] = `
 [
   {
-    "automationRate": "k-rate",
+    "automationRate": "a-rate",
     "defaultValue": 0,
     "maxValue": 1,
     "minValue": 0,

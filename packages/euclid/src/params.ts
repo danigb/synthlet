@@ -4,11 +4,17 @@ import type { ParamDescriptor } from "./_worklet";
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 export const PARAMS: readonly ParamDescriptor[] = [
   {
+    // Not a gate: a phase ramp, rising 0 to 1 over each beat, and the step
+    // boundary is the wrap. a-rate so that boundary lands on its own sample
+    // rather than at the top of the next render quantum - the same quantity as
+    // every other event parameter in the library, arrived at differently.
+    // A `Clock` is a node by construction, so k-rate here bought nothing: the
+    // ramp was rendered either way and 127 of its 128 samples thrown away.
     name: "clock",
     defaultValue: 0,
     minValue: 0,
     maxValue: 1,
-    automationRate: "k-rate",
+    automationRate: "a-rate",
   },
   {
     name: "steps",

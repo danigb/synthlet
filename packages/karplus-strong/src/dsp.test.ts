@@ -986,8 +986,9 @@ describe("createKS trigger timing", () => {
     },
   );
 
-  // And this is what a caller who sets `trigger.automationRate = "a-rate"`
-  // gets: the pluck starts where it was scheduled, not up to 2.9 ms later.
+  // And this is what every caller gets since automation-rate 03 declared
+  // `trigger` a-rate: the pluck starts where it was scheduled, not up to
+  // 2.9 ms later.
   it("starts a pluck mid-block when the trigger is a-rate", () => {
     const AT = 64;
     const trigger = new Float32Array(BLOCK);

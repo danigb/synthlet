@@ -4,11 +4,15 @@ import type { ParamDescriptor } from "./_worklet";
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 export const PARAMS: readonly ParamDescriptor[] = [
   {
+    // The step. a-rate so the note changes at the trigger's own sample rather
+    // than at the top of the next render quantum, and so two triggers inside
+    // one quantum advance the arpeggiator twice - at k-rate the second was
+    // invisible. What it emits is still one note per trigger.
     name: "trigger",
     defaultValue: 0,
     minValue: 0,
     maxValue: 1,
-    automationRate: "k-rate",
+    automationRate: "a-rate",
   },
   // MIDI note numbers.
   {

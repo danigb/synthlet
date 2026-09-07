@@ -1,0 +1,34 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ArpProcessor has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "trigger",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 60,
+    "maxValue": 127,
+    "minValue": 0,
+    "name": "baseNote",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 4095,
+    "minValue": 1,
+    "name": "scale",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 10,
+    "minValue": 1,
+    "name": "octaves",
+  },
+]
+`;

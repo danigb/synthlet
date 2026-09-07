@@ -38,6 +38,52 @@ describe("ImpulseProcessor", () => {
     new Worklet().process([], outputs, { trigger: [1] });
     expect(Array.from(outputs[0][0])).toEqual([1, 0, 0, 0, 0, 0, 0, 0]);
   });
+
+  // `trigger` is a-rate as of automation-rate ticket 03, so the detector reads
+  // every sample it was given rather than only the first. The impulse still
+  // goes at index 0 - deliberately, and deferred - so what these assert is the
+  // *detection*, which is where the events were being lost.
+  describe("a-rate detection", () => {
+    const block = (values: number[]) => Float32Array.from(values);
+
+    it("sees a pulse narrower than the block, which used to vanish", () => {
+      // Rises at 2 and falls at 5. Reading only sample 0 sees 0, then 0 in the
+      // next block, and no edge ever existed: not a late trigger, a lost one.
+      const outputs = [[new Float32Array(8)]];
+      new Worklet().process([], outputs, {
+        trigger: block([0, 0, 1, 1, 1, 0, 0, 0]),
+      });
+      expect(outputs[0][0][0]).toBe(1);
+    });
+
+    it("fires in the block the trigger arrives in, not the next one", () => {
+      const worklet = new Worklet();
+      const first = [[new Float32Array(8)]];
+      worklet.process([], first, { trigger: block([0, 0, 0, 0, 0, 0, 0, 1]) });
+      expect(first[0][0][0]).toBe(1);
+
+      // And holding it across the boundary does not re-fire.
+      const second = [[new Float32Array(8)]];
+      worklet.process([], second, { trigger: block([1, 1, 1, 1, 1, 1, 1, 1]) });
+      expect(second[0][0][0]).toBe(0);
+    });
+
+    it("does not fire on a block that never goes positive", () => {
+      const outputs = [[new Float32Array(8)]];
+      new Worklet().process([], outputs, { trigger: new Float32Array(8) });
+      expect(Array.from(outputs[0][0])).toEqual([0, 0, 0, 0, 0, 0, 0, 0]);
+    });
+
+    it("collapses two edges in one block into one impulse", () => {
+      // Index 0 holds one sample. Documented rather than fixed: moving the
+      // impulse off index 0 is deferred, and this is the same question.
+      const outputs = [[new Float32Array(8)]];
+      new Worklet().process([], outputs, {
+        trigger: block([0, 1, 0, 0, 1, 0, 0, 0]),
+      });
+      expect(Array.from(outputs[0][0])).toEqual([1, 0, 0, 0, 0, 0, 0, 0]);
+    });
+  });
 });
 
 // Returns the first sample of each block: the impulse, when there is one.

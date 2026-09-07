@@ -70,12 +70,10 @@ export function createAdsr(sampleRate: number) {
     const length = outputs[0]?.length ?? 0;
 
     for (let i = 0; i < length; i++) {
-      // Read the gate per sample when it is a-rate. The descriptor still
-      // declares k-rate, so by default this is `gate[0]` for the whole block -
-      // identical to reading it once - but a caller who sets
-      // `gate.automationRate = "a-rate"` now gets the sample-accurate
-      // sequencing they asked for instead of one quantised to the 128-frame
-      // block boundary (up to 2.9 ms at 44.1 kHz).
+      // The house a-rate read. `gate` is declared a-rate, but an unautomated
+      // parameter still arrives as a single value - the spec allows it and
+      // Chrome does it even for a connected constant - so this handles both
+      // shapes and the length-1 case costs exactly what reading it once cost.
       const edge = detectGate(gate.length > 1 ? gate[i] : gate[0]);
       if (edge === true) {
         stage = Stage.Attack;
