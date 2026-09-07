@@ -53,7 +53,32 @@ kick.connect(audioContext.destination);
 
 - `bpm`: beats per minute
 - `pulseWidth`: how much of each beat `clock.gate` is high for, as a fraction of the beat. Default is `0.5`. `1` means the widest gate that still retriggers, not 100% — a gate that never falls can never fire anything again.
-- `reset`: on a rising edge, the phase returns to 0 on that sample and the next beat starts there. Edge triggered, and `a-rate` so it lands on its own sample.
+- `reset`: on a rising edge, the phase returns to 0 on that sample and the next beat starts there. Edge triggered, and `a-rate` so it lands on its own sample. A reset puts you at the top of a bar, not the top of an arbitrary beat.
+- `beatsPerBar`: how many beats make a bar. Default is `4`; `0` means no bar structure and silences `clock.bar` and `clock.downbeat`.
+
+## Bars and downbeats
+
+`clock.bar` is a phase ramp over the whole bar, and `clock.downbeat` is the beat
+gate on the first beat of each bar only. They are the beat pair one level up, and
+they are on the clock rather than in each consumer because a bar cannot be
+recovered downstream: the beat ramp during beat 1 is bit-identical to the ramp
+during beat 3, so the bar position is a count that has to be owned by whoever
+owns the phase origin.
+
+```ts
+const clock = Clock(audioContext, { bpm: 120, beatsPerBar: 4 });
+const snare = Snare(audioContext, { trigger: clock.downbeat }); // once per bar
+// eight steps spread across the bar
+const hats = Euclid(audioContext, {
+  clock: clock.bar,
+  subdivision: 8,
+  steps: 8,
+  beats: 3,
+});
+```
+
+`clock.downbeat` is a subset of `clock.gate` — same width, same phase, same
+sample — so the two rise and fall together.
 
 ## Aligning two clocks
 

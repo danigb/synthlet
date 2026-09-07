@@ -1,17 +1,21 @@
 # @synthlet/clock
 
-> A tempo clock with two outputs: a phase ramp and a gate
+> A tempo clock with four outputs: a beat phase and gate, a bar phase and downbeat
 
 Part of [Synthlet](https://github.com/danigb/synthlet).
 
-The thing a sequenced patch is built on. It emits **two different signals**,
-because the two things that consume a clock want different shapes:
+The thing a sequenced patch is built on. It emits **two different kinds of
+signal**, because the two things that consume a clock want different shapes —
+and it emits each of them at two levels, the beat and the bar:
 
 - **the phase ramp**, on the node's own output — a `[0, 1)` sawtooth restarting
   each beat, written **one value per sample**. Subdividing a clock means
   multiplying its phase, so this is what `Euclid` reads.
 - **the gate**, on `.gate` — high for `pulseWidth` of each beat. This is what an
   envelope or a drum voice reads.
+- **the bar phase**, on `.bar` — the same ramp over `beatsPerBar` beats.
+- **the downbeat gate**, on `.downbeat` — the beat gate, but only on the first
+  beat of each bar.
 
 They are not interchangeable. Feeding the ramp to an envelope's trigger used to
 work by accident and does not any more.
@@ -38,19 +42,21 @@ await registerClockWorklet(ac);
 
 const clock = Clock(ac, { bpm: 120, pulseWidth: 0.25 });
 
-Euclid(ac, { clock }); // the ramp
-KickDrum(ac, { trigger: clock.gate }); // the gate
+Euclid(ac, { clock }); // the beat ramp
+KickDrum(ac, { trigger: clock.gate }); // the beat gate
+Snare(ac, { trigger: clock.downbeat }); // once per bar
 
 clock.dispose(); // disposes the gate node with it
 ```
 
 ## Parameters
 
-| Param        | Default | Range    | Rate   | Meaning                                     |
-| ------------ | ------- | -------- | ------ | ------------------------------------------- |
-| `bpm`        | 120     | 0 … 1000 | k-rate | Tempo in beats per minute                   |
-| `pulseWidth` | 0.5     | 0 … 1    | k-rate | Fraction of each beat the gate is high for¹ |
-| `reset`      | 0       | 0 … 1    | a-rate | Rising edge returns the phase to 0          |
+| Param         | Default | Range    | Rate   | Meaning                                     |
+| ------------- | ------- | -------- | ------ | ------------------------------------------- |
+| `bpm`         | 120     | 0 … 1000 | k-rate | Tempo in beats per minute                   |
+| `pulseWidth`  | 0.5     | 0 … 1    | k-rate | Fraction of each beat the gate is high for¹ |
+| `reset`       | 0       | 0 … 1    | a-rate | Rising edge returns the phase to 0          |
+| `beatsPerBar` | 4       | 0 … 32   | k-rate | Beats per bar; `0` silences the bar outputs |
 
 `bpm` and `pulseWidth` are `k-rate`: the phase increment is derived from `bpm` and cached, and a
 tempo that changed every sample is frequency modulation of the clock rather
@@ -81,6 +87,42 @@ what repairs it is an alignment inlet, which this module does not have yet.
 
 That is also why the gate is a second output rather than a separate `ClockGate`
 module: one accumulator, two views of it.
+
+## Bars
+
+`.bar` is the same kind of object as the beat phase — a rising `[0, 1)` ramp,
+one per bar instead of one per beat — so anything that consumes a clock consumes
+it:
+
+```ts
+const clock = Clock(ac, { bpm: 120, beatsPerBar: 4 });
+Euclid(ac, { clock: clock.bar, subdivision: 8, steps: 8, beats: 3 });
+```
+
+`.downbeat` is a **subset of `.gate`**: both take their width from the same
+`pulseWidth` and the same phase at the same sample, so they rise and fall
+together and `downbeat > 0` implies `gate > 0` everywhere.
+
+A clock starts on a downbeat, and `reset` returns it to one — a reset puts you at
+the top of a bar rather than the top of an arbitrary beat.
+
+Changing `beatsPerBar` while the clock runs re-phases the grid from the next
+beat: the counter is beats-since-start and the bar position is
+`beats % beatsPerBar`, so nothing emits a spurious downbeat or swallows one.
+
+**Why the bar lives here rather than in each consumer.** Subdividing a clock is
+multiplying its phase — a pure function of the instantaneous value, available to
+anything with no setup. Division is not the mirror image: the bar position is a
+_count_, and the beat ramp during beat 1 is bit-identical to the ramp during beat
+3, so the information is not in the signal at all. A consumer that wanted bars
+would have to count wraps and choose an origin, and two consumers choosing
+privately disagree about where bar 1 is — permanently and silently, while each is
+individually correct. A bar is a shared fact about a timeline, and `Clock` is the
+only thing in the library that owns a timeline.
+
+There is no time-signature denominator: `bpm` defines what a beat is. 6/8 at
+dotted-quarter = 60 is `bpm: 60, beatsPerBar: 2`, or `bpm: 180, beatsPerBar: 6`,
+depending on what you want to count.
 
 ## Aligning things
 

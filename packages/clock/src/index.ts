@@ -12,30 +12,49 @@ export type ClockInputs = {
   bpm?: ParamInput;
   pulseWidth?: ParamInput;
   reset?: ParamInput;
+  beatsPerBar?: ParamInput;
 };
 
 export type ClockWorkletNode = AudioWorkletNode & {
   bpm: AudioParam;
   pulseWidth: AudioParam;
   reset: AudioParam;
+  beatsPerBar: AudioParam;
 };
 
 /**
- * A clock node: the phase ramp on its own output, the gate on `.gate`.
+ * A clock node: the beat phase on its own output, the beat gate on `.gate`,
+ * and the same pair one level up on `.bar` and `.downbeat`.
  *
- * The two are different kinds of signal and are not interchangeable. The phase
- * is a rising 0...1 ramp, restarting each beat - what `Euclid` needs, because
- * subdividing a clock means multiplying its phase. The gate is high for
- * `pulseWidth` of each beat - what an envelope needs. Feeding the phase to an
- * envelope's trigger used to work by accident and does not any more:
+ * A phase and a gate are different kinds of signal and are not interchangeable.
+ * A phase is a rising `[0, 1)` ramp - what `Euclid` needs, because subdividing
+ * a clock means multiplying its phase. A gate is high for `pulseWidth` of each
+ * cycle - what an envelope needs. Feeding a phase to an envelope's trigger used
+ * to work by accident and does not any more.
+ *
+ * The bar pair exists for exactly the same reason as the beat pair, and it is
+ * on the clock rather than in each consumer because a bar cannot be recovered
+ * downstream: the beat ramp during beat 1 is bit-identical to the ramp during
+ * beat 3, so the bar position is a count that has to be owned by whoever owns
+ * the phase origin.
  *
  * ```ts
- * const clock = Clock(ac, { bpm: 120 });
- * Euclid(ac, { clock }); // the ramp
- * KickDrum(ac, { trigger: clock.gate }); // the gate
+ * const clock = Clock(ac, { bpm: 120, beatsPerBar: 4 });
+ * Euclid(ac, { clock }); // the beat ramp
+ * KickDrum(ac, { trigger: clock.gate }); // the beat gate
+ * Snare(ac, { trigger: clock.downbeat }); // once per bar
+ * // eight steps across the bar - `subdivision` is what divides a cycle
+ * Euclid(ac, { clock: clock.bar, subdivision: 8, steps: 8, beats: 3 });
  * ```
+ *
+ * `.downbeat` is a subset of `.gate`: both take their width from the same
+ * `pulseWidth` and the same phase at the same sample, so they rise and fall
+ * together.
  */
-export type ClockNode = CompoundNode<ClockWorkletNode, { gate: GainNode }>;
+export type ClockNode = CompoundNode<
+  ClockWorkletNode,
+  { gate: GainNode; bar: GainNode; downbeat: GainNode }
+>;
 
 const createClockNode = createWorkletConstructor<ClockWorkletNode, ClockInputs>(
   {
@@ -43,8 +62,8 @@ const createClockNode = createWorkletConstructor<ClockWorkletNode, ClockInputs>(
     descriptors: PARAMS,
     workletOptions: () => ({
       numberOfInputs: 0,
-      numberOfOutputs: 2,
-      outputChannelCount: [1, 1],
+      numberOfOutputs: 4,
+      outputChannelCount: [1, 1, 1, 1],
     }),
   },
 );
@@ -52,13 +71,26 @@ const createClockNode = createWorkletConstructor<ClockWorkletNode, ClockInputs>(
 export const Clock = Object.assign(
   (context: AudioContext, inputs: ClockInputs = {}): ClockNode => {
     const node = createClockNode(context, inputs);
-    // The gate needs to be a node a caller can connect *from*, so output 1
-    // gets its own gain to hang off. One clock, one phase accumulator: a
-    // second Clock node would drift unless built in the same render quantum,
-    // which is why this is a second output rather than a `ClockGate` variant.
+    // Each secondary output needs to be a node a caller can connect *from*, so
+    // each gets its own gain to hang off. One clock, one phase accumulator and
+    // one beat counter: a second Clock node holds a constant offset from this
+    // one, which is why these are outputs rather than sibling modules.
+    //
+    // Three idle gain nodes per clock whether or not anyone connects to them.
+    // That is cheap, and it is also a precedent worth being deliberate about:
+    // if a fifth output is ever proposed, creating these lazily should be
+    // reconsidered rather than the count grown by reflex.
     const gate = new GainNode(context);
+    const bar = new GainNode(context);
+    const downbeat = new GainNode(context);
     node.connect(gate, 1);
-    return Compound({ output: node, owns: [gate], exposes: { gate } });
+    node.connect(bar, 2);
+    node.connect(downbeat, 3);
+    return Compound({
+      output: node,
+      owns: [gate, bar, downbeat],
+      exposes: { gate, bar, downbeat },
+    });
   },
   { descriptors: PARAMS },
 );

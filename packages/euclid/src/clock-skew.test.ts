@@ -207,7 +207,7 @@ describe("two Euclids on one clock", () => {
 
     for (let b = 0; b < blocks; b++) {
       const reset = options.reset && b === resetBlock ? pulse : NO_RESET;
-      clock(phase, clockGate, 120, 0.5, NO_RESET);
+      clock([[phase], [clockGate]], 120, 0.5, 4, NO_RESET);
       if (b === offset) second = new Worklet();
       first.process([], [[firstOut]], params(reset));
       if (second) second.process([], [[secondOut]], params(reset));
@@ -230,6 +230,66 @@ describe("two Euclids on one clock", () => {
       firstHits.every((hit, i) => hit === secondHits[i])
     );
   }
+});
+
+describe("a Euclid on the clock's bar phase", () => {
+  beforeAll(async () => {
+    createWorkletTestContext(SAMPLE_RATE);
+    Worklet = (await import("./worklet")).EuclidProcessor;
+  });
+
+  it("spreads its steps evenly across the bar", () => {
+    // Criterion 4 of clock ticket 06, proven by consumption rather than by
+    // measurement: a bar phase is only worth having if it is the *same kind of
+    // object* as a beat phase, and the test of that is that the thing which
+    // consumes beat phases consumes it without knowing the difference.
+    //
+    // Eight steps over a 4-beat bar at 120 BPM: one every half beat, the first
+    // on the downbeat. `subdivision` is what divides a cycle into steps -
+    // `steps` selects the pattern - so eight steps *per bar* is
+    // `subdivision: 8`, not `steps: 8` alone.
+    const beatsPerBar = 4;
+    const steps = 8;
+    const clock = createClock(SAMPLE_RATE);
+    const euclid = new Worklet();
+    const out = [
+      [new Float32Array(BLOCK)],
+      [new Float32Array(BLOCK)],
+      [new Float32Array(BLOCK)],
+      [new Float32Array(BLOCK)],
+    ];
+    const hitsOut = new Float32Array(BLOCK);
+    const params = {
+      clock: out[2][0],
+      steps: [steps],
+      beats: [steps],
+      subdivision: [steps],
+      rotation: [0],
+      pulseWidth: [0.5],
+      reset: NO_RESET,
+    };
+
+    const hits: number[] = [];
+    let prev = 0;
+    const blocks = Math.floor((SAMPLE_RATE * 16) / BLOCK);
+    for (let b = 0; b < blocks; b++) {
+      clock(out, 120, 0.5, beatsPerBar, NO_RESET);
+      euclid.process([], [[hitsOut]], params);
+      for (let i = 0; i < BLOCK; i++) {
+        if (hitsOut[i] > 0 && !(prev > 0)) hits.push(b * BLOCK + i);
+        prev = hitsOut[i];
+      }
+    }
+
+    const beat = (SAMPLE_RATE * 60) / 120;
+    const stepLength = (beat * beatsPerBar) / steps;
+    expect(hits[0]).toBe(0);
+    expect(hits.length).toBeGreaterThan(steps * 3);
+    // Evenly spaced, to the sample.
+    hits.forEach((hit, i) => {
+      expect(Math.abs(hit - i * stepLength)).toBeLessThanOrEqual(1);
+    });
+  });
 });
 
 /** Render `seconds` and return the rising-edge sample indices of each signal. */
@@ -272,7 +332,7 @@ function render(
   let prevHit = 0;
   const blocks = Math.floor((SAMPLE_RATE * seconds) / BLOCK);
   for (let b = 0; b < blocks; b++) {
-    clock(phase, clockGate, params.bpm ?? 120, 0.5, NO_RESET);
+    clock([[phase], [clockGate]], params.bpm ?? 120, 0.5, 4, NO_RESET);
     euclid.process([], [[euclidOut]], euclidParams);
     for (let i = 0; i < BLOCK; i++) {
       if (clockGate[i] > 0 && !(prevGate > 0)) gate.push(b * BLOCK + i);

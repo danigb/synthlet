@@ -5,14 +5,32 @@ import { createGateDetector, gatePulse } from "./_gate";
 const RENDER_QUANTUM = 128;
 
 /**
- * The clock engine: one phase accumulator, rendered a sample at a time.
+ * The clock engine: one phase accumulator and one beat counter, rendered a
+ * sample at a time.
  *
- * Both outputs are read from the same variable at the same sample, so they
- * cannot describe different instants. Output 0 is the phase ramp - a rising
- * `[0, 1)` sawtooth, restarting each beat - because subdividing a clock means
- * multiplying its phase, which a square gate cannot support. Output 1 is the
- * gate, which is what an envelope wants: a phase is not a gate, and no
- * threshold makes it one (any threshold fires early; `> 0` latches on).
+ * All four outputs are read from the same phase at the same sample, so they
+ * cannot describe different instants.
+ *
+ * Output 0 is the beat phase - a rising `[0, 1)` sawtooth, restarting each
+ * beat - because subdividing a clock means multiplying its phase, which a
+ * square gate cannot support. Output 1 is the beat gate, which is what an
+ * envelope wants: a phase is not a gate, and no threshold makes it one (any
+ * threshold fires early; `> 0` latches on).
+ *
+ * Outputs 2 and 3 are the same pair one level up: a bar phase and a downbeat
+ * gate. They are both here for the same reason, and a bar needs both for
+ * identical reasons - a bar phase is what a consumer subdivides or reads a
+ * position from, a downbeat gate is what a trigger wants.
+ *
+ * A bar cannot be recovered downstream. `Euclid` multiplies the beat phase to
+ * subdivide it, which is a pure function of the instantaneous value; division
+ * is not the mirror image, because the bar position is a *count* and the ramp
+ * during beat 1 is bit-identical to the ramp during beat 3. A consumer that
+ * wanted bars would have to count wraps, which means holding state and
+ * choosing an origin - and choosing that origin privately is the defect. Two
+ * counters built at different times disagree about where bar 1 is, silently
+ * and forever, while each is individually correct. `Clock` owns the phase
+ * origin, so it owns the bar.
  *
  * The wrap is `>= 1`, so nothing ever emits exactly 1.0. That is what
  * `gatePulse` and `Euclid`'s `currentClock < prevClock` both already assume,
@@ -31,13 +49,43 @@ export function createClock(sampleRate: number) {
   let phase = 0;
   const detectReset = createGateDetector();
 
+  // Beats since the clock started, unbounded - not a counter that wraps at
+  // `beatsPerBar`. The bar position is `beats % beatsPerBar`, so changing the
+  // parameter re-phases the grid rather than emitting a spurious downbeat or
+  // swallowing one.
+  //
+  // `barPos` and `barLength` are latched at the beat boundary rather than read
+  // per sample. Reading `beatsPerBar` live for the divisor would jump the bar
+  // phase mid-beat - downward, if the bar got longer - which a downstream
+  // `Euclid` reads as a wrap and answers with a spurious step. Latching both
+  // is what makes a mid-run change re-phase from the *next* beat onward.
+  let beats = 0;
+  let barPos = 0;
+  let barLength = -1;
+
+  /**
+   * Renders one block.
+   *
+   * Takes the processor's `outputs` array rather than four positional buffers:
+   * four outputs and four parameters is too many arguments to keep straight,
+   * and `lfo`'s `dsp.ts` already takes the processor's `parameters` for the
+   * same reason. It is a plain nested array, not anything from the worklet
+   * global scope - `dsp.test.ts` builds one by hand.
+   *
+   * Outputs 1 to 3 may be absent; output 0 is not optional.
+   */
   return function generate(
-    phaseOut: Float32Array,
-    gateOut: Float32Array | undefined,
+    outputs: Float32Array[][],
     nextBpm: number,
     pulseWidth: number,
+    beatsPerBar: number,
     reset: Float32Array,
   ) {
+    const phaseOut = outputs[0][0];
+    const gateOut = outputs[1]?.[0];
+    const barOut = outputs[2]?.[0];
+    const downbeatOut = outputs[3]?.[0];
+
     if (nextBpm !== bpm) {
       bpm = nextBpm;
       increment = bpm / 60 / sampleRate;
@@ -81,30 +129,64 @@ export function createClock(sampleRate: number) {
     const rRate = reset.length > 1;
     let p = phase;
 
+    // The bar grid on the very first block: every later change to
+    // `beatsPerBar` lands at a beat boundary, but there has not been one yet.
+    if (barLength < 0) barLength = beatsPerBar;
+
+    const wantGate = gateOut !== undefined;
+    const wantBar = barOut !== undefined;
+    const wantDownbeat = downbeatOut !== undefined;
+
     // Emit, then advance. `phase[i]` is the fraction of the beat elapsed *at*
     // sample `i`, so a beat boundary lands on the sample it is due on rather
     // than one early: at 16384 Hz and 120 BPM the wrap is at sample 8192, not
     // 8191. Advancing first would bias every edge a sample low, which is
-    // within the one-sample bound this ticket promises but is a bias rather
+    // within the one-sample bound ticket 03 promises but is a bias rather
     // than a rounding.
-    if (gateOut) {
-      for (let i = 0; i < length; i++) {
-        // Before the emit, so the phase *is* 0 on the reset's own sample and
-        // the gate rises there rather than a block later. `running` still
-        // gates the gate, so a reset re-aligns a stopped clock's phase without
-        // waking it.
-        if (detectReset(rRate ? reset[i] : reset[0]) === true) p = 0;
-        phaseOut[i] = p;
-        gateOut[i] = running ? gatePulse(p, width) : 0;
-        p += step;
-        if (p >= 1) p -= 1;
+    //
+    // One loop with four hoisted flags rather than a body per combination of
+    // present outputs: `benchmarks/clock-rate` prices the whole generator at a
+    // fraction of a microsecond a block, and four perfectly predicted branches
+    // are not where that goes.
+    for (let i = 0; i < length; i++) {
+      // Before the emit, so the phase *is* 0 on the reset's own sample and the
+      // gate rises there rather than a block later. `running` still gates the
+      // gate, so a reset re-aligns a stopped clock's phase without waking it.
+      //
+      // A reset zeroes the beat counter too: it puts you at the top of a bar,
+      // not the top of an arbitrary beat. Anything else would make `reset`
+      // mean two different things depending on which output you watched.
+      if (detectReset(rRate ? reset[i] : reset[0]) === true) {
+        p = 0;
+        beats = 0;
+        barLength = beatsPerBar;
+        barPos = 0;
       }
-    } else {
-      for (let i = 0; i < length; i++) {
-        if (detectReset(rRate ? reset[i] : reset[0]) === true) p = 0;
-        phaseOut[i] = p;
-        p += step;
-        if (p >= 1) p -= 1;
+
+      phaseOut[i] = p;
+      // The downbeat takes its phase, its width and its sample from the beat
+      // gate, so it rises and falls with it: `downbeat > 0` implies `gate > 0`
+      // everywhere, and the two can be summed or compared with no phase
+      // relationship to reason about.
+      if (wantGate) gateOut![i] = running ? gatePulse(p, width) : 0;
+      // A divide per sample, not a hoisted reciprocal. Measured on isolated
+      // copies of the two loops: 0.9244 vs 0.9269 us/block, which is nothing.
+      // `benchmarks/lfo-rate` kept its hoist because it was worth 34%; this
+      // one is not worth the fourth piece of latched state.
+      if (wantBar) barOut![i] = barLength > 0 ? (barPos + p) / barLength : 0;
+      if (wantDownbeat) {
+        downbeatOut![i] =
+          running && barLength > 0 && barPos === 0 ? gatePulse(p, width) : 0;
+      }
+
+      p += step;
+      if (p >= 1) {
+        p -= 1;
+        beats++;
+        // Latched here and nowhere else, which is what confines a
+        // `beatsPerBar` change to a beat boundary.
+        barLength = beatsPerBar;
+        barPos = barLength > 0 ? beats % barLength : 0;
       }
     }
 

@@ -102,21 +102,36 @@ function risingEdges(values: number[]) {
 function run(
   worklet: any,
   samples: number,
-  params: { bpm?: number; pulseWidth?: number; reset?: Float32Array } = {},
+  params: {
+    bpm?: number;
+    pulseWidth?: number;
+    reset?: Float32Array;
+    beatsPerBar?: number;
+  } = {},
 ) {
   const phase: number[] = [];
   const gate: number[] = [];
+  const bar: number[] = [];
+  const downbeat: number[] = [];
   for (let i = 0; i < samples / BLOCK; i++) {
-    const outputs = [[new Float32Array(BLOCK)], [new Float32Array(BLOCK)]];
+    const outputs = [
+      [new Float32Array(BLOCK)],
+      [new Float32Array(BLOCK)],
+      [new Float32Array(BLOCK)],
+      [new Float32Array(BLOCK)],
+    ];
     worklet.process([], outputs, {
       bpm: [params.bpm ?? 120],
       pulseWidth: [params.pulseWidth ?? 0.5],
+      beatsPerBar: [params.beatsPerBar ?? 4],
       reset: params.reset ?? new Float32Array(1),
     });
     phase.push(...outputs[0][0]);
     gate.push(...outputs[1][0]);
+    bar.push(...outputs[2][0]);
+    downbeat.push(...outputs[3][0]);
   }
-  return { phase, gate };
+  return { phase, gate, bar, downbeat };
 }
 
 function createWorkletTestContext(sampleRate = 10, ctx: any = global) {

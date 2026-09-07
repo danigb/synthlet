@@ -24,10 +24,10 @@ export class ClockWorkletProcessor extends AudioWorkletProcessor {
     parameters: any,
   ) {
     this.g(
-      outputs[0][0],
-      outputs[1]?.[0],
+      outputs,
       parameters.bpm[0],
       parameters.pulseWidth[0],
+      parameters.beatsPerBar[0],
       parameters.reset,
     );
     return this.r;

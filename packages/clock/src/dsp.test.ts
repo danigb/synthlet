@@ -32,6 +32,9 @@ const BLOCK = 128;
  * `reset` looks like in every test that is not about resetting. */
 const SILENT = new Float32Array(1);
 
+/** The default `beatsPerBar`, for tests that are not about bars. */
+const BEATS_PER_BAR = 4;
+
 describe("createClock", () => {
   /**
    * The two tests that stood here until clock ticket 03 were oracle tests: they
@@ -121,9 +124,9 @@ describe("createClock", () => {
     const phaseOut = new Float32Array(BLOCK);
     const slow = new Float32Array(BLOCK);
     const fast = new Float32Array(BLOCK);
-    clock(phaseOut, undefined, 60, 0.5, SILENT);
-    clock(slow, undefined, 60, 0.5, SILENT);
-    clock(fast, undefined, 240, 0.5, SILENT);
+    clock([[phaseOut]], 60, 0.5, BEATS_PER_BAR, SILENT);
+    clock([[slow]], 60, 0.5, BEATS_PER_BAR, SILENT);
+    clock([[fast]], 240, 0.5, BEATS_PER_BAR, SILENT);
     // Float32 storage, so the difference of two adjacent ramp values carries
     // about seven digits - hence 9 rather than 12.
     expect(slow[1] - slow[0]).toBeCloseTo(60 / 60 / 44100, 9);
@@ -134,7 +137,9 @@ describe("createClock", () => {
     // `outputs[1]` is absent whenever nothing is connected to `.gate`.
     const clock = createClock(44100);
     const phaseOut = new Float32Array(BLOCK);
-    expect(() => clock(phaseOut, undefined, 120, 0.5, SILENT)).not.toThrow();
+    expect(() =>
+      clock([[phaseOut]], 120, 0.5, BEATS_PER_BAR, SILENT),
+    ).not.toThrow();
     expect(phaseOut[1]).toBeGreaterThan(phaseOut[0]);
   });
 });
@@ -325,20 +330,22 @@ function renderEdges(
     pulseWidth?: number;
     startBlock?: number;
     reset?: Float32Array;
+    beatsPerBar?: number;
   } = {},
 ) {
   const phaseOut = new Float32Array(BLOCK);
   const gateOut = new Float32Array(BLOCK);
+  const out = [[phaseOut], [gateOut]];
   const blocks = Math.floor((sampleRate * seconds) / BLOCK);
   const startBlock = params.startBlock ?? 0;
   const edges: number[] = [];
   let prev = 0;
   for (let b = startBlock; b < blocks; b++) {
     clock(
-      phaseOut,
-      gateOut,
+      out,
       params.bpm ?? 120,
       params.pulseWidth ?? 0.5,
+      params.beatsPerBar ?? BEATS_PER_BAR,
       params.reset ?? SILENT,
     );
     const found = risingEdgesOf(gateOut, b * BLOCK, prev);
@@ -353,10 +360,16 @@ function renderGateWidths(
   clock: ReturnType<typeof createClock>,
   sampleRate: number,
   seconds: number,
-  params: { bpm?: number; pulseWidth?: number; reset?: Float32Array } = {},
+  params: {
+    bpm?: number;
+    pulseWidth?: number;
+    reset?: Float32Array;
+    beatsPerBar?: number;
+  } = {},
 ) {
   const phaseOut = new Float32Array(BLOCK);
   const gateOut = new Float32Array(BLOCK);
+  const out = [[phaseOut], [gateOut]];
   const blocks = Math.floor((sampleRate * seconds) / BLOCK);
   const highs: number[] = [];
   const edges: number[] = [];
@@ -364,10 +377,10 @@ function renderGateWidths(
   let count = 0;
   for (let b = 0; b < blocks; b++) {
     clock(
-      phaseOut,
-      gateOut,
+      out,
       params.bpm ?? 120,
       params.pulseWidth ?? 0.5,
+      params.beatsPerBar ?? BEATS_PER_BAR,
       params.reset ?? SILENT,
     );
     for (let i = 0; i < BLOCK; i++) {
@@ -504,17 +517,18 @@ describe("reset", () => {
     const clock = createClock(sampleRate);
     const phaseOut = new Float32Array(BLOCK);
     const gateOut = new Float32Array(BLOCK);
+    const out = [[phaseOut], [gateOut]];
 
     // Run far enough into the beat that the gate has already fallen: at 120
     // BPM and 44100 a beat is 172.3 blocks, so 100 blocks is phase 0.58.
     for (let b = 0; b < 100; b++) {
-      clock(phaseOut, gateOut, 120, 0.5, SILENT);
+      clock(out, 120, 0.5, BEATS_PER_BAR, SILENT);
     }
     expect(phaseOut[0]).toBeGreaterThan(0.5);
 
     const reset = new Float32Array(BLOCK);
     reset[40] = 1;
-    clock(phaseOut, gateOut, 120, 0.5, reset);
+    clock(out, 120, 0.5, BEATS_PER_BAR, reset);
 
     expect(phaseOut[39]).toBeGreaterThan(0.5);
     expect(phaseOut[40]).toBe(0);
@@ -530,10 +544,11 @@ describe("reset", () => {
     const clock = createClock(44100);
     const phaseOut = new Float32Array(BLOCK);
     const gateOut = new Float32Array(BLOCK);
+    const out = [[phaseOut], [gateOut]];
     const reset = new Float32Array(BLOCK);
     reset[10] = 1;
     reset[60] = 1;
-    clock(phaseOut, gateOut, 120, 0.5, reset);
+    clock(out, 120, 0.5, BEATS_PER_BAR, reset);
     expect(phaseOut[10]).toBe(0);
     expect(phaseOut[59]).toBeGreaterThan(0);
     expect(phaseOut[60]).toBe(0);
@@ -546,12 +561,13 @@ describe("reset", () => {
     const clock = createClock(44100);
     const phaseOut = new Float32Array(BLOCK);
     const gateOut = new Float32Array(BLOCK);
+    const out = [[phaseOut], [gateOut]];
     const held = new Float32Array(BLOCK).fill(1);
-    clock(phaseOut, gateOut, 120, 0.5, held);
+    clock(out, 120, 0.5, BEATS_PER_BAR, held);
     expect(phaseOut[0]).toBe(0);
     expect(phaseOut[BLOCK - 1]).toBeGreaterThan(0);
     // A second block still held high does not reset again.
-    clock(phaseOut, gateOut, 120, 0.5, held);
+    clock(out, 120, 0.5, BEATS_PER_BAR, held);
     expect(phaseOut[0]).toBeGreaterThan(0);
   });
 
@@ -563,9 +579,10 @@ describe("reset", () => {
     const clock = createClock(44100);
     const phaseOut = new Float32Array(BLOCK);
     const gateOut = new Float32Array(BLOCK);
+    const out = [[phaseOut], [gateOut]];
     const reset = new Float32Array(BLOCK);
     reset[10] = 1;
-    clock(phaseOut, gateOut, 0, 0.5, reset);
+    clock(out, 0, 0.5, BEATS_PER_BAR, reset);
     expect([...gateOut]).toEqual(new Array(BLOCK).fill(0));
   });
 
@@ -587,6 +604,8 @@ describe("reset", () => {
     const bGate = new Float32Array(BLOCK);
     const pulse = new Float32Array(BLOCK);
     pulse[0] = 1;
+    const aOut = [[aPhase], [aGate]];
+    const bOut = [[bPhase], [bGate]];
 
     const blocks = Math.floor((sampleRate * SECONDS) / BLOCK);
     let mismatches = 0;
@@ -594,8 +613,8 @@ describe("reset", () => {
     let edges = 0;
     for (let b = 0; b < blocks; b++) {
       const reset = b === resetAt ? pulse : SILENT;
-      first(aPhase, aGate, 120, 0.5, reset);
-      if (b >= late) second(bPhase, bGate, 120, 0.5, reset);
+      first(aOut, 120, 0.5, BEATS_PER_BAR, reset);
+      if (b >= late) second(bOut, 120, 0.5, BEATS_PER_BAR, reset);
       if (b <= resetAt) continue;
       for (let i = 0; i < BLOCK; i++) {
         if (aPhase[i] !== bPhase[i] || aGate[i] !== bGate[i]) mismatches++;
@@ -629,6 +648,181 @@ describe("reset", () => {
   });
 });
 
+describe("bars", () => {
+  /**
+   * A bar cannot be recovered downstream, which is the whole argument for it
+   * being here. `Euclid` subdivides a clock by multiplying its phase - a pure
+   * function of the instantaneous value - but the bar position is a *count*,
+   * and the beat ramp during beat 1 is bit-identical to the ramp during beat
+   * 3. A consumer that wanted bars would have to count wraps and choose an
+   * origin, and two consumers choosing privately disagree about where bar 1
+   * is, permanently and silently.
+   *
+   * The change is additive: outputs 0 and 1 were verified sample-identical to
+   * the pre-ticket build over 60 s across bpm {0, 1, 120, 137.3, 1000} x
+   * pulseWidth {0, 0.25, 0.5, 1} x beatsPerBar {0, 4} at 44100 and 48000. That
+   * comparison is not kept as a test because one side of it stopped existing.
+   */
+
+  it("fires the downbeat once per bar, aligned with the beat gate", () => {
+    // Criterion 2, and the invariant is asserted directly rather than by
+    // counting: both gates take their width from the same `pulseWidth` and the
+    // same phase at the same sample, so they rise and fall together.
+    const sampleRate = 44100;
+    const beatsPerBar = 4;
+    const { gate, downbeat } = renderAll(
+      createClock(sampleRate),
+      sampleRate,
+      12,
+      { bpm: 120, beatsPerBar },
+    );
+
+    const gateEdges = risingEdgesOf(gate, 0, 0).edges;
+    const downEdges = risingEdgesOf(downbeat, 0, 0).edges;
+    expect(gateEdges.length).toBeGreaterThan(20);
+    // Exactly every 4th beat gate has a coincident downbeat.
+    expect(downEdges).toEqual(
+      gateEdges.filter((_, i) => i % beatsPerBar === 0),
+    );
+
+    // `downbeat > 0` implies `gate > 0`, at every sample.
+    for (let i = 0; i < downbeat.length; i++) {
+      if (downbeat[i] > 0) expect(gate[i]).toBeGreaterThan(0);
+    }
+  });
+
+  it("starts on a downbeat, and a reset returns it to one", () => {
+    // Criterion 3. The beat counter starts at 0 and the phase starts at 0, so
+    // the first beat of a clock's life is beat 0 of bar 0. A reset zeroes the
+    // counter as well as the phase - otherwise `reset` would mean two
+    // different things depending on which output you watched.
+    const sampleRate = 44100;
+    const clock = createClock(sampleRate);
+    const phaseOut = new Float32Array(BLOCK);
+    const gateOut = new Float32Array(BLOCK);
+    const barOut = new Float32Array(BLOCK);
+    const downOut = new Float32Array(BLOCK);
+    const out = [[phaseOut], [gateOut], [barOut], [downOut]];
+
+    clock(out, 120, 0.5, 4, SILENT);
+    expect(downOut[0]).toBe(1);
+    expect(barOut[0]).toBe(0);
+
+    // Run into the middle of bar 0's third beat, where there is no downbeat.
+    for (let b = 0; b < 400; b++) clock(out, 120, 0.5, 4, SILENT);
+    expect(downOut[0]).toBe(0);
+    expect(barOut[0]).toBeGreaterThan(0);
+
+    const reset = new Float32Array(BLOCK);
+    reset[30] = 1;
+    clock(out, 120, 0.5, 4, reset);
+    expect(downOut[29]).toBe(0);
+    expect(downOut[30]).toBe(1);
+    expect(barOut[30]).toBe(0);
+  });
+
+  it("emits a bar phase that wraps exactly where the downbeat rises", () => {
+    // Criterion 4, measured. It is proved by *consumption* in
+    // `packages/euclid/src/clock-skew.test.ts`, which feeds `.bar` to a real
+    // `Euclid` and counts the steps - that is the claim that a bar phase is
+    // the same kind of object as a beat phase.
+    const sampleRate = 44100;
+    const { bar, downbeat } = renderAll(
+      createClock(sampleRate),
+      sampleRate,
+      12,
+      {
+        bpm: 120,
+        beatsPerBar: 4,
+      },
+    );
+
+    const wraps = bar.flatMap((v, i) => (i > 0 && v < bar[i - 1] ? [i] : []));
+    const downEdges = risingEdgesOf(downbeat, 0, 0).edges;
+    // The first downbeat is at sample 0, which is not a wrap.
+    expect(wraps).toEqual(downEdges.slice(1));
+    expect(wraps.length).toBeGreaterThan(4);
+
+    // Monotonic between wraps, and `[0, 1)`.
+    expect(bar.every((v) => v >= 0 && v < 1)).toBe(true);
+    for (let i = 1; i < wraps[0]; i++) {
+      expect(bar[i]).toBeGreaterThan(bar[i - 1]);
+    }
+    // One bar is `beatsPerBar` beats long.
+    expect(wraps[1] - wraps[0]).toBe(4 * ((sampleRate * 60) / 120));
+  });
+
+  it("is inert at beatsPerBar 0", () => {
+    // Criterion 5: no bar structure, both new outputs silent, no division and
+    // no NaN. Outputs 0 and 1 are unaffected, which the additive comparison
+    // above covered across the whole matrix.
+    const sampleRate = 44100;
+    const { gate, bar, downbeat } = renderAll(
+      createClock(sampleRate),
+      sampleRate,
+      4,
+      { bpm: 120, beatsPerBar: 0 },
+    );
+    expect(bar.every((v) => v === 0)).toBe(true);
+    expect(downbeat.every((v) => v === 0)).toBe(true);
+    expect(risingEdgesOf(gate, 0, 0).edges.length).toBeGreaterThan(4);
+  });
+
+  it("re-phases cleanly when beatsPerBar changes mid-run", () => {
+    // Criterion 6. The counter is beats-since-start and the bar position is
+    // `beats % beatsPerBar` taken at the boundary, so a change re-phases the
+    // grid rather than emitting a spurious downbeat or swallowing one. Both
+    // the position and the divisor are latched at the beat boundary: reading
+    // the divisor live would jump the bar phase mid-beat, which a downstream
+    // `Euclid` reads as a wrap.
+    const sampleRate = 44100;
+    const beat = (sampleRate * 60) / 120;
+    const clock = createClock(sampleRate);
+    const out = [
+      [new Float32Array(BLOCK)],
+      [new Float32Array(BLOCK)],
+      [new Float32Array(BLOCK)],
+      [new Float32Array(BLOCK)],
+    ];
+    const bar: number[] = [];
+    const downbeat: number[] = [];
+    const blocks = Math.floor((sampleRate * 16) / BLOCK);
+    // Change at a block that lands mid-beat, not on a boundary.
+    const changeAt = 400;
+    for (let b = 0; b < blocks; b++) {
+      clock(out, 120, 0.5, b < changeAt ? 4 : 3, SILENT);
+      bar.push(...out[2][0]);
+      downbeat.push(...out[3][0]);
+    }
+
+    const edges = risingEdgesOf(downbeat, 0, 0).edges;
+    const beatsAt = edges.map((e) => Math.round(e / beat));
+    // Every 4 beats before the change, every 3 after, and nothing in between:
+    // no downbeat lands off a beat boundary.
+    edges.forEach((e) => expect(Math.abs(e % beat)).toBeLessThanOrEqual(1));
+    const changeBeat = (changeAt * BLOCK) / beat;
+    const before = beatsAt.filter((b) => b < changeBeat);
+    const after = beatsAt.filter((b) => b > changeBeat + 1);
+    expect(before.every((b) => b % 4 === 0)).toBe(true);
+    expect(after.every((b) => b % 3 === 0)).toBe(true);
+    expect(after.length).toBeGreaterThan(3);
+    // The bar phase never jumps backwards except at a downbeat.
+    const wraps = bar.flatMap((v, i) => (i > 0 && v < bar[i - 1] ? [i] : []));
+    expect(wraps).toEqual(edges.slice(1));
+  });
+
+  it("stops the bar outputs when the clock is stopped", () => {
+    // Criterion 7, consistent with the existing rule that a stopped clock
+    // emits no gate rather than holding one open.
+    const { gate, downbeat } = renderAll(createClock(44100), 44100, 1, {
+      bpm: 0,
+      beatsPerBar: 4,
+    });
+    expect(gate.every((v) => v === 0)).toBe(true);
+    expect(downbeat.every((v) => v === 0)).toBe(true);
+  });
+});
+
 /**
  * Render `seconds` of phase into one flat array.
  *
@@ -641,17 +835,23 @@ function renderPhase(
   clock: ReturnType<typeof createClock>,
   sampleRate: number,
   seconds: number,
-  params: { bpm?: number; pulseWidth?: number; reset?: Float32Array } = {},
+  params: {
+    bpm?: number;
+    pulseWidth?: number;
+    reset?: Float32Array;
+    beatsPerBar?: number;
+  } = {},
 ) {
   const phase: number[] = [];
   const phaseOut = new Float32Array(BLOCK);
+  const out = [[phaseOut]];
   const blocks = Math.floor((sampleRate * seconds) / BLOCK);
   for (let b = 0; b < blocks; b++) {
     clock(
-      phaseOut,
-      undefined,
+      out,
       params.bpm ?? 120,
       params.pulseWidth ?? 0.5,
+      params.beatsPerBar ?? BEATS_PER_BAR,
       params.reset ?? SILENT,
     );
     phase.push(...phaseOut);
@@ -669,10 +869,16 @@ function gateRuns(
   clock: ReturnType<typeof createClock>,
   sampleRate: number,
   seconds: number,
-  params: { bpm?: number; pulseWidth?: number; reset?: Float32Array } = {},
+  params: {
+    bpm?: number;
+    pulseWidth?: number;
+    reset?: Float32Array;
+    beatsPerBar?: number;
+  } = {},
 ) {
   const phaseOut = new Float32Array(BLOCK);
   const gateOut = new Float32Array(BLOCK);
+  const out = [[phaseOut], [gateOut]];
   const blocks = Math.floor((sampleRate * seconds) / BLOCK);
   const highs: number[] = [];
   const lows: number[] = [];
@@ -680,10 +886,10 @@ function gateRuns(
   let length = 0;
   for (let b = 0; b < blocks; b++) {
     clock(
-      phaseOut,
-      gateOut,
+      out,
       params.bpm ?? 120,
       params.pulseWidth ?? 0.5,
+      params.beatsPerBar ?? BEATS_PER_BAR,
       params.reset ?? SILENT,
     );
     for (let i = 0; i < BLOCK; i++) {
@@ -698,4 +904,40 @@ function gateRuns(
     }
   }
   return { highs, lows };
+}
+
+/** All four outputs of a short render, flattened. Short by construction: this
+ * keeps every sample, so it is for the property tests rather than the timing
+ * ones. */
+function renderAll(
+  clock: ReturnType<typeof createClock>,
+  sampleRate: number,
+  seconds: number,
+  params: { bpm?: number; pulseWidth?: number; beatsPerBar?: number } = {},
+) {
+  const out = [
+    [new Float32Array(BLOCK)],
+    [new Float32Array(BLOCK)],
+    [new Float32Array(BLOCK)],
+    [new Float32Array(BLOCK)],
+  ];
+  const phase: number[] = [];
+  const gate: number[] = [];
+  const bar: number[] = [];
+  const downbeat: number[] = [];
+  const blocks = Math.floor((sampleRate * seconds) / BLOCK);
+  for (let b = 0; b < blocks; b++) {
+    clock(
+      out,
+      params.bpm ?? 120,
+      params.pulseWidth ?? 0.5,
+      params.beatsPerBar ?? BEATS_PER_BAR,
+      SILENT,
+    );
+    phase.push(...out[0][0]);
+    gate.push(...out[1][0]);
+    bar.push(...out[2][0]);
+    downbeat.push(...out[3][0]);
+  }
+  return { phase, gate, bar, downbeat };
 }

@@ -30,7 +30,9 @@ function createBlockFillClock(sampleRate) {
   let bpm = 120;
   let increment = bpm / 60 / sampleRate;
   let phase = 0;
-  return (phaseOut, gateOut, nextBpm, pulseWidth) => {
+  return (outputs, nextBpm, pulseWidth) => {
+    const phaseOut = outputs[0][0];
+    const gateOut = outputs[1]?.[0];
     if (nextBpm !== bpm) {
       bpm = nextBpm;
       increment = bpm / 60 / sampleRate;
@@ -65,17 +67,24 @@ try {
   const { createClock } = await import(pathToFileURL(bundle).href);
 
   const blocks = Math.round((SAMPLE_RATE * SECONDS) / BLOCK);
-  const phaseOut = new Float32Array(BLOCK);
-  const gateOut = new Float32Array(BLOCK);
+  const NO_RESET = new Float32Array(1);
+  const buffers = [
+    [new Float32Array(BLOCK)],
+    [new Float32Array(BLOCK)],
+    [new Float32Array(BLOCK)],
+    [new Float32Array(BLOCK)],
+  ];
 
   /** Microseconds per block, median of `REPEATS` runs. */
-  function measure(factory, bpm, withGate) {
+  function measure(factory, bpm, outputCount) {
+    const outputs = buffers.slice(0, outputCount);
     const times = [];
     for (let run = 0; run < REPEATS; run++) {
       const generate = factory(SAMPLE_RATE);
-      const gate = withGate ? gateOut : undefined;
       const start = process.hrtime.bigint();
-      for (let i = 0; i < blocks; i++) generate(phaseOut, gate, bpm, 0.5);
+      for (let i = 0; i < blocks; i++) {
+        generate(outputs, bpm, 0.5, 4, NO_RESET);
+      }
       times.push(Number(process.hrtime.bigint() - start) / 1000 / blocks);
     }
     times.sort((a, b) => a - b);
@@ -84,16 +93,18 @@ try {
 
   // One untimed pass so the JIT has seen both shapes before anything counts.
   for (const factory of [createBlockFillClock, createClock]) {
-    measure(factory, 120, true);
+    measure(factory, 120, 2);
   }
+  for (const count of [1, 2, 4]) measure(createClock, 120, count);
 
+  const LABELS = { 1: "phase only", 2: "phase+gate", 4: "all four" };
   const rows = [];
-  for (const withGate of [true, false]) {
+  for (const outputCount of [2, 1, 4]) {
     for (const bpm of [0, 120, 1000]) {
-      const before = measure(createBlockFillClock, bpm, withGate);
-      const after = measure(createClock, bpm, withGate);
+      const before = measure(createBlockFillClock, bpm, outputCount);
+      const after = measure(createClock, bpm, outputCount);
       rows.push({
-        label: `${withGate ? "phase+gate" : "phase only"}, bpm ${bpm}`,
+        label: `${LABELS[outputCount]}, bpm ${bpm}`,
         before,
         after,
         delta: after - before,
