@@ -78,13 +78,27 @@ The three `Exp*` shapes are their linear partners bent inward: same zeros, same
 peaks, same sign everywhere, and only the path between them differs. The bend is
 the MMA concave transform (see Credits).
 
-All four parameters are `k-rate` — what is audio-rate here is the **output**,
-which is a different question. `type` is structural: swapping generator 128
-times a block is not waveform modulation, it is noise. The other three are read
-once per block, which lets the generator hoist its phase increment out of the
-sample loop; a modulated `frequency` still moves, one step per render quantum.
-For an envelope on the depth, put a native `GainNode` between the LFO and its
-destination — that is a-rate and free.
+`sync`, `gate` and `frequency` are `a-rate`; the rest are read once per block.
+`type` is structural: swapping generator 128 times a block is not waveform
+modulation, it is noise. `gain` and `offset` are k-rate because the better answer
+to a signal on either already exists — a native `GainNode` between the LFO and
+its destination is a-rate and free, and adding a signal to `offset` is what the
+destination `AudioParam`'s own summing does.
+
+A modulated `frequency` is tracked per sample and costs at most 9.4 %
+(`benchmarks/lfo-rate/`). An unmodulated one costs nothing: a browser hands
+length 1 both for an unconnected parameter and for a connected constant, so the
+phase increment stays hoisted out of the sample loop.
+
+**Above roughly 20 Hz this stops being a modulation source.** The shapes are
+naive — there is no BLEP in an LFO, because at LFO rates the aliased images fold
+back onto harmonics and there is nothing inharmonic to remove — and at the top of
+the range the discontinuous ones show it. Measured alias SNR at 200 Hz: 23.6 dB
+for the ramps, 25.4 for the square, 16.3 for the exponential ramps, against 96 dB
+or better for all of them at 100 Hz. Audio-rate _modulation_ at 50–100 Hz is
+clean and useful; for an audio-rate _oscillator_, use
+[`@synthlet/polyblep-oscillator`](https://github.com/danigb/synthlet/tree/main/packages/polyblep-oscillator),
+which is band-limited.
 
 `frequency` is bipolar too: a negative rate runs the phase backwards — the
 reverse ramp — and `frequency: 0` freezes the LFO on the value at `phase`.

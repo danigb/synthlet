@@ -22,23 +22,31 @@ belong to different machines; the ratio and the delta are what transfer.
 
 ## Results
 
-After the hoist described below:
+After the hoist described below, and re-run for [ticket
+06](../../../thoughts/tickets/lfo/06-a-rate-that-moves.md), which made
+`frequency` a-rate:
 
-| type           | k-rate | a-rate | delta | ratio |
-| -------------- | -----: | -----: | ----: | ----: |
-| None           |  0.036 |  0.692 | 0.656 | 19.41 |
-| Sine           |  0.038 |  1.568 | 1.531 | 41.73 |
-| Triangle       |  0.031 |  0.868 | 0.836 | 27.70 |
-| RampUp         |  0.027 |  0.812 | 0.786 | 30.25 |
-| RampDown       |  0.026 |  0.838 | 0.812 | 31.63 |
-| Square         |  0.027 |  0.704 | 0.677 | 25.75 |
-| ExpRampUp      |  0.060 |  1.654 | 1.594 | 27.55 |
-| ExpRampDown    |  0.054 |  1.668 | 1.613 | 30.82 |
-| ExpTriangle    |  0.051 |  1.721 | 1.670 | 33.88 |
-| RandSampleHold |  0.026 |  0.790 | 0.765 | 30.93 |
-| Impulse        |  0.027 |  0.789 | 0.761 | 28.85 |
+| type           | k-rate | a-rate | delta | ratio | mod rate | cost |
+| -------------- | -----: | -----: | ----: | ----: | -------: | ---: |
+| None           |  0.039 |  0.926 | 0.887 | 23.69 |    0.996 | 7.6% |
+| Sine           |  0.046 |  1.696 | 1.650 | 36.81 |    1.764 | 4.0% |
+| Triangle       |  0.035 |  1.128 | 1.094 | 32.71 |    1.202 | 6.5% |
+| RampUp         |  0.034 |  1.119 | 1.085 | 33.04 |    1.213 | 8.4% |
+| RampDown       |  0.033 |  1.146 | 1.113 | 34.31 |    1.230 | 7.3% |
+| Square         |  0.032 |  0.977 | 0.945 | 30.74 |    1.044 | 6.9% |
+| ExpRampUp      |  0.074 |  2.250 | 2.176 | 30.44 |    2.301 | 2.3% |
+| ExpRampDown    |  0.064 |  2.285 | 2.220 | 35.43 |    2.339 | 2.4% |
+| ExpTriangle    |  0.060 |  2.287 | 2.227 | 37.96 |    2.345 | 2.5% |
+| RandSampleHold |  0.033 |  1.045 | 1.012 | 31.83 |    1.143 | 9.4% |
+| Impulse        |  0.032 |  1.014 | 0.982 | 31.94 |    1.109 | 9.4% |
 
 µs per block. One block's budget at 48 kHz is 2667 µs.
+
+The `a-rate` column is 25–40 % above its first measurement, and that is not the
+rate change: the sample loop gained a gate detector for `sync` and a branch for
+the depth envelope (lfo tickets 04 and 05) between the two runs. `mod rate` is
+the same loop with a `frequency` that varies every sample, and `cost` is what
+that branch costs against the hoisted increment.
 
 ## Three findings
 
@@ -65,7 +73,21 @@ this library where the audio-rate generator is the thing to worry about, and the
 ticket's argument does not depend on the number being small anyway: a 344 Hz
 staircase on a pitch parameter is wrong at any price.
 
-### 3. Hoisting is worth 34 %, and the ticket asked for it conditionally
+### 3. A per-sample rate costs at most 9.4 %, and usually less
+
+Ticket 06 of the lfo folder budgeted 40 % for the modulated path, on the grounds
+that the hoisted increment is worth 34 % and giving all of it back would be the
+worst case. It does not come to that: the branch is taken once per block, and the
+per-sample arithmetic it enables is one multiply against a `gen()` call that
+already costs far more. The dearest shapes in absolute terms — the `Exp*` family,
+which do a `Math.log10` per sample — are the _cheapest_ in relative terms, at
+2.3–2.5 %, for exactly that reason.
+
+Every unmodulated patch pays **nothing**: Chrome hands length 1 both for an
+unconnected parameter and for a connected constant, so the `length > 1` branch is
+false and the increment is hoisted exactly as it was.
+
+### 4. Hoisting is worth 34 %, and the ticket asked for it conditionally
 
 `generateAudioRate` read `gen`, `$gain`, `$offset` and `$frequency` from the
 closure on every one of its 128 iterations, and `phase` twice. All five are
@@ -84,6 +106,11 @@ against the block-constant generator run one sample at a time.
 
 The ticket's checklist said to hoist _"if profiling shows the indirect call
 matters; leave it alone if it does not"_. 34 % matters.
+
+Since ticket 06 the increment is hoisted **conditionally** — only when
+`frequency` arrives as a single value, which is every patch that does not
+modulate it. The other four hoists are unconditional, because `read()` still runs
+once per block for the k-rate parameters.
 
 ## What this does not settle
 

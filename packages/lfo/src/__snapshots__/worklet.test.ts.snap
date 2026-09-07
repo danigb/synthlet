@@ -10,7 +10,7 @@ exports[`LfoWorkletProcessor has parameter descriptors 1`] = `
     "name": "type",
   },
   {
-    "automationRate": "k-rate",
+    "automationRate": "a-rate",
     "defaultValue": 10,
     "maxValue": 200,
     "minValue": -200,

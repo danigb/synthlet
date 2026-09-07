@@ -3,7 +3,7 @@ import type { ParamDescriptor } from "./_worklet";
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 //
-// Seven parameters, two of them a-rate - and this module's *output* is the
+// Seven parameters, three of them a-rate - and this module's *output* is the
 // signal, which is a different question. `worklet.ts` builds the audio-rate
 // generator, so the LFO emits one value per sample; what follows is about what
 // it reads, and `dsp.ts` reads the four shaping parameters once per block in
@@ -41,7 +41,7 @@ export const PARAMS: readonly ParamDescriptor[] = [
     defaultValue: 10,
     minValue: -200,
     maxValue: 200,
-    automationRate: "k-rate",
+    automationRate: "a-rate",
   },
   {
     // Amplitude, applied per sample as `gen() * gain + offset`. **A bet**: a

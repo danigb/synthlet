@@ -1,4 +1,4 @@
-import { magnitudes, peak } from "./_spectrum";
+import { aliasSnr, magnitudes, peak } from "./_spectrum";
 import { createGenerators, createLfo, LfoType } from "./dsp";
 
 /**
@@ -47,7 +47,7 @@ const CYCLE = SAMPLE_RATE / RATE;
 
 type Params = {
   type: number[];
-  frequency: number[];
+  frequency: ArrayLike<number>;
   gain: number[];
   offset: number[];
   sync: ArrayLike<number>;
@@ -65,17 +65,19 @@ type Params = {
  */
 const params = (
   over: Partial<
-    Record<
-      "type" | "frequency" | "gain" | "offset" | "delay" | "attack",
-      number
-    >
+    Record<"type" | "gain" | "offset" | "delay" | "attack", number>
   > & {
+    /** A number is the length-1 array a browser hands a constant parameter. */
+    frequency?: number | ArrayLike<number>;
     sync?: ArrayLike<number>;
     gate?: ArrayLike<number>;
   } = {},
 ): Params => ({
   type: [over.type ?? LfoType.Sine],
-  frequency: [over.frequency ?? RATE],
+  frequency:
+    typeof over.frequency === "object"
+      ? over.frequency
+      : [over.frequency ?? RATE],
   gain: [over.gain ?? 1],
   offset: [over.offset ?? 0],
   sync: over.sync ?? [0],
@@ -888,6 +890,156 @@ describe("spectrum", () => {
     // This is the ticket, as a number.
     const signal = controlRate(LENGTH, params());
     expect(rejectionDb(signal, STAIRCASE)).toBeLessThan(60);
+  });
+});
+
+describe("a rate that moves", () => {
+  // `frequency` read as k-rate on a **cost** argument - the hoisted phase
+  // increment is worth 34% of the generator - and `scripts/_worklet.ts` allows
+  // exactly two grounds for a k-rate opt-out, neither of which is a saving.
+  // `clock/src/params.ts` sends the caller who wants an audio-rate tempo here,
+  // and until this they arrived at a second block-quantised parameter.
+
+  /** A rate that sweeps linearly from `from` to `to` across `samples`. */
+  const sweep = (from: number, to: number, samples: number) =>
+    Float32Array.from(
+      { length: samples },
+      (_, i) => from + ((to - from) * i) / samples,
+    );
+
+  it("tracks a swept rate per sample", () => {
+    const TOP = 20;
+    const length = SAMPLE_RATE;
+    const signal = audioRate(
+      length,
+      params({ frequency: sweep(1, TOP, length) }),
+      length,
+    );
+
+    // A sine's steepest point is its zero crossing, at `2*pi*f` per second. The
+    // bound is the *fastest* the rate ever gets, so one sample of it is the
+    // whole budget - and a rate quantised to a render quantum would step 128
+    // times that at the moment the rate itself jumps.
+    const bound = (2 * Math.PI * TOP) / SAMPLE_RATE;
+    expect(maxStep(signal)).toBeLessThan(bound * 2);
+  });
+
+  it("has no energy at the render-quantum rate while the rate is moving", () => {
+    // The existing spectrum test, run on a *modulated* rate: this is the
+    // assertion that the modulation is not itself quantised. A k-rate read puts
+    // a 344.53 Hz image series here, which is the whole bug.
+    const LENGTH = 65536;
+    const signal = audioRate(
+      LENGTH,
+      params({ frequency: sweep(1, 20, LENGTH) }),
+      LENGTH,
+    );
+    for (const harmonic of [1, 2, 3, 4]) {
+      expect(
+        rejectionDb(signal, (SAMPLE_RATE / BLOCK) * harmonic),
+      ).toBeGreaterThan(120);
+    }
+  });
+
+  const EVERY_TYPE = Object.values(LfoType).filter(
+    (value): value is LfoType => typeof value === "number",
+  );
+
+  it.each(EVERY_TYPE.map((type) => [LfoType[type], type]))(
+    "%s: a constant rate is free and unchanged",
+    (_name, type) => {
+      // Chrome hands length 1 for an unconnected parameter *and* for a
+      // connected constant, so the hoisted increment is what every existing
+      // patch still takes. A full block of the same value is the other
+      // spelling of the same rate and has to render identically.
+      const hoisted = audioRate(2 * CYCLE, params({ type }));
+      const perSample = audioRate(
+        2 * CYCLE,
+        params({
+          type,
+          frequency: new Float32Array(BLOCK).fill(RATE),
+        }),
+      );
+      if (type === LfoType.RandSampleHold) {
+        const changes = (signal: Float32Array) =>
+          Array.from(signal.subarray(1))
+            .map((value, i) => (value !== signal[i] ? i : -1))
+            .filter((i) => i >= 0);
+        expect(changes(perSample)).toEqual(changes(hoisted));
+      } else {
+        expect(Array.from(perSample)).toEqual(Array.from(hoisted));
+      }
+    },
+  );
+
+  describe("the top of the range", () => {
+    /**
+     * Alias SNR of the naive shapes, measured on this code at 44.1 kHz over
+     * 65536 samples with `_spectrum.ts`'s `aliasSnr`:
+     *
+     * | shape         | 20 Hz | 50 Hz | 100 Hz | 200 Hz |
+     * | ------------- | ----: | ----: | -----: | -----: |
+     * | `Sine`        |  98.7 |  97.6 |   96.2 |   99.7 |
+     * | `Triangle`    |  98.7 |  97.6 |   96.2 |   69.8 |
+     * | `RampUp`      |  98.0 |  51.1 |   97.1 |   23.6 |
+     * | `Square`      |  65.1 |  55.9 |   51.1 |   25.4 |
+     * | `ExpRampUp`   |  98.2 |  43.7 |   97.9 |   16.3 |
+     * | `ExpTriangle` |  98.9 |  98.0 |   96.8 |   34.0 |
+     *
+     * **The audit's table is the same measurement with `removeDC: true`**, and
+     * that flag is the wrong one here: `_spectrum.ts` subtracts the *unwindowed*
+     * mean, so on a signal with no DC and a fractional number of cycles in the
+     * window it plants a windowed constant at bin 0 and costs dB for nothing.
+     * Every shape's mean is zero - `every shape is the shape it claims` asserts
+     * it - so there is no DC to remove. The 200 Hz column is identical either
+     * way, because there the aliasing genuinely dominates.
+     *
+     * Which is the ticket's own point, arrived at from the other side: at LFO
+     * rates the images fold back onto harmonics and there is nothing inharmonic
+     * to remove. **This is a range note, not a missing algorithm.** No BLEP
+     * belongs in an LFO; `polyblep-oscillator` is the answer above 20 Hz.
+     */
+    const LENGTH = 65536;
+
+    const snr = (type: number, frequency: number) => {
+      const signal = audioRate(LENGTH, params({ type, frequency }));
+      return aliasSnr(signal, frequency, SAMPLE_RATE);
+    };
+
+    const SHAPES = EVERY_TYPE.filter(
+      (type) =>
+        type !== LfoType.None &&
+        type !== LfoType.RandSampleHold &&
+        type !== LfoType.Impulse,
+    );
+
+    it.each(
+      SHAPES.flatMap((type) =>
+        [20, 50, 100].map(
+          (frequency) =>
+            [LfoType[type], frequency, type] as [string, number, number],
+        ),
+      ),
+    )("%s is clean at %i Hz", (_name, frequency, type) => {
+      // Measured minimum across the grid is 43.7 dB; 35 is the regression net.
+      expect(snr(type, frequency)).toBeGreaterThan(35);
+    });
+
+    it.each(
+      [
+        LfoType.RampUp,
+        LfoType.RampDown,
+        LfoType.Square,
+        LfoType.ExpRampUp,
+        LfoType.ExpRampDown,
+      ].map((type) => [LfoType[type], type]),
+    )("%s is documented as poor at 200 Hz", (_name, type) => {
+      // Pinned in both directions: it must not silently get worse, and if it
+      // gets *better* the docs and the param comment are now wrong.
+      const measured = snr(type, 200);
+      expect(measured).toBeGreaterThan(12);
+      expect(measured).toBeLessThan(35);
+    });
   });
 });
 

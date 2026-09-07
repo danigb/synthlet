@@ -17,9 +17,10 @@ const lfo = Lfo(audioContext, {
 
 ## Params
 
-- `frequency`: the rate in Hz. Default is 10. Range: [-200, 200]. **Bipolar**: a
-  negative rate runs the phase backwards, and `frequency: 0` freezes the LFO on
-  the value at `phase`.
+- `frequency`: the rate in Hz, a-rate. Default is 10. Range: [-200, 200].
+  **Bipolar**: a negative rate runs the phase backwards, and `frequency: 0`
+  freezes the LFO on the value at `phase`. A modulated rate is tracked per
+  sample; an unmodulated one costs nothing.
 - `type`: the type of the oscillator. You can use `LfoType` enum. Default is `LfoType.Sine`.
 - `gain`: the depth of the oscillator. Default is 1. Range: [-20000, 20000]. A
   **negative gain inverts the waveform** — that is how you get a filter that
@@ -40,6 +41,19 @@ compute the identical `x × gain + offset`.
 - `delay`: seconds held at zero depth before the ramp begins. Default 0. Range:
   [0, 10].
 - `attack`: seconds from zero to 99% of full depth. Default 0. Range: [0, 10].
+
+## The top of the range
+
+**Above roughly 20 Hz this stops being a modulation source.** The shapes are
+naive, and deliberately: at LFO rates the aliased images fold back onto
+harmonics, so there is nothing inharmonic for a band-limiting scheme to remove.
+At the top of the range the discontinuous shapes show it — measured alias SNR at
+200 Hz is 23.6 dB for the ramps, 25.4 for the square and 16.3 for the exponential
+ramps, against 96 dB or better for all of them at 100 Hz.
+
+Audio-rate _modulation_ at 50–100 Hz is clean and useful, which is why the
+ceiling stays where it is. For an audio-rate _oscillator_, use
+[PolyblepOscillator](/docs/sources/polyblep), which is band-limited.
 
 ## Fading in
 

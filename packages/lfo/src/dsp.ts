@@ -228,7 +228,7 @@ const LN100 = Math.log(100);
 
 type Params = {
   type: number[];
-  frequency: number[];
+  frequency: ArrayLike<number>;
   gain: number[];
   offset: number[];
   sync: ArrayLike<number>;
@@ -261,7 +261,6 @@ export function createLfo(
 
   // Params
   let $type = 1;
-  let $frequency = 10;
   let $gain = 1;
   let $offset = 0;
   let $delay = -1;
@@ -299,7 +298,6 @@ export function createLfo(
       $type = params.type[0];
       gen = generators[Math.floor($type)] ?? none;
     }
-    $frequency = params.frequency[0];
     $offset = params.offset[0];
     $gain = params.gain[0];
 
@@ -360,7 +358,9 @@ export function createLfo(
       for (let i = 0; i < gate.length; i++) advanceDepth(gate[i]);
     }
 
-    let nextPhase = phase + output.length * dt * $frequency;
+    // This generator writes one value per block, which is what it is for.
+    // rate-ok: block-constant by construction
+    let nextPhase = phase + output.length * dt * params.frequency[0];
     if (nextPhase >= 1) {
       nextPhase -= 1;
     } else if (nextPhase < 0) {
@@ -371,20 +371,27 @@ export function createLfo(
     phase = nextPhase;
   }
 
-  // `read()` runs once per block and every parameter here is k-rate, so the
-  // generator, the increment and the two scalars are all fixed for the whole
-  // block: hoisting them turns 128 closure-variable reads and 128 indirect
-  // loads into four. Measured at 34% of this function on node 24
-  // (`benchmarks/lfo-rate/`), which is why it is written this way and not the
-  // obvious way. The arithmetic is unchanged - `dt * $frequency` is the same
-  // product every iteration - so the output is bit-identical.
+  // `read()` runs once per block and the shaping parameters are k-rate, so the
+  // generator and the two scalars are fixed for the whole block: hoisting them
+  // turns 128 closure-variable reads and 128 indirect loads into a handful.
+  // Measured at 34% of this function on node 24 (`benchmarks/lfo-rate/`), which
+  // is why it is written this way and not the obvious way.
+  //
+  // `frequency` is a-rate, so the increment joins them **conditionally**: an
+  // a-rate parameter arrives as either one value or one per sample, and Chrome
+  // hands length 1 both for an unconnected parameter and for a connected
+  // constant. So the branch is taken once per block, the unmodulated path keeps
+  // the hoisted increment and is bit-identical to what it was, and only a
+  // genuinely varying rate pays per sample.
   function generateAudioRate(output: Float32Array, params: Params) {
     read(params);
     const generate = gen;
     const gain = $gain;
     const offset = $offset;
-    const increment = dt * $frequency;
     const length = output.length;
+    const frequency = params.frequency;
+    const fRate = frequency.length > 1;
+    const increment = fRate ? 0 : dt * frequency[0];
     // The house a-rate idiom, hoisted once per block: an a-rate parameter
     // arrives as either one value or one per sample, and the length-1 case is
     // the common one. `scripts/_worklet.ts` has the reasoning and
@@ -408,7 +415,7 @@ export function createLfo(
         current = phaseStart;
       }
       if (fade) advanceDepth(gateRate ? gate[i] : gate[0]);
-      let nextPhase = current + increment;
+      let nextPhase = current + (fRate ? dt * frequency[i] : increment);
       if (nextPhase >= 1) {
         nextPhase -= 1;
       } else if (nextPhase < 0) {
