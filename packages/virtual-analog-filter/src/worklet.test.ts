@@ -111,9 +111,21 @@ describe("VAFProcessor", () => {
       // damage inside the block that caused it.
       expect(Array.from(bad)).toEqual(Array.from(new Float32Array(16)));
 
-      const [good] = runProcessChannels(node, [impulse()], withType);
-      expect(Array.from(good).every(Number.isFinite)).toBe(true);
-      expect(Array.from(good).some((value) => value !== 0)).toBe(true);
+      // Two blocks, because the module now has 16 samples of latency and
+      // these are 16-sample blocks: the two Korg 35 types are delayed to match
+      // the seven that resample, so an impulse at the start of the next block
+      // arrives in the one after it.
+      const heard: number[] = [];
+      for (let n = 0; n < 3; n++) {
+        const [good] = runProcessChannels(
+          node,
+          [n === 0 ? impulse() : new Float32Array(16)],
+          withType,
+        );
+        heard.push(...Array.from(good));
+      }
+      expect(heard.every(Number.isFinite)).toBe(true);
+      expect(heard.some((value) => value !== 0)).toBe(true);
     });
 
     it("recovers on the automated path too", () => {
@@ -152,12 +164,13 @@ describe("VAFProcessor", () => {
       const node = new Worklet();
       runProcessChannels(node, [impulse()], korg);
       runProcessChannels(node, [poisoned()], params);
-      const [backToKorg] = runProcessChannels(
-        node,
-        [new Float32Array(16)],
-        korg,
-      );
-      expect(Array.from(backToKorg).some((value) => value !== 0)).toBe(true);
+      // Two blocks again, for the 16 samples of latency.
+      const heard: number[] = [];
+      for (let n = 0; n < 2; n++) {
+        const [back] = runProcessChannels(node, [new Float32Array(16)], korg);
+        heard.push(...Array.from(back));
+      }
+      expect(heard.some((value) => value !== 0)).toBe(true);
     });
   });
 
@@ -221,13 +234,16 @@ describe("a-rate cutoff", () => {
   // These run at 44.1 kHz, unlike the tests above: a cutoff sweep needs a real
   // sample rate to mean anything.
   let Worklet: any;
+  let OVERSAMPLE: number;
   const SAMPLE_RATE = 44100;
   const BLOCK = 128;
   const MOOG_LADDER = 0;
 
   beforeAll(async () => {
     createWorkletTestContext(SAMPLE_RATE);
-    Worklet = (await import("./worklet")).VAF;
+    const module = await import("./worklet");
+    Worklet = module.VAF;
+    OVERSAMPLE = module.OVERSAMPLE;
   });
 
   const noise = (length: number) => {
@@ -272,10 +288,16 @@ describe("a-rate cutoff", () => {
 
     expect(update).toHaveBeenCalledTimes(BLOCK);
     expect(process).toHaveBeenCalledTimes(BLOCK);
-    // And between them they cover the block exactly once, in order.
+    // And between them they cover the block exactly once, in order - in the
+    // *oversampled* domain, because the resampler brackets the block and the
+    // runs are rendered inside it. The coefficient updates are still one per
+    // base-rate sample, which is the property that matters.
     const ranges = process.mock.calls.map((call: any) => [call[2], call[3]]);
-    expect(ranges[0]).toEqual([0, 1]);
-    expect(ranges[BLOCK - 1]).toEqual([BLOCK - 1, BLOCK]);
+    expect(ranges[0]).toEqual([0, OVERSAMPLE]);
+    expect(ranges[BLOCK - 1]).toEqual([
+      (BLOCK - 1) * OVERSAMPLE,
+      BLOCK * OVERSAMPLE,
+    ]);
   });
 
   it("splits the block on a moving drive, like any other a-rate parameter", () => {
@@ -310,7 +332,7 @@ describe("a-rate cutoff", () => {
     // Change detection skips the update entirely: nothing moved.
     expect(update).not.toHaveBeenCalled();
     expect(process).toHaveBeenCalledTimes(1);
-    expect(process.mock.calls[0].slice(2)).toEqual([0, BLOCK]);
+    expect(process.mock.calls[0].slice(2)).toEqual([0, BLOCK * OVERSAMPLE]);
   });
 
   it("collapses an a-rate parameter that holds still", () => {

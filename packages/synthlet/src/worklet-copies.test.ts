@@ -175,6 +175,7 @@ describe("the measuring instrument", () => {
       "digital-delay",
       "granite",
       "lfo",
+      "virtual-analog-filter",
       "wavetable-oscillator",
     ]);
   });

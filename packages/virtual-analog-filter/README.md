@@ -71,6 +71,20 @@ switching it mid-block is a discontinuity rather than a feature.
 
 Every channel of the input is filtered, so a stereo signal stays stereo.
 
+## Latency
+
+**This node delays its output by 16 samples** — 0.33 ms at 48 kHz, and 16
+samples at any sample rate. Earlier releases had none.
+
+Seven of the nine models saturate, and a saturating filter folds its own
+harmonics back down as inharmonic aliasing. They are therefore rendered at
+twice the sample rate, with a polyphase FIR resampler either side, and a
+symmetric FIR delays by half its length. The two Korg 35 models are linear and
+do not resample, and are delayed to match so that changing `type` does not
+shift the output.
+
+If you are summing this node with a dry path, compensate.
+
 ## Credits
 
 Generated from the Faust virtual analog filter library
