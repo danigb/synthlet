@@ -1,0 +1,759 @@
+import { createFilter, createPrewarp, SvfType } from "./dsp";
+import { PARAMS } from "./params";
+
+// `Q` is a-rate, so it arrives as an array. Length 1 is what a browser delivers
+// for an unmodulated parameter, and it is the path every measurement here wants.
+const held = (q: number) => new Float32Array([q]);
+
+/**
+ * What this filter promises, as numbers.
+ *
+ * **Every magnitude here is asserted against the analytic transfer function,
+ * not against captured output.** A trapezoidal SVF has a closed form and this
+ * port already hits it to about 6e-9, so `1e-6` is a loose tolerance and
+ * anything that fails it is a defect rather than drift. Golden numbers would
+ * have been the easier choice and the wrong one: today's output is wrong at
+ * three sample rates, and capturing it would have enshrined that.
+ *
+ * The measurement helper is lifted from `allpass.test.ts:7-42`, which is the
+ * only response anybody has had a reason to measure until now, and which stays
+ * where it is.
+ *
+ * `it.failing` was the handover between tickets here. Four cases were written
+ * failing and turned on by the tickets that fixed them: three sample rates by
+ * ticket 03's prewarping, and the poisoned-state recovery by ticket 05's
+ * per-block check. A ticket that fixes one had to delete its way out of the
+ * list, so the diff was the evidence. None are left.
+ */
+
+const MAX_FREQUENCY = 20000; // `frequency.maxValue` in params.ts
+const SAMPLE_RATES = [8000, 22050, 32000, 44100, 48000, 96000];
+
+/**
+ * Run a steady sine of `f` Hz through the filter and measure the amplitude and
+ * phase of the output once it has settled, using I/Q demodulation over the
+ * last full second (an integer number of cycles for any integer frequency, so
+ * there is no spectral leakage).
+ */
+function measure(
+  sampleRate: number,
+  type: SvfType,
+  cutoff: number,
+  q: number,
+  f: number,
+  gain = 0,
+) {
+  const seconds = 2;
+  const length = sampleRate * seconds;
+  const input = new Float32Array(length);
+  const output = new Float32Array(length);
+  const frequency = new Float32Array(length).fill(cutoff);
+
+  for (let n = 0; n < length; n++) {
+    input[n] = Math.sin((2 * Math.PI * f * n) / sampleRate);
+  }
+
+  createFilter(sampleRate).filter(
+    input,
+    output,
+    type,
+    frequency,
+    held(q),
+    gain,
+  );
+
+  let i = 0;
+  let quad = 0;
+  for (let n = length - sampleRate; n < length; n++) {
+    const w = (2 * Math.PI * f * n) / sampleRate;
+    i += output[n] * Math.sin(w);
+    quad += output[n] * Math.cos(w);
+  }
+  i /= sampleRate;
+  quad /= sampleRate;
+
+  return { amplitude: 2 * Math.hypot(i, quad), phase: Math.atan2(quad, i) };
+}
+
+/**
+ * The magnitude of the analytic response, evaluated the way the trapezoidal
+ * integrator actually behaves: the bilinear transform maps the unit circle onto
+ * the imaginary axis as `s = j*tan(pi*f/fs)`, so normalising by the prewarped
+ * cutoff `g = tan(pi*fc/fs)` gives `s = j*t` with `t = tan(pi*f/fs)/g`.
+ *
+ * Denominator is the SVF prototype `s^2 + s/Q + 1`; each numerator follows from
+ * the mixing coefficients in `dsp.ts`. They are derived rather than assumed:
+ * `HighPass = 1 - k*BP - LP` reduces to `s^2/(s^2+ks+1)` only if the raw
+ * bandpass is `s/(s^2+ks+1)`, which is also why that tap peaks at a gain of Q.
+ */
+function analytic(
+  sampleRate: number,
+  type: SvfType,
+  cutoff: number,
+  q: number,
+  f: number,
+) {
+  const g = Math.tan((cutoff * Math.PI) / sampleRate);
+  const k = 1 / Math.max(q, 0.0001);
+  const t = Math.tan((f * Math.PI) / sampleRate) / g;
+
+  // s = j*t, so s^2 = -t^2. Denominator (1 - t^2) + j*k*t.
+  const denominator = Math.hypot(1 - t * t, k * t);
+
+  let numerator: number;
+  switch (type) {
+    case SvfType.LowPass:
+      numerator = 1;
+      break;
+    case SvfType.BandPass:
+      // Normalized: unity gain at the centre frequency, not a gain of Q.
+      numerator = k * Math.abs(t);
+      break;
+    case SvfType.HighPass:
+      numerator = t * t;
+      break;
+    case SvfType.Notch:
+      numerator = Math.abs(1 - t * t);
+      break;
+    case SvfType.Peak:
+      numerator = Math.abs(-1 - t * t);
+      break;
+    case SvfType.AllPass:
+      numerator = Math.hypot(1 - t * t, k * t);
+      break;
+    default:
+      return 1; // ByPass
+  }
+  return numerator / denominator;
+}
+
+const db = (magnitude: number) => 20 * Math.log10(magnitude);
+
+describe("the magnitude response", () => {
+  // Two decades either side of a 1 kHz cutoff at 48 kHz, which is where the
+  // audit's 6e-9 agreement was measured.
+  const SAMPLE_RATE = 48000;
+  const CUTOFF = 1000;
+  const Q = 0.7071;
+  const FREQUENCIES = [50, 200, 1000, 2000, 5000, 10000];
+
+  const cases = [
+    SvfType.LowPass,
+    SvfType.HighPass,
+    SvfType.BandPass,
+    SvfType.Notch,
+    SvfType.Peak,
+  ].flatMap((type) =>
+    FREQUENCIES.map((f) => [SvfType[type], type, f] as const),
+  );
+
+  it.each(cases)("%s at %p Hz matches its transfer function", (_, type, f) => {
+    const { amplitude } = measure(SAMPLE_RATE, type, CUTOFF, Q, f);
+    const expected = analytic(SAMPLE_RATE, type, CUTOFF, Q, f);
+    expect(Math.abs(amplitude - expected)).toBeLessThan(1e-6);
+  });
+
+  it("puts the lowpass corner at the cutoff", () => {
+    // The one number worth stating on its own: -3 dB at fc, for Butterworth Q.
+    const { amplitude } = measure(
+      SAMPLE_RATE,
+      SvfType.LowPass,
+      CUTOFF,
+      Q,
+      1000,
+    );
+    expect(db(amplitude)).toBeCloseTo(-3.01, 2);
+  });
+
+  it("makes the highpass the lowpass mirrored about the cutoff", () => {
+    // |HP(fc*r)| == |LP(fc/r)| in the warped frequency variable, which is the
+    // statement that the two share one prototype.
+    for (const ratio of [2, 5, 10]) {
+      const t = Math.tan((CUTOFF * ratio * Math.PI) / SAMPLE_RATE);
+      const g = Math.tan((CUTOFF * Math.PI) / SAMPLE_RATE);
+      // |HP(t)| == |LP(1/t)| in the warped variable, so the mirror frequency is
+      // the one whose tangent is g^2/t.
+      const mirror = (SAMPLE_RATE / Math.PI) * Math.atan((g * g) / t);
+      const high = measure(
+        SAMPLE_RATE,
+        SvfType.HighPass,
+        CUTOFF,
+        Q,
+        CUTOFF * ratio,
+      ).amplitude;
+      const low = analytic(SAMPLE_RATE, SvfType.LowPass, CUTOFF, Q, mirror);
+      expect(Math.abs(high - low)).toBeLessThan(1e-6);
+    }
+  });
+
+  it("notches at the cutoff and passes either side of it", () => {
+    expect(
+      measure(SAMPLE_RATE, SvfType.Notch, CUTOFF, Q, CUTOFF).amplitude,
+    ).toBeLessThan(1e-4);
+    for (const f of [50, 10000]) {
+      const { amplitude } = measure(SAMPLE_RATE, SvfType.Notch, CUTOFF, Q, f);
+      expect(Math.abs(db(amplitude))).toBeLessThan(0.5);
+    }
+  });
+});
+
+describe("the magnitude response at every sample rate", () => {
+  // A cutoff of 1 kHz is safely under the 4 kHz Nyquist of the lowest rate, so
+  // this group is about the sample rate reaching the coefficients correctly and
+  // nothing else. It passes today; the group below is the one that does not.
+  const CUTOFF = 1000;
+  const Q = 0.7071;
+
+  const cases = SAMPLE_RATES.flatMap((sampleRate) =>
+    [100, 1000, 3000].map((f) => [sampleRate, f] as const),
+  );
+
+  it.each(cases)("lowpass at %p Hz, tested at %p Hz", (sampleRate, f) => {
+    const { amplitude } = measure(sampleRate, SvfType.LowPass, CUTOFF, Q, f);
+    const expected = analytic(sampleRate, SvfType.LowPass, CUTOFF, Q, f);
+    expect(Math.abs(amplitude - expected)).toBeLessThan(1e-6);
+  });
+});
+
+describe("Q maps to a peak height", () => {
+  const SAMPLE_RATE = 48000;
+  const CUTOFF = 1000;
+
+  // Measured against today's dsp.ts, and independently the analytic peak of
+  // 1/(s^2 + s/Q + 1). Q = 0.5 is over-damped - it has no -3 dB point at the
+  // cutoff at all - which is ticket 07's reason for moving the default.
+  const cases = [
+    [0.5, -0.09],
+    [0.7071, 0.0],
+    [1, 1.25],
+    [4, 12.09],
+    [40, 32.04],
+  ] as const;
+
+  // Scanning the analytic function is free; scanning the measured one is two
+  // seconds of audio per point. So the peak is located analytically and then
+  // confirmed once against the filter itself.
+  //
+  // The scan starts at 100 Hz, a tenth of the cutoff, and that lower bound is
+  // load-bearing for the first two rows: below Q = 1/sqrt(2) the response has
+  // no resonant peak at all, it descends monotonically from a DC gain of 1, so
+  // "the peak" is whatever the bottom of the band measures. That is the honest
+  // reading of "over-damped" and it is the number the audit reported.
+  function analyticPeak(q: number) {
+    let best = 0;
+    let at = 0;
+    for (let f = 100; f <= 2000; f++) {
+      const a = analytic(SAMPLE_RATE, SvfType.LowPass, CUTOFF, q, f);
+      if (a > best) {
+        best = a;
+        at = f;
+      }
+    }
+    return { peak: db(best), at };
+  }
+
+  it.each(cases)("Q=%p peaks at %p dB", (q, expected) => {
+    const { peak, at } = analyticPeak(q);
+    expect(peak).toBeCloseTo(expected, 1);
+
+    // ...and the filter agrees with the formula that describes it.
+    const { amplitude } = measure(SAMPLE_RATE, SvfType.LowPass, CUTOFF, q, at);
+    expect(db(amplitude)).toBeCloseTo(peak, 4);
+  });
+
+  it.each([4, 40])("Q=%p puts the peak within 5% of the cutoff", (q) => {
+    const { at } = analyticPeak(q);
+    expect(Math.abs(at - CUTOFF) / CUTOFF).toBeLessThan(0.05);
+  });
+});
+
+describe("ByPass", () => {
+  it("is bit-identical to its input", () => {
+    const input = new Float32Array(512);
+    for (let n = 0; n < input.length; n++) {
+      input[n] = Math.sin(n * 0.31) * 0.7 + Math.sin(n * 2.9) * 0.3;
+    }
+    const output = new Float32Array(input.length);
+    const frequency = new Float32Array(input.length).fill(1000);
+
+    createFilter(48000).filter(
+      input,
+      output,
+      SvfType.ByPass,
+      frequency,
+      held(0.7071),
+    );
+    expect(Array.from(output)).toEqual(Array.from(input));
+  });
+});
+
+describe("the bandpass", () => {
+  // It used to be the raw tap, whose peak gain at the centre frequency is
+  // exactly Q: -6.02 dB at Q=0.5, +32.04 dB at Q=40. Sweeping resonance swept
+  // 38 dB of level with it, which is not what `BiquadFilterNode` does and is
+  // actively wrong now that `Q` tracks an envelope.
+  const SAMPLE_RATE = 48000;
+  const CUTOFF = 1000;
+  const QS = [0.025, 0.5, 2, 10, 40];
+
+  it.each(QS)("has unity gain at the centre frequency at Q=%p", (q) => {
+    const { amplitude } = measure(
+      SAMPLE_RATE,
+      SvfType.BandPass,
+      CUTOFF,
+      q,
+      CUTOFF,
+    );
+    expect(db(amplitude)).toBeCloseTo(0, 4);
+  });
+
+  it.each(QS)("keeps the shape it had at Q=%p", (q) => {
+    // Only the level moved. In the warped variable `t = tan(pi*f/fs)/g` the
+    // -3 dB points of `s/(s^2 + ks + 1)` are at `sqrt(1 + k^2/4) -/+ k/2`,
+    // which follows from the prototype and says nothing about normalisation -
+    // so asserting them asserts that the bandwidth is untouched.
+    const k = 1 / Math.max(q, 0.0001);
+    const g = Math.tan((CUTOFF * Math.PI) / SAMPLE_RATE);
+    const half = Math.sqrt(1 + (k * k) / 4);
+
+    for (const t of [half - k / 2, half + k / 2]) {
+      const f = (Math.atan(t * g) * SAMPLE_RATE) / Math.PI;
+
+      // The edge really is at -3 dB below the (now unity) peak...
+      expect(
+        db(analytic(SAMPLE_RATE, SvfType.BandPass, CUTOFF, q, f)),
+      ).toBeCloseTo(-3.01, 2);
+
+      // ...and the filter is that curve. Measured at the nearest integer
+      // frequency, because the demodulator needs a whole number of cycles;
+      // compared against the model at the same frequency, so the rounding
+      // cancels instead of being absorbed by a loose tolerance. At Q=40 the
+      // response moves 0.14 dB in half a hertz here, which is what a rounded
+      // -3.01 dB assertion would have had to swallow.
+      const at = Math.round(f);
+      const { amplitude } = measure(
+        SAMPLE_RATE,
+        SvfType.BandPass,
+        CUTOFF,
+        q,
+        at,
+      );
+      expect(
+        Math.abs(
+          amplitude - analytic(SAMPLE_RATE, SvfType.BandPass, CUTOFF, q, at),
+        ),
+      ).toBeLessThan(1e-6);
+    }
+  });
+});
+
+describe("the declared defaults", () => {
+  it("are a Butterworth lowpass at 1 kHz", () => {
+    // Asserted against `params.ts` rather than against literals, so that
+    // `Svf(ac, {})` and this test cannot drift apart.
+    const defaults = Object.fromEntries(
+      PARAMS.map((p) => [p.name, p.defaultValue]),
+    );
+    expect(defaults.type).toBe(SvfType.LowPass);
+    expect(defaults.frequency).toBe(1000);
+
+    const sampleRate = 48000;
+    const at = (f: number) =>
+      measure(sampleRate, defaults.type, defaults.frequency, defaults.Q, f)
+        .amplitude;
+
+    // Butterworth: maximally flat, and exactly -3 dB at the cutoff. The old
+    // default of 0.5 was over-damped and had no -3 dB point there at all.
+    expect(db(at(defaults.frequency))).toBeCloseTo(-3.01, 2);
+    expect(db(at(100))).toBeCloseTo(0, 3);
+    expect(db(at(100))).toBeLessThanOrEqual(1e-6); // no peak anywhere
+  });
+});
+
+describe("the gain responses", () => {
+  // Bell, LowShelf and HighShelf, the three that were `// Not implemented yet`
+  // since the package was written. Coefficients read from the rendered
+  // `Solve[]` cells of Simper's notebook PDF - the *code* cells are glyph
+  // placeholders there and in the markdown conversion, the solutions are not.
+  const SAMPLE_RATE = 48000;
+  const CUTOFF = 1000;
+  const Q = 0.7071;
+  const GAINS = [12, 6, -6, -12];
+
+  const at = (type: SvfType, f: number, gain: number, q = Q) =>
+    db(measure(SAMPLE_RATE, type, CUTOFF, q, f, gain).amplitude);
+
+  describe("the bell", () => {
+    it.each(GAINS)("hits %p dB at the centre frequency", (gain) => {
+      expect(at(SvfType.Bell, CUTOFF, gain)).toBeCloseTo(gain, 1);
+    });
+
+    it.each(GAINS)("leaves a decade either side alone at %p dB", (gain) => {
+      // 0.080 dB at 50 Hz and 0.024 dB at 18 kHz, measured. Not zero, and it
+      // should not be: a Butterworth-Q bell is a *wide* bell, and 50 Hz is only
+      // 4.3 octaves below a 1 kHz centre. At Q=4 the same points are 0.003 and
+      // 0.001 dB.
+      expect(Math.abs(at(SvfType.Bell, 50, gain))).toBeLessThan(0.1);
+      expect(Math.abs(at(SvfType.Bell, 18000, gain))).toBeLessThan(0.1);
+    });
+  });
+
+  describe("the low shelf", () => {
+    it.each(GAINS)("shelves at %p dB below the cutoff", (gain) => {
+      expect(at(SvfType.LowShelf, 20, gain)).toBeCloseTo(gain, 1);
+    });
+
+    it.each(GAINS)("passes above it, at half gain at fc, at %p dB", (gain) => {
+      // Simper moves the cutoff by 1/sqrt(A) precisely so that the half-gain
+      // point stays at the cutoff as the shelf gain changes.
+      expect(at(SvfType.LowShelf, CUTOFF, gain)).toBeCloseTo(gain / 2, 1);
+      expect(at(SvfType.LowShelf, 18000, gain)).toBeCloseTo(0, 1);
+    });
+  });
+
+  describe("the high shelf", () => {
+    it.each(GAINS)("shelves at %p dB above the cutoff", (gain) => {
+      expect(at(SvfType.HighShelf, 18000, gain)).toBeCloseTo(gain, 1);
+    });
+
+    it.each(GAINS)("passes below it, at half gain at fc, at %p dB", (gain) => {
+      expect(at(SvfType.HighShelf, CUTOFF, gain)).toBeCloseTo(gain / 2, 1);
+      expect(at(SvfType.HighShelf, 20, gain)).toBeCloseTo(0, 1);
+    });
+  });
+
+  it.each([
+    [SvfType.LowShelf, 12],
+    [SvfType.LowShelf, -12],
+    [SvfType.HighShelf, 12],
+    [SvfType.HighShelf, -12],
+  ])("makes %p monotonic at %p dB", (type, gain) => {
+    // **This is the assertion that catches a wrong sign without knowing the
+    // right answer in advance.** `m1 = k*(A-1)*A` on the high shelf gives a
+    // +12 dB "shelf" that reaches 14.67 dB at the cutoff - a resonant bump, and
+    // visibly not a shelf whatever the algebra says. The correct `k*(1-A)*A`
+    // gives 6.00 dB there and climbs monotonically to 12.
+    const points = [20, 50, 100, 300, 1000, 3000, 6000, 12000, 18000].map((f) =>
+      at(type, f, gain),
+    );
+    const rising = gain > 0 === (type === SvfType.HighShelf);
+
+    for (let i = 1; i < points.length; i++) {
+      if (rising) expect(points[i]).toBeGreaterThan(points[i - 1] - 0.01);
+      else expect(points[i]).toBeLessThan(points[i - 1] + 0.01);
+    }
+    // And no overshoot beyond the shelf gain itself, at either end.
+    const bound = Math.abs(gain) + 0.05;
+    for (const p of points) expect(Math.abs(p)).toBeLessThan(bound);
+  });
+
+  // **`Q` on a shelf is corner resonance, and above Butterworth these shelves
+  // peak - by construction, not by accident.** The ticket asked for "no
+  // overshoot beyond the shelf gain at any Q in the declared range"; that is
+  // not what a resonant shelf is, and asserting it would have meant changing
+  // the filter rather than the assertion. What is asserted instead is the
+  // boundary: flat at and below 1/sqrt(2), resonant above it.
+  //
+  // Measured at +12 dB, worst point over 20 Hz - 20 kHz:
+  //
+  //   Q       low shelf          high shelf
+  //   0.025   9.64 dB @ 20 Hz    9.61 dB @ 19430 Hz   (never reaches the shelf)
+  //   0.5     11.995 @ 20 Hz     11.995 @ 19430 Hz
+  //   0.7071  12.000 @ 20 Hz     12.000 @ 19430 Hz
+  //   4       21.82 @ 695 Hz     21.64 @ 1489 Hz
+  //   40      36.54 @ 695 Hz     40.89 @ 1404 Hz
+  const SHELVES = [SvfType.LowShelf, SvfType.HighShelf];
+  const SWEEP = [20, 100, 300, 695, 1000, 1489, 3000, 6000, 12000, 19430];
+
+  it.each([0.025, 0.5, 0.7071])(
+    "keeps the shelves inside their own gain at Q=%p",
+    (q) => {
+      for (const type of SHELVES) {
+        for (const gain of [12, -12]) {
+          for (const f of SWEEP) {
+            expect(Math.abs(at(type, f, gain, q))).toBeLessThan(
+              Math.abs(gain) + 0.01,
+            );
+          }
+        }
+      }
+    },
+  );
+
+  it.each([4, 40])(
+    "makes the shelves resonate at their corner at Q=%p",
+    (q) => {
+      for (const type of SHELVES) {
+        const peak = Math.max(...SWEEP.map((f) => at(type, f, 12, q)));
+        // A real peak, not drift: at least 6 dB above the shelf at Q=4.
+        expect(peak).toBeGreaterThan(12 + 6);
+        // ...and it is the corner that resonates, not the shelf itself.
+        expect(
+          at(type, type === SvfType.LowShelf ? 20 : 19430, 12, q),
+        ).toBeCloseTo(12, 1);
+      }
+    },
+  );
+
+  it.each([SvfType.Bell, SvfType.LowShelf, SvfType.HighShelf])(
+    "is an exact bypass at gain 0 (%p)",
+    (type) => {
+      // A = 10^0 = 1, so every coefficient collapses: m = (1, 0, 0) and the
+      // cutoff scale is 1. Bit-identical to the input, not merely close.
+      const input = new Float32Array(512);
+      for (let n = 0; n < input.length; n++) {
+        input[n] = Math.sin(n * 0.31) * 0.7 + Math.sin(n * 2.9) * 0.3;
+      }
+      const output = new Float32Array(input.length);
+      const frequency = new Float32Array(input.length).fill(CUTOFF);
+
+      createFilter(SAMPLE_RATE).filter(
+        input,
+        output,
+        type,
+        frequency,
+        held(Q),
+        0,
+      );
+      expect(Array.from(output)).toEqual(Array.from(input));
+    },
+  );
+});
+
+describe("stability under a fast sweep", () => {
+  // A 3 kHz LFO on the cutoff across the whole declared range is not a patch
+  // anybody plays; it is the worst case the a-rate coefficient path can be
+  // handed, and it is what makes the zero-delay-feedback claim in the README a
+  // measurement rather than an assertion.
+  const SAMPLE_RATE = 48000;
+
+  it.each([0.7071, 10, 40])("survives a 3 kHz cutoff LFO at Q=%p", (q) => {
+    const length = SAMPLE_RATE;
+    const input = new Float32Array(length);
+    const output = new Float32Array(length);
+    const frequency = new Float32Array(length);
+    for (let n = 0; n < length; n++) {
+      input[n] = Math.sin((2 * Math.PI * 220 * n) / SAMPLE_RATE);
+      const lfo = Math.sin((2 * Math.PI * 3000 * n) / SAMPLE_RATE);
+      frequency[n] = 20 + ((MAX_FREQUENCY - 20) * (lfo + 1)) / 2;
+    }
+
+    createFilter(SAMPLE_RATE).filter(
+      input,
+      output,
+      SvfType.LowPass,
+      frequency,
+      held(q),
+    );
+
+    expect(Array.from(output).every(Number.isFinite)).toBe(true);
+    expect(Math.max(...Array.from(output).map(Math.abs))).toBeLessThan(1.1);
+  });
+});
+
+describe("the prewarped cutoff", () => {
+  // Zavalishin section 3.8 eq. 3.23. The three properties that make it a fix
+  // rather than a change: it is exact below the ceiling, it is monotonic above
+  // it, and its first derivative is continuous through the join.
+  const CEILING_FRACTION = 0.72;
+
+  it.each(SAMPLE_RATES)(
+    "is bit-identical to Math.tan below the ceiling at %p Hz",
+    (sampleRate) => {
+      // Criterion 3, asserted at its source rather than through a tolerance on
+      // the output: below the ceiling nothing about any existing patch moves.
+      //
+      // The reference is `f * (1/fs) * PI`, which is the expression dsp.ts used
+      // before this ticket, and not the algebraically identical `f * PI / fs`.
+      // They differ in the last bit, and "bit-identical" is a claim about the
+      // code that was replaced, not about real arithmetic.
+      const prewarp = createPrewarp(sampleRate);
+      const ceiling = (CEILING_FRACTION * sampleRate) / 2;
+      for (const fraction of [0.001, 0.01, 0.1, 0.5, 0.9, 0.999]) {
+        const f = ceiling * fraction;
+        expect(prewarp(f)).toBe(Math.tan(f * (1 / sampleRate) * Math.PI));
+      }
+    },
+  );
+
+  it.each(SAMPLE_RATES)(
+    "stays positive and strictly increasing over the whole declared range at %p Hz",
+    (sampleRate) => {
+      const prewarp = createPrewarp(sampleRate);
+      let previous = 0;
+      for (let f = 20; f <= MAX_FREQUENCY; f += 10) {
+        const g = prewarp(f);
+        expect(Number.isFinite(g)).toBe(true);
+        expect(g).toBeGreaterThan(previous);
+        previous = g;
+      }
+    },
+  );
+
+  it("has a continuous first derivative through the breakpoint", () => {
+    // Criterion 4. Stepping the cutoff by 1 Hz at 48 kHz, a smooth curve gives
+    // a second difference of about g'' * h^2 = 24 * (PI/48000)^2 ~ 1e-7, while
+    // eq. 3.22's hard breakpoint would drop the slope by 5.599 in one step and
+    // give ~3.7e-4. Two orders of magnitude of daylight either side of 1e-6,
+    // which is what makes this an assertion about the *kink* and not about the
+    // curvature.
+    const sampleRate = 48000;
+    const prewarp = createPrewarp(sampleRate);
+    const ceiling = (CEILING_FRACTION * sampleRate) / 2;
+
+    let worst = 0;
+    for (let f = ceiling - 200; f <= ceiling + 200; f++) {
+      const second = prewarp(f + 1) - 2 * prewarp(f) + prewarp(f - 1);
+      worst = Math.max(worst, Math.abs(second));
+    }
+    expect(worst).toBeLessThan(1e-6);
+  });
+});
+
+describe("the declared cutoff range", () => {
+  // The property this asserts is not a level but a *shape*: raising the cutoff
+  // of a lowpass can never lower its gain at a fixed probe tone. It deliberately
+  // does not assert a level, because a cutoff far above Nyquist is legitimately
+  // "wide open" and the prewarping does not pretend otherwise - it slows the
+  // curve, it does not clamp it. What `g` must never be is negative, infinite
+  // or backwards, and before ticket 03 it was all three: `frequency.maxValue`
+  // is a compile-time 20000, Nyquist is not, and at 8000 Hz a cutoff of 6000
+  // gave `g = -1` while 20000 gave `tan(2.5*PI) = 3.3e15`.
+  //
+  // The comment that hid it for three audits claimed the range was
+  // "[16, sampleRate / 2] (clamped by AudioWorklet)". `AudioParam` clamps to
+  // the descriptor's compile-time constants and has never known the sample
+  // rate.
+  const Q = 0.7071; // k^2 = 2, so |H|^2 = 1/(1+u^4): monotone in the cutoff
+  const CUTOFFS = [
+    20,
+    100,
+    500,
+    1000,
+    2000,
+    4000,
+    6000,
+    8000,
+    12000,
+    16000,
+    MAX_FREQUENCY,
+  ];
+
+  it.each(SAMPLE_RATES)("is finite and monotonic at %p Hz", (sampleRate) => {
+    // A fifth of the sample rate: under Nyquist everywhere, above the cutoff
+    // at the bottom of the sweep and below it at the top, so the measured
+    // magnitude has to climb the whole way.
+    const probe = Math.round(0.2 * sampleRate);
+    let previous = -Infinity;
+
+    for (const cutoff of CUTOFFS) {
+      const { amplitude } = measure(
+        sampleRate,
+        SvfType.LowPass,
+        cutoff,
+        Q,
+        probe,
+      );
+      expect(Number.isFinite(amplitude)).toBe(true);
+      expect(amplitude).toBeLessThan(1.1);
+      expect(amplitude).toBeGreaterThan(previous - 1e-6);
+      previous = amplitude;
+    }
+  });
+});
+
+describe("recovery from a poisoned state", () => {
+  // One non-finite sample - a disconnected node, an upstream division - and the
+  // state was NaN forever, because NaN propagates through every one of the five
+  // state updates and both integrators feed back into themselves. The per-block
+  // check turns a permanently dead node into a click.
+  const frequency = () => new Float32Array(128).fill(1000);
+
+  it("comes back within one block after an Infinity at the input", () => {
+    const { filter } = createFilter(48000);
+    const poisoned = new Float32Array(128);
+    poisoned[0] = Infinity;
+    const output = new Float32Array(128);
+
+    filter(poisoned, output, SvfType.LowPass, frequency(), held(0.7071));
+
+    // The block that carried the Infinity is a write-off; the *next* one is
+    // not. Not "within 100 blocks" - within one.
+    const clean = new Float32Array(128).fill(0.25);
+    filter(clean, output, SvfType.LowPass, frequency(), held(0.7071));
+    expect(Array.from(output).every(Number.isFinite)).toBe(true);
+  });
+
+  it("does not fire on well-formed audio", () => {
+    // The thing most likely to go wrong silently here is a guard that trips on
+    // legitimate signal, so: the worst case the a-rate path can be handed has
+    // to come out bit-identical to a filter that never checks anything.
+    const sampleRate = 48000;
+    const length = sampleRate;
+    const input = new Float32Array(length);
+    const freq = new Float32Array(length);
+    for (let n = 0; n < length; n++) {
+      input[n] = Math.sin((2 * Math.PI * 220 * n) / sampleRate);
+      const lfo = Math.sin((2 * Math.PI * 3000 * n) / sampleRate);
+      freq[n] = 20 + ((MAX_FREQUENCY - 20) * (lfo + 1)) / 2;
+    }
+
+    const guarded = new Float32Array(length);
+    createFilter(sampleRate).filter(
+      input,
+      guarded,
+      SvfType.LowPass,
+      freq,
+      held(40),
+    );
+
+    // A second pass through a fresh filter, block by block the way the worklet
+    // drives it: if the guard ever fired, the two disagree.
+    const blocked = new Float32Array(length);
+    const { filter } = createFilter(sampleRate);
+    for (let off = 0; off + 128 <= length; off += 128) {
+      filter(
+        input.subarray(off, off + 128),
+        blocked.subarray(off, off + 128),
+        SvfType.LowPass,
+        freq.subarray(off, off + 128),
+        held(40),
+      );
+    }
+    const upTo = length - (length % 128);
+    expect(Array.from(blocked.subarray(0, upTo))).toEqual(
+      Array.from(guarded.subarray(0, upTo)),
+    );
+  });
+
+  it("clears the state on reset()", () => {
+    const impulse = new Float32Array(128);
+    impulse[0] = 1;
+    const silence = new Float32Array(128);
+
+    // Ring a filter, reset it, and let it run on silence...
+    const rung = createFilter(48000);
+    const afterReset = new Float32Array(128);
+    rung.filter(
+      impulse,
+      new Float32Array(128),
+      SvfType.LowPass,
+      frequency(),
+      held(40),
+    );
+    rung.reset();
+    rung.filter(silence, afterReset, SvfType.LowPass, frequency(), held(40));
+
+    // ...which has to be exactly what a filter that was never rung produces.
+    const fresh = new Float32Array(128);
+    createFilter(48000).filter(
+      silence,
+      fresh,
+      SvfType.LowPass,
+      frequency(),
+      held(40),
+    );
+    expect(Array.from(afterReset)).toEqual(Array.from(fresh));
+    expect(Array.from(afterReset).every((v) => v === 0)).toBe(true);
+  });
+});

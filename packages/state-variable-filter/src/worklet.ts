@@ -11,7 +11,7 @@ export class SvfProcessor extends AudioWorkletProcessor {
     this.p = [];
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "STOP":
+        case "DISPOSE":
           this.r = false;
           break;
       }
@@ -27,13 +27,14 @@ export class SvfProcessor extends AudioWorkletProcessor {
       // Each channel needs its own filter state: sharing one across channels
       // would bleed the left channel into the right, not just blur it. The
       // filters are built on the first block that has that many channels.
-      const filter = (this.p[c] ??= createFilter(sampleRate));
-      filter(
+      const svf = (this.p[c] ??= createFilter(sampleRate));
+      svf.filter(
         input[c],
         output[c],
         params.type[0],
         params.frequency,
-        params.Q[0],
+        params.Q,
+        params.gain[0],
       );
     }
 
