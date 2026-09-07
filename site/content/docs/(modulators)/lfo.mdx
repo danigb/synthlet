@@ -141,6 +141,30 @@ sample _is_ the cycle boundary.
 | `RandSampleHold` (9) | held | held    | held | held    | φ=0      |
 | `Impulse` (10)       | 1    | 0       | 0    | 0       | φ=0      |
 
+The last two are stochastic and have no such row. What they promise instead is a
+range and a continuity:
+
+| `LfoType`         | Promises                                                                                           |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| `RandSmooth` (11) | In ±1. One random target per cycle, faded between targets — continuous, with no corner at a target |
+| `Drift` (12)      | In ±1. Two octaves of gradient noise along the phase — a rate, but no audible period               |
+
+`RandSampleHold` steps, and that is its point — it is also the loudest thing this
+module emits, at a measured 1.41623 of single-sample step at 5 Hz where a sine's
+largest is 0.00071. `RandSmooth` and `Drift` are the continuous members, both
+under 0.005 at the same rate. They are not redundant with each other:
+**`RandSmooth` has a beat** — every local extremum is a cycle boundary — and
+**`Drift` does not**.
+
+The interpolation is Perlin's quintic fade rather than a straight line: linear
+interpolation between random targets has a discontinuous derivative at every
+target, so a smoothed random on a cutoff would have an audible corner once a
+cycle. `Drift` is one-dimensional gradient (Perlin) noise along the phase, per
+Popov 2018.
+
+**None of these is a noise source.** [Noise](/docs/sources/noise) is white and
+pink at audio rate; these are one random value per LFO cycle.
+
 Every shape swings the full ±1 and averages to zero over a cycle, so `gain` is
 the whole depth and nothing here adds DC to what it modulates.
 

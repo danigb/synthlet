@@ -22,7 +22,7 @@ export const PARAMS: readonly ParamDescriptor[] = [
     name: "type",
     defaultValue: 1,
     minValue: 0,
-    maxValue: 10,
+    maxValue: 12,
     automationRate: "k-rate",
   },
   {

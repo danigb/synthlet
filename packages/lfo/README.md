@@ -1,6 +1,6 @@
 # @synthlet/lfo
 
-> A low-frequency oscillator with eleven shapes, as an audio worklet
+> A low-frequency oscillator with thirteen shapes, as an audio worklet
 
 Part of [Synthlet](https://github.com/danigb/synthlet).
 
@@ -148,6 +148,34 @@ re-arm.
 The reset lands on the sample the edge was detected on. Unlike
 `@synthlet/polyblep-oscillator`, this package does not interpolate the
 sub-sample crossing instant — 2.9 ms is nothing against a 5 Hz cycle.
+
+## The random family
+
+`RandSampleHold` steps, and that is its point — it is also the loudest thing this
+module emits, at a measured 1.41623 of single-sample step at 5 Hz where a sine's
+largest is 0.00071. So for a long time "random modulation" and "audible stepping"
+were the same setting.
+
+`RandSmooth` and `Drift` are the continuous members. They are not redundant with
+each other: **`RandSmooth` has a beat** — you can hear one value per cycle, and
+every local extremum is a cycle boundary — and **`Drift` does not**. Both measure
+under 0.005 of single-sample step at 5 Hz, two orders of magnitude under the
+stepped one.
+
+The interpolation is Perlin's quintic fade `6t⁵ − 15t⁴ + 10t³` rather than a
+straight line, and not as a matter of taste: linear interpolation between random
+targets has a discontinuous derivative at every target, so a smoothed random on a
+cutoff would have an audible corner once a cycle — a smaller version of the
+problem it exists to solve.
+
+`Drift` is two octaves of one-dimensional gradient (Perlin) noise sampled along
+the phase, per Popov 2018. Its lacunarity is the **golden ratio** rather than the
+usual 2, because gradient noise is exactly zero at every lattice point: an
+integer lacunarity puts every octave's zeros in the same places and leaves an
+audible period in a shape whose whole job is not to have one.
+
+**None of these is a noise source.** `@synthlet/noise` is white and pink at audio
+rate; these are one random value per LFO cycle.
 
 ## Fading in
 

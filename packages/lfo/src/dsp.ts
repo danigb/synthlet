@@ -37,6 +37,17 @@
  * | `RandSampleHold` | held | held    | held | held   | φ=0           |
  * | `Impulse`        | 1    | 0       | 0   | 0       | φ=0           |
  *
+ * The last two members are stochastic and have no such row. What they promise
+ * instead is a range and a continuity:
+ *
+ * | shape        | promises                                                   |
+ * | ------------ | ---------------------------------------------------------- |
+ * | `RandSmooth` | In [−1, 1]. One random target per cycle, quintic-faded      |
+ * |              | between targets, so it is continuous and has **no corner**  |
+ * |              | at a target. Every local extremum is a cycle boundary       |
+ * | `Drift`      | In [−1, 1]. Two octaves of gradient noise along the phase,  |
+ * |              | so it has a rate but **no audible period**                  |
+ *
  * ## The `Exp*` family is the linear family, more curved
  *
  * `ExpTriangle` used to be `bipolar(concave(|bipolar(φ)|))`, which peaks where
@@ -50,6 +61,26 @@
  * coefficient: `|Exp(φ)| ≤ |Linear(φ)|` with matching signs. The 5/12
  * correction factor is one legitimate fixed opinion about how much to bend;
  * pinning it in a test would make the opinion untouchable.
+ *
+ * ## The random family
+ *
+ * `RandSampleHold` steps, and that is its point - it is also the loudest thing
+ * this module emits, at a measured 1.41623 of single-sample step at 5 Hz where
+ * a sine's largest is 0.00071. So for a long time "random modulation" and
+ * "audible stepping" were the same setting here. `RandSmooth` and `Drift` are
+ * the continuous members every surveyed synth ships alongside the stepped one:
+ * Vital calls its own **Drift**, Serum 2 reaches it through the Smooth knob.
+ *
+ * They are not redundant with each other. `RandSmooth` has a beat - you can
+ * hear one value per cycle, and every local extremum *is* a cycle boundary.
+ * `Drift` has a rate but no period.
+ *
+ * The gradient-noise construction and the quintic fade are Popov 2018, *Using
+ * Perlin noise in sound synthesis* (LAC), sections 2-4, which is in the
+ * repository's paper library for this. Its method, not its code.
+ *
+ * Neither is a noise *source*: `@synthlet/noise` is white and pink at audio
+ * rate, and these are one random value per LFO cycle.
  */
 import { createGateDetector } from "./_gate";
 
@@ -65,6 +96,8 @@ export enum LfoType {
   ExpTriangle = 8,
   RandSampleHold = 9,
   Impulse = 10,
+  RandSmooth = 11,
+  Drift = 12,
 }
 
 /**
@@ -157,6 +190,140 @@ const rampDown: Gen = (phase, prev) => -rampUp(phase, prev);
 // duty, and a mean of exactly zero over an even-length cycle.
 const square: Gen = (phase) => (phase < 0.5 ? +1.0 : -1.0);
 const rand = () => bipolar(Math.random());
+
+/**
+ * Perlin's quintic fade, `6t^5 - 15t^4 + 10t^3`.
+ *
+ * Zero-valued and zero-*sloped* at both ends, which is the whole reason it is
+ * here rather than a straight line: linear interpolation between random targets
+ * has a discontinuous derivative at every target, so a smoothed random on a
+ * cutoff would have an audible corner once per cycle - a smaller version of
+ * exactly the problem `RandSmooth` exists to solve. Shared with `Drift`, whose
+ * source specifies the same curve, rather than picking a second one.
+ */
+const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
+
+/**
+ * One random target per cycle, faded between targets.
+ *
+ * The same draw as `createSampleAndHold`, travelled to instead of jumped to.
+ * Its rate is still `frequency`, which is what makes it that shape's sibling
+ * rather than a different idea. Bounded by construction: both endpoints are in
+ * [-1, 1] and `fade` is in [0, 1], so the output cannot leave the range.
+ */
+function createRandSmooth(): Gen {
+  let from = rand();
+  let to = rand();
+  return (phase, nextPhase) => {
+    const out = from + (to - from) * fade(phase);
+    if (nextPhase < phase) {
+      from = to;
+      to = rand();
+    }
+    return out;
+  };
+}
+
+/** How many octaves of gradient noise `Drift` sums. See `createDrift`. */
+const DRIFT_OCTAVES = 2;
+/** Each octave is half as loud as the one below it: Popov's *persistence*. */
+const DRIFT_PERSISTENCE = 0.5;
+/**
+ * And `phi` times as fast: Popov's *lacunarity*, and the load-bearing constant
+ * in this shape.
+ *
+ * One-dimensional Perlin noise is **exactly zero at every lattice point** -
+ * Popov names this as the property that makes a single cycle loop seamlessly,
+ * which for a waveform is a feature and for a modulator is an audible period. A
+ * lacunarity of 2, the usual choice, puts every octave's zeros in the same
+ * places and keeps it. The golden ratio is incommensurate, so past the origin
+ * the two lattices never line up again and the period goes away.
+ */
+const DRIFT_LACUNARITY = (1 + Math.sqrt(5)) / 2;
+
+type Octave = {
+  scale: number;
+  amp: number;
+  /** Lattice cell the position was last in; `NaN` forces the first draw. */
+  index: number;
+  /** Gradients at the cell's left and right lattice points. */
+  g0: number;
+  g1: number;
+};
+
+/**
+ * Gradient (Perlin) noise along the phase: a rate, and no period.
+ *
+ * Popov 2018 section 2, after Gustavson: each lattice point carries a gradient,
+ * and the value at a point is the faded interpolation of the two neighbouring
+ * linear slopes extrapolated to it. Summed over `DRIFT_OCTAVES`, each
+ * `DRIFT_LACUNARITY` times faster and `DRIFT_PERSISTENCE` times quieter than
+ * the last - Popov's fractional Brownian motion, with his names for the two
+ * factors.
+ *
+ * **Two octaves, measured.** One octave has the zero-at-every-lattice-point
+ * period described at `DRIFT_LACUNARITY`. Three peak at 0.69 of full scale over
+ * 120 s and four at 0.60, because summing more independent octaves is more
+ * Gaussian and less likely to approach the bound. Two peak at 0.80-0.90 over
+ * 3000 cycles while still being bounded by 1 **by construction** - `norm` is
+ * the construction's own maximum, not an empirical fudge - so the shape uses
+ * its range with no clamp anywhere.
+ *
+ * The position advances by the phase increment recovered from the two phases it
+ * is handed, wrap and direction included, so a negative `frequency` drifts
+ * backwards through the same field.
+ */
+function createDrift(): Gen {
+  const octaves: Octave[] = [];
+  let amplitudes = 0;
+  for (let o = 0; o < DRIFT_OCTAVES; o++) {
+    const amp = Math.pow(DRIFT_PERSISTENCE, o);
+    amplitudes += amp;
+    octaves.push({
+      scale: Math.pow(DRIFT_LACUNARITY, o),
+      amp,
+      index: NaN,
+      g0: rand(),
+      g1: rand(),
+    });
+  }
+  // 1-D Perlin's extreme is half its gradient's, at the middle of a cell.
+  const norm = 1 / (0.5 * amplitudes);
+  let position = 0;
+
+  return (phase, nextPhase) => {
+    let value = 0;
+    for (const octave of octaves) {
+      const at = position * octave.scale;
+      const cell = Math.floor(at);
+      if (cell !== octave.index) {
+        // Walking forward one cell keeps the gradient the two cells share; any
+        // other jump - the first call, or a phase reset - draws both afresh.
+        if (cell === octave.index + 1) {
+          octave.g0 = octave.g1;
+          octave.g1 = rand();
+        } else {
+          octave.g0 = rand();
+          octave.g1 = rand();
+        }
+        octave.index = cell;
+      }
+      const t = at - cell;
+      const left = octave.g0 * t;
+      const right = octave.g1 * (t - 1);
+      value += octave.amp * (left + fade(t) * (right - left));
+    }
+
+    // The phase increment, recovered: `nextPhase` has already wrapped, and the
+    // sign is `frequency`'s.
+    let step = nextPhase - phase;
+    if (step > 0.5) step -= 1;
+    else if (step < -0.5) step += 1;
+    position += step;
+
+    return value * norm;
+  };
+}
 const expRampUp: Gen = (phase, prev) => curve(rampUp(phase, prev));
 const expRampDown: Gen = (phase, prev) => -expRampUp(phase, prev);
 const expTriangle: Gen = (phase, prev) => curve(triangle(phase, prev));
@@ -188,6 +355,8 @@ export function createGenerators(): Gen[] {
     expTriangle,
     createSampleAndHold(),
     createImpulse(),
+    createRandSmooth(),
+    createDrift(),
   ];
 }
 

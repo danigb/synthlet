@@ -116,6 +116,32 @@ const fromPhase = (
 const controlRate = (samples: number, p: Params, blockSize = BLOCK) =>
   render(createLfo(SAMPLE_RATE, false), samples, p, blockSize);
 
+const ALL_TYPES = Object.values(LfoType).filter(
+  (value): value is LfoType => typeof value === "number",
+);
+
+/**
+ * The three shapes whose output is random.
+ *
+ * Their state is per instance, so two renders of one of them are two
+ * independent instances and there is nothing to compare sample for sample.
+ * Every grid below that asserts bit-identity runs over the other ten instead;
+ * `the random family` is where these three are measured, by their statistics.
+ */
+const STOCHASTIC: LfoType[] = [
+  LfoType.RandSampleHold,
+  LfoType.RandSmooth,
+  LfoType.Drift,
+];
+
+const DETERMINISTIC_TYPES = ALL_TYPES.filter(
+  (type) => !STOCHASTIC.includes(type),
+);
+
+/** `[name, type]` rows for `it.each`, so a failure names the shape. */
+const byName = (types: LfoType[]) =>
+  types.map((type) => [LfoType[type], type] as [string, LfoType]);
+
 /** The largest step between adjacent samples. */
 function maxStep(signal: Float32Array) {
   let max = 0;
@@ -186,11 +212,13 @@ describe("every waveform", () => {
   // it is a constant-free statement that the 128-sample render is the same
   // signal, for every shape, without a hand-derived slope bound per waveform.
   //
-  // `RandSampleHold` is the one shape this cannot be run on, and the reason is
-  // that it *is* independent now: two renders are two instances, and two
-  // instances draw different numbers. It is compared on where it changes
-  // instead, which is the statement the equality suite is making anyway - that
-  // the loop is right - and is the largest true one for a stochastic shape.
+  // The three random shapes cannot be run on this, and the reason is that they
+  // *are* independent now: two renders are two instances, and two instances
+  // draw different numbers. `RandSampleHold` is compared on where it changes
+  // instead - the statement the equality suite is making anyway, that the loop
+  // is right, and the largest true one for a stochastic shape. `RandSmooth` and
+  // `Drift` change every sample and have no such structure; `the random family`
+  // measures them.
   const DETERMINISTIC_SHAPES = [
     LfoType.None,
     LfoType.Sine,
@@ -268,11 +296,14 @@ describe("every waveform", () => {
 });
 
 describe("independent instances", () => {
-  // Two of the eleven generators carry state, and both used to be built once at
-  // module scope - so every `Lfo` of those types in an `AudioContext` shared one
-  // variable. Measured before the fix: a brand-new `Impulse` node emitted
+  // Four of the thirteen generators carry state, and the two that existed first
+  // were built once at module scope - so every `Lfo` of those types in an
+  // `AudioContext` shared one variable. Measured before the fix: a brand-new
+  // `Impulse` node emitted
   // nothing at all, because an older node's render had consumed the shared
   // `active` flag, and a fresh sample-and-hold returned the older node's value.
+  // `RandSmooth` and `Drift` were written after the fix and are covered by
+  // `the random family`.
   //
   // `karplus-strong`, `polyblep-oscillator` and `wavetable-oscillator` each
   // carry a named test for this property. This is `lfo`'s.
@@ -414,10 +445,6 @@ describe("sync and phase", () => {
   // node into an a-rate param is the library's only sync mechanism and it
   // already reaches everything.
 
-  const EVERY_TYPE = Object.values(LfoType).filter(
-    (value): value is LfoType => typeof value === "number",
-  );
-
   /** A gate that steps `0 -> 1` at `at` and stays there: one rising edge. */
   function edgeAt(at: number, length: number, high = 1) {
     const gate = new Float32Array(length);
@@ -425,8 +452,8 @@ describe("sync and phase", () => {
     return gate;
   }
 
-  const SHAPE_TYPES = EVERY_TYPE.filter(
-    (type) => type !== LfoType.RandSampleHold && type !== LfoType.Impulse,
+  const SHAPE_TYPES = DETERMINISTIC_TYPES.filter(
+    (type) => type !== LfoType.Impulse,
   );
 
   it.each(SHAPE_TYPES.map((type) => [LfoType[type], type]))(
@@ -506,7 +533,7 @@ describe("sync and phase", () => {
     expect(stepped[3000]).toBe(fresh[3000]);
   });
 
-  it.each(EVERY_TYPE.map((type) => [LfoType[type], type]))(
+  it.each(byName(DETERMINISTIC_TYPES))(
     "%s: an unconnected sync changes nothing",
     (_name, type) => {
       // The assertion that says this ticket is additive. A browser hands an
@@ -519,16 +546,7 @@ describe("sync and phase", () => {
         4 * CYCLE,
         params({ type, sync: new Float32Array(BLOCK) }),
       );
-      if (type === LfoType.RandSampleHold) {
-        // Two renders are two instances; what is comparable is where it moves.
-        const changes = (signal: Float32Array) =>
-          Array.from(signal.subarray(1))
-            .map((value, i) => (value !== signal[i] ? i : -1))
-            .filter((i) => i >= 0);
-        expect(changes(block)).toEqual(changes(single));
-      } else {
-        expect(Array.from(block)).toEqual(Array.from(single));
-      }
+      expect(Array.from(block)).toEqual(Array.from(single));
     },
   );
 
@@ -671,11 +689,7 @@ describe("depth envelope", () => {
     return gate;
   }
 
-  const EVERY_TYPE = Object.values(LfoType).filter(
-    (value): value is LfoType => typeof value === "number",
-  );
-
-  it.each(EVERY_TYPE.map((type) => [LfoType[type], type]))(
+  it.each(byName(DETERMINISTIC_TYPES))(
     "%s: the defaults change nothing",
     (_name, type) => {
       // Non-negotiable: nine packages depend on this one and none of them
@@ -686,15 +700,7 @@ describe("depth envelope", () => {
         4 * CYCLE,
         params({ type, gate: new Float32Array(BLOCK).fill(1) }),
       );
-      if (type === LfoType.RandSampleHold) {
-        const changes = (signal: Float32Array) =>
-          Array.from(signal.subarray(1))
-            .map((value, i) => (value !== signal[i] ? i : -1))
-            .filter((i) => i >= 0);
-        expect(changes(gated)).toEqual(changes(plain));
-      } else {
-        expect(Array.from(gated)).toEqual(Array.from(plain));
-      }
+      expect(Array.from(gated)).toEqual(Array.from(plain));
     },
   );
 
@@ -722,7 +728,7 @@ describe("depth envelope", () => {
     );
 
     const hold = Math.round(0.5 * SAMPLE_RATE);
-    for (let i = 0; i < hold; i++) expect(depth[i]).toBe(0);
+    expect(depth.subarray(0, hold).some((value) => value !== 0)).toBe(false);
     expect(depth[hold]).toBeGreaterThan(0);
 
     const reached = depth.findIndex((value) => value >= 0.99);
@@ -754,9 +760,11 @@ describe("depth envelope", () => {
     const atRelease = depth[half - 1];
     expect(atRelease).toBeGreaterThan(0.5);
     expect(atRelease).toBeLessThan(0.99);
+    let drift = 0;
     for (let i = half; i < length; i++) {
-      expect(depth[i]).toBeCloseTo(atRelease, 6);
+      drift = Math.max(drift, Math.abs(depth[i] - atRelease));
     }
+    expect(drift).toBeLessThan(1e-6);
   });
 
   it("treats legato as one ramp", () => {
@@ -769,10 +777,8 @@ describe("depth envelope", () => {
       length,
     );
 
-    for (let i = 1; i < length; i++) {
-      expect(depth[i]).toBeGreaterThanOrEqual(depth[i - 1]);
-    }
-    // A restart would be a step down; the largest step here is the first one.
+    // A restart would be a step down, so the largest backward step is the
+    // whole assertion: it rises, monotonically, once.
     let worst = 0;
     for (let i = 1; i < length; i++) {
       worst = Math.max(worst, depth[i - 1] - depth[i]);
@@ -860,6 +866,217 @@ describe("depth envelope", () => {
   });
 });
 
+describe("the random family", () => {
+  // `RandSampleHold` used to be the only random shape here, and it is also the
+  // loudest thing the module emits: measured largest single-sample step at
+  // `gain: 1` is 1.41623 at 5 Hz, where a sine's is 0.00071. So "random
+  // modulation" and "audible stepping" were the same setting.
+  //
+  // `RandSmooth` and `Drift` are the continuous members. They are not
+  // redundant with each other, and `has a beat` below is the test that says so.
+  //
+  // Everything here is a *statistic*, because a random shape has nothing else
+  // to assert. Every threshold was measured before it was written, over eight
+  // trials, and the measured figures are quoted next to the bound they justify.
+
+  const SMOOTH = [LfoType.RandSmooth, LfoType.Drift];
+  const SAMPLE_RATES = [22050, 44100, 96000];
+
+  /**
+   * `cycles` whole cycles of `type` at `rate`, rendered a block at a time.
+   *
+   * The statistics below need *cycles*, not seconds, and a cycle costs
+   * `sampleRate / rate` samples - so they are taken at the top of the declared
+   * range, where three thousand of them is fifteen seconds rather than a
+   * minute. The shapes have no rate-dependent behaviour to miss: `at every
+   * sample rate` is the grid that checks that.
+   */
+  function run(type: LfoType, cycles: number, rate = 200, sampleRate = 44100) {
+    const perCycle = sampleRate / rate;
+    const total = Math.ceil((cycles * perCycle) / BLOCK) * BLOCK;
+    const out = new Float32Array(total);
+    const block = new Float32Array(BLOCK);
+    const generate = createLfo(sampleRate, true);
+    const p = params({ type, frequency: rate });
+    for (let i = 0; i < total; i += BLOCK) {
+      generate(block, p);
+      out.set(block, i);
+    }
+    return out;
+  }
+
+  const largestStep = (signal: Float32Array) => maxStep(signal);
+
+  it.each(
+    SAMPLE_RATES.flatMap((sampleRate) =>
+      SMOOTH.map(
+        (type) =>
+          [LfoType[type], sampleRate, type] as [string, number, LfoType],
+      ),
+    ),
+  )(
+    "%s at %i Hz uses its range and never leaves it",
+    (_n, sampleRate, type) => {
+      const signal = run(type, 3000, 200, sampleRate);
+      // Reduced in a plain loop and asserted once: an `expect` per sample over
+      // half a million samples is the slowest thing a suite can do.
+      let peak = 0;
+      for (const value of signal) peak = Math.max(peak, Math.abs(value));
+      expect(peak).toBeLessThanOrEqual(1);
+      // A random that never gets near its limits is not using its range.
+      // Measured over 3000 cycles, worst of eight trials: `RandSmooth` 0.998,
+      // `Drift` 0.800. `Drift` is the lower of the two because gradient noise
+      // reaches its bound only when both octaves' gradients are extreme at once;
+      // 0.7 is the bound with margin, not the measurement.
+      expect(peak).toBeGreaterThan(type === LfoType.Drift ? 0.7 : 0.9);
+    },
+  );
+
+  it.each(
+    SAMPLE_RATES.flatMap((sampleRate) =>
+      SMOOTH.map(
+        (type) =>
+          [LfoType[type], sampleRate, type] as [string, number, LfoType],
+      ),
+    ),
+  )("%s at %i Hz is smooth", (_n, sampleRate, type) => {
+    // The number that says the ticket worked: two orders of magnitude under
+    // `RandSampleHold`'s 1.41623 at the same rate. Measured at 5 Hz:
+    // `RandSmooth` 4.2e-4, `Drift` 2.8e-4.
+    const signal = run(type, 20, 5, sampleRate);
+    expect(largestStep(signal)).toBeLessThan(0.01);
+    expect(
+      largestStep(run(LfoType.RandSampleHold, 20, 5, sampleRate)),
+    ).toBeGreaterThan(0.1);
+  });
+
+  it("RandSmooth has no corner at its targets", () => {
+    // The assertion that fails against linear interpolation and passes against
+    // the quintic fade. A corner is a step in the *first* difference, so it is
+    // the second difference that sees it: linear interpolation between targets
+    // up to 2 apart puts a whole target's worth of slope change into one
+    // sample, where the quintic's is bounded by `fade''` and the increment
+    // squared. Measured at 5 Hz: 1.45e-7.
+    const signal = run(LfoType.RandSmooth, 20, 5);
+    let worst = 0;
+    for (let i = 2; i < signal.length; i++) {
+      worst = Math.max(
+        worst,
+        Math.abs(signal[i] - 2 * signal[i - 1] + signal[i - 2]),
+      );
+    }
+    expect(worst).toBeLessThan(1e-4);
+  });
+
+  it("RandSmooth has a beat and Drift does not", () => {
+    // The property, measured as the thing it is. `RandSmooth` is monotone
+    // between targets, so **every** local extremum is a cycle boundary;
+    // `Drift`'s fall wherever the gradient field puts them. Measured over 60 s
+    // at 5 Hz: 100.0% of `RandSmooth`'s 188 extrema against 0.7% of `Drift`'s
+    // 580.
+    //
+    // The ticket proposed autocorrelation at a one-cycle lag instead, and
+    // measured it does not discriminate: `RandSmooth` reads 0.09 because the
+    // quintic fade spends most of its time at one target or the other, and
+    // `Drift` reads -0.25 because adjacent cells share a gradient, which
+    // correlates them *negatively*. Neither number means what the ticket wanted
+    // it to; this one does.
+    const RATE = 20;
+    const perCycle = SAMPLE_RATE / RATE;
+
+    const onBoundary = (type: LfoType) => {
+      const signal = run(type, 300, RATE);
+      let extrema = 0;
+      let atBoundary = 0;
+      let rising = 0;
+      // Sign changes of the first difference, skipping *over* runs of equal
+      // samples rather than skipping the extremum they contain: `fade` has zero
+      // slope at a target, so `RandSmooth` is flat to `Float32`'s precision for
+      // a few hundredths of a percent of a cycle around every one of them, and
+      // a naive three-sample test finds six of them in three hundred cycles.
+      for (let i = 1; i < signal.length; i++) {
+        const step = signal[i] - signal[i - 1];
+        if (step === 0) continue;
+        const sign = step > 0 ? 1 : -1;
+        if (rising !== 0 && sign !== rising) {
+          extrema++;
+          const phase = ((i - 1) % perCycle) / perCycle;
+          if (phase < 0.02 || phase > 0.98) atBoundary++;
+        }
+        rising = sign;
+      }
+      expect(extrema).toBeGreaterThan(50);
+      return atBoundary / extrema;
+    };
+
+    expect(onBoundary(LfoType.RandSmooth)).toBeGreaterThan(0.95);
+    expect(onBoundary(LfoType.Drift)).toBeLessThan(0.1);
+  });
+
+  it.each(
+    SAMPLE_RATES.flatMap((sampleRate) =>
+      SMOOTH.map(
+        (type) =>
+          [LfoType[type], sampleRate, type] as [string, number, LfoType],
+      ),
+    ),
+  )("%s at %i Hz averages to zero", (_n, sampleRate, type) => {
+    // 3000 cycles and not 100: a random shape's sample mean has a standard
+    // error of 0.058 over 100 cycles, so a bound of 0.05 there would be under
+    // one sigma and would flake about half the time. Measured over 3000, worst
+    // of six trials at all three sample rates: `RandSmooth` 0.034, `Drift`
+    // 0.0001.
+    const signal = run(type, 3000, 200, sampleRate);
+    let sum = 0;
+    for (const value of signal) sum += value;
+    expect(Math.abs(sum / signal.length)).toBeLessThan(0.05);
+  });
+
+  it.each(byName(SMOOTH))("%s: instances are independent", (_n, type) => {
+    // The same property `independent instances` asserts for the two older
+    // stateful shapes, extended to the two new ones - which is the reason
+    // ticket 01 of this folder had to land before this one.
+    const p = params({ type, frequency: 200 });
+    const a = audioRate(SAMPLE_RATE / 4, p);
+    const b = audioRate(SAMPLE_RATE / 4, p);
+
+    let differ = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) differ++;
+    expect(differ / a.length).toBeGreaterThan(0.99);
+  });
+
+  it("Drift begins at no modulation", () => {
+    // Gradient noise is exactly zero at every lattice point, and a fresh
+    // instance starts on one - so `Drift` opens at zero and rises out of it,
+    // which is what `phi=0 is zero-and-rising` promises for the deterministic
+    // shapes. It is also why the assertion above is about the bulk of the
+    // signal rather than its first sample.
+    for (let i = 0; i < 5; i++) {
+      expect(audioRate(BLOCK, params({ type: LfoType.Drift }))[0]).toBe(0);
+    }
+  });
+
+  it("leaves RandSampleHold alone", () => {
+    // Appended, not inserted: renumbering an enum is a breaking change to every
+    // hardcoded index, which is why `RandSmooth` and `Drift` are 11 and 12 and
+    // not the two values next to `RandSampleHold` where they belong
+    // conceptually.
+    expect(LfoType.RandSampleHold).toBe(9);
+    expect(LfoType.Impulse).toBe(10);
+    expect(LfoType.RandSmooth).toBe(11);
+    expect(LfoType.Drift).toBe(12);
+
+    const signal = run(LfoType.RandSampleHold, 20, 5);
+    let changes = 0;
+    for (let i = 1; i < signal.length; i++) {
+      if (signal[i] !== signal[i - 1]) changes++;
+    }
+    // Still one value per cycle, still stepping: 20 cycles, 19 to 21 steps.
+    expect(changes).toBeGreaterThanOrEqual(19);
+    expect(changes).toBeLessThanOrEqual(21);
+  });
+});
+
 describe("spectrum", () => {
   // The staircase's fundamental: one step per render quantum is a 344.53 Hz
   // sampler, and its energy is exactly what a-rate output removes.
@@ -941,11 +1158,7 @@ describe("a rate that moves", () => {
     }
   });
 
-  const EVERY_TYPE = Object.values(LfoType).filter(
-    (value): value is LfoType => typeof value === "number",
-  );
-
-  it.each(EVERY_TYPE.map((type) => [LfoType[type], type]))(
+  it.each(byName(DETERMINISTIC_TYPES))(
     "%s: a constant rate is free and unchanged",
     (_name, type) => {
       // Chrome hands length 1 for an unconnected parameter *and* for a
@@ -960,15 +1173,7 @@ describe("a rate that moves", () => {
           frequency: new Float32Array(BLOCK).fill(RATE),
         }),
       );
-      if (type === LfoType.RandSampleHold) {
-        const changes = (signal: Float32Array) =>
-          Array.from(signal.subarray(1))
-            .map((value, i) => (value !== signal[i] ? i : -1))
-            .filter((i) => i >= 0);
-        expect(changes(perSample)).toEqual(changes(hoisted));
-      } else {
-        expect(Array.from(perSample)).toEqual(Array.from(hoisted));
-      }
+      expect(Array.from(perSample)).toEqual(Array.from(hoisted));
     },
   );
 
@@ -1006,11 +1211,8 @@ describe("a rate that moves", () => {
       return aliasSnr(signal, frequency, SAMPLE_RATE);
     };
 
-    const SHAPES = EVERY_TYPE.filter(
-      (type) =>
-        type !== LfoType.None &&
-        type !== LfoType.RandSampleHold &&
-        type !== LfoType.Impulse,
+    const SHAPES = DETERMINISTIC_TYPES.filter(
+      (type) => type !== LfoType.None && type !== LfoType.Impulse,
     );
 
     it.each(
