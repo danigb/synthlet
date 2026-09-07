@@ -33,12 +33,14 @@ Faust *example* source rather than compiler output. See its entry below.
 ### @synthlet/virtual-analog-filter
 
 Generated from the Faust virtual analog filter library,
-[`vaeffects.lib`](https://github.com/grame-cncm/faustlibraries/blob/master/vaeffects.lib).
+[`vaeffects.lib`](https://github.com/grame-cncm/faustlibraries/blob/master/vaeffects.lib),
+version 1.5.0 - see `packages/virtual-analog-filter/dsp/compile.txt` for the
+pinned blob.
 
 | Faust function | Declared author | Declared licence | synthlet source |
 | --- | --- | --- | --- |
-| `ve.moogLadder` | Dario Sanfilippo | `LicenseRef-STK-4.3` | `src/moog.ts` |
-| `ve.moogHalfLadder` | Eric Tarr | `LicenseRef-STK-4.3` | `src/moog-half.ts` |
+| `ve.moogLadder` | Dario Sanfilippo | `LicenseRef-STK-4.3` | `src/moog.ts` (see below) |
+| `ve.moogHalfLadder` | Eric Tarr | `LicenseRef-STK-4.3` | `src/moog-half.ts` (see below) |
 | `ve.korg35LPF` | Eric Tarr | `LicenseRef-STK-4.3` | `src/korg35.ts` |
 | `ve.korg35HPF` | Eric Tarr | `LicenseRef-STK-4.3` | `src/korg35.ts` |
 | `ve.diodeLadder` | Eric Tarr | `LicenseRef-STK-4.3` | `src/diode.ts` |
@@ -50,6 +52,19 @@ in this section are Copyright (C) 2003-2017 by Julius O. Smith III
 license."
 
 Notice required. See [STK-4.3](#stk-43) below.
+
+**The two ladders are no longer purely upstream's.** `src/moog.ts` and
+`src/moog-half.ts` still carry `ve.moogLadder`'s and `ve.moogHalfLadder`'s
+linear TPT cores, unchanged, and the attribution above stands for those. What
+is not upstream's is the saturating feedback path and the delay-free-loop
+solver that resolves it: `vaeffects.lib` says of these functions that they have
+"no nonlinearities", and that is accurate about the code it ships. The
+nonlinearity here is our transcription of Huovilainen's differential-pair
+analysis (*Non-linear Digital Implementation of the Moog Ladder Filter*, DAFx
+2004, eq. 1-6) resolved by the discrete-time method in Chowdhury's *A Review of
+Methods for Resolving Delay-Free Loops* (§4). Both are papers rather than code;
+no third-party source was copied for it, and it is MIT like the rest of
+synthlet. See `packages/virtual-analog-filter/src/saturate.ts`.
 
 ### @synthlet/dattorro-reverb
 

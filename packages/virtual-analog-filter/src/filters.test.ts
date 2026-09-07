@@ -32,6 +32,7 @@ import {
   measureDb,
   render,
 } from "./test-utils";
+import { SELF_OSCILLATION_RESONANCE } from "./saturate";
 
 const RATES = [44100, 48000, 96000];
 
@@ -84,6 +85,12 @@ const OTHERS: Model[] = [
 ];
 
 const ALL = [...LOWPASS, ...OTHERS];
+
+// The two ladders self-oscillate; the other seven do not. Kept as a list
+// rather than a flag on `Model` because it is a statement about ticket 07's
+// scope - the Korg 35 stays linear by decision, and the diode ladder and the
+// Oberheim already have a saturator that ticket 06 made drivable.
+const SCREAMS = ["MOOG_LADDER", "MOOG_HALF_LADDER"];
 
 function tuned(
   model: Model,
@@ -353,6 +360,16 @@ describe("passband gain does not move with resonance", () => {
   // moves with the cutoff and there is no closed form in resonance alone.
   const RESONANCES = [0, 0.2, 0.5, 0.9, 1.0];
 
+  // The two ladders self-oscillate above `THRESHOLD_AT_RESONANCE`, and a
+  // filter generating a full-scale tone at its cutoff cannot be asked what its
+  // passband gain is: the demodulator would be reading the oscillation, not
+  // the probe. They are measured over the range where the question means
+  // something, which is everything below the threshold.
+  const range = (model: Model) =>
+    SCREAMS.includes(model.name)
+      ? RESONANCES.filter((r) => r < 0.95)
+      : RESONANCES;
+
   // Where each model's passband is. The band-stop passes DC, so 5 Hz reads it
   // like a lowpass; the two highpasses are read at the top.
   const PROBE: Record<string, number> = {
@@ -368,7 +385,7 @@ describe("passband gain does not move with resonance", () => {
 
   for (const model of ALL.filter((m) => m.name !== "OBERHEIM_BPF")) {
     it(`${model.name}`, () => {
-      for (const resonance of RESONANCES) {
+      for (const resonance of range(model)) {
         const filter = tuned(model, 48000, 1000, resonance);
         const db = measureDb(filter, PROBE[model.name], 48000);
         // 0.1 dB, against a measured spread of under 0.005 dB. The tolerance
@@ -457,13 +474,102 @@ describe("drive", () => {
   }
 });
 
+describe("self-oscillation", () => {
+  // The feature this package exists for and did not have. A linear ladder has
+  // one loop gain for every amplitude, so it can only decay, hold, or diverge;
+  // `resonance: 1.0` landed on k = 4.0 exactly, the analytic threshold, and it
+  // *held* - a marginally stable resonator ringing at whatever the last
+  // impulse left it with, one rounding error either side of silence and
+  // divergence. A saturating feedback path makes the loop gain fall as the
+  // amplitude grows, so the oscillation settles at an amplitude of its own.
+  const settled = (
+    model: Model,
+    frequency: number,
+    resonance: number,
+    sampleRate = 48000,
+  ) => {
+    const filter = tuned(model, sampleRate, frequency, resonance);
+    const length = 800 * 128;
+    const input = new Float32Array(length);
+    const output = new Float32Array(length);
+    input[0] = 1e-3; // one tick, to leave silence
+    render(filter, input, output, 128);
+    return output;
+  };
+
+  const peak = (output: Float32Array, from: number, to: number) => {
+    let worst = 0;
+    for (let n = from; n < to; n++)
+      worst = Math.max(worst, Math.abs(output[n]));
+    return worst;
+  };
+
+  for (const name of SCREAMS) {
+    const model = ALL.find((m) => m.name === name)!;
+
+    it(`${name} settles at a stable non-zero amplitude at maximum resonance`, () => {
+      const output = settled(model, 1000, 1.0);
+      const middle = peak(output, 600 * 128, 700 * 128);
+      const late = peak(output, 700 * 128, output.length);
+      expect(late).toBeGreaterThan(0.1);
+      expect(late).toBeLessThan(2);
+      expect(late / middle).toBeGreaterThan(0.98);
+      expect(late / middle).toBeLessThan(1.02);
+    });
+
+    it(`${name} is silent below the threshold`, () => {
+      // Below `SELF_OSCILLATION_RESONANCE` the filter is the linear one it
+      // always was, and one tick of input decays to nothing. This is the half
+      // of the claim that stops "it oscillates" meaning "it never stops".
+      const output = settled(model, 1000, SELF_OSCILLATION_RESONANCE - 0.05);
+      expect(peak(output, 700 * 128, output.length)).toBeLessThan(1e-9);
+    });
+
+    it(`${name} oscillates at a frequency that tracks the cutoff`, () => {
+      // Counted from zero crossings of the settled tail, which needs no
+      // reference response and no assumption about the waveform.
+      for (const request of [200, 1000, 4000]) {
+        const output = settled(model, request, 1.0);
+        const from = 700 * 128;
+        let crossings = 0;
+        for (let n = from + 1; n < output.length; n++) {
+          if (output[n - 1] < 0 && output[n] >= 0) crossings++;
+        }
+        const measured = (crossings * 48000) / (output.length - from);
+        // The same band the corner group states for this model, for the same
+        // reason: a resonant peak sits where the topology puts it, not where
+        // the request does.
+        expect(measured / request).toBeGreaterThan(0.7);
+        expect(measured / request).toBeLessThan(1.4);
+      }
+    });
+  }
+
+  for (const model of ALL.filter((m) => !SCREAMS.includes(m.name))) {
+    it(`${model.name} does not`, () => {
+      // The scope of ticket 07, asserted: the Korg 35 stays linear by
+      // decision, and the diode ladder and the Oberheim have a saturator in a
+      // different place that does not put them over their own threshold.
+      const output = settled(model, 1000, 1.0);
+      expect(peak(output, 700 * 128, output.length)).toBeLessThan(
+        peak(output, 0, 100 * 128) * 1.05,
+      );
+    });
+  }
+});
+
 describe("bounded at maximum resonance", () => {
-  // Bounded, not self-oscillating. `moog.ts` reaches k = 4.0 exactly, the
-  // analytic threshold, so it is a marginally stable linear resonator that
-  // rings at whatever amplitude it was left with; the other four are below
-  // their thresholds and decay. Asserting growth here would be asserting
-  // ticket 07 before it exists. This group is the guard that ticket 07 has to
-  // keep meaning something.
+  // Written before the nonlinearity rather than after it, because the natural
+  // way for a self-oscillating filter to fail is to sound right at one setting
+  // and diverge at another, and this is the group that catches that.
+  //
+  // "Bounded" here is an absolute claim, not a relative one: a self-oscillating
+  // ladder is *supposed* to grow, so `late < early` cannot be asked of it. What
+  // can be asked of every model is that no sample leaves a stated range, and of
+  // the two ladders that the amplitude *settles* - which is what separates a
+  // note from a divergence and from a decay.
+  const BOUND = 4;
+
   for (const model of ALL) {
     it(`${model.name}`, () => {
       const filter = tuned(model, 48000, 1000, 1.0);
@@ -473,15 +579,73 @@ describe("bounded at maximum resonance", () => {
       input[0] = 1e-3;
       render(filter, input, output, 128);
 
-      let early = 0;
-      let late = 0;
-      for (let n = 0; n < length; n++) {
-        const sample = output[n];
-        expect(Number.isFinite(sample)).toBe(true);
-        if (n < 50 * 128) early = Math.max(early, Math.abs(sample));
-        if (n >= 350 * 128) late = Math.max(late, Math.abs(sample));
+      const peak = (from: number, to: number) => {
+        let worst = 0;
+        for (let n = from; n < to; n++) {
+          expect(Number.isFinite(output[n])).toBe(true);
+          worst = Math.max(worst, Math.abs(output[n]));
+        }
+        return worst;
+      };
+
+      const early = peak(0, 50 * 128);
+      const middle = peak(300 * 128, 350 * 128);
+      const late = peak(350 * 128, length);
+      expect(Math.max(early, late)).toBeLessThan(BOUND);
+
+      if (SCREAMS.includes(model.name)) {
+        // Settled: the last 50 blocks agree with the 50 before them. A
+        // divergence fails this, and so does a decay.
+        expect(late).toBeGreaterThan(1e-4);
+        expect(late / middle).toBeGreaterThan(0.95);
+        expect(late / middle).toBeLessThan(1.05);
+      } else {
+        expect(late).toBeLessThan(early * 1.05);
       }
-      expect(late).toBeLessThan(early * 1.05);
     });
   }
+
+  it.each(ALL.map((m) => m.name))(
+    "%s stays bounded under a full-range sweep with a full-scale input",
+    (name) => {
+      // Maximum resonance, a full-scale input, and a cutoff moving every
+      // sample across the whole declared range - the combination that a filter
+      // tuned by ear at one setting will not have been tried at. Rendered a
+      // sample at a time, which is what the worklet's segment renderer does on
+      // a genuine a-rate sweep.
+      const model = ALL.find((m) => m.name === name)!;
+      const filter = model.make(48000);
+      const length = 200 * 128;
+      const input = new Float32Array(128);
+      const output = new Float32Array(128);
+
+      // A deterministic full-scale noise, so the bound below is a fact about
+      // the filter rather than about this run's random numbers.
+      let seed = 0x9e3779b9;
+      const noise = () => {
+        seed = (seed * 1664525 + 1013904223) >>> 0;
+        return seed / 2147483648 - 1;
+      };
+
+      for (let block = 0; block < length / 128; block++) {
+        for (let n = 0; n < 128; n++) input[n] = noise();
+        for (let n = 0; n < 128; n++) {
+          // Two octaves per block, wrapping: fast enough that the operating
+          // point never settles.
+          const phase = ((block * 128 + n) / 997) % 1;
+          filter.update(20 + 19980 * phase, 1.0, 1);
+          filter.process(input, output, n, n + 1);
+        }
+        for (const sample of output) {
+          expect(Number.isFinite(sample)).toBe(true);
+          // Deliberately loose: this asserts against divergence, not against
+          // loudness. A full-scale white noise at maximum resonance already
+          // carries 5x of makeup gain and 20-odd dB of resonant peak, so a
+          // peak in the hundreds is legitimate here and 1e21 - which is what
+          // an unbounded prewarp gave - is not.
+          expect(Math.abs(sample)).toBeLessThan(1e3);
+        }
+      }
+    },
+  );
 });

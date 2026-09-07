@@ -39,5 +39,12 @@ divergences are intended and must survive a regeneration:
     `17 - 9.7*normFreq^10` feedback term, which the library designs over 0..1
     and which is what returned `Infinity` past it.
 
+  * moog.ts and moog-half.ts are no longer generated files at all. Their
+    linear TPT cores are still `ve.moogLadder` and `ve.moogHalfLadder` and are
+    still diffable against these .rs files, but the feedback path is
+    saturating and the delay-free loop that creates is resolved in
+    ../src/saturate.ts. Regenerating them would delete the nonlinearity. See
+    THIRD-PARTY-LICENSES.md.
+
 Anything else is a bug. `input[0]` where the Rust reads `*input0` was one, and
 it made four of the nine models filter a DC value re-latched once per block.
