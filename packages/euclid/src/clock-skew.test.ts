@@ -90,6 +90,38 @@ describe("Clock and Euclid on one clock", () => {
   });
 });
 
+describe("pulseWidth through the real chain", () => {
+  beforeAll(async () => {
+    createWorkletTestContext(SAMPLE_RATE);
+    Worklet = (await import("./worklet")).EuclidProcessor;
+  });
+
+  it("never latches a hit on, at any subdivision or tempo", () => {
+    // `Euclid` declares the same `pulseWidth: 0 ... 1` as `Clock` and applies
+    // it to its own subdivided phase, so fixing the clock did not fix this:
+    // measured, a `Euclid` at `pulseWidth: 1` on a corrected clock still went
+    // high on its first sample and stayed there. It carries its own clamp,
+    // against the step rather than the beat.
+    for (const subdivision of [1, 4, 20]) {
+      for (const bpm of [60, 120, 1000]) {
+        for (const pulseWidth of [1, 0.999, 0.99]) {
+          const { hits, lows } = render(2, { bpm, subdivision, pulseWidth });
+          expect(hits.length).toBeGreaterThan(1);
+          expect(Math.min(...lows)).toBeGreaterThanOrEqual(BLOCK);
+        }
+      }
+    }
+  });
+
+  it("leaves ordinary widths alone", () => {
+    // The guard rail is inert where people actually live: half a step at 120
+    // BPM and subdivision 4 is 5512 samples, and it stays that.
+    const { highs } = render(4, { bpm: 120, subdivision: 4, pulseWidth: 0.5 });
+    const step = (SAMPLE_RATE * 60) / 120 / 4;
+    expect(Math.abs(Math.min(...highs) - 0.5 * step)).toBeLessThanOrEqual(1);
+  });
+});
+
 /** Render `seconds` and return the rising-edge sample indices of each signal. */
 function render(
   seconds: number,
@@ -98,6 +130,7 @@ function render(
     subdivision?: number;
     steps?: number;
     beats?: number;
+    pulseWidth?: number;
   } = {},
 ) {
   const clock = createClock(SAMPLE_RATE);
@@ -111,10 +144,17 @@ function render(
     beats: [params.beats ?? 1],
     subdivision: [params.subdivision ?? 1],
     rotation: [0],
-    pulseWidth: [0.5],
+    pulseWidth: [params.pulseWidth ?? 0.5],
   };
   const gate: number[] = [];
   const hits: number[] = [];
+  // Complete high and low runs of the Euclid output, for the latch check. The
+  // leading and trailing partials are dropped: the first hit starts at sample
+  // 0 with nothing before it, and the render stops mid-run.
+  const highs: number[] = [];
+  const lows: number[] = [];
+  let current = -1;
+  let runLength = 0;
   let prevGate = 0;
   let prevHit = 0;
   const blocks = Math.floor((SAMPLE_RATE * seconds) / BLOCK);
@@ -126,9 +166,18 @@ function render(
       if (euclidOut[i] > 0 && !(prevHit > 0)) hits.push(b * BLOCK + i);
       prevGate = clockGate[i];
       prevHit = euclidOut[i];
+
+      const value = euclidOut[i] > 0 ? 1 : 0;
+      if (value !== current) {
+        if (current === 1) highs.push(runLength);
+        if (current === 0) lows.push(runLength);
+        current = value;
+        runLength = 0;
+      }
+      runLength++;
     }
   }
-  return { gate, hits };
+  return { gate, hits, highs, lows };
 }
 
 function createWorkletTestContext(sampleRate = 44100, ctx: any = global) {

@@ -46,10 +46,10 @@ clock.dispose(); // disposes the gate node with it
 
 ## Parameters
 
-| Param        | Default | Range    | Rate   | Meaning                                    |
-| ------------ | ------- | -------- | ------ | ------------------------------------------ |
-| `bpm`        | 120     | 0 … 1000 | k-rate | Tempo in beats per minute                  |
-| `pulseWidth` | 0.5     | 0 … 1    | k-rate | Fraction of each beat the gate is high for |
+| Param        | Default | Range    | Rate   | Meaning                                     |
+| ------------ | ------- | -------- | ------ | ------------------------------------------- |
+| `bpm`        | 120     | 0 … 1000 | k-rate | Tempo in beats per minute                   |
+| `pulseWidth` | 0.5     | 0 … 1    | k-rate | Fraction of each beat the gate is high for¹ |
 
 Both are `k-rate`: the phase increment is derived from `bpm` and cached, and a
 tempo that changed every sample is frequency modulation of the clock rather
@@ -61,6 +61,15 @@ how often its parameters are read.
 120 BPM the default is 250 ms — 11025 samples at 44.1 kHz, wide enough that no
 consumer can miss it. A fixed short pulse could land inside one render quantum
 and be invisible to a consumer that reads its trigger once per block.
+
+¹ **`pulseWidth: 1` means "the widest gate that still retriggers"**, not 100 %.
+A gate is a trigger when it goes from non-positive to positive, so a gate that
+never falls can never fire anything again — and against a `[0, 1)` phase, a
+literal 100 % is exactly that: one envelope attack, then silence. The width is
+capped to leave one render quantum of every beat low, which is what a consumer
+reading its trigger once per block needs in order to see the falling edge. The
+cap is tempo-aware — 0.9941 at 120 BPM, 0.9512 at 1000 BPM — and inert below
+0.95 at every tempo in range, so nothing you would ordinarily set is affected.
 
 One phase accumulator per node, and both nodes derive the same increment — so
 two `Clock` nodes built in different render quanta do not drift apart, they hold

@@ -365,6 +365,105 @@ function renderGateWidths(
   return { highs, periods: beatPeriods(edges) };
 }
 
+describe("pulseWidth", () => {
+  /**
+   * `pulseWidth` declares `maxValue: 1`, and against a `[0, 1)` phase a width
+   * of 1 used to mean a gate that never falls: 400 of 400 blocks high, one
+   * envelope attack and then silence forever. Under `_gate.ts`'s contract a
+   * trigger is the transition to positive, so a gate that never falls can
+   * never trigger anything again - `1` read as "the widest gate" and delivered
+   * "no more gates".
+   *
+   * It now means the widest gate that still retriggers, via a clamp that
+   * leaves one render quantum of every beat low.
+   */
+
+  /** Tempi across the declared range. 1 BPM is exercised separately: a beat is
+   * 2.6 M samples there, so a full 0...1 sweep at that tempo is not worth the
+   * wall clock. */
+  const SWEEP_TEMPOS = [60, 120, 400, 1000];
+
+  it("never latches the gate, anywhere in the declared range", () => {
+    // The sweep: `pulseWidth` 0 to 1 in 0.01 steps, every tempo, both rates.
+    // Before the clamp, 1.0 latched at every one of them.
+    for (const sampleRate of RATES) {
+      for (const bpm of SWEEP_TEMPOS) {
+        const beat = (sampleRate * 60) / bpm;
+        for (let k = 1; k <= 100; k++) {
+          const pulseWidth = k / 100;
+          const { highs, lows } = gateRuns(
+            createClock(sampleRate),
+            sampleRate,
+            (3 * beat) / sampleRate,
+            { bpm, pulseWidth },
+          );
+          expect(highs.length).toBeGreaterThan(0);
+          expect(lows.length).toBeGreaterThan(0);
+          // Criterion 2: the low run is never shorter than a render quantum,
+          // which is what a consumer reading its trigger once per block needs
+          // in order to see the falling edge and re-arm.
+          expect(Math.min(...lows)).toBeGreaterThanOrEqual(BLOCK);
+        }
+      }
+    }
+  });
+
+  it("still retriggers at 1 BPM, where a beat is 2.6 M samples", () => {
+    // The slowest tempo in range and the one where the clamp is nearly inert:
+    // 1 - 128 x increment is 0.99995 at 44100. The gate still falls, and for
+    // exactly a quantum.
+    for (const sampleRate of RATES) {
+      const beat = sampleRate * 60;
+      const { lows } = gateRuns(
+        createClock(sampleRate),
+        sampleRate,
+        (2 * beat) / sampleRate,
+        { bpm: 1, pulseWidth: 1 },
+      );
+      expect(lows.length).toBeGreaterThan(0);
+      expect(Math.min(...lows)).toBeGreaterThanOrEqual(BLOCK);
+    }
+  });
+
+  it("emits no gate at all at pulseWidth 0", () => {
+    // The one end of the range that was always right: 0 means no gate, and it
+    // reads that way. The clamp must not turn it into a narrow one.
+    for (const sampleRate of RATES) {
+      for (const bpm of SWEEP_TEMPOS) {
+        const { highs } = gateRuns(createClock(sampleRate), sampleRate, 1, {
+          bpm,
+          pulseWidth: 0,
+        });
+        expect(highs).toEqual([]);
+      }
+    }
+  });
+
+  it("is inert below 0.95 at every tempo in range", () => {
+    // The test that proves this is a guard rail and not a behaviour change.
+    // The clamp bites at 1 - 128 x increment, which is 0.9942 at 120 BPM and
+    // 0.9516 at 1000 BPM - the lowest it goes anywhere in the declared range.
+    // So below 0.95 the gate is still exactly `pulseWidth` of the beat.
+    for (const sampleRate of RATES) {
+      for (const bpm of SWEEP_TEMPOS) {
+        const beat = (sampleRate * 60) / bpm;
+        expect(1 - (BLOCK * bpm) / 60 / sampleRate).toBeGreaterThan(0.95);
+        for (const pulseWidth of [0.25, 0.5, 0.75, 0.9, 0.95]) {
+          const { highs } = gateRuns(
+            createClock(sampleRate),
+            sampleRate,
+            (3 * beat) / sampleRate,
+            { bpm, pulseWidth },
+          );
+          expect(
+            Math.abs(Math.min(...highs) - pulseWidth * beat),
+          ).toBeLessThanOrEqual(1);
+        }
+      }
+    }
+  });
+});
+
 /**
  * Render `seconds` of phase into one flat array.
  *
@@ -387,4 +486,39 @@ function renderPhase(
     phase.push(...phaseOut);
   }
   return phase;
+}
+
+/**
+ * Complete high and low runs of the gate, in samples.
+ *
+ * Drops the leading and trailing partial runs: the first gate starts at sample
+ * 0 with nothing before it, and the render stops mid-run.
+ */
+function gateRuns(
+  clock: ReturnType<typeof createClock>,
+  sampleRate: number,
+  seconds: number,
+  params: { bpm?: number; pulseWidth?: number } = {},
+) {
+  const phaseOut = new Float32Array(BLOCK);
+  const gateOut = new Float32Array(BLOCK);
+  const blocks = Math.floor((sampleRate * seconds) / BLOCK);
+  const highs: number[] = [];
+  const lows: number[] = [];
+  let current = -1;
+  let length = 0;
+  for (let b = 0; b < blocks; b++) {
+    clock(phaseOut, gateOut, params.bpm ?? 120, params.pulseWidth ?? 0.5);
+    for (let i = 0; i < BLOCK; i++) {
+      const value = gateOut[i] > 0 ? 1 : 0;
+      if (value !== current) {
+        if (current === 1) highs.push(length);
+        if (current === 0) lows.push(length);
+        current = value;
+        length = 0;
+      }
+      length++;
+    }
+  }
+  return { highs, lows };
 }

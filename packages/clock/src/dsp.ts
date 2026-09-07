@@ -1,5 +1,9 @@
 import { gatePulse } from "./_gate";
 
+/** One render quantum. The spec's block size, and the unit a consumer that
+ * reads its trigger once per block can actually resolve. */
+const RENDER_QUANTUM = 128;
+
 /**
  * The clock engine: one phase accumulator, rendered a sample at a time.
  *
@@ -37,6 +41,31 @@ export function createClock(sampleRate: number) {
       increment = bpm / 60 / sampleRate;
     }
 
+    // A gate that never falls can never trigger anything again - the library's
+    // one gate contract, in `_gate.ts`, is that a trigger is the transition to
+    // positive. `pulseWidth` declares a maximum of 1, and against a `[0, 1)`
+    // phase a width of 1 is exactly a gate that never falls: one envelope
+    // attack, then silence forever.
+    //
+    // So cap the width to leave one render quantum of every beat low. That is
+    // what a consumer reading its trigger once per block needs in order to see
+    // the falling edge and re-arm, and it is the same argument `_gate.ts`
+    // already makes about the gate itself being at least a quantum wide.
+    //
+    // `+ 1` because the threshold is compared at discrete samples: asking for
+    // exactly 128 rounds down to 127 often enough to be worth the one sample.
+    //
+    // Tempo-aware, because a static cap cannot be: this is 0.9941 at 120 BPM
+    // and 0.9512 at 1000 BPM. Inert below 0.95 at every tempo in range, so it
+    // is a guard rail rather than a behaviour change. Lowering `maxValue` to
+    // 0.99 instead would move the cliff rather than remove it - 0.99 still
+    // latches at 1000 BPM, where it leaves 600 us low.
+    //
+    // If a beat is shorter than a quantum there is no width that helps, and
+    // the clamp stands aside rather than silencing the gate outright.
+    const maxWidth = 1 - (RENDER_QUANTUM + 1) * increment;
+    const width = maxWidth > 0 && pulseWidth > maxWidth ? maxWidth : pulseWidth;
+
     // Hoisted: all three are fixed for the block, and the same hoist was worth
     // 34% in `benchmarks/lfo-rate`. `p` in particular is a closure read that
     // would otherwise happen twice per sample.
@@ -54,7 +83,7 @@ export function createClock(sampleRate: number) {
     if (gateOut) {
       for (let i = 0; i < length; i++) {
         phaseOut[i] = p;
-        gateOut[i] = running ? gatePulse(p, pulseWidth) : 0;
+        gateOut[i] = running ? gatePulse(p, width) : 0;
         p += step;
         if (p >= 1) p -= 1;
       }
