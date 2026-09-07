@@ -14,11 +14,30 @@ export function Diode(sampleRate: number) {
 
   const prewarp = createPrewarp(sampleRate);
 
-  return { update, process };
+  return { update, process, reset };
 
   function update(frequency: number, resonance: number) {
     fHslider0 = frequency;
     fHslider1 = resonance;
+  }
+
+  /**
+   * Back to a newly constructed filter. `NaN` reaches every one of these
+   * recurrences through `state = state + k * something` and never leaves - and
+   * the saturating models do not help, because `Math.max(-1, Math.min(1, NaN))`
+   * is `NaN` too. Writing zeroes over them is the only way out. `worklet.ts`
+   * is what calls this, once a block and only when the output says so.
+   *
+   * The sliders go too, so a reset filter is indistinguishable from a new one.
+   * That is why the caller has to invalidate its change-detection slot.
+   */
+  function reset() {
+    fHslider0 = 0;
+    fHslider1 = 0;
+    fRec1 = [0, 0];
+    fRec2 = [0, 0];
+    fRec3 = [0, 0];
+    fRec4 = [0, 0];
   }
 
   function process(

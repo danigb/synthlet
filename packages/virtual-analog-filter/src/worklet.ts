@@ -7,6 +7,7 @@ import { PARAMS } from "./params";
 
 type Filter = {
   update: (frequency: number, resonance: number) => void;
+  reset: () => void;
   process: (
     input: Float32Array,
     output: Float32Array,
@@ -101,6 +102,7 @@ export class VAF extends AudioWorkletProcessor {
           filter.update(f, r);
         }
         filter.process(input[c], output[c], 0, length);
+        guard(filter, output[c], last);
         continue;
       }
 
@@ -142,6 +144,8 @@ export class VAF extends AudioWorkletProcessor {
       last.type = type;
       last.frequency = $frequency;
       last.resonance = $resonance;
+
+      guard(filter, output[c], last);
     }
 
     return this.r;
@@ -153,6 +157,40 @@ export class VAF extends AudioWorkletProcessor {
 }
 
 registerProcessor("VAFProcessor", VAF);
+
+// One non-finite sample and this model is dead for the life of the node: every
+// `fRec*` update is `state + k * something`, `NaN + anything` is `NaN`, and the
+// two saturating models do not help - `Math.max(-1, Math.min(1, NaN))` is `NaN`
+// as well. Web Audio has no recovery path either; the graph emits `NaN` or
+// silence until somebody rebuilds it. The result of this is a click, which is
+// the honest answer to a signal that was already broken.
+//
+// Scanned on the *output*, not the input: the input is not the only route in,
+// and before the cutoff was bounded the diode ladder produced `Infinity` from
+// two in-range parameters. Once per block per channel, and deliberately not at
+// the end of `process()` where the sibling `state-variable-filter` puts its
+// check - that function takes `from`/`to` bounds and the segment renderer calls
+// it up to 128 times a block, so a check there would be a per-sample check
+// wearing a per-block disguise.
+//
+// Only the active filter is reset. Each channel keeps all nine models so that
+// switching `type` mid-note resumes where that model left off, and only the one
+// that rendered can have been poisoned.
+function guard(filter: Filter, block: Float32Array, last: Coefficients) {
+  for (let i = 0; i < block.length; i++) {
+    if (Number.isFinite(block[i])) continue;
+
+    filter.reset();
+    block.fill(0);
+    // `reset()` clears the sliders too, so the filter has no coefficients.
+    // Without this the next block sees "unchanged", skips `update()`, and
+    // renders at a cutoff of zero.
+    last.type = NaN;
+    last.frequency = NaN;
+    last.resonance = NaN;
+    return;
+  }
+}
 
 // One instance of every filter type, built on the first block that has this
 // many channels. Keeping all of them means switching `type` mid-note picks up

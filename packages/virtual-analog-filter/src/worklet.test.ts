@@ -87,6 +87,79 @@ describe("VAFProcessor", () => {
     expect(Array.from(backToMoog).some((value) => value !== 0)).toBe(true);
   });
 
+  describe("surviving a non-finite sample", () => {
+    // A ladder is all state and `NaN + anything` is `NaN`, so one bad input
+    // sample used to kill the node for the life of the AudioContext. There is
+    // no recovery path in Web Audio: the graph emits `NaN` or silence until
+    // somebody rebuilds it.
+    const poisoned = () => {
+      const signal = new Float32Array(16);
+      signal[0] = NaN;
+      signal[1] = 1;
+      return signal;
+    };
+
+    // One per circuit: Moog, half ladder, Korg 35, diode, Oberheim.
+    const TYPES = [0, 1, 2, 4, 5];
+
+    it.each(TYPES)("type %p is finite again on the next block", (type) => {
+      const node = new Worklet();
+      const withType = { ...params, type: [type] };
+      const [bad] = runProcessChannels(node, [poisoned()], withType);
+      // The offending block is silence, not NaN. Zeroing it is what keeps the
+      // damage inside the block that caused it.
+      expect(Array.from(bad)).toEqual(Array.from(new Float32Array(16)));
+
+      const [good] = runProcessChannels(node, [impulse()], withType);
+      expect(Array.from(good).every(Number.isFinite)).toBe(true);
+      expect(Array.from(good).some((value) => value !== 0)).toBe(true);
+    });
+
+    it("recovers on the automated path too", () => {
+      // A different route into the same check: the segment renderer calls
+      // `process()` once per sample here, and the guard is still once per
+      // block.
+      const node = new Worklet();
+      const swept = {
+        ...params,
+        frequency: Array.from({ length: 16 }, (_, i) => 500 + 40 * i),
+      };
+      runProcessChannels(node, [poisoned()], swept);
+      const [good] = runProcessChannels(node, [impulse()], swept);
+      expect(Array.from(good).every(Number.isFinite)).toBe(true);
+      expect(Array.from(good).some((value) => value !== 0)).toBe(true);
+    });
+
+    it("does not reset the other channel", () => {
+      // Each channel has its own bank and its own change-detection slot, so a
+      // NaN on the left must not silence the right one's ringing.
+      const node = new Worklet();
+      runProcessChannels(node, [impulse(), impulse()], params);
+      const [, right] = runProcessChannels(
+        node,
+        [poisoned(), new Float32Array(16)],
+        params,
+      );
+      // Still ringing from the first block.
+      expect(Array.from(right).some((value) => value !== 0)).toBe(true);
+    });
+
+    it("does not reset the other types in the bank", () => {
+      // The bank exists so that switching `type` mid-note resumes where that
+      // model left off. Only the filter that rendered can have been poisoned.
+      const korg = { ...params, type: [KORG35_LPF] };
+      const node = new Worklet();
+      runProcessChannels(node, [impulse()], korg);
+      runProcessChannels(node, [poisoned()], params);
+      const [backToKorg] = runProcessChannels(
+        node,
+        [new Float32Array(16)],
+        korg,
+      );
+      expect(Array.from(backToKorg).some((value) => value !== 0)).toBe(true);
+    });
+  });
+
   it("is a no-op for an input with no channels", () => {
     const outputs = [[new Float32Array(16)]];
     expect(() => new Worklet().process([[]], outputs, params)).not.toThrow();

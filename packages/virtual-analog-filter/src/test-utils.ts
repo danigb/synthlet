@@ -13,6 +13,7 @@
 /** The shape every circuit module in this package returns. */
 export type Filter = {
   update(frequency: number, resonance: number): void;
+  reset(): void;
   process(
     input: Float32Array,
     output: Float32Array,

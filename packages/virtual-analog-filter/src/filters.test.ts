@@ -177,23 +177,39 @@ describe("the response does not depend on the block size", () => {
 });
 
 describe("recovers from a poisoned state", () => {
+  // The circuit-level half of the contract. Every model keeps its state in
+  // plain arrays with no guard, and `NaN + anything` is `NaN`, so once one of
+  // the `fRec*` is poisoned there is no input that clears it - the saturating
+  // models included, because `Math.max(-1, Math.min(1, NaN))` is `NaN` too.
+  // `reset()` is the only way out, and this is what asserts it does the job.
+  //
+  // Who calls `reset()`, and when, is `worklet.ts`'s once-a-block output scan;
+  // that end of it is asserted in `worklet.test.ts`, where the guard lives.
   for (const model of ALL) {
-    // Every model keeps its state in plain `let` arrays with no guard, so one
-    // NaN propagates into every recurrence and stays there.
-    it.failing(`${model.name} - see ticket 05, survive a NaN`, () => {
+    it(`${model.name}`, () => {
       const filter = tuned(model, 48000, 1000, 0.5);
       const poison = new Float32Array(128);
       poison[0] = NaN;
       filter.process(poison, new Float32Array(128), 0, 128);
 
-      const length = 300 * 128;
+      const length = 8 * 128;
       const input = new Float32Array(length);
       const output = new Float32Array(length);
       for (let n = 0; n < length; n++) {
         input[n] = 1e-3 * Math.sin((2 * Math.PI * 440 * n) / 48000);
       }
+
+      // Still dead, however long it is fed.
       render(filter, input, output, 128);
-      expect(Number.isFinite(output[length - 1])).toBe(true);
+      expect(Number.isFinite(output[length - 1])).toBe(false);
+
+      // And alive again one block after a reset.
+      filter.reset();
+      filter.update(1000, 0.5);
+      output.fill(0);
+      render(filter, input, output, 128);
+      for (const sample of output) expect(Number.isFinite(sample)).toBe(true);
+      expect(Array.from(output).some((sample) => sample !== 0)).toBe(true);
     });
   }
 });
