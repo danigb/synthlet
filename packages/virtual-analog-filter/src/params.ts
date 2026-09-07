@@ -51,4 +51,23 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "a-rate",
   },
+  {
+    // A performance control on the same footing as `resonance`: it is what a
+    // filter envelope or a velocity map reaches for once the cutoff is set,
+    // and `state-variable-filter`'s `gain` is a-rate for the same reason.
+    // There is no cost argument either - the modulator renders whether or not
+    // the samples are read.
+    //
+    // On `DIODE_LADDER` this *is* the saturator's input gain, replacing a
+    // hardcoded 100, so `drive: 100` reproduces the fuzzbox this package used
+    // to be and 1 is clean. On `OBERHEIM_*` it drives the clipper inside the
+    // loop. On the other five models there is nothing to drive into - they are
+    // linear by the library's design - and there `drive` is input gain and
+    // nothing more.
+    name: "drive",
+    defaultValue: 1,
+    minValue: 0,
+    maxValue: 100,
+    automationRate: "a-rate",
+  },
 ];

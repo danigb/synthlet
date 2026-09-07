@@ -28,6 +28,7 @@ export type VirtualAnalogFilterInputs = {
   frequency: ParamInput;
   detune: ParamInput;
   resonance: ParamInput;
+  drive: ParamInput;
 };
 
 export type VirtualAnalogFilterWorkletNode = AudioWorkletNode & {
@@ -35,6 +36,7 @@ export type VirtualAnalogFilterWorkletNode = AudioWorkletNode & {
   frequency: AudioParam;
   detune: AudioParam;
   resonance: AudioParam;
+  drive: AudioParam;
   dispose(): void;
 };
 

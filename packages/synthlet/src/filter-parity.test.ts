@@ -98,6 +98,7 @@ describe("the two filters", () => {
         frequency: cutoff,
         detune: [0],
         resonance: [0.2],
+        drive: [1],
       });
       return outputs[0][0];
     });
@@ -179,6 +180,7 @@ describe("the two filters", () => {
         frequency: cutoff,
         detune: [0],
         resonance: [0.2],
+        drive: [1],
       });
       return outputs[0][0];
     });
@@ -189,6 +191,7 @@ describe("the two filters", () => {
         frequency: [cutoff[0]],
         detune: [0],
         resonance: [0.2],
+        drive: [1],
       });
       return outputs[0][0];
     });
