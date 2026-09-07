@@ -13,6 +13,7 @@ describe("VAFProcessor", () => {
     frequency: [1000],
     detune: [0],
     resonance: [0.5],
+    drive: [1],
   };
   const impulse = () => {
     const signal = new Float32Array(16);
@@ -188,6 +189,7 @@ describe("type selection", () => {
       frequency: [1000],
       detune: [0],
       resonance: [0.5],
+      drive: [1],
     });
     return Array.from(out);
   };
@@ -250,6 +252,7 @@ describe("a-rate cutoff", () => {
       frequency: [1000],
       detune: [0],
       resonance: [0.5],
+      drive: [1],
       ...params,
     });
     return outputs[0][0];
@@ -273,6 +276,25 @@ describe("a-rate cutoff", () => {
     const ranges = process.mock.calls.map((call: any) => [call[2], call[3]]);
     expect(ranges[0]).toEqual([0, 1]);
     expect(ranges[BLOCK - 1]).toEqual([BLOCK - 1, BLOCK]);
+  });
+
+  it("splits the block on a moving drive, like any other a-rate parameter", () => {
+    // Easy to add a parameter and forget the run-splitting comparison, which
+    // would apply the last sample's drive to the whole block - the failure
+    // mode `worklet.ts` already warns about for the others.
+    const worklet = new Worklet();
+    run(worklet, noise(BLOCK), {});
+    const filter = worklet.p[0][MOOG_LADDER];
+    const update = jest.spyOn(filter, "update");
+    const process = jest.spyOn(filter, "process");
+
+    run(worklet, noise(BLOCK), { drive: ramp(BLOCK, 1, 8) });
+
+    expect(update).toHaveBeenCalledTimes(BLOCK);
+    expect(process).toHaveBeenCalledTimes(BLOCK);
+    // And the value each run is rendered with is that run's own drive.
+    expect(update.mock.calls[0][2]).toBeCloseTo(1, 6);
+    expect(update.mock.calls[BLOCK - 1][2]).toBeCloseTo(8, 6);
   });
 
   it("costs one update and one process when nothing is automated", () => {
@@ -317,6 +339,7 @@ describe("a-rate cutoff", () => {
       frequency: ramp(BLOCK, 200, 4000),
       detune: [0],
       resonance: [0.5],
+      drive: [1],
     });
 
     // Same input and same sweep, so the two channels must agree - and neither
@@ -337,6 +360,7 @@ describe("a-rate cutoff", () => {
         const block = run(worklet, new Float32Array(BLOCK).fill(1), {
           frequency: aRate ? cutoff : [cutoff[0]],
           resonance: [0.2],
+          drive: [1],
         });
         out.push(...Array.from(block));
       }
@@ -379,6 +403,7 @@ describe("a-rate cutoff", () => {
       const out = run(worklet, noise(BLOCK), {
         frequency: ramp(BLOCK, up ? 20 : 20000, up ? 20000 : 20),
         resonance: [1],
+        drive: [1],
       });
       expect(Array.from(out).every(Number.isFinite)).toBe(true);
       expect(Math.max(...Array.from(out).map(Math.abs))).toBeLessThan(100);
@@ -399,7 +424,11 @@ describe("a-rate cutoff", () => {
     run(worklet, noise(BLOCK), {}); // build the bank
     const filter = worklet.p[0][MOOG_LADDER];
     const update = jest.spyOn(filter, "update");
-    run(worklet, noise(BLOCK), { frequency: modulator, resonance: [0.2] });
+    run(worklet, noise(BLOCK), {
+      frequency: modulator,
+      resonance: [0.2],
+      drive: [1],
+    });
 
     const cutoffs = update.mock.calls.map((call: any) => call[0]);
     expect(cutoffs).toHaveLength(BLOCK);

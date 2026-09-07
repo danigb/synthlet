@@ -7,6 +7,7 @@ export function Korg35(sampleRate: number, type: number) {
   let fSampleRate = 0;
   let fHslider0 = 0;
   let fHslider1 = 0;
+  let fDrive = 1;
   let fRec1 = [0, 0];
   let fRec2 = [0, 0];
   let fRec3 = [0, 0];
@@ -16,9 +17,10 @@ export function Korg35(sampleRate: number, type: number) {
 
   return { update, process, reset };
 
-  function update(frequency: number, resonance: number) {
+  function update(frequency: number, resonance: number, drive: number) {
     fHslider0 = frequency;
     fHslider1 = resonance;
+    fDrive = drive;
   }
 
   /**
@@ -34,6 +36,7 @@ export function Korg35(sampleRate: number, type: number) {
   function reset() {
     fHslider0 = 0;
     fHslider1 = 0;
+    fDrive = 1;
     fRec1 = [0, 0];
     fRec2 = [0, 0];
     fRec3 = [0, 0];
@@ -58,7 +61,7 @@ export function Korg35(sampleRate: number, type: number) {
     let fSlow9 = 0.21521823 * fSlow3;
 
     for (let i = from; i < to; i++) {
-      let fTemp0 = input[i] - fRec3[1];
+      let fTemp0 = fDrive * input[i] - fRec3[1];
       let fTemp1 =
         fSlow5 *
           (fRec3[1] +
@@ -94,7 +97,7 @@ export function Korg35(sampleRate: number, type: number) {
     let fSlow8 = 0.21521823 * (fSlow1 / fSlow4);
 
     for (let i = from; i < to; i++) {
-      let fTemp0 = input[i];
+      let fTemp0 = fDrive * input[i];
       let fTemp1 = fTemp0 - fRec3[1];
       let fTemp2 =
         fTemp0 -

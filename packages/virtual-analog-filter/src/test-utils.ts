@@ -12,7 +12,7 @@
 
 /** The shape every circuit module in this package returns. */
 export type Filter = {
-  update(frequency: number, resonance: number): void;
+  update(frequency: number, resonance: number, drive: number): void;
   reset(): void;
   process(
     input: Float32Array,
@@ -214,7 +214,7 @@ function probeAt(
 ) {
   return (probe: number) => {
     const filter = make();
-    filter.update(frequency, resonance);
+    filter.update(frequency, resonance, 1);
     return measureDb(filter, probe, sampleRate, options);
   };
 }

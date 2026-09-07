@@ -6,6 +6,7 @@ import { createPrewarp } from "./prewarp";
 export function Moog(sampleRate: number) {
   let fHslider0 = 0;
   let fHslider1 = 0;
+  let fDrive = 1;
   let fRec0 = [0, 0];
   let fRec1 = [0, 0];
   let fRec2 = [0, 0];
@@ -15,9 +16,10 @@ export function Moog(sampleRate: number) {
 
   return { update, process, reset };
 
-  function update(frequency: number, resonance: number) {
+  function update(frequency: number, resonance: number, drive: number) {
     fHslider0 = frequency;
     fHslider1 = resonance;
+    fDrive = drive;
   }
 
   /**
@@ -33,6 +35,7 @@ export function Moog(sampleRate: number) {
   function reset() {
     fHslider0 = 0;
     fHslider1 = 0;
+    fDrive = 1;
     fRec0 = [0, 0];
     fRec1 = [0, 0];
     fRec2 = [0, 0];
@@ -57,11 +60,16 @@ export function Moog(sampleRate: number) {
           (fSlow1 * fSlow1 * fSlow1 * fSlow1)) +
         1.0);
     let fSlow6 = 2.0 * fSlow2;
+    // A ladder's uncompensated DC gain is 1/(1+k) - Huovilainen 2004, and
+    // Zavalishin section 5 - so `resonance` was doubling as a volume control:
+    // measured 1/(1+4r) to five digits, -5.1 dB at 0.2 and -13.3 dB at 0.9.
+    // The file's own constants make k exactly 4r: 0.1646572 * 24.293 = 4.0000.
+    let fMakeup = 1.0 + 0.1646572 * fSlow3;
 
     for (let i = from; i < to; i++) {
       let fTemp0 =
         fSlow5 *
-          (input[i] -
+          (fDrive * input[i] -
             fSlow4 *
               (fRec3[1] +
                 fSlow2 *
@@ -75,7 +83,7 @@ export function Moog(sampleRate: number) {
       let fTemp3 = fRec2[1] + fSlow2 * fTemp2 - fRec3[1];
       fRec3[0] = fRec3[1] + fSlow6 * fTemp3;
       let fRec4 = fRec3[1] + fSlow2 * fTemp3;
-      output[i] = fRec4;
+      output[i] = fMakeup * fRec4;
       fRec0[1] = fRec0[0];
       fRec1[1] = fRec1[0];
       fRec2[1] = fRec2[0];

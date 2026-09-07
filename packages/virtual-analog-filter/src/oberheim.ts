@@ -6,6 +6,7 @@ import { createPrewarp } from "./prewarp";
 export function Oberheim(sampleRate: number, type: number) {
   let fHslider0 = 0;
   let fHslider1 = 0;
+  let fDrive = 1;
   let fRec4 = [0, 0];
   let fRec5 = [0, 0];
 
@@ -29,9 +30,10 @@ export function Oberheim(sampleRate: number, type: number) {
 
   return { update, process, reset };
 
-  function update(cutoff: number, resonance: number) {
+  function update(cutoff: number, resonance: number, drive: number) {
     fHslider0 = cutoff;
     fHslider1 = resonance;
+    fDrive = drive;
   }
 
   /**
@@ -47,6 +49,7 @@ export function Oberheim(sampleRate: number, type: number) {
   function reset() {
     fHslider0 = 0;
     fHslider1 = 0;
+    fDrive = 1;
     fRec4 = [0, 0];
     fRec5 = [0, 0];
   }
@@ -63,9 +66,17 @@ export function Oberheim(sampleRate: number, type: number) {
     let fSlow3 = fSlow0 / fSlow2;
     let fSlow4 = 1.0 / fSlow2;
     let fSlow5 = 2.0 * fSlow0;
+    // The band-pass tap's peak gain *is* Q: measured 0.707 at resonance 0 and
+    // 28.6 at 1, so opening the resonance was a 32 dB volume increase there.
+    // The other three taps measure flat to 3e-4 across the whole range and
+    // need nothing - which is a measurement, not a citation: `ve.oberheim`
+    // derives from Pirkle section 7.2, which is not on disk here. Normalising
+    // the band-pass to unity is the decision `state-variable-filter` made for
+    // the same reason.
+    let fMakeup = kBand ? 1.0 / (29.293 * fHslider1 + 0.707) : 1.0;
 
     for (let i = from; i < to; i++) {
-      let fTemp0 = input[i] - (fRec4[1] + fSlow1 * fRec5[1]);
+      let fTemp0 = fDrive * input[i] - (fRec4[1] + fSlow1 * fRec5[1]);
       let fTemp1 = fSlow3 * fTemp0;
       let fTemp2 = Math.max(-1.0, Math.min(1.0, fRec5[1] + fTemp1));
       let fTemp3 = fTemp2 * (1.0 - 0.33333334 * (fTemp2 * fTemp2));
@@ -74,7 +85,8 @@ export function Oberheim(sampleRate: number, type: number) {
       fRec4[0] = fRec4[1] + fSlow5 * fTemp3;
       fRec5[0] = fTemp1 + fTemp3;
       output[i] =
-        kState * (fRec4[1] + fTemp4) + kHigh * fTemp5 + kBand * fTemp3;
+        fMakeup *
+        (kState * (fRec4[1] + fTemp4) + kHigh * fTemp5 + kBand * fTemp3);
       fRec4[1] = fRec4[0];
       fRec5[1] = fRec5[0];
     }

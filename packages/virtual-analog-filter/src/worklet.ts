@@ -6,7 +6,7 @@ import { Oberheim } from "./oberheim";
 import { PARAMS } from "./params";
 
 type Filter = {
-  update: (frequency: number, resonance: number) => void;
+  update: (frequency: number, resonance: number, drive: number) => void;
   reset: () => void;
   process: (
     input: Float32Array,
@@ -17,7 +17,12 @@ type Filter = {
 };
 
 /** What one channel's filter was last told, so it is not told twice. */
-type Coefficients = { type: number; frequency: number; resonance: number };
+type Coefficients = {
+  type: number;
+  frequency: number;
+  resonance: number;
+  drive: number;
+};
 
 export class VAF extends AudioWorkletProcessor {
   r: boolean; // running
@@ -53,11 +58,12 @@ export class VAF extends AudioWorkletProcessor {
     const type = Math.floor(params.type[0]);
 
     // The house a-rate check, once per block and once per parameter.
-    const { frequency, detune, resonance } = params;
+    const { frequency, detune, resonance, drive } = params;
     const fR = frequency.length > 1;
     const dR = detune.length > 1;
     const rR = resonance.length > 1;
-    const automated = fR || dR || rR;
+    const gR = drive.length > 1;
+    const automated = fR || dR || rR || gR;
 
     // `detune` is semitones, so folding it into the cutoff is a `Math.pow`.
     // Cached on the detune value, which is static in every realistic patch:
@@ -80,6 +86,7 @@ export class VAF extends AudioWorkletProcessor {
         type: NaN,
         frequency: NaN,
         resonance: NaN,
+        drive: NaN,
       });
 
       if (!automated) {
@@ -91,15 +98,18 @@ export class VAF extends AudioWorkletProcessor {
         // shape of work.
         const f = frequency[0] * multiplier;
         const r = resonance[0];
+        const d = drive[0];
         if (
           f !== last.frequency ||
           r !== last.resonance ||
+          d !== last.drive ||
           type !== last.type
         ) {
           last.type = type;
           last.frequency = f;
           last.resonance = r;
-          filter.update(f, r);
+          last.drive = d;
+          filter.update(f, r, d);
         }
         filter.process(input[c], output[c], 0, length);
         guard(filter, output[c], last);
@@ -119,6 +129,7 @@ export class VAF extends AudioWorkletProcessor {
       let start = 0;
       let $frequency = frequency[0] * multiplier;
       let $resonance = resonance[0];
+      let $drive = drive[0];
 
       for (let i = 1; i <= length; i++) {
         if (i < length) {
@@ -128,15 +139,17 @@ export class VAF extends AudioWorkletProcessor {
           }
           const f = (fR ? frequency[i] : frequency[0]) * multiplier;
           const r = rR ? resonance[i] : resonance[0];
-          if (f === $frequency && r === $resonance) continue;
+          const d = gR ? drive[i] : drive[0];
+          if (f === $frequency && r === $resonance && d === $drive) continue;
 
-          filter.update($frequency, $resonance);
+          filter.update($frequency, $resonance, $drive);
           filter.process(input[c], output[c], start, i);
           start = i;
           $frequency = f;
           $resonance = r;
+          $drive = d;
         } else {
-          filter.update($frequency, $resonance);
+          filter.update($frequency, $resonance, $drive);
           filter.process(input[c], output[c], start, i);
         }
       }
@@ -144,6 +157,7 @@ export class VAF extends AudioWorkletProcessor {
       last.type = type;
       last.frequency = $frequency;
       last.resonance = $resonance;
+      last.drive = $drive;
 
       guard(filter, output[c], last);
     }
@@ -188,6 +202,7 @@ function guard(filter: Filter, block: Float32Array, last: Coefficients) {
     last.type = NaN;
     last.frequency = NaN;
     last.resonance = NaN;
+    last.drive = NaN;
     return;
   }
 }

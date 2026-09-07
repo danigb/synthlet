@@ -28,6 +28,7 @@ import {
   findCorner,
   findCornerHigh,
   findExtreme,
+  measure,
   measureDb,
   render,
 } from "./test-utils";
@@ -89,9 +90,10 @@ function tuned(
   sampleRate: number,
   frequency: number,
   resonance = R,
+  drive = 1,
 ) {
   const filter = model.make(sampleRate);
-  filter.update(frequency, resonance);
+  filter.update(frequency, resonance, drive);
   return filter;
 }
 
@@ -205,7 +207,7 @@ describe("recovers from a poisoned state", () => {
 
       // And alive again one block after a reset.
       filter.reset();
-      filter.update(1000, 0.5);
+      filter.update(1000, 0.5, 1);
       output.fill(0);
       render(filter, input, output, 128);
       for (const sample of output) expect(Number.isFinite(sample)).toBe(true);
@@ -335,59 +337,124 @@ describe("the highpass, bandpass and bandstop taps are what they say", () => {
   });
 });
 
-describe("passband gain against resonance", () => {
-  // Recorded, not corrected. Ticket 06 is what changes these numbers; this
-  // group is the baseline that stops it being graded by ear.
-  const RESONANCES = [0, 0.2, 0.5, 0.9];
+describe("passband gain does not move with resonance", () => {
+  // The defect this replaces: `MOOG_LADDER` measured exactly 1/(1+4*resonance)
+  // at DC, so opening the resonance turned the volume down - -5.1 dB at 0.2 and
+  // -13.3 dB at 0.9 - and the Oberheim band-pass did the same thing upwards,
+  // its peak gain rising from 0.707 to 28.6. Every filter people compare these
+  // to applies makeup gain; this one applied none.
+  //
+  // The makeup is per topology and every one of them was measured before it was
+  // written: `1 + k` for the two ladders, where the files' own constants make k
+  // exactly 4r and 2r (Huovilainen 2004, Zavalishin section 5); nothing for the
+  // Korg 35 and three of the four Oberheim taps, which normalise their own
+  // feedback and measure flat to 3e-4; `1/Q` for the Oberheim band-pass; and
+  // for the diode ladder a solve of its own DC steady state, because its slope
+  // moves with the cutoff and there is no closed form in resonance alone.
+  const RESONANCES = [0, 0.2, 0.5, 0.9, 1.0];
 
-  it("MOOG_LADDER ducks by exactly 1/(1+4*resonance)", () => {
-    // `moog.ts:34` maps resonance to `24.293 * r` and scales the feedback by
-    // 0.1646572, so k = 4.0 * r to five figures. An uncompensated ladder's DC
-    // gain is 1/(1+k). Measured -0.00, -5.11, -9.54, -13.25 dB against a
-    // predicted 0, -5.11, -9.54, -13.26.
-    for (const resonance of RESONANCES) {
-      const filter = tuned(LOWPASS[0], 48000, 1000, resonance);
-      const measured = measureDb(filter, 5, 48000);
-      const predicted = 20 * Math.log10(1 / (1 + 4 * resonance));
-      expect(Math.abs(measured - predicted)).toBeLessThan(0.1);
-    }
-  });
+  // Where each model's passband is. The band-stop passes DC, so 5 Hz reads it
+  // like a lowpass; the two highpasses are read at the top.
+  const PROBE: Record<string, number> = {
+    MOOG_LADDER: 5,
+    MOOG_HALF_LADDER: 5,
+    KORG35_LPF: 5,
+    KORG35_HPF: 20000,
+    DIODE_LADDER: 5,
+    OBERHEIM_LPF: 5,
+    OBERHEIM_HPF: 20000,
+    OBERHEIM_BSF: 5,
+  };
 
-  it("MOOG_HALF_LADDER ducks too, and by less", () => {
-    // Half the ladder, half the feedback: measured -0.30, -2.65, -5.56, -8.48.
-    const at = (resonance: number) =>
-      measureDb(tuned(LOWPASS[1], 48000, 1000, resonance), 5, 48000);
-    const readings = RESONANCES.map(at);
-    for (let n = 1; n < readings.length; n++) {
-      expect(readings[n]).toBeLessThan(readings[n - 1]);
-    }
-    expect(readings[0] - readings[3]).toBeGreaterThan(6);
-    expect(readings[0] - readings[3]).toBeLessThan(12);
-  });
-
-  for (const model of [LOWPASS[2], LOWPASS[4]]) {
-    it(`${model.name} normalises its own feedback`, () => {
-      // The Korg 35 and the Oberheim scale the feedback back into the forward
-      // path, so resonance costs no passband level. No literature formula is
-      // claimed here; this is a measurement, within 1 dB of unity across the
-      // whole range.
+  for (const model of ALL.filter((m) => m.name !== "OBERHEIM_BPF")) {
+    it(`${model.name}`, () => {
       for (const resonance of RESONANCES) {
         const filter = tuned(model, 48000, 1000, resonance);
-        expect(Math.abs(measureDb(filter, 5, 48000))).toBeLessThan(1);
+        const db = measureDb(filter, PROBE[model.name], 48000);
+        // 0.1 dB, against a measured spread of under 0.005 dB. The tolerance
+        // is loose because it is a claim about the makeup being right, not
+        // about the arithmetic being reproducible.
+        expect(Math.abs(db)).toBeLessThan(0.1);
       }
     });
   }
 
-  it("DIODE_LADDER is 30 dB hot", () => {
-    // `diode.ts:66` multiplies the input by 100 before its soft clipper. That
-    // is not a resonance compensation and not in the literature: it is a
-    // hardcoded gain, and ticket 06 removes it. Measured +34.5 dB at
-    // resonance 0, falling to +19.9 at 0.9.
-    const at = (resonance: number) =>
-      measureDb(tuned(LOWPASS[3], 48000, 1000, resonance), 5, 48000);
-    expect(at(0)).toBeGreaterThan(30);
-    expect(at(0.9)).toBeGreaterThan(15);
+  it("OBERHEIM_BPF", () => {
+    // Read at the peak rather than at DC, because a bandpass has no DC
+    // passband, and found on a log grid rather than assumed - the peak moves
+    // with resonance.
+    const model = ALL.find((m) => m.name === "OBERHEIM_BPF")!;
+    for (const resonance of RESONANCES) {
+      let peak = 0;
+      for (let n = 0; n <= 40; n++) {
+        const probe = 100 * Math.pow(100, n / 40);
+        const filter = tuned(model, 48000, 1000, resonance);
+        peak = Math.max(peak, measure(filter, probe, 48000).amplitude);
+      }
+      // 0.5 dB rather than 0.1: the grid has 40 steps over two decades, so it
+      // lands beside the peak rather than on it, and the miss grows with the
+      // sharpness of the peak. Against the 32 dB this group replaces.
+      expect(Math.abs(20 * Math.log10(peak))).toBeLessThan(0.5);
+    }
   });
+});
+
+describe("drive", () => {
+  // `diode.ts` clipped `100 * input[i]` with no way to turn it down, so above
+  // an input of about 0.01 the output fundamental was constant and only the
+  // zero crossings survived: a distortion box with a filter after it, and the
+  // filter's own character inaudible underneath. Known upstream as
+  // faustlibraries #214, open since February 2025.
+  const DIODE = ALL.find((m) => m.name === "DIODE_LADDER")!;
+
+  it("DIODE_LADDER is clean at drive 1", () => {
+    const at = (amplitude: number) =>
+      measure(tuned(DIODE, 48000, 1000, 0.5, 1), 200, 48000, { amplitude })
+        .amplitude;
+    const small = at(1e-3);
+    // A 0.5-amplitude sine, which used to sit at a constant 0.265 whatever
+    // went in. Within 1 dB of the small-signal gain is the assertion that its
+    // fundamental tracks the input.
+    expect(20 * Math.log10(at(0.5) / small)).toBeGreaterThan(-1);
+  });
+
+  it("DIODE_LADDER at drive 100 is the fuzzbox it used to be", () => {
+    // Not nostalgia: it is the check that `drive` reaches the saturator rather
+    // than being an output gain in front of it. Above 0.01 in, the output
+    // fundamental stops moving.
+    const out = [0.01, 0.1, 0.5, 1.0].map(
+      (amplitude) =>
+        amplitude *
+        measure(tuned(DIODE, 48000, 1000, 0.5, 100), 200, 48000, { amplitude })
+          .amplitude,
+    );
+    expect(Math.max(...out.slice(1)) / Math.min(...out.slice(1))).toBeLessThan(
+      1.02,
+    );
+    expect(out[0]).toBeLessThan(out[1]);
+  });
+
+  for (const name of ["MOOG_LADDER", "MOOG_HALF_LADDER", "KORG35_LPF"]) {
+    it(`${name} is exactly drive times its unity output`, () => {
+      // These three contain no clipper and no tanh by the library's design, so
+      // `drive` can only be input gain here. Ticket 07 is what gives the two
+      // ladders something to drive into.
+      const model = ALL.find((m) => m.name === name)!;
+      const unity = measure(
+        tuned(model, 48000, 1000, 0.5, 1),
+        200,
+        48000,
+      ).amplitude;
+      for (const drive of [0.5, 2, 10]) {
+        const driven = measure(
+          tuned(model, 48000, 1000, 0.5, drive),
+          200,
+          48000,
+        ).amplitude;
+        expect(driven / unity).toBeCloseTo(drive, 3);
+      }
+    });
+  }
 });
 
 describe("bounded at maximum resonance", () => {
