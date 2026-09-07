@@ -1,5 +1,5 @@
 import { magnitudes, peak } from "./_spectrum";
-import { createLfo, GENERATORS, LfoType } from "./dsp";
+import { createGenerators, createLfo, LfoType } from "./dsp";
 
 /**
  * What this package promises, as numbers.
@@ -151,10 +151,12 @@ describe("every waveform", () => {
   // it is a constant-free statement that the 128-sample render is the same
   // signal, for every shape, without a hand-derived slope bound per waveform.
   //
-  // `RandSampleHold` and `Impulse` are excluded and tested below: both are
-  // built once at module scope in `dsp.ts`, so their state is shared by every
-  // `Lfo` in the process and two renders of them are not independent.
-  const STATELESS = [
+  // `RandSampleHold` is the one shape this cannot be run on, and the reason is
+  // that it *is* independent now: two renders are two instances, and two
+  // instances draw different numbers. It is compared on where it changes
+  // instead, which is the statement the equality suite is making anyway - that
+  // the loop is right - and is the largest true one for a stochastic shape.
+  const DETERMINISTIC_SHAPES = [
     LfoType.None,
     LfoType.Sine,
     LfoType.Triangle,
@@ -164,9 +166,10 @@ describe("every waveform", () => {
     LfoType.ExpRampUp,
     LfoType.ExpRampDown,
     LfoType.ExpTriangle,
+    LfoType.Impulse,
   ];
 
-  it.each(STATELESS.map((type) => [LfoType[type], type]))(
+  it.each(DETERMINISTIC_SHAPES.map((type) => [LfoType[type], type]))(
     "%s renders per sample",
     (_name, type) => {
       const p = params({ type });
@@ -175,6 +178,18 @@ describe("every waveform", () => {
       );
     },
   );
+
+  it("RandSampleHold changes where the one-sample reference changes", () => {
+    const p = params({ type: LfoType.RandSampleHold });
+    const changes = (signal: Float32Array) =>
+      Array.from(signal.subarray(1))
+        .map((value, i) => (value !== signal[i] ? i + 1 : -1))
+        .filter((i) => i >= 0);
+
+    expect(changes(audioRate(4 * CYCLE, p))).toEqual(
+      changes(controlRate(4 * CYCLE, p, 1)),
+    );
+  });
 
   it("Impulse emits one sample of 1.0 per cycle, at the cycle boundary", () => {
     const signal = audioRate(4 * CYCLE, params({ type: LfoType.Impulse }));
@@ -191,11 +206,10 @@ describe("every waveform", () => {
       expect(signal[at + 1] ?? 0).toBe(0);
     }
 
-    // And they are a cycle apart, which is the statement that the impulse is
-    // on the phase wrap rather than merely rare. Where the *first* one falls
-    // is not asserted: `impulse` is built once at module scope in `dsp.ts`, so
-    // this render starts wherever the previous test left the shared generator
-    // (ticket 01 of this folder).
+    // The first fires at sample 0 - a fresh instance is armed - and the rest
+    // are a cycle apart, which is the statement that the impulse is on the
+    // phase wrap rather than merely rare.
+    expect(fired[0]).toBe(0);
     const gaps = fired.slice(1).map((at, i) => at - fired[i]);
     for (const gap of gaps)
       expect(Math.abs(gap - CYCLE)).toBeLessThanOrEqual(1);
@@ -215,6 +229,85 @@ describe("every waveform", () => {
     }
     expect(changes).toBeGreaterThanOrEqual(2);
     expect(changes).toBeLessThanOrEqual(4);
+  });
+});
+
+describe("independent instances", () => {
+  // Two of the eleven generators carry state, and both used to be built once at
+  // module scope - so every `Lfo` of those types in an `AudioContext` shared one
+  // variable. Measured before the fix: a brand-new `Impulse` node emitted
+  // nothing at all, because an older node's render had consumed the shared
+  // `active` flag, and a fresh sample-and-hold returned the older node's value.
+  //
+  // `karplus-strong`, `polyblep-oscillator` and `wavetable-oscillator` each
+  // carry a named test for this property. This is `lfo`'s.
+
+  /** Two instances rendered block by block against each other, as a graph runs them. */
+  function lockstep(a: Params, b: Params, requested: number) {
+    const samples = Math.floor(requested / BLOCK) * BLOCK;
+    const genA = createLfo(SAMPLE_RATE, true);
+    const genB = createLfo(SAMPLE_RATE, true);
+    const outA = new Float32Array(samples);
+    const outB = new Float32Array(samples);
+    const block = new Float32Array(BLOCK);
+    for (let i = 0; i < samples; i += BLOCK) {
+      genA(block, a);
+      outA.set(block, i);
+      genB(block, b);
+      outB.set(block, i);
+    }
+    return [outA, outB] as const;
+  }
+
+  const SECONDS = 3 * SAMPLE_RATE;
+
+  it("two sample-and-holds diverge", () => {
+    const p = params({ type: LfoType.RandSampleHold, frequency: 100 });
+    const [a, b] = lockstep(p, p, SECONDS);
+
+    // 300 holds each. Not 100%, because two draws from `Math.random()` collide
+    // occasionally and a test that forbids it is a flake.
+    let differ = 0;
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) differ++;
+    expect(differ / a.length).toBeGreaterThan(0.9);
+  });
+
+  it("a fresh sample-and-hold does not inherit a running one's value", () => {
+    // The measured probe from the ticket, inverted: instance B is constructed
+    // after A has rendered 40 blocks and must not open on A's current value.
+    const p = params({ type: LfoType.RandSampleHold, frequency: 100 });
+    let independent = 0;
+    for (let trial = 0; trial < 20; trial++) {
+      const a = audioRate(40 * BLOCK, p);
+      const b = audioRate(BLOCK, p);
+      if (b[0] !== a[a.length - 1]) independent++;
+    }
+    expect(independent).toBeGreaterThanOrEqual(18);
+  });
+
+  it("every Impulse instance fires in its own first block", () => {
+    // Ten fresh nodes, one block each. Before the fix the first one fired and
+    // the other nine emitted silence.
+    for (let i = 0; i < 10; i++) {
+      const signal = audioRate(BLOCK, params({ type: LfoType.Impulse }));
+      const fired = Array.from(signal).filter((value) => value !== 0);
+      expect(fired).toEqual([1]);
+      expect(signal[0]).toBe(1);
+    }
+  });
+
+  it("a slow sample-and-hold is not re-rolled by a fast one", () => {
+    // The sharpest form of the old bug: `createSampleAndHold` re-rolls on *its
+    // caller's* wrap, so A's rate used to drive B's holds. One second, A at
+    // 100 Hz wrapping ~100 times, B at 0.1 Hz wrapping never.
+    const [a, b] = lockstep(
+      params({ type: LfoType.RandSampleHold, frequency: 100 }),
+      params({ type: LfoType.RandSampleHold, frequency: 0.1 }),
+      SAMPLE_RATE,
+    );
+
+    expect(new Set(a).size).toBeGreaterThan(50);
+    expect(new Set(b).size).toBe(1);
   });
 });
 
@@ -463,8 +556,8 @@ describe("every shape is the shape it claims", () => {
     types.map((type) => [LfoType[type], type] as const);
 
   /** Read a shape at an exact phase, with no render and no accumulated drift. */
-  const at = (type: number, phase: number) =>
-    GENERATORS[type](phase, phase + 1e-9);
+  const shapes = createGenerators();
+  const at = (type: number, phase: number) => shapes[type](phase, phase + 1e-9);
 
   it.each(named(DETERMINISTIC))(
     "%s reads its declared quarters",
@@ -658,10 +751,9 @@ describe("every shape is the shape it claims", () => {
 
   it("RandSampleHold rolls a uniform value in [-1, 1]", () => {
     // Driven straight, one forced wrap per call: the generator returns the
-    // held value and re-rolls, so 1001 calls collect 1000 fresh rolls. The
-    // first is whatever an earlier test left in `dsp.ts`'s module-scope
-    // generator - ticket 01 of this folder is why that sentence is necessary.
-    const generator = GENERATORS[LfoType.RandSampleHold];
+    // held value and re-rolls, so 1001 calls collect 1000 fresh rolls, the
+    // first being the value the generator was constructed with.
+    const generator = createGenerators()[LfoType.RandSampleHold];
     const held = Array.from({ length: 1001 }, () => generator(0.9, 0.1)).slice(
       1,
     );

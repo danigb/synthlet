@@ -56,6 +56,24 @@ describe("LfoWorkletProcessor", () => {
     expect(Math.abs(second[0] - first[127])).toBeLessThanOrEqual(inside * 1.01);
   });
 
+  it("gives every instance its own generator state", () => {
+    // The module scope this is about is the worklet's: an
+    // `AudioWorkletGlobalScope` evaluates `dsp.ts` once, so a generator built
+    // there is one variable shared by every `LfoProcessor` in the context.
+    // Measured before the fix: the first `Impulse` node fired and the second
+    // emitted silence, because the first had consumed the shared flag.
+    const outputs = [0, 1].map(() => {
+      const output = new Float32Array(128);
+      new Processor({}).process([], [[output]], params(10 /* Impulse */));
+      return output;
+    });
+
+    for (const output of outputs) {
+      expect(output[0]).toBe(1);
+      expect(Array.from(output).filter((value) => value !== 0)).toEqual([1]);
+    }
+  });
+
   it("stops when disposed", () => {
     const processor = new Processor({});
     expect(processor.process([], [[new Float32Array(128)]], params(1))).toBe(

@@ -121,6 +121,12 @@ function createImpulse(): Gen {
 }
 
 type Gen = (phase: number, prev: number) => number;
+
+// Shared, and allowed to be: `concaveTransform()` closes over three constants
+// it computes with three logarithms, and returns a pure function of its
+// argument. The rule this file follows is that *stateful* generators are
+// per-instance - see `createGenerators` - not that nothing lives at module
+// scope.
 const concave = concaveTransform();
 
 /** Fractional part, for a phase rotated past the end of its cycle. */
@@ -136,7 +142,6 @@ const curve = (value: number) =>
   value < 0 ? -concave(-value) : concave(value);
 
 const none: Gen = () => 0;
-const impulse = createImpulse();
 const sine: Gen = (phase) => Math.sin(phase * 2 * Math.PI);
 // A quarter cycle later than the naive `1 - 2|bipolar(φ)|`, which starts at its
 // trough. See the phase convention above.
@@ -153,28 +158,36 @@ const rand = () => bipolar(Math.random());
 const expRampUp: Gen = (phase, prev) => curve(rampUp(phase, prev));
 const expRampDown: Gen = (phase, prev) => -expRampUp(phase, prev);
 const expTriangle: Gen = (phase, prev) => curve(triangle(phase, prev));
-const randSampleHold: Gen = createSampleAndHold();
 
 /**
- * The generators, indexed by `LfoType`.
+ * A fresh generator bank, indexed by `LfoType`.
  *
- * Exported so the tests can read a shape at an exact phase rather than infer
- * it from a render - the difference between asserting the specification above
- * and asserting today's output.
+ * The nine stateless shapes are shared, because they are pure functions of the
+ * phase. `RandSampleHold` and `Impulse` are built per call, because they are
+ * not: an `AudioWorkletGlobalScope` evaluates this module **once**, so a
+ * generator constructed here at module scope would be one variable shared by
+ * every `Lfo` of that type in the context. It was, and it showed - a fresh
+ * sample-and-hold returned another instance's value, and a second `Impulse`
+ * emitted nothing at all because the first had consumed the flag.
+ *
+ * Also the seam the tests read a shape through: a generator answers at an exact
+ * phase, where a render only answers on its own grid.
  */
-export const GENERATORS: readonly Gen[] = [
-  none,
-  sine,
-  triangle,
-  rampUp,
-  rampDown,
-  square,
-  expRampUp,
-  expRampDown,
-  expTriangle,
-  randSampleHold,
-  impulse,
-];
+export function createGenerators(): Gen[] {
+  return [
+    none,
+    sine,
+    triangle,
+    rampUp,
+    rampDown,
+    square,
+    expRampUp,
+    expRampDown,
+    expTriangle,
+    createSampleAndHold(),
+    createImpulse(),
+  ];
+}
 
 type Params = {
   type: number[];
@@ -185,6 +198,7 @@ type Params = {
 
 export function createLfo(sampleRate: number, audioRate: boolean) {
   const dt = 1 / sampleRate;
+  const generators = createGenerators();
 
   // Params
   let $type = 1;
@@ -193,13 +207,13 @@ export function createLfo(sampleRate: number, audioRate: boolean) {
   let $offset = 0;
 
   // State
-  let gen: Gen = GENERATORS[1] ?? none;
+  let gen: Gen = generators[1] ?? none;
   let phase = 0;
 
   function read(params: Params) {
     if (params.type[0] !== $type) {
       $type = params.type[0];
-      gen = GENERATORS[Math.floor($type)] ?? none;
+      gen = generators[Math.floor($type)] ?? none;
     }
     $frequency = params.frequency[0];
     $offset = params.offset[0];
