@@ -1,6 +1,19 @@
+Generated with FAUST 2.72.14.
+
  faust -lang rust -cn Moog moog.dsp -o moog.rs
  faust -lang rust -cn MoogHalf moog-half.dsp -o moog-half.rs
  faust -lang rust -cn Korg35LPF korg35-lpf.dsp -o korg35-lpf.rs
  faust -lang rust -cn Korg35HPF korg35-hpf.dsp -o korg35-hpf.rs
  faust -lang rust -cn Oberheim oberheim.dsp -o oberheim.rs
  faust -lang rust -cn Diode diode.dsp -o diode.rs
+
+The .ts files in ../src are hand transcriptions of these .rs files. Two
+divergences are intended and must survive a regeneration:
+
+  * `process()` takes `from`/`to` bounds so the worklet can render a block in
+    runs of constant coefficients (see the 0.13.0 CHANGELOG).
+  * oberheim.ts exposes one output selected by `type` rather than the four
+    output buffers the Rust emits, with the tap mix hoisted out of the loop.
+
+Anything else is a bug. `input[0]` where the Rust reads `*input0` was one, and
+it made four of the nine models filter a DC value re-latched once per block.

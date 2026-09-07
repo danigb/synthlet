@@ -25,7 +25,6 @@ import { MoogHalf } from "./moog-half";
 import { Oberheim } from "./oberheim";
 import {
   Filter,
-  MeasureOptions,
   findCorner,
   findCornerHigh,
   findExtreme,
@@ -41,19 +40,9 @@ const RATES = [44100, 48000, 96000];
 // line twice.
 const R = 0.2;
 
-// The four Oberheim taps are measured a sample at a time. `oberheim.ts:39`
-// reads `input[0]` rather than `input[i]`, so at any larger block size it
-// filters one latched DC value per block and every reading below would be
-// measuring that defect instead of the circuit. At a block size of one,
-// `input[0]` *is* the current sample and the tap responses are visible. The
-// defect itself is asserted, at its real block sizes, by "the response does
-// not depend on the block size".
-const PER_SAMPLE: MeasureOptions = { blockSize: 1 };
-
 type Model = {
   name: string;
   make: (sampleRate: number) => Filter;
-  options?: MeasureOptions;
   /** Order of the topology, for the skirt assertion. */
   poles: number;
   /**
@@ -80,7 +69,6 @@ const LOWPASS: Model[] = [
   {
     name: "OBERHEIM_LPF",
     make: (sr) => Oberheim(sr, 0),
-    options: PER_SAMPLE,
     poles: 2,
     mistuned: true,
   },
@@ -91,21 +79,18 @@ const OTHERS: Model[] = [
   {
     name: "OBERHEIM_HPF",
     make: (sr) => Oberheim(sr, 1),
-    options: PER_SAMPLE,
     poles: 2,
     mistuned: true,
   },
   {
     name: "OBERHEIM_BPF",
     make: (sr) => Oberheim(sr, 2),
-    options: PER_SAMPLE,
     poles: 2,
     mistuned: true,
   },
   {
     name: "OBERHEIM_BSF",
     make: (sr) => Oberheim(sr, 3),
-    options: PER_SAMPLE,
     poles: 2,
     mistuned: true,
   },
@@ -137,12 +122,7 @@ function db(
   frequency: number,
   probe: number,
 ) {
-  return measureDb(
-    tuned(model, sampleRate, frequency),
-    probe,
-    sampleRate,
-    model.options,
-  );
+  return measureDb(tuned(model, sampleRate, frequency), probe, sampleRate);
 }
 
 describe("the measured corner tracks the requested one", () => {
@@ -166,13 +146,7 @@ describe("the measured corner tracks the requested one", () => {
       () => {
         const [min, max] = RATIO[model.name];
         for (const request of [100, 500, 1000, 5000]) {
-          const corner = findCorner(
-            () => model.make(48000),
-            request,
-            R,
-            48000,
-            model.options,
-          );
+          const corner = findCorner(() => model.make(48000), request, R, 48000);
           const ratio = corner / request;
           expect(ratio).toBeGreaterThan(min);
           expect(ratio).toBeLessThan(max);
@@ -188,7 +162,7 @@ describe("the corner does not move with the sample rate", () => {
       `${model.name}${because(model.mistuned, "03, a cutoff that is in Hz")}`,
       () => {
         const corners = RATES.map((rate) =>
-          findCorner(() => model.make(rate), 1000, R, rate, model.options),
+          findCorner(() => model.make(rate), 1000, R, rate),
         );
         // 5%: a bilinear-prewarped corner is exact at the cutoff by
         // construction, so what is left is the fourth-order cascade's own drift
@@ -209,20 +183,14 @@ describe("the response does not depend on the block size", () => {
   const PROBES = [231, 3000, 12000];
 
   for (const model of ALL) {
-    const oberheim = model.name.startsWith("OBERHEIM");
-    when(oberheim)(
-      `${model.name}${because(oberheim, "02, the Oberheim reads one sample per block")}`,
-      () => {
-        for (const probe of PROBES) {
-          const readings = [64, 128, 512].map((blockSize) =>
-            measureDb(tuned(model, 48000, 16000), probe, 48000, { blockSize }),
-          );
-          expect(Math.max(...readings) - Math.min(...readings)).toBeLessThan(
-            0.5,
-          );
-        }
-      },
-    );
+    it(`${model.name}`, () => {
+      for (const probe of PROBES) {
+        const readings = [64, 128, 512].map((blockSize) =>
+          measureDb(tuned(model, 48000, 16000), probe, 48000, { blockSize }),
+        );
+        expect(Math.max(...readings) - Math.min(...readings)).toBeLessThan(0.5);
+      }
+    });
   }
 });
 
@@ -295,13 +263,7 @@ describe("the skirt matches the order of the topology", () => {
   for (const model of LOWPASS) {
     it(`${model.name}`, () => {
       for (const rate of RATES) {
-        const corner = findCorner(
-          () => model.make(rate),
-          200,
-          R,
-          rate,
-          model.options,
-        );
+        const corner = findCorner(() => model.make(rate), 200, R, rate);
         const attenuation =
           db(model, rate, 200, 5) - db(model, rate, 200, corner * 10);
         const [min, max] = BAND[model.name];
@@ -313,13 +275,7 @@ describe("the skirt matches the order of the topology", () => {
 
   it("separates the 4-pole models from the 2-pole ones", () => {
     const decade = (model: Model) => {
-      const corner = findCorner(
-        () => model.make(48000),
-        200,
-        R,
-        48000,
-        model.options,
-      );
+      const corner = findCorner(() => model.make(48000), 200, R, 48000);
       return db(model, 48000, 200, 5) - db(model, 48000, 200, corner * 10);
     };
     const four = LOWPASS.filter((m) => m.poles === 4).map(decade);
@@ -347,13 +303,7 @@ describe("the highpass, bandpass and bandstop taps are what they say", () => {
 
   it("OBERHEIM_HPF attenuates below its corner and passes above it", () => {
     const model = OTHERS[1];
-    const corner = findCornerHigh(
-      () => model.make(48000),
-      1000,
-      R,
-      48000,
-      model.options,
-    );
+    const corner = findCornerHigh(() => model.make(48000), 1000, R, 48000);
     expect(
       db(model, 48000, 1000, corner * 4) - db(model, 48000, 1000, corner / 4),
     ).toBeGreaterThan(20);
@@ -361,14 +311,7 @@ describe("the highpass, bandpass and bandstop taps are what they say", () => {
 
   it("OBERHEIM_BPF peaks near its corner and falls either side", () => {
     const model = OTHERS[2];
-    const peak = findExtreme(
-      () => model.make(48000),
-      1000,
-      R,
-      48000,
-      "peak",
-      model.options,
-    );
+    const peak = findExtreme(() => model.make(48000), 1000, R, 48000, "peak");
     const at = db(model, 48000, 1000, peak);
     expect(at - db(model, 48000, 1000, peak / 8)).toBeGreaterThan(10);
     expect(at - db(model, 48000, 1000, peak * 8)).toBeGreaterThan(10);
@@ -376,14 +319,7 @@ describe("the highpass, bandpass and bandstop taps are what they say", () => {
 
   it("OBERHEIM_BSF notches", () => {
     const model = OTHERS[3];
-    const notch = findExtreme(
-      () => model.make(48000),
-      1000,
-      R,
-      48000,
-      "notch",
-      model.options,
-    );
+    const notch = findExtreme(() => model.make(48000), 1000, R, 48000, "notch");
     const at = db(model, 48000, 1000, notch);
     // Only 5 dB asserted against a measured 7.7: this notch is shallow
     // because the band-stop tap is a sum of the other three rather than a
@@ -431,9 +367,7 @@ describe("passband gain against resonance", () => {
       // whole range.
       for (const resonance of RESONANCES) {
         const filter = tuned(model, 48000, 1000, resonance);
-        expect(
-          Math.abs(measureDb(filter, 5, 48000, model.options)),
-        ).toBeLessThan(1);
+        expect(Math.abs(measureDb(filter, 5, 48000))).toBeLessThan(1);
       }
     });
   }
@@ -464,7 +398,7 @@ describe("bounded at maximum resonance", () => {
       const input = new Float32Array(length);
       const output = new Float32Array(length);
       input[0] = 1e-3;
-      render(filter, input, output, model.options?.blockSize ?? 128);
+      render(filter, input, output, 128);
 
       let early = 0;
       let late = 0;
