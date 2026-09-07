@@ -33,16 +33,23 @@ export const PARAMS: readonly ParamDescriptor[] = [
     automationRate: "a-rate",
   },
   {
-    // Resonance. **A bet, and a weak one**: Q opening with an envelope is as
-    // ordinary a patch as cutoff sweeping with one, and `virtual-analog-filter`
-    // - the other filter here - made its `resonance` a-rate in automation-rate
-    // ticket 04 for exactly that reason. The obstacle is not cost but shape:
-    // `dsp.ts`'s `update()` takes `q` as a scalar and only `frequency` is
-    // threaded through per sample. Worth a ticket, not a comment.
+    // Resonance, and the other half of a filter's performance surface. It opens
+    // with the envelope, it tracks velocity, and a slow LFO on it is a standard
+    // sound - the same argument `virtual-analog-filter` made for `resonance` in
+    // automation-rate ticket 04, resolved the same way, so the library's two
+    // filters now agree.
+    //
+    // This used to be k-rate, with a comment that called itself "a bet, and a
+    // weak one" and named the obstacle as shape rather than cost. It was right
+    // about the cost: threading `Q` per sample measures at +4.6%, because
+    // `dsp.ts` already computed `k = 1/max(q, 1e-4)` on every call and reading
+    // a different `q` each time adds an array index, not a division. An
+    // unmodulated filter pays nothing at all - Chrome delivers length 1 for a
+    // constant, and `dsp.ts` takes the same branch it always did.
     name: "Q",
     defaultValue: 0.5,
     minValue: 0.025,
     maxValue: 40,
-    automationRate: "k-rate",
+    automationRate: "a-rate",
   },
 ];

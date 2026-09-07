@@ -95,6 +95,9 @@ export function createFilter(sampleRate: number) {
 
   // damping, 1/Q: set by the mixing half and read by the cutoff half
   let _k = 0;
+  // whether the current `type`'s mix contains `k`, and so has to be recomputed
+  // when Q moves
+  let _mixReadsK = false;
 
   // previous type, Q and frequency
   let currType = -1;
@@ -106,12 +109,20 @@ export function createFilter(sampleRate: number) {
   // k-rate, so this runs once a block, where it used to run once a sample.
   //
   // **Measured, and it is worth much less than it looks.** 200k blocks of 128
-  // samples at 48 kHz, minimum of seven timed runs across four processes, on
-  // Node 24 / Apple Silicon:
+  // samples at 48 kHz, minimum of seven timed runs across three or more
+  // processes, on Node 24 / Apple Silicon:
   //
-  //   a-rate, switch per sample     1121 ms   0.210% of a core
-  //   a-rate, mix hoisted (this)    1094 ms   0.205% of a core   -2.3%
-  //   k-rate floor, no per-sample   437 ms    0.082% of a core
+  //   neither parameter automated       448 ms   0.084% of a core
+  //   a-rate cutoff, switch per sample  1121 ms  0.210% of a core
+  //   a-rate cutoff, mix hoisted        1094 ms  0.205% of a core   -2.3%
+  //   a-rate cutoff and Q, lowpass      1390 ms  0.261% of a core   +30%
+  //   a-rate cutoff and Q, highpass     1467 ms  0.275% of a core   +37%
+  //
+  // The audit predicted 31% for hoisting the mix and 4.6% for a-rate Q; here
+  // it is 2.3% and 30%, in both cases because the cost is arithmetic and not
+  // control flow. A per-sample `Q` adds a second division - `1/max(q, 1e-4)`
+  // here and `1/(1 + g*(g+k))` in `updateCutoff` - and a division is most of
+  // what a sample of this filter costs. An unmodulated filter pays none of it.
   //
   // The audit predicted 31% from the same split and it does not reproduce here:
   // the per-sample cost is the tangent and the division in `a1`, and a
@@ -127,6 +138,7 @@ export function createFilter(sampleRate: number) {
   // constants in `params.ts`; that is all `AudioParam` clamps to.
   function updateMixing(type: number, q: number) {
     if (type === currType && q === currQ) return;
+    const typeChanged = type !== currType;
     currType = type;
     currQ = q;
     _k = 1 / Math.max(q, 0.0001);
@@ -138,42 +150,63 @@ export function createFilter(sampleRate: number) {
     // this replaces did as well.)
     currFreq = NaN;
 
+    // Only four of the seven responses put `k` in the mix. When `Q` is
+    // automated this runs every sample, and for `LowPass`, `BandPass` and
+    // `ByPass` a moving Q leaves m0..m2 exactly where they were, so the switch
+    // is skipped rather than re-executed to reassign three constants.
+    // `_mixReadsK` was set the last time `type` changed, which is the only
+    // time it can change.
+    //
+    // **It measures at zero**: 1390 ms with the skip against 1388 ms without,
+    // on the a-rate benchmark below. Kept because it is the correct shape and
+    // it costs one boolean, and recorded because it corroborates what hoisting
+    // the mix already showed - the per-sample cost here is the two divisions
+    // and the tangent, and a seven-arm switch is not in the running.
+    if (!typeChanged && !_mixReadsK) return;
+
     switch (type) {
       case SvfType.LowPass:
         _m0 = 0;
         _m1 = 0;
         _m2 = 1;
+        _mixReadsK = false;
         break;
       case SvfType.BandPass:
         _m0 = 0;
         _m1 = 1;
         _m2 = 0;
+        _mixReadsK = false;
         break;
 
       case SvfType.HighPass:
         _m0 = 1;
         _m1 = -_k;
         _m2 = -1;
+        _mixReadsK = true;
         break;
       case SvfType.Notch:
         _m0 = 1;
         _m1 = -_k;
         _m2 = 0;
+        _mixReadsK = true;
         break;
       case SvfType.Peak:
         _m0 = 1;
         _m1 = -_k;
         _m2 = -2;
+        _mixReadsK = true;
         break;
       case SvfType.AllPass:
         _m0 = 1;
         _m1 = -2 * _k;
         _m2 = 0;
+        _mixReadsK = true;
         break;
       default:
         _m0 = 1;
         _m1 = 0;
         _m2 = 0;
+        _mixReadsK = false;
         break;
     }
   }
@@ -215,17 +248,29 @@ export function createFilter(sampleRate: number) {
     output: Float32Array,
     type: number,
     frequency: Float32Array,
-    q: number,
+    Q: Float32Array,
   ) {
-    updateMixing(type, q);
+    updateMixing(type, Q[0]);
     updateCutoff(frequency[0]);
-    // The house a-rate check, hoisted. `> 1` and not `=== input.length`:
-    // see `_worklet.ts` next to `ParamDescriptor`.
-    const isARateParam = frequency.length > 1;
+    // The house a-rate check, hoisted, once per parameter. `> 1` and not
+    // `=== input.length`: see `_worklet.ts` next to `ParamDescriptor`. A
+    // length-1 array is what Chrome delivers for an unconnected parameter and
+    // for a connected constant alike, so it is the common case rather than a
+    // corner, and an unmodulated filter takes neither branch below.
+    const fRate = frequency.length > 1;
+    const qRate = Q.length > 1;
+    const perSample = fRate || qRate;
+
     for (let i = 0; i < input.length; i++) {
       let x = input[i];
 
-      if (isARateParam) updateCutoff(frequency[i]);
+      if (perSample) {
+        if (qRate) updateMixing(type, Q[i]);
+        // Not redundant when only `Q` moves: `a1` reads `k`, and
+        // `updateMixing` NaNs `currFreq` for exactly this reason. The guard
+        // inside is what makes the call free when nothing moved.
+        updateCutoff(fRate ? frequency[i] : frequency[0]);
+      }
 
       _v3 = x - _ic2eq;
       _v1 = _a1 * _ic1eq + _a2 * _v3;

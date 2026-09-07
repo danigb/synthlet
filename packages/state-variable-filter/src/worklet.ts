@@ -33,7 +33,7 @@ export class SvfProcessor extends AudioWorkletProcessor {
         output[c],
         params.type[0],
         params.frequency,
-        params.Q[0],
+        params.Q,
       );
     }
 

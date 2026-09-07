@@ -1,5 +1,9 @@
 import { createFilter, createPrewarp, SvfType } from "./dsp";
 
+// `Q` is a-rate, so it arrives as an array. Length 1 is what a browser delivers
+// for an unmodulated parameter, and it is the path every measurement here wants.
+const held = (q: number) => new Float32Array([q]);
+
 /**
  * What this filter promises, as numbers.
  *
@@ -47,7 +51,7 @@ function measure(
     input[n] = Math.sin((2 * Math.PI * f * n) / sampleRate);
   }
 
-  createFilter(sampleRate).filter(input, output, type, frequency, q);
+  createFilter(sampleRate).filter(input, output, type, frequency, held(q));
 
   let i = 0;
   let quad = 0;
@@ -267,7 +271,7 @@ describe("ByPass", () => {
       output,
       SvfType.ByPass,
       frequency,
-      0.7071,
+      held(0.7071),
     );
     expect(Array.from(output)).toEqual(Array.from(input));
   });
@@ -296,7 +300,7 @@ describe("stability under a fast sweep", () => {
       output,
       SvfType.LowPass,
       frequency,
-      q,
+      held(q),
     );
 
     expect(Array.from(output).every(Number.isFinite)).toBe(true);
@@ -428,12 +432,12 @@ describe("recovery from a poisoned state", () => {
     poisoned[0] = Infinity;
     const output = new Float32Array(128);
 
-    filter(poisoned, output, SvfType.LowPass, frequency(), 0.7071);
+    filter(poisoned, output, SvfType.LowPass, frequency(), held(0.7071));
 
     // The block that carried the Infinity is a write-off; the *next* one is
     // not. Not "within 100 blocks" - within one.
     const clean = new Float32Array(128).fill(0.25);
-    filter(clean, output, SvfType.LowPass, frequency(), 0.7071);
+    filter(clean, output, SvfType.LowPass, frequency(), held(0.7071));
     expect(Array.from(output).every(Number.isFinite)).toBe(true);
   });
 
@@ -452,7 +456,13 @@ describe("recovery from a poisoned state", () => {
     }
 
     const guarded = new Float32Array(length);
-    createFilter(sampleRate).filter(input, guarded, SvfType.LowPass, freq, 40);
+    createFilter(sampleRate).filter(
+      input,
+      guarded,
+      SvfType.LowPass,
+      freq,
+      held(40),
+    );
 
     // A second pass through a fresh filter, block by block the way the worklet
     // drives it: if the guard ever fired, the two disagree.
@@ -464,7 +474,7 @@ describe("recovery from a poisoned state", () => {
         blocked.subarray(off, off + 128),
         SvfType.LowPass,
         freq.subarray(off, off + 128),
-        40,
+        held(40),
       );
     }
     const upTo = length - (length % 128);
@@ -486,10 +496,10 @@ describe("recovery from a poisoned state", () => {
       new Float32Array(128),
       SvfType.LowPass,
       frequency(),
-      40,
+      held(40),
     );
     rung.reset();
-    rung.filter(silence, afterReset, SvfType.LowPass, frequency(), 40);
+    rung.filter(silence, afterReset, SvfType.LowPass, frequency(), held(40));
 
     // ...which has to be exactly what a filter that was never rung produces.
     const fresh = new Float32Array(128);
@@ -498,7 +508,7 @@ describe("recovery from a poisoned state", () => {
       fresh,
       SvfType.LowPass,
       frequency(),
-      40,
+      held(40),
     );
     expect(Array.from(afterReset)).toEqual(Array.from(fresh));
     expect(Array.from(afterReset).every((v) => v === 0)).toBe(true);
