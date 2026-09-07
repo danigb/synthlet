@@ -93,30 +93,50 @@ export function createFilter(sampleRate: number) {
     _v2 = 0,
     _v3 = 0;
 
-  // previous frequency and Q
+  // damping, 1/Q: set by the mixing half and read by the cutoff half
+  let _k = 0;
+
+  // previous type, Q and frequency
   let currType = -1;
-  let currFreq = 0;
   let currQ = 0;
+  let currFreq = 0;
 
-  function update(type: number, freq: number, q: number) {
-    if (freq === currFreq && currType === type && q === currQ) return;
-
-    // Range [0, 6] (clamped by AudioWorklet)
+  // The output mix. It depends on `type` and on `k`, and on nothing else -
+  // read the switch below: no arm of it mentions `freq` or `g`. Both are
+  // k-rate, so this runs once a block, where it used to run once a sample.
+  //
+  // **Measured, and it is worth much less than it looks.** 200k blocks of 128
+  // samples at 48 kHz, minimum of seven timed runs across four processes, on
+  // Node 24 / Apple Silicon:
+  //
+  //   a-rate, switch per sample     1121 ms   0.210% of a core
+  //   a-rate, mix hoisted (this)    1094 ms   0.205% of a core   -2.3%
+  //   k-rate floor, no per-sample   437 ms    0.082% of a core
+  //
+  // The audit predicted 31% from the same split and it does not reproduce here:
+  // the per-sample cost is the tangent and the division in `a1`, and a
+  // seven-arm switch over three stores is a rounding error beside them. The
+  // number is kept because the folder's rule is that a performance claim
+  // carries its measurement, and this one measures small.
+  //
+  // The split is taken anyway, on structure rather than on speed: nothing in
+  // the sample loop reads `type` any more, and threading `k` through per sample
+  // for ticket 06 is a change to one function instead of to the loop.
+  //
+  // Range [0, 6] for `type` and [0.025, 40] for `q`, the compile-time
+  // constants in `params.ts`; that is all `AudioParam` clamps to.
+  function updateMixing(type: number, q: number) {
+    if (type === currType && q === currQ) return;
     currType = type;
-    // Range [20, 20000], the compile-time constants in `params.ts`. That is
-    // all `AudioParam` clamps to: it has never known the sample rate, so at
-    // any sample rate below 40 kHz the declared maximum is above Nyquist and
-    // the prewarping is what keeps `g` on the right side of the pole.
-    currFreq = freq;
-    // Range [0.025, 40] (clamped by AudioWorklet)
     currQ = q;
-
-    const g = prewarp(freq);
-    const k = 1 / Math.max(q, 0.0001);
-
-    _a1 = 1 / (1 + g * (g + k));
-    _a2 = g * _a1;
-    _a3 = g * _a2;
+    _k = 1 / Math.max(q, 0.0001);
+    // `a1` reads `k`, so the two halves are not independent: a change in `q`
+    // has to invalidate the cutoff coefficients even when the cutoff itself
+    // has not moved. `NaN` compares false against every frequency, so the next
+    // `updateCutoff` cannot short-circuit. (A change in `type` alone
+    // recomputes them to the same values, which is what the single `update()`
+    // this replaces did as well.)
+    currFreq = NaN;
 
     switch (type) {
       case SvfType.LowPass:
@@ -132,22 +152,22 @@ export function createFilter(sampleRate: number) {
 
       case SvfType.HighPass:
         _m0 = 1;
-        _m1 = -k;
+        _m1 = -_k;
         _m2 = -1;
         break;
       case SvfType.Notch:
         _m0 = 1;
-        _m1 = -k;
+        _m1 = -_k;
         _m2 = 0;
         break;
       case SvfType.Peak:
         _m0 = 1;
-        _m1 = -k;
+        _m1 = -_k;
         _m2 = -2;
         break;
       case SvfType.AllPass:
         _m0 = 1;
-        _m1 = -2 * k;
+        _m1 = -2 * _k;
         _m2 = 0;
         break;
       default:
@@ -158,6 +178,24 @@ export function createFilter(sampleRate: number) {
     }
   }
 
+  // The per-sample half: one compare, one prewarp, one divide, three
+  // multiplies. Nothing here reads `type`.
+  //
+  // Range [20, 20000] for `freq` - `params.ts` again, and `AudioParam` has
+  // never known the sample rate, so at any sample rate below 40 kHz the
+  // declared maximum is above Nyquist and `prewarp` is what keeps `g` on the
+  // right side of the pole.
+  function updateCutoff(freq: number) {
+    if (freq === currFreq) return;
+    currFreq = freq;
+
+    const g = prewarp(freq);
+
+    _a1 = 1 / (1 + g * (g + _k));
+    _a2 = g * _a1;
+    _a3 = g * _a2;
+  }
+
   return function filter(
     input: Float32Array,
     output: Float32Array,
@@ -165,15 +203,15 @@ export function createFilter(sampleRate: number) {
     frequency: Float32Array,
     q: number,
   ) {
-    update(type, frequency[0], q);
+    updateMixing(type, q);
+    updateCutoff(frequency[0]);
     // The house a-rate check, hoisted. `> 1` and not `=== input.length`:
     // see `_worklet.ts` next to `ParamDescriptor`.
     const isARateParam = frequency.length > 1;
     for (let i = 0; i < input.length; i++) {
       let x = input[i];
-      let freq = frequency[i];
 
-      if (isARateParam) update(type, frequency[i], q);
+      if (isARateParam) updateCutoff(frequency[i]);
 
       _v3 = x - _ic2eq;
       _v1 = _a1 * _ic1eq + _a2 * _v3;
