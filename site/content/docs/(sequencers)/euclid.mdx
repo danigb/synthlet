@@ -41,7 +41,15 @@ clock.bpm.value = 150;
 #### Output
 
 - `pulseWidth`: how much of each step a hit is high for, as a fraction of the
-  step. Default is `0.5`.
+  step. Default is `0.5`. `1` means the widest hit that still retriggers, not
+  100% — a hit that never falls can never fire anything again.
+- `reset`: on a rising edge, the next step boundary is step 0 of the pattern.
+  Edge triggered, and `a-rate` so it lands on its own sample.
+
+Two `Euclid`s on one `Clock` each keep a private step counter starting from
+whenever that node was built, so they play different rotations of the same
+pattern unless you align them. Patch both `reset` inlets from the same gate and
+they agree.
 
 Euclid's output is a [gate](/docs/gates-and-triggers): each hit is a pulse over
 the first `pulseWidth` of its step, so two adjacent hits are two triggers. (It

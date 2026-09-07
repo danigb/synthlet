@@ -1,6 +1,6 @@
 ---
 title: Clock
-description: A clock generator
+description: A tempo clock with a phase and a gate, at the beat and at the bar
 package: clock
 ---
 
@@ -8,48 +8,126 @@ import ClockExample from "../../../examples/ClockExample";
 
 `@synthlet/clock`
 
-Generates a clock signal at a given tempo.
+The thing a sequenced patch is built on: a tempo, and four outputs that carry it.
 
 ```ts
 import { registerClockWorklet, Clock } from "synthlet";
 
 const audioContext = new AudioContext();
 await registerClockWorklet(audioContext);
-const clock = Clock(audioContext, { bpm: 10 });
+const clock = Clock(audioContext, { bpm: 120, beatsPerBar: 4 });
 ```
 
 <ClockExample />
 
-## Two outputs: a phase and a gate
+## Four outputs, two kinds of signal
 
-A clock emits two different kinds of signal, and they are not interchangeable.
+A clock emits two kinds of signal, and they are not interchangeable.
 
-- **The node itself is the phase**: a ramp rising from 0 to 1 over each beat.
+- **A phase** is a ramp rising from 0 towards 1 over each cycle.
   [Euclid](/docs/sequencers/euclid) needs it, because subdividing a clock means
   multiplying its phase.
-- **`clock.gate` is the gate**: high for `pulseWidth` of each beat. This is what
-  envelopes, drums and arpeggiators read.
+- **A gate** is high for `pulseWidth` of each cycle. This is what envelopes,
+  drums and arpeggiators read.
 
-Feeding the phase ramp to a trigger used to fire on the beat by accident - the
-ramp reads exactly `1` on the block where it wraps, and the envelopes used to
-fire only on exactly `1`. Under the [gate contract](/docs/gates-and-triggers)
-it does not: connect `clock.gate` instead.
+It emits each at two levels:
 
-## Example
+| Output           | What it is                                        |
+| ---------------- | ------------------------------------------------- |
+| the node itself  | beat phase — restarts each beat                   |
+| `clock.gate`     | beat gate — high for `pulseWidth` of each beat    |
+| `clock.bar`      | bar phase — restarts every `beatsPerBar` beats    |
+| `clock.downbeat` | the beat gate, on the first beat of each bar only |
 
-Trigger a kick with a clock:
+All four come off one accumulator and are read at the same sample, so the gate
+rises on exactly the sample the phase wraps, and `clock.downbeat` is a subset of
+`clock.gate` — the two rise and fall together.
 
-```ts
-import { registerAllWorklets, Clock, KickDrum } from "synthlet";
-
-const audioContext = new AudioContext();
-await registerAllWorklets(audioContext);
-const clock = Clock(audioContext, { bpm: 120 });
-const kick = KickDrum(audioContext, { trigger: clock.gate });
-kick.connect(audioContext.destination);
-```
+Feeding the phase ramp to a trigger fires once and then latches open forever,
+under the [gate contract](/docs/gates-and-triggers). Connect `clock.gate`.
 
 ## Parameters
 
-- `bpm`: beats per minute
-- `pulseWidth`: how much of each beat `clock.gate` is high for, as a fraction of the beat. Default is `0.5`.
+- `bpm`: beats per minute. `0` stops the clock, and a stopped clock emits no gate rather than holding one open.
+- `pulseWidth`: how much of each beat the gates are high for, as a fraction of the beat. Default `0.5`. `1` means the widest gate that still retriggers, not 100% — a gate that never falls can never fire anything again.
+- `beatsPerBar`: how many beats make a bar. Default `4`; `0` means no bar structure and silences `clock.bar` and `clock.downbeat`. There is no time-signature denominator — `bpm` defines what a beat is.
+- `reset`: on a rising edge, the phase and the bar return to 0 on that sample. Edge triggered, and `a-rate` so it lands on its own sample rather than at the top of the next render quantum.
+
+## Recipes
+
+### Accent the downbeat
+
+The smallest patch that makes a bar audible: one voice on every beat, another
+once a bar.
+
+```ts
+const clock = Clock(audioContext, { bpm: 120, beatsPerBar: 4 });
+ClaveDrum(audioContext, { trigger: clock.gate });
+CowBellDrum(audioContext, { trigger: clock.downbeat });
+```
+
+### Subdivide a beat, or a bar
+
+`subdivision` is what divides a cycle into steps; `steps` and `beats` select the
+pattern. Feed the beat phase for sixteenths, the bar phase for a figure that
+spans the whole bar.
+
+```ts
+Euclid(audioContext, { clock, subdivision: 4, steps: 16, beats: 5 });
+Euclid(audioContext, { clock: clock.bar, subdivision: 8, steps: 8, beats: 3 });
+```
+
+See [Euclid](/docs/sequencers/euclid) for what the patterns are.
+
+### Make two patterns start together
+
+Each `Euclid` keeps a private step counter that starts when _that node_ was
+built, so two of them on one clock play different rotations of the same pattern
+unless you say otherwise. Patch both resets from the same signal:
+
+```ts
+const clock = Clock(audioContext, { bpm: 120, beatsPerBar: 4 });
+const a = Euclid(audioContext, {
+  clock,
+  steps: 8,
+  beats: 3,
+  reset: clock.downbeat,
+});
+const b = Euclid(audioContext, {
+  clock,
+  steps: 16,
+  beats: 5,
+  reset: clock.downbeat,
+});
+```
+
+### Align two clocks
+
+A clock's phase origin is whenever the node was constructed, so two clocks built
+in different render quanta hold that offset forever — they keep identical tempo
+and never converge. `reset` is how you bring them together:
+
+```ts
+const a = Clock(audioContext, { bpm: 120 });
+const b = Clock(audioContext, { bpm: 120, reset: a.downbeat });
+```
+
+There is no transport and no global timeline. This is the mechanism; what you
+align to is yours to choose.
+
+## Timing
+
+Measured over 600 s at 44100 and 48000 Hz, at 60, 120, 137.3 and 400 BPM — rates
+and tempi where a beat is never a whole number of blocks, which is where a
+clock's errors hide.
+
+| Quantity                                 |          Measured |
+| ---------------------------------------- | ----------------: |
+| Deviation from ideal beat time           | ≤ 1 sample, 23 µs |
+| Cumulative drift over 600 s              |                 0 |
+| `clock.gate` vs. a `Euclid` on the clock |         0 samples |
+
+The accumulator is exact, so the tempo does not drift; what is quantised is the
+rendering, and it is quantised to a sample. Every figure is asserted in the
+package's tests, so a clock that gets worse fails the build. Full method in the
+[package README](https://github.com/danigb/synthlet/tree/main/packages/clock).

@@ -51,7 +51,8 @@ kick.connect(ac.destination);
 | `beats`       | 0       | 0 … 100 | k-rate | How many of those steps are hits                         |
 | `subdivision` | 1       | 1 … 20  | k-rate | Pattern cycles per clock cycle — a multiplier on `clock` |
 | `rotation`    | 0       | 0 … 100 | k-rate | How far the pattern is rotated                           |
-| `pulseWidth`  | 0.5     | 0 … 1   | k-rate | How much of each step a hit is high for                  |
+| `pulseWidth`  | 0.5     | 0 … 1   | k-rate | How much of each step a hit is high for¹                 |
+| `reset`       | 0       | 0 … 1   | a-rate | Rising edge makes the next step boundary step 0          |
 
 `clock` is `a-rate`, so a step boundary lands on its own sample rather than at
 the top of the next render quantum.
@@ -64,6 +65,31 @@ pattern is choosing a different pattern, not interpolating toward one.
 falling edge between them means no rising edge for the second — so a `(4, 4)`
 pattern would fire exactly once, ever. `pulseWidth` is what makes two adjacent
 hits two triggers.
+
+**Two patterns agree only if you say so.** Each `Euclid` keeps a private step
+counter that starts at 0 whenever _that node_ was built, so two of them on one
+`Clock` play different rotations of the same pattern unless they happened to be
+constructed in the same render quantum. Measured across 32 birth offsets, 28
+diverge. `reset` is how you say so:
+
+```ts
+const clock = Clock(ac, { bpm: 120 });
+const a = Euclid(ac, { clock, steps: 8, beats: 3, reset: someGate });
+const b = Euclid(ac, { clock, steps: 16, beats: 5, reset: someGate });
+// both start their step 0 on the same beat, however they were built
+```
+
+Like `Clock`'s, it is `a-rate` and edge triggered: the reset lands on its own
+sample, two resets in one block are two resets, and holding it high does not
+pin the pattern at step 0.
+
+¹ **`pulseWidth: 1` means "the widest hit that still retriggers"**, not 100 %.
+For the same reason: a hit that never falls is a gate that can never fire
+again. The width is capped to leave one render quantum of every step low, which
+is what a consumer reading its trigger once per block needs in order to see the
+falling edge. The cap is derived from the incoming clock's own rate and the
+`subdivision` applied to it, so it tracks the tempo, and it is inert at any
+width you would ordinarily set.
 
 ## License
 
