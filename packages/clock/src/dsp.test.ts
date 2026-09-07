@@ -28,6 +28,10 @@ import { createClock } from "./dsp";
 /** One render quantum - the block size the processor is actually called with. */
 const BLOCK = 128;
 
+/** An unconnected a-rate parameter: one value, and it is 0. That is what
+ * `reset` looks like in every test that is not about resetting. */
+const SILENT = new Float32Array(1);
+
 describe("createClock", () => {
   /**
    * The two tests that stood here until clock ticket 03 were oracle tests: they
@@ -117,9 +121,9 @@ describe("createClock", () => {
     const phaseOut = new Float32Array(BLOCK);
     const slow = new Float32Array(BLOCK);
     const fast = new Float32Array(BLOCK);
-    clock(phaseOut, undefined, 60, 0.5);
-    clock(slow, undefined, 60, 0.5);
-    clock(fast, undefined, 240, 0.5);
+    clock(phaseOut, undefined, 60, 0.5, SILENT);
+    clock(slow, undefined, 60, 0.5, SILENT);
+    clock(fast, undefined, 240, 0.5, SILENT);
     // Float32 storage, so the difference of two adjacent ramp values carries
     // about seven digits - hence 9 rather than 12.
     expect(slow[1] - slow[0]).toBeCloseTo(60 / 60 / 44100, 9);
@@ -130,7 +134,7 @@ describe("createClock", () => {
     // `outputs[1]` is absent whenever nothing is connected to `.gate`.
     const clock = createClock(44100);
     const phaseOut = new Float32Array(BLOCK);
-    expect(() => clock(phaseOut, undefined, 120, 0.5)).not.toThrow();
+    expect(() => clock(phaseOut, undefined, 120, 0.5, SILENT)).not.toThrow();
     expect(phaseOut[1]).toBeGreaterThan(phaseOut[0]);
   });
 });
@@ -316,7 +320,12 @@ function renderEdges(
   clock: ReturnType<typeof createClock>,
   sampleRate: number,
   seconds: number,
-  params: { bpm?: number; pulseWidth?: number; startBlock?: number } = {},
+  params: {
+    bpm?: number;
+    pulseWidth?: number;
+    startBlock?: number;
+    reset?: Float32Array;
+  } = {},
 ) {
   const phaseOut = new Float32Array(BLOCK);
   const gateOut = new Float32Array(BLOCK);
@@ -325,7 +334,13 @@ function renderEdges(
   const edges: number[] = [];
   let prev = 0;
   for (let b = startBlock; b < blocks; b++) {
-    clock(phaseOut, gateOut, params.bpm ?? 120, params.pulseWidth ?? 0.5);
+    clock(
+      phaseOut,
+      gateOut,
+      params.bpm ?? 120,
+      params.pulseWidth ?? 0.5,
+      params.reset ?? SILENT,
+    );
     const found = risingEdgesOf(gateOut, b * BLOCK, prev);
     edges.push(...found.edges);
     prev = found.prev;
@@ -338,7 +353,7 @@ function renderGateWidths(
   clock: ReturnType<typeof createClock>,
   sampleRate: number,
   seconds: number,
-  params: { bpm?: number; pulseWidth?: number } = {},
+  params: { bpm?: number; pulseWidth?: number; reset?: Float32Array } = {},
 ) {
   const phaseOut = new Float32Array(BLOCK);
   const gateOut = new Float32Array(BLOCK);
@@ -348,7 +363,13 @@ function renderGateWidths(
   let prev = 0;
   let count = 0;
   for (let b = 0; b < blocks; b++) {
-    clock(phaseOut, gateOut, params.bpm ?? 120, params.pulseWidth ?? 0.5);
+    clock(
+      phaseOut,
+      gateOut,
+      params.bpm ?? 120,
+      params.pulseWidth ?? 0.5,
+      params.reset ?? SILENT,
+    );
     for (let i = 0; i < BLOCK; i++) {
       if (gateOut[i] > 0) {
         if (!(prev > 0)) {
@@ -464,6 +485,150 @@ describe("pulseWidth", () => {
   });
 });
 
+describe("reset", () => {
+  /**
+   * A clock's phase origin is otherwise "whenever the node was constructed",
+   * and nothing can change it. Two clocks built 37 blocks apart hold that
+   * 4736-sample offset for as long as they live - they do not drift, so
+   * nothing self-corrects, and they never converge.
+   *
+   * `reset` is the mechanism for them to agree. It is not a policy: nothing
+   * here decides what two clocks should agree *on*.
+   */
+
+  it("puts the phase at 0 on the reset's own sample", () => {
+    // Criterion 1, and only testable because the phase moves every sample: a
+    // reset that could only land on a block boundary would re-introduce
+    // exactly the quantisation that change removed.
+    const sampleRate = 44100;
+    const clock = createClock(sampleRate);
+    const phaseOut = new Float32Array(BLOCK);
+    const gateOut = new Float32Array(BLOCK);
+
+    // Run far enough into the beat that the gate has already fallen: at 120
+    // BPM and 44100 a beat is 172.3 blocks, so 100 blocks is phase 0.58.
+    for (let b = 0; b < 100; b++) {
+      clock(phaseOut, gateOut, 120, 0.5, SILENT);
+    }
+    expect(phaseOut[0]).toBeGreaterThan(0.5);
+
+    const reset = new Float32Array(BLOCK);
+    reset[40] = 1;
+    clock(phaseOut, gateOut, 120, 0.5, reset);
+
+    expect(phaseOut[39]).toBeGreaterThan(0.5);
+    expect(phaseOut[40]).toBe(0);
+    // And the beat restarts from there rather than resuming.
+    expect(phaseOut[41]).toBeCloseTo(120 / 60 / sampleRate, 9);
+    // The gate rises on that sample too, since both come off one accumulator.
+    expect(gateOut[39]).toBe(0);
+    expect(gateOut[40]).toBe(1);
+  });
+
+  it("treats two resets in one block as two resets", () => {
+    // The reason `reset` is a-rate. At k-rate the second one is invisible.
+    const clock = createClock(44100);
+    const phaseOut = new Float32Array(BLOCK);
+    const gateOut = new Float32Array(BLOCK);
+    const reset = new Float32Array(BLOCK);
+    reset[10] = 1;
+    reset[60] = 1;
+    clock(phaseOut, gateOut, 120, 0.5, reset);
+    expect(phaseOut[10]).toBe(0);
+    expect(phaseOut[59]).toBeGreaterThan(0);
+    expect(phaseOut[60]).toBe(0);
+  });
+
+  it("is edge triggered, not level triggered", () => {
+    // Criterion 4, and the test that proves `createGateDetector` was used
+    // rather than a level check: a held-high reset would otherwise pin the
+    // phase at 0 and the clock would never advance again.
+    const clock = createClock(44100);
+    const phaseOut = new Float32Array(BLOCK);
+    const gateOut = new Float32Array(BLOCK);
+    const held = new Float32Array(BLOCK).fill(1);
+    clock(phaseOut, gateOut, 120, 0.5, held);
+    expect(phaseOut[0]).toBe(0);
+    expect(phaseOut[BLOCK - 1]).toBeGreaterThan(0);
+    // A second block still held high does not reset again.
+    clock(phaseOut, gateOut, 120, 0.5, held);
+    expect(phaseOut[0]).toBeGreaterThan(0);
+  });
+
+  it("does not wake a stopped clock", () => {
+    // Criterion 6. A reset re-aligns a stopped clock's phase - which is worth
+    // something, since it is where the clock will start from - without
+    // emitting a gate. `bpm: 0` is how this library stops a clock and there is
+    // no second answer to that question.
+    const clock = createClock(44100);
+    const phaseOut = new Float32Array(BLOCK);
+    const gateOut = new Float32Array(BLOCK);
+    const reset = new Float32Array(BLOCK);
+    reset[10] = 1;
+    clock(phaseOut, gateOut, 0, 0.5, reset);
+    expect([...gateOut]).toEqual(new Array(BLOCK).fill(0));
+  });
+
+  it("makes two clocks born 37 blocks apart sample-identical", () => {
+    // Criterion 2, and the direct inverse of the constant-offset measurement
+    // above: the same two clocks, one reset signal, and they agree from that
+    // sample on - for 600 s, which is 1200 beats.
+    //
+    // Compared with a plain loop and one assertion rather than a matcher per
+    // sample: this is 26 M samples and a jest matcher each would take minutes.
+    const sampleRate = 44100;
+    const late = 37;
+    const resetAt = 100;
+    const first = createClock(sampleRate);
+    const second = createClock(sampleRate);
+    const aPhase = new Float32Array(BLOCK);
+    const aGate = new Float32Array(BLOCK);
+    const bPhase = new Float32Array(BLOCK);
+    const bGate = new Float32Array(BLOCK);
+    const pulse = new Float32Array(BLOCK);
+    pulse[0] = 1;
+
+    const blocks = Math.floor((sampleRate * SECONDS) / BLOCK);
+    let mismatches = 0;
+    let compared = 0;
+    let edges = 0;
+    for (let b = 0; b < blocks; b++) {
+      const reset = b === resetAt ? pulse : SILENT;
+      first(aPhase, aGate, 120, 0.5, reset);
+      if (b >= late) second(bPhase, bGate, 120, 0.5, reset);
+      if (b <= resetAt) continue;
+      for (let i = 0; i < BLOCK; i++) {
+        if (aPhase[i] !== bPhase[i] || aGate[i] !== bGate[i]) mismatches++;
+        compared++;
+      }
+      if (aGate[0] > 0) edges++;
+    }
+    expect(mismatches).toBe(0);
+    expect(compared).toBeGreaterThan(20_000_000);
+    expect(edges).toBeGreaterThan(0);
+  });
+
+  it("changes nothing while it is unconnected", () => {
+    // Criterion 5. The default is a length-1 array holding 0, and the whole
+    // clamp-and-detect path has to be inert against it.
+    for (const sampleRate of RATES) {
+      for (const bpm of TEMPOS) {
+        const withReset = renderEdges(createClock(sampleRate), sampleRate, 30, {
+          bpm,
+          reset: SILENT,
+        });
+        const withoutParam = renderEdges(
+          createClock(sampleRate),
+          sampleRate,
+          30,
+          { bpm },
+        );
+        expect(withReset).toEqual(withoutParam);
+      }
+    }
+  });
+});
+
 /**
  * Render `seconds` of phase into one flat array.
  *
@@ -476,13 +641,19 @@ function renderPhase(
   clock: ReturnType<typeof createClock>,
   sampleRate: number,
   seconds: number,
-  params: { bpm?: number; pulseWidth?: number } = {},
+  params: { bpm?: number; pulseWidth?: number; reset?: Float32Array } = {},
 ) {
   const phase: number[] = [];
   const phaseOut = new Float32Array(BLOCK);
   const blocks = Math.floor((sampleRate * seconds) / BLOCK);
   for (let b = 0; b < blocks; b++) {
-    clock(phaseOut, undefined, params.bpm ?? 120, params.pulseWidth ?? 0.5);
+    clock(
+      phaseOut,
+      undefined,
+      params.bpm ?? 120,
+      params.pulseWidth ?? 0.5,
+      params.reset ?? SILENT,
+    );
     phase.push(...phaseOut);
   }
   return phase;
@@ -498,7 +669,7 @@ function gateRuns(
   clock: ReturnType<typeof createClock>,
   sampleRate: number,
   seconds: number,
-  params: { bpm?: number; pulseWidth?: number } = {},
+  params: { bpm?: number; pulseWidth?: number; reset?: Float32Array } = {},
 ) {
   const phaseOut = new Float32Array(BLOCK);
   const gateOut = new Float32Array(BLOCK);
@@ -508,7 +679,13 @@ function gateRuns(
   let current = -1;
   let length = 0;
   for (let b = 0; b < blocks; b++) {
-    clock(phaseOut, gateOut, params.bpm ?? 120, params.pulseWidth ?? 0.5);
+    clock(
+      phaseOut,
+      gateOut,
+      params.bpm ?? 120,
+      params.pulseWidth ?? 0.5,
+      params.reset ?? SILENT,
+    );
     for (let i = 0; i < BLOCK; i++) {
       const value = gateOut[i] > 0 ? 1 : 0;
       if (value !== current) {

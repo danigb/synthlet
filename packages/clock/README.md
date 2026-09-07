@@ -50,8 +50,9 @@ clock.dispose(); // disposes the gate node with it
 | ------------ | ------- | -------- | ------ | ------------------------------------------- |
 | `bpm`        | 120     | 0 … 1000 | k-rate | Tempo in beats per minute                   |
 | `pulseWidth` | 0.5     | 0 … 1    | k-rate | Fraction of each beat the gate is high for¹ |
+| `reset`      | 0       | 0 … 1    | a-rate | Rising edge returns the phase to 0          |
 
-Both are `k-rate`: the phase increment is derived from `bpm` and cached, and a
+`bpm` and `pulseWidth` are `k-rate`: the phase increment is derived from `bpm` and cached, and a
 tempo that changed every sample is frequency modulation of the clock rather
 than a tempo — `Lfo` and `Param` are the modules for that. What the clock
 _emits_ is written per sample either way, which is a different question from
@@ -80,6 +81,31 @@ what repairs it is an alignment inlet, which this module does not have yet.
 
 That is also why the gate is a second output rather than a separate `ClockGate`
 module: one accumulator, two views of it.
+
+## Aligning things
+
+`reset` is how two things agree on where the beat is. On its rising edge the
+phase returns to 0 on that exact sample, and the next beat starts there:
+
+```ts
+const a = Clock(ac, { bpm: 120 });
+const b = Clock(ac, { bpm: 120, reset: a.gate }); // b now follows a
+```
+
+It is `a-rate`, so a reset lands on its own sample rather than at the top of the
+next render quantum, and two resets inside one block are two resets. It is
+**edge triggered** — holding it high does not pin the phase at 0, it resets
+once.
+
+A reset on a stopped clock (`bpm: 0`) re-aligns where the clock will start from
+without emitting a gate. There is no separate `run` inlet: `bpm: 0` is how this
+library stops a clock, and a second answer to that question would be one answer
+too many. To stop without losing the tempo value, hold it in a `Param`.
+
+This is a mechanism, not a policy. Nothing here decides what two clocks should
+agree on, and two of them still free-run independently unless you wire them
+together — there is no transport and no implicit global timeline. The mechanism
+is the part you cannot build downstream; the policy is the part you can.
 
 ## Timing
 

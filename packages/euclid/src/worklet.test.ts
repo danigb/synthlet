@@ -4,6 +4,10 @@
 const BLOCK = 128;
 const BLOCKS_PER_CYCLE = 64;
 
+/** An unconnected a-rate parameter: one value, and it is 0. That is what
+ * `reset` looks like in every test that is not about resetting. */
+const NO_RESET = new Float32Array(1);
+
 describe("EuclidProcessor", () => {
   let Worklet: any;
 
@@ -150,6 +154,7 @@ function aRateParams(
     subdivision: [1],
     rotation: [0],
     pulseWidth: [params.pulseWidth ?? 0.5],
+    reset: NO_RESET,
   };
 }
 
@@ -180,6 +185,7 @@ function run(
       subdivision: [params.subdivision ?? 1],
       rotation: [params.rotation ?? 0],
       pulseWidth: [params.pulseWidth ?? 0.5],
+      reset: NO_RESET,
     });
     out.push(outputs[0][0][0]);
   }

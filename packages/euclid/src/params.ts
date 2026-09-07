@@ -3,7 +3,7 @@ import type { ParamDescriptor } from "./_worklet";
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 //
-// Six parameters, one of them a-rate.
+// Seven parameters, two of them a-rate.
 //
 // `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
 // every `k-rate` below is an explicit opt-out and carries a reason for being
@@ -80,5 +80,25 @@ export const PARAMS: readonly ParamDescriptor[] = [
     minValue: 0,
     maxValue: 1,
     automationRate: "k-rate",
+  },
+  {
+    // Re-align the pattern. On the trigger's rising edge the next step boundary
+    // is step 0 of the pattern rather than a continuation.
+    //
+    // a-rate for the same reason `clock` is: the reset lands on its own sample,
+    // and two resets inside one block are two resets. Edge triggered, so
+    // holding it high does not pin the pattern at step 0.
+    //
+    // The step counter is otherwise private and starts at 0 whenever *this
+    // node* was built, so two `Euclid`s on one clock play different rotations
+    // of the same pattern unless they happened to be constructed together.
+    // Measured: 28 of 32 birth offsets diverge. A pattern's step 0 is a shared
+    // musical fact, and this is the only way to say so - patch both from one
+    // gate and they agree.
+    name: "reset",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "a-rate",
   },
 ];

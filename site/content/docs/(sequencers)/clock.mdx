@@ -52,4 +52,19 @@ kick.connect(audioContext.destination);
 ## Parameters
 
 - `bpm`: beats per minute
-- `pulseWidth`: how much of each beat `clock.gate` is high for, as a fraction of the beat. Default is `0.5`.
+- `pulseWidth`: how much of each beat `clock.gate` is high for, as a fraction of the beat. Default is `0.5`. `1` means the widest gate that still retriggers, not 100% — a gate that never falls can never fire anything again.
+- `reset`: on a rising edge, the phase returns to 0 on that sample and the next beat starts there. Edge triggered, and `a-rate` so it lands on its own sample.
+
+## Aligning two clocks
+
+A clock's phase origin is whenever the node was constructed, so two clocks built
+in different render quanta hold that offset forever — they keep perfect tempo
+and never converge. `reset` is how you bring them together:
+
+```ts
+const a = Clock(audioContext, { bpm: 120 });
+const b = Clock(audioContext, { bpm: 120, reset: a.gate });
+```
+
+There is no transport and no global timeline: this is the mechanism, and what
+you align to is yours to choose.

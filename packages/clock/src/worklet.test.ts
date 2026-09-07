@@ -102,7 +102,7 @@ function risingEdges(values: number[]) {
 function run(
   worklet: any,
   samples: number,
-  params: { bpm?: number; pulseWidth?: number } = {},
+  params: { bpm?: number; pulseWidth?: number; reset?: Float32Array } = {},
 ) {
   const phase: number[] = [];
   const gate: number[] = [];
@@ -111,6 +111,7 @@ function run(
     worklet.process([], outputs, {
       bpm: [params.bpm ?? 120],
       pulseWidth: [params.pulseWidth ?? 0.5],
+      reset: params.reset ?? new Float32Array(1),
     });
     phase.push(...outputs[0][0]);
     gate.push(...outputs[1][0]);

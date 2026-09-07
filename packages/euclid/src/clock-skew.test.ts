@@ -37,6 +37,9 @@ import { createClock } from "../../clock/src/dsp";
 const BLOCK = 128;
 const SAMPLE_RATE = 44100;
 
+/** An unconnected a-rate parameter: one value, and it is 0. */
+const NO_RESET = new Float32Array(1);
+
 let Worklet: any;
 
 describe("Clock and Euclid on one clock", () => {
@@ -122,6 +125,113 @@ describe("pulseWidth through the real chain", () => {
   });
 });
 
+describe("two Euclids on one clock", () => {
+  beforeAll(async () => {
+    createWorkletTestContext(SAMPLE_RATE);
+    Worklet = (await import("./worklet")).EuclidProcessor;
+  });
+
+  /**
+   * Each `Euclid` keeps a private step counter starting at 0 whenever *that
+   * node* was built, so two of them on one clock play different rotations of
+   * the same pattern. Measured across 32 birth offsets, 28 diverge - one
+   * firing at sample 441088 while the other fires at 446592, permanently.
+   *
+   * `site/examples/EuclidExample.tsx` builds two on one `Clock` and they agree
+   * only because both are constructed in the same synchronous block. A third
+   * pattern added from a UI callback gets a private downbeat.
+   *
+   * A pattern's step 0 is a shared musical fact, and `reset` is the only way
+   * to say so.
+   */
+  // The sweep the audit ran: 32 birth blocks spread across many step
+  // boundaries, `E(3, 8)` at subdivision 4, compared over the last 4 s of a
+  // 14 s render so the startup transient is long gone.
+  const OFFSETS = Array.from({ length: 32 }, (_, i) => (i + 1) * 60);
+  const SECONDS = 14;
+  const COMPARE_AFTER = 10;
+
+  it("diverges at 28 of 32 birth offsets with no reset", () => {
+    // The measurement this ticket exists for, kept as the control: without the
+    // reset the divergence is still there, so the next test is evidence that
+    // the reset is what closes it rather than that the sweep is toothless.
+    const diverging = OFFSETS.filter(
+      (offset) => !alignedPair(offset, { reset: false }),
+    );
+    expect(diverging).toHaveLength(28);
+  });
+
+  it("agrees at all 32 once both are reset from one signal", () => {
+    // Criterion 3: 0 of 32, against 28 of 32.
+    const diverging = OFFSETS.filter(
+      (offset) => !alignedPair(offset, { reset: true }),
+    );
+    expect(diverging).toEqual([]);
+  });
+
+  /**
+   * Build two `Euclid`s on one clock, the second `offset` blocks late, and
+   * report whether they fire at the same samples once both are settled.
+   */
+  function alignedPair(offset: number, options: { reset: boolean }) {
+    const clock = createClock(SAMPLE_RATE);
+    const first = new Worklet();
+    let second: any = null;
+    const phase = new Float32Array(BLOCK);
+    const clockGate = new Float32Array(BLOCK);
+    const firstOut = new Float32Array(BLOCK);
+    const secondOut = new Float32Array(BLOCK);
+    const pulse = new Float32Array(BLOCK);
+    pulse[0] = 1;
+
+    // E(3, 8): three hits over eight steps, the pattern the measurement used.
+    const params = (reset: Float32Array) => ({
+      clock: phase,
+      steps: [8],
+      beats: [3],
+      subdivision: [4],
+      rotation: [0],
+      pulseWidth: [0.5],
+      reset,
+    });
+
+    // A reset well after the last birth block, so it is re-alignment and not a
+    // coincidence of construction.
+    const resetBlock = offset + 100;
+    const blocks = Math.floor((SAMPLE_RATE * SECONDS) / BLOCK);
+    const compareFrom = SAMPLE_RATE * COMPARE_AFTER;
+    const firstHits: number[] = [];
+    const secondHits: number[] = [];
+    let prevFirst = 0;
+    let prevSecond = 0;
+
+    for (let b = 0; b < blocks; b++) {
+      const reset = options.reset && b === resetBlock ? pulse : NO_RESET;
+      clock(phase, clockGate, 120, 0.5, NO_RESET);
+      if (b === offset) second = new Worklet();
+      first.process([], [[firstOut]], params(reset));
+      if (second) second.process([], [[secondOut]], params(reset));
+      for (let i = 0; i < BLOCK; i++) {
+        const at = b * BLOCK + i;
+        if (firstOut[i] > 0 && !(prevFirst > 0) && at >= compareFrom) {
+          firstHits.push(at);
+        }
+        prevFirst = firstOut[i];
+        if (!second) continue;
+        if (secondOut[i] > 0 && !(prevSecond > 0) && at >= compareFrom) {
+          secondHits.push(at);
+        }
+        prevSecond = secondOut[i];
+      }
+    }
+    return (
+      firstHits.length > 0 &&
+      firstHits.length === secondHits.length &&
+      firstHits.every((hit, i) => hit === secondHits[i])
+    );
+  }
+});
+
 /** Render `seconds` and return the rising-edge sample indices of each signal. */
 function render(
   seconds: number,
@@ -131,6 +241,8 @@ function render(
     steps?: number;
     beats?: number;
     pulseWidth?: number;
+    reset?: Float32Array;
+    startBlock?: number;
   } = {},
 ) {
   const clock = createClock(SAMPLE_RATE);
@@ -145,6 +257,7 @@ function render(
     subdivision: [params.subdivision ?? 1],
     rotation: [0],
     pulseWidth: [params.pulseWidth ?? 0.5],
+    reset: params.reset ?? NO_RESET,
   };
   const gate: number[] = [];
   const hits: number[] = [];
@@ -159,7 +272,7 @@ function render(
   let prevHit = 0;
   const blocks = Math.floor((SAMPLE_RATE * seconds) / BLOCK);
   for (let b = 0; b < blocks; b++) {
-    clock(phase, clockGate, params.bpm ?? 120, 0.5);
+    clock(phase, clockGate, params.bpm ?? 120, 0.5, NO_RESET);
     euclid.process([], [[euclidOut]], euclidParams);
     for (let i = 0; i < BLOCK; i++) {
       if (clockGate[i] > 0 && !(prevGate > 0)) gate.push(b * BLOCK + i);

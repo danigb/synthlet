@@ -1,4 +1,4 @@
-import { gatePulse } from "./_gate";
+import { createGateDetector, gatePulse } from "./_gate";
 
 /** One render quantum. The spec's block size, and the unit a consumer that
  * reads its trigger once per block can actually resolve. */
@@ -29,12 +29,14 @@ export function createClock(sampleRate: number) {
   let bpm = 120;
   let increment = bpm / 60 / sampleRate;
   let phase = 0;
+  const detectReset = createGateDetector();
 
   return function generate(
     phaseOut: Float32Array,
     gateOut: Float32Array | undefined,
     nextBpm: number,
     pulseWidth: number,
+    reset: Float32Array,
   ) {
     if (nextBpm !== bpm) {
       bpm = nextBpm;
@@ -72,6 +74,11 @@ export function createClock(sampleRate: number) {
     const step = increment;
     const running = step > 0;
     const length = phaseOut.length;
+    // The house a-rate read, hoisted: an a-rate parameter arrives as either one
+    // value or one per sample, and an unconnected one - the default here - is
+    // the length-1 case. `> 1` rather than `=== length` because a sub-block
+    // render would make those disagree.
+    const rRate = reset.length > 1;
     let p = phase;
 
     // Emit, then advance. `phase[i]` is the fraction of the beat elapsed *at*
@@ -82,6 +89,11 @@ export function createClock(sampleRate: number) {
     // than a rounding.
     if (gateOut) {
       for (let i = 0; i < length; i++) {
+        // Before the emit, so the phase *is* 0 on the reset's own sample and
+        // the gate rises there rather than a block later. `running` still
+        // gates the gate, so a reset re-aligns a stopped clock's phase without
+        // waking it.
+        if (detectReset(rRate ? reset[i] : reset[0]) === true) p = 0;
         phaseOut[i] = p;
         gateOut[i] = running ? gatePulse(p, width) : 0;
         p += step;
@@ -89,6 +101,7 @@ export function createClock(sampleRate: number) {
       }
     } else {
       for (let i = 0; i < length; i++) {
+        if (detectReset(rRate ? reset[i] : reset[0]) === true) p = 0;
         phaseOut[i] = p;
         p += step;
         if (p >= 1) p -= 1;

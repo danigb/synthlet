@@ -11,11 +11,13 @@ import { PROCESSOR } from "./processor";
 export type ClockInputs = {
   bpm?: ParamInput;
   pulseWidth?: ParamInput;
+  reset?: ParamInput;
 };
 
 export type ClockWorkletNode = AudioWorkletNode & {
   bpm: AudioParam;
   pulseWidth: AudioParam;
+  reset: AudioParam;
 };
 
 /**

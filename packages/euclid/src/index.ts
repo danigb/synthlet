@@ -14,6 +14,7 @@ export type EuclidInputs = {
   beats?: ParamInput;
   subdivision?: ParamInput;
   rotation?: ParamInput;
+  reset?: ParamInput;
 };
 
 export type EuclidWorkletNode = AudioWorkletNode & {
@@ -22,6 +23,7 @@ export type EuclidWorkletNode = AudioWorkletNode & {
   beats: AudioParam;
   subdivision: AudioParam;
   rotation: AudioParam;
+  reset: AudioParam;
   dispose(): void;
 };
 
