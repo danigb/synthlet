@@ -129,4 +129,4 @@ See the repository's
 
 ## License
 
-MIT © [Daniel Gómez Blasco](https://github.com/danigb)
+MIT © [danigb](https://github.com/danigb)

@@ -65,4 +65,4 @@ on.
 
 ## License
 
-MIT © [Daniel Gómez Blasco](https://github.com/danigb)
+MIT © [danigb](https://github.com/danigb)

@@ -71,4 +71,4 @@ its own. `scale` is the exception; it is bounded by the enum.
 
 ## License
 
-MIT © [Daniel Gómez Blasco](https://github.com/danigb)
+MIT © [danigb](https://github.com/danigb)

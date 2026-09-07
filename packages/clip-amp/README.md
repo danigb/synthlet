@@ -51,4 +51,4 @@ Every channel of the input is clipped, so a stereo signal stays stereo.
 
 ## License
 
-MIT © [Daniel Gómez Blasco](https://github.com/danigb)
+MIT © [danigb](https://github.com/danigb)

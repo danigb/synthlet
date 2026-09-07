@@ -70,4 +70,4 @@ per frame. Only `"horizontal"` orientation is implemented.
 
 ## License
 
-MIT © [Daniel Gómez Blasco](https://github.com/danigb)
+MIT © [danigb](https://github.com/danigb)
