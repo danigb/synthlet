@@ -242,7 +242,7 @@ inferred. Nothing below derives from third-party source.
 | `@synthlet/clock` | Original |
 | `@synthlet/euclid` | Original. Implements the Euclidean rhythm algorithm of Godfried Toussaint, *The Euclidean Algorithm Generates Traditional Musical Rhythms* (2005) |
 | `@synthlet/timestretch-audio-source` | Original, re-derived from published algorithm descriptions: J. Driedger and M. Müller, [*A Review of Time-Scale Modification of Music Signals*](https://doi.org/10.3390/app6020057), Applied Sciences 6(2):57, 2016, §4.1 (equations 6-11) and §7.2 (pitch-shifting as resampling plus TSM); W. Verhelst and M. Roelands, [*An Overlap-Add Technique Based on Waveform Similarity (WSOLA) for High Quality Time-Scale Modification of Speech*](https://doi.org/10.1109/ICASSP.1993.319366), Proc. ICASSP-93; M. Roelands and W. Verhelst, [*WSOLA for Time-Scale Modification of Speech: Structures and Evaluation*](https://doi.org/10.21437/Eurospeech.1993-59), Proc. EUROSPEECH'93; and J. O. Smith III, [*Digital Audio Resampling Home Page*](https://ccrma.stanford.edu/~jos/resample/) for the windowed-sinc pitch stage. Which published equation each step implements is recorded in the header of `src/wsola.ts`, along with the seven things it does that the sources do not |
-| `@synthlet/granite` | Original granular engine |
+| `@synthlet/granite` | Original, re-derived from published algorithm descriptions and from one MIT-licensed reference implementation read as a worked example. **Papers:** R. Bencina, [*Implementing Real-Time Granular Synthesis*](https://www.rossbencina.com/static/writings/gs_ap2004.pdf), in *Audio Anecdotes III*, 2001 — the Delay Line Granulator architecture, the `nextOnset` grain scheduler, its Direct Interonset Specification and its preemption clause; B. Truax, *Real-Time Granular Synthesis with a Digital Signal Processor*, CMJ 12(2), 1988, *Real-Time Granulation of Sampled Sound with the DMX-1000*, Proc. ICMC 1986, and *Discovering Inner Complexity*, CMJ 18(2), 1994 — the `(centre, range)` stochastic control model, the `[0, 2·mean]` interonset range and freeze; C. Roads, J. Kilgore and J. DuPlessis, *Emission Control*, Proc. ICMC 2021 — the parameter surface and the per-grain integrity invariant; C. Roads, *Microsound*, MIT Press, 2001 — stochastic masking, which is `intermittency`. **Mutable Instruments Clouds** (Copyright 2014 Emilie Gillet, MIT) was read as a worked example for five specific pieces of arithmetic, each re-derived in this module's own terms and each documented at its use site in `src/dsp.ts`: the causality clamp (`granular_sample_player.h:205-224`), the mono/stereo pan split (`:186-204`), the smoothed `1/√(n−1)` gain normalisation with its `activeCount > 2` clause (`:152-165`), the grain pre-delay (`grain.h:120-127`), and the feedback high-pass at `20 + 100·feedback²` Hz (`granular_processor.cc:190-203`). **No Clouds source is present, and none was copied:** it is not vendored, not bundled and not in the repository — it is read from a gitignored `refs/eurorack` checkout. MIT's notice-preservation clause therefore does not bite, since there is no copy or substantial portion to attach it to; the credit here stands in its place. **In-repo reuse:** `clip-amp`'s `tanh` shaper, `digital-delay`'s saturator-blend form `x + fb·(tanh(x) − x)` (which is what makes `feedback: 0` store the input exactly) and its Clouds-derived feedback high-pass, and `scripts/_delay.ts` for the circular buffer and its Hermite read. The envelope family, the unit-RMS window gain, the three spread conventions, the scheduler's second generator and the freeze fade are this module's own and are marked as such in `src/params.ts` and `src/dsp.ts` |
 | `@synthlet/impulse` | Original |
 | `@synthlet/karplus-strong` | Original, from the published algorithm: Karplus & Strong, [*Digital Synthesis of Plucked String and Drum Timbres*](https://users.soe.ucsc.edu/~karplus/papers/digitar.pdf), CMJ 7(2), 1983 |
 | `@synthlet/level-meter` | Original |
@@ -289,6 +289,41 @@ search, the rule that ties in the search are broken towards the smallest
 shift, the loop seam, and reverse as a coordinate mirror. Each of those claims is measured, not inherited: `wsola.test.ts`
 asserts them against `src/wsola-oracle.ts`, an independently written
 brute-force full-rate implementation that exists only for the tests.
+
+**On the strength of the granite claim.** The same standard again, and the same
+caveat stated plainly. Mutable Instruments Clouds was read as a worked example
+for five specific pieces of arithmetic and each was re-derived in granite's own
+terms — this is re-derivation with the chain recorded, **not** clean-room, for
+the reason set out above. What was taken is small, closed-form and enumerated: a
+causality inequality, a pan split by input channel count, a `1/√(n−1)` power law
+with a smoothing coefficient and an `activeCount > 2` clause, a pre-delay, and a
+high-pass corner as a function of a feedback setting. Each is documented at its
+use site in `packages/granite/src/dsp.ts` with the file and line it was read
+from, and each is derived rather than transliterated — granite's grain
+representation, scheduler, envelope family, window gain, spread conventions,
+generators and freeze fade have no counterpart in Clouds. **No Clouds source is
+present in this repository:** it is not vendored, not bundled and not committed.
+`refs/eurorack` is a local, gitignored checkout.
+
+**On Clouds' licence, because the repository said the wrong thing.** The granite
+ticket folder recorded `refs/eurorack` as GPL-3.0. It is not. Every file read
+here — `clouds/dsp/granular_sample_player.h`, `clouds/dsp/grain.h` and
+`clouds/dsp/granular_processor.cc` — carries Emilie Gillet's standard MIT
+notice, and there is no GPL text anywhere under `clouds/`. The granite research
+document had it right. Recorded here because an attribution file that overstates
+an upstream's terms is as wrong as one that understates them, and because the
+correction makes the position simpler rather than harder: MIT is permissive, and
+no notice-preservation duty arises where nothing was copied.
+
+Five things in granite are not in any of its sources and are marked as such in
+`src/params.ts` and `src/dsp.ts` rather than being allowed to borrow their
+authority: the moving-peak raised-cosine envelope with `p = 0.05 + 0.9·shape`
+(EC2 names the asymmetry axis but no curve; this family was chosen because its
+mean square is 3/8 at every `p`, so `shape` is level-neutral by construction),
+the unit-RMS window gain `1/√(3/8)`, the three different spread conventions and
+why each is forced, the scheduler's second generator at `seed ^ 0x5bf03635`, and
+the 100-sample raised-cosine fade on freeze's leaving edge. Each of the five is
+measured by `dsp.test.ts` rather than asserted.
 
 **Affirmative statement on the reading list.** The root README links a number of
 open-source synthesis projects — Surge, VCV Rack, the Synthesis ToolKit, stmlib,

@@ -10,7 +10,7 @@ import { CheckboxParam } from "./components/CheckboxParam";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 
-// The same clip the granite demo loads.
+// The same clip the granite example loads.
 const CLIP = "/synthlet/track14.mp3";
 
 function TimestretchAudioSourceExample() {
