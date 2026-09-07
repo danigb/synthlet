@@ -40,5 +40,14 @@ jobs:
             exit 1
           }
 
+      # Rate bugs are silent: a k-rate read of an a-rate parameter does not throw,
+      # does not warn, and produces audio that still sounds like audio. This reads
+      # each package's params.ts and its processor together, which is the only
+      # thing that would have caught `Math.floor(params.type)` in
+      # virtual-analog-filter - correct by accident for its whole life, and one
+      # rate change away from silently selecting the wrong filter model.
+      - name: Check a-rate parameters are read per sample
+        run: npm run check:rates
+
       - name: Run tests
         run: npm run test

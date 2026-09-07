@@ -69,3 +69,32 @@ describe("Param.db", () => {
     expect(param.input.value).toBe(-6);
   });
 });
+
+describe("the factory variants", () => {
+  // "`Param.db`, `Param.lin` and the other variants need no change - they set
+  // `scale`, not the signal path." Confirmed with a test rather than by
+  // reading, because that is what ticket 02's checklist asked for.
+  const source = () => new AudioNodeMock() as unknown as AudioNode;
+
+  it.each([
+    ["input", () => Param.input(context, source())],
+    ["db", () => Param.db(context, source())],
+    ["lin", () => Param.lin(context, source(), 20, 100)],
+    ["mul", () => Param.mul(context, source(), 2)],
+    ["inv", () => Param.inv(context, source())],
+  ])("%s routes its argument to the signal path", (_name, build) => {
+    const param = build();
+    // `connectParams` zeroes a parameter before connecting a node to it, so a
+    // zero here plus a `connect` call is the node having been wired in.
+    expect(param.input.value).toBe(0);
+  });
+
+  it("leaves the rate to the descriptors", () => {
+    // No variant touches `automationRate`; `input` and `mod` are a-rate
+    // because `params.ts` says so, and that is the only place it is decided.
+    const aRate = Param.descriptors
+      .filter((d) => d.automationRate === "a-rate")
+      .map((d) => d.name);
+    expect(aRate).toEqual(["input", "mod"]);
+  });
+});

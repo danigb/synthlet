@@ -986,8 +986,9 @@ describe("createKS trigger timing", () => {
     },
   );
 
-  // And this is what a caller who sets `trigger.automationRate = "a-rate"`
-  // gets: the pluck starts where it was scheduled, not up to 2.9 ms later.
+  // And this is what every caller gets since automation-rate 03 declared
+  // `trigger` a-rate: the pluck starts where it was scheduled, not up to
+  // 2.9 ms later.
   it("starts a pluck mid-block when the trigger is a-rate", () => {
     const AT = 64;
     const trigger = new Float32Array(BLOCK);
@@ -999,6 +1000,70 @@ describe("createKS trigger timing", () => {
       Array.from(new Float32Array(AT)),
     );
     expect(output.subarray(AT).some((v) => v !== 0)).toBe(true);
+  });
+
+  // Sub-block safety, which is automation-rate ticket 05's reason for spelling
+  // the house a-rate check `length > 1` rather than `length === n`.
+  //
+  // An a-rate trigger makes this renderer split the block at the rising edge
+  // and render the segments between them, so the segment after `AT` is 64
+  // samples long while `frequency` is whatever length the host sent. Under
+  // `length === n` a length-1 frequency is a-rate for a one-sample segment and
+  // k-rate for the rest, and a *128-sample* frequency is k-rate for every
+  // segment - it would be read at `[0]` and held. Both are wrong, and both are
+  // silent: the string still rings, at the wrong pitch.
+  it("holds the pitch across a split block when `frequency` arrives length 1", () => {
+    // Asserted as a pitch rather than sample for sample: the excitation is a
+    // noise burst, so two instances never produce the same samples.
+    const AT = 64;
+    const seconds = 0.5;
+    const render = (frequency: number | Float32Array) => {
+      const generate = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+      const out = new Float32Array(Math.round(seconds * SAMPLE_RATE));
+      const trigger = new Float32Array(BLOCK);
+      trigger.fill(1, AT);
+      for (let at = 0; at < out.length; at += BLOCK) {
+        const block = out.subarray(at, Math.min(at + BLOCK, out.length));
+        generate(block, at === 0 ? trigger : 0, frequency, 1);
+      }
+      return out;
+    };
+
+    const split = render(new Float32Array([440]));
+    const scalar = render(440);
+
+    // Both play the note they were asked for, and the split block does not
+    // shift the pitch.
+    for (const signal of [split, scalar]) {
+      expect(
+        Math.abs(cents(spectralFundamental(signal, 440), 440)),
+      ).toBeLessThan(5);
+    }
+    expect(split.subarray(AT, BLOCK).some((v) => v !== 0)).toBe(true);
+  });
+
+  it("plucks at the pitch the split block's own segment carries", () => {
+    // The other half. A pluck starts in tune at whatever the pitch is *now*
+    // (`dsp.ts:1296-1299`), so a trigger at sample 64 of a 128-sample block
+    // takes `frequency[64]` - not `frequency[0]`, which is what `length === n`
+    // would give in the 64-sample segment after the edge.
+    const AT = 64;
+    const seconds = 0.5;
+    const sweep = Float32Array.from({ length: BLOCK }, (_, i) => 220 + i * 2);
+    const generate = createKS(SAMPLE_RATE, MIN_FREQUENCY);
+    const out = new Float32Array(Math.round(seconds * SAMPLE_RATE));
+    const trigger = new Float32Array(BLOCK);
+    trigger.fill(1, AT);
+
+    for (let at = 0; at < out.length; at += BLOCK) {
+      const block = out.subarray(at, Math.min(at + BLOCK, out.length));
+      // The sweep only runs during the first block; after it the pitch holds
+      // at where the pluck started, so the ring is measurable.
+      generate(block, at === 0 ? trigger : 0, at === 0 ? sweep : 348, 1);
+    }
+
+    // 220 + 64*2 = 348 Hz, not 220.
+    expect(Math.abs(cents(spectralFundamental(out, 348), 348))).toBeLessThan(5);
   });
 });
 

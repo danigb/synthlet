@@ -24,7 +24,12 @@ export function Korg35(sampleRate: number, type: number) {
     fHslider1 = resonance;
   }
 
-  function lpf(input: Float32Array, output: Float32Array) {
+  function lpf(
+    input: Float32Array,
+    output: Float32Array,
+    from: number,
+    to: number,
+  ) {
     let fSlow0 = Math.tan(fConst1 * Math.pow(1e1, fConst2 * fHslider0 + 1.0));
     let fSlow1 = fSlow0 + 1.0;
     let fSlow2 = fSlow0 / fSlow1;
@@ -37,7 +42,7 @@ export function Korg35(sampleRate: number, type: number) {
     let fSlow8 = 2.0 * fSlow2;
     let fSlow9 = 0.21521823 * fSlow3;
 
-    for (let i = 0; i < input.length; i++) {
+    for (let i = from; i < to; i++) {
       let fTemp0 = input[i] - fRec3[1];
       let fTemp1 =
         fSlow5 *
@@ -56,7 +61,12 @@ export function Korg35(sampleRate: number, type: number) {
     }
   }
 
-  function hpf(input: Float32Array, output: Float32Array) {
+  function hpf(
+    input: Float32Array,
+    output: Float32Array,
+    from: number,
+    to: number,
+  ) {
     let fSlow0 = Math.tan(fConst1 * Math.pow(1e1, fConst2 * fHslider0 + 1.0));
     let fSlow1 = 9.293 * fHslider1 + -0.00010678119;
     let fSlow2 = fSlow0 + 1.0;
@@ -68,7 +78,7 @@ export function Korg35(sampleRate: number, type: number) {
     let fSlow7 = 2.0 * fSlow3;
     let fSlow8 = 0.21521823 * (fSlow1 / fSlow4);
 
-    for (let i = 0; i < input.length; i++) {
+    for (let i = from; i < to; i++) {
       let fTemp0 = input[i];
       let fTemp1 = fTemp0 - fRec3[1];
       let fTemp2 =

@@ -21,7 +21,12 @@ export function Diode(sampleRate: number) {
     fHslider1 = resonance;
   }
 
-  function process(input: Float32Array, output: Float32Array) {
+  function process(
+    input: Float32Array,
+    output: Float32Array,
+    from: number,
+    to: number,
+  ) {
     let fSlow0 = fHslider0;
     let fSlow1 = Math.tan(fConst1 * Math.pow(1e1, fConst2 * fSlow0 + 1.0));
     let fSlow2 = fSlow1 + 1.0;
@@ -58,7 +63,7 @@ export function Diode(sampleRate: number) {
     let fSlow27 = 1.0 / fSlow2;
     let fSlow28 = 2.0 * fSlow3;
 
-    for (let i = 0; i < input.length; i++) {
+    for (let i = from; i < to; i++) {
       let fTemp0 = Math.max(-1.0, Math.min(1.0, 1e2 * input[i]));
       let fTemp1 = fSlow20 * fRec1[1] + fRec2[1];
       let fTemp2 = fSlow22 * fTemp1;

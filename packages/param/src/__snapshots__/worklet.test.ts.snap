@@ -1,0 +1,63 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`ParamProcessor has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 3,
+    "minValue": 0,
+    "name": "scale",
+  },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 20000,
+    "minValue": -20000,
+    "name": "input",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 20000,
+    "minValue": -20000,
+    "name": "offset",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 20000,
+    "minValue": -20000,
+    "name": "min",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 20000,
+    "minValue": -20000,
+    "name": "max",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 20000,
+    "minValue": -20000,
+    "name": "gain",
+  },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 20000,
+    "minValue": -20000,
+    "name": "mod",
+  },
+]
+`;
+
+exports[`ParamProcessor no regression at k-rate Bypass 1`] = `2.5`;
+
+exports[`ParamProcessor no regression at k-rate DbToGain 1`] = `3.1803689002990723`;
+
+exports[`ParamProcessor no regression at k-rate GainToDb 1`] = `-3.997549533843994`;
+
+exports[`ParamProcessor no regression at k-rate Linear 1`] = `81`;

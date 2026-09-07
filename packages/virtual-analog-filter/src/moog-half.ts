@@ -22,7 +22,12 @@ export function MoogHalf(sampleRate: number) {
     fHslider1 = resonance;
   }
 
-  function process(input: Float32Array, output: Float32Array) {
+  function process(
+    input: Float32Array,
+    output: Float32Array,
+    from: number,
+    to: number,
+  ) {
     let fSlow0 = Math.tan(fConst2 * Math.pow(1e1, fConst1 * fHslider0 + 1.0));
     let fSlow1 = fSlow0 + 1.0;
     let fSlow2 = fSlow0 / fSlow1;
@@ -37,7 +42,7 @@ export function MoogHalf(sampleRate: number) {
       (0.0823286 * ((fSlow0 * fSlow0 * fSlow7 * fSlow4) / (fSlow1 * fSlow1)) +
         1.0);
 
-    for (let i = 0; i < input.length; i++) {
+    for (let i = from; i < to; i++) {
       let fTemp0 =
         fSlow9 *
           (input[i] -

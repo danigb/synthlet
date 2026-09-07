@@ -677,18 +677,18 @@ export function createPolyblepOscillator(
     const index = rounded > 0 ? (rounded < LAST_TYPE ? rounded : LAST_TYPE) : 0;
     const wave = WAVEFORMS[index];
 
-    // `packages/state-variable-filter/src/dsp.ts:103-117`'s idiom: an a-rate
-    // parameter arrives one value per frame, a k-rate one as a single value.
+    // The house a-rate check, hoisted once per block and once per parameter -
+    // see `_worklet.ts` next to `ParamDescriptor` for the whole of it.
     const length = output.length;
-    const freqIsARate = frequency.length === length;
-    const detuneIsARate = detune.length === length;
-    const widthIsARate = widthParam.length === length;
+    const freqIsARate = frequency.length > 1;
+    const detuneIsARate = detune.length > 1;
+    const widthIsARate = widthParam.length > 1;
     // `sync` is optional so that a caller with nothing to sync to - every test
     // written before this ticket, and `spectrum.ts`'s harness - takes the same
     // path it always did, to the bit. A connected but silent gate takes the
     // other path and produces the same samples, which `dsp.test.ts` asserts.
     const synced = syncParam !== undefined && syncParam.length > 0;
-    const syncIsARate = synced && syncParam.length === length;
+    const syncIsARate = synced && syncParam.length > 1;
 
     if (!primed) {
       primed = true;

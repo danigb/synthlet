@@ -1,0 +1,95 @@
+{
+  "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/152.0.0.0 Safari/537.36",
+  "probes": [
+    {
+      "case": "nothing connected",
+      "rate": "k-rate",
+      "length": 1,
+      "min": 0.5,
+      "max": 0.5,
+      "spreadWithinBlock": 0,
+      "first": 0.5
+    },
+    {
+      "case": "constant source",
+      "rate": "k-rate",
+      "length": 1,
+      "min": 0.75,
+      "max": 0.75,
+      "spreadWithinBlock": 0,
+      "first": 0.75
+    },
+    {
+      "case": "oscillator 5 Hz",
+      "rate": "k-rate",
+      "length": 1,
+      "min": 1.4048266410827637,
+      "max": 1.4048266410827637,
+      "spreadWithinBlock": 0,
+      "first": 1.4048266410827637
+    },
+    {
+      "case": "oscillator 1000 Hz",
+      "rate": "k-rate",
+      "length": 1,
+      "min": 0.5000494122505188,
+      "max": 0.5000494122505188,
+      "spreadWithinBlock": 0,
+      "first": 0.5000494122505188
+    },
+    {
+      "case": "scheduled ramp",
+      "rate": "k-rate",
+      "length": 1,
+      "min": 0.2639999985694885,
+      "max": 0.2639999985694885,
+      "spreadWithinBlock": 0,
+      "first": 0.2639999985694885
+    },
+    {
+      "case": "nothing connected",
+      "rate": "a-rate",
+      "length": 1,
+      "min": 0.5,
+      "max": 0.5,
+      "spreadWithinBlock": 0,
+      "first": 0.5
+    },
+    {
+      "case": "constant source",
+      "rate": "a-rate",
+      "length": 1,
+      "min": 0.75,
+      "max": 0.75,
+      "spreadWithinBlock": 0,
+      "first": 0.75
+    },
+    {
+      "case": "oscillator 5 Hz",
+      "rate": "a-rate",
+      "length": 128,
+      "min": 1.3663523197174072,
+      "max": 1.4048266410827637,
+      "spreadWithinBlock": 0.038474321365356445,
+      "first": 1.4048266410827637
+    },
+    {
+      "case": "oscillator 1000 Hz",
+      "rate": "a-rate",
+      "length": 128,
+      "min": -0.4999999403953552,
+      "max": 1.5,
+      "spreadWithinBlock": 1.9999999403953552,
+      "first": 0.5000494122505188
+    },
+    {
+      "case": "scheduled ramp",
+      "rate": "a-rate",
+      "length": 128,
+      "min": 0.2639999985694885,
+      "max": 0.2666458189487457,
+      "spreadWithinBlock": 0.002645820379257202,
+      "first": 0.2639999985694885
+    }
+  ]
+}

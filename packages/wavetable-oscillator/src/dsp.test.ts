@@ -2171,12 +2171,21 @@ describe("the render loop", () => {
       ...options,
       block: 1024,
     });
-    const sampleAtATime = render(pyramid.data, len, params, {
+    // The reference render is two samples at a time, not one. At a block of
+    // one an a-rate parameter arrives as a single value, which is byte for byte
+    // what an unautomated one arrives as - the two deliveries are identical and
+    // no rule can tell them apart. The house check is `length > 1`
+    // (`_worklet.ts`, next to `ParamDescriptor`), so a one-sample block reads
+    // as k-rate and the declick at `wavetable-oscillator.ts:387` engages, which
+    // is the conservative answer to an ambiguity rather than a disagreement
+    // about the level. Two samples is the smallest block that can carry an
+    // a-rate array, and it pins the same thing.
+    const twoAtATime = render(pyramid.data, len, params, {
       ...options,
-      block: 1,
+      block: 2,
     });
     expect(eightBlocks).toEqual(oneBlock);
-    expect(eightBlocks).toEqual(sampleAtATime);
+    expect(eightBlocks).toEqual(twoAtATime);
   });
 });
 

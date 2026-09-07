@@ -48,6 +48,13 @@ export function createArpeggiator() {
   const detectGate = createGateDetector();
   let current = $note;
 
+  // The note-to-frequency conversion is memoised on the MIDI note because
+  // `trigger` is a-rate: the worklet calls this once per sample, and the note
+  // changes at most once per block. Without the cache that is 128 `Math.pow`
+  // calls a block for one result.
+  let $current = NaN;
+  let $frequency = 0;
+
   return function update(
     trigger: number,
     baseNote: number,
@@ -65,9 +72,12 @@ export function createArpeggiator() {
 
     if (detectGate(trigger) === true) current = nextRandom();
 
-    const freq = 440 * Math.pow(2, (current - 69) / 12);
+    if (current !== $current) {
+      $current = current;
+      $frequency = 440 * Math.pow(2, (current - 69) / 12);
+    }
 
-    return freq;
+    return $frequency;
   };
 
   function nextRandom() {

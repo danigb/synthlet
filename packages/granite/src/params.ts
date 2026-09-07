@@ -6,12 +6,35 @@ import type { ParamDescriptor } from "./_worklet";
 // The order is `update()`'s argument order, so it is load-bearing. Each spread
 // sits beside the value it spreads.
 //
-// Every one is k-rate, and that is a decision rather than a default. Grains are
-// born at arbitrary sample offsets inside a block, so a-rate would be *honest*
-// here - a grain could read the parameter at its own sample rather than the one
-// at the top of the quantum. It is not worth 128 floats per parameter per block
-// at this parameter count; `pitch` and `position` are the two to revisit if
-// audio-rate modulation of them proves interesting.
+// Eighteen parameters, every one k-rate, and that is a decision rather than a
+// default: `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the
+// spec, so each `k-rate` below is an explicit opt-out. `scripts/_worklet.ts`,
+// next to `ParamDescriptor`, has the two grounds a module may claim.
+//
+// The ground for fifteen of them is that **a grain reads its parameters once,
+// at activation**. Between two onsets there is nothing a per-sample value could
+// act on, and a grain already sounding keeps what it was born with - ground
+// (b), and why `dsp.ts` takes them as scalars.
+//
+// `freeze` is ground (a): it borrows the gate shape to latch a *mode*, and
+// `dsp.ts` crossfades 100 samples across each of its edges, so which sample the
+// edge landed on is not what a listener hears. `wet` and `feedback` are the
+// two that are neither - see below.
+//
+// It is *not* a cost argument, and the earlier version of this comment made
+// one: "not worth 128 floats per parameter per block". `benchmarks/automation-rate/`
+// measured that and it is wrong twice over. Declaring a parameter costs about
+// 0.30 us/node/block and the rate is free; and an a-rate parameter with nothing
+// varying connected still arrives as a *single value*, so the 128 floats only
+// exist when somebody has actually patched something in - in which case k-rate
+// renders the modulator and throws the samples away.
+//
+// Grains are born at arbitrary sample offsets inside a block, so a-rate would
+// be honest for `pitch` and `position` in particular: a grain could read them
+// at its own sample rather than at the top of the quantum. Those two remain the
+// ones to revisit. The two marked **A bet** below - `wet` and `feedback` - are
+// applied per sample rather than read per grain, so their k-rate is a
+// prediction about users rather than a property of the DSP.
 //
 // Three more controls are not here because a parameter cannot resize an
 // allocation or reseed a generator: `maxGrains`, `bufferSeconds` and `seed` are
@@ -442,6 +465,11 @@ export const PARAMS: readonly ParamDescriptor[] = [
     //
     // The tap is the wet grain sum rather than the dry/wet mix, so `wet` is not
     // secretly a second feedback control.
+    //
+    // **A bet**, and an arguable one: the multiply is per sample, but it is
+    // *inside* the loop, where a per-sample gain change is a modulated
+    // resonator rather than a level control - the same reason
+    // `reverb-delay.feedback` stays k-rate.
     name: "feedback",
     defaultValue: 0,
     minValue: 0,
@@ -457,6 +485,12 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // *delay*: the dry path is what makes a grain cloud an effect on a source
     // rather than a replacement for it. 0 is an exact bypass, sample for
     // sample, which the tests assert.
+    //
+    // **A bet.** Unlike everything above it this is not read per grain - it is
+    // a crossfade applied per sample at the output, so an envelope on it would
+    // be meaningful and cheap. It is the nearest candidate in this file, and it
+    // sits alongside `dattorro-reverb.dryWet` and the two delays' `mix` in the
+    // automation-rate folder's list.
     name: "wet",
     defaultValue: 1,
     minValue: 0,

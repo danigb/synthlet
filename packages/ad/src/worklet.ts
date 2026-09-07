@@ -102,12 +102,9 @@ function createEnvelope(sampleRate: number) {
       const channels = outputs.length;
       const length = outputs[0]?.length ?? 0;
       for (let i = 0; i < length; i++) {
-        // Read the trigger per sample when it is a-rate. The descriptor still
-        // declares k-rate, so by default this is `trigger[0]` for the whole
-        // block - identical to reading it once - but a caller who sets
-        // `trigger.automationRate = "a-rate"` now gets the sample-accurate
-        // firing they asked for instead of one quantised to the 128-frame
-        // block boundary (up to 2.9 ms at 44.1 kHz).
+        // The house a-rate read. `trigger` is declared a-rate, but an
+        // unautomated parameter still arrives as a single value, so this
+        // handles both shapes and the length-1 case costs what it always did.
         if (detectGate(trigger.length > 1 ? trigger[i] : trigger[0]) === true) {
           mode = MODE_ATTACK;
         }

@@ -2,6 +2,13 @@ import type { ParamDescriptor } from "./_worklet";
 
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
+//
+// Nine parameters, eight of them a-rate. Same reason as `polyblep-oscillator`,
+// plus the stochastic layer, whose four controls are all modulation targets.
+//
+// `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
+// every `k-rate` below is an explicit opt-out and carries a reason for being
+// one. `scripts/_worklet.ts`, next to `ParamDescriptor`, has the two grounds.
 export const PARAMS: readonly ParamDescriptor[] = [
   // In Hz, and it means it: the increment is derived from the context sample rate
   // and the loaded table's length inside the worklet, so no table length or sample

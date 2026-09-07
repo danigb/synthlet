@@ -18,7 +18,12 @@ export function Moog(sampleRate: number) {
     fHslider1 = resonance;
   }
 
-  function process(input: Float32Array, output: Float32Array) {
+  function process(
+    input: Float32Array,
+    output: Float32Array,
+    from: number,
+    to: number,
+  ) {
     let fSlow0 = Math.tan(fConst0 * fHslider0);
     let fSlow1 = fSlow0 + 1.0;
     let fSlow2 = fSlow0 / fSlow1;
@@ -32,7 +37,7 @@ export function Moog(sampleRate: number) {
         1.0);
     let fSlow6 = 2.0 * fSlow2;
 
-    for (let i = 0; i < input.length; i++) {
+    for (let i = from; i < to; i++) {
       let fTemp0 =
         fSlow5 *
           (input[i] -

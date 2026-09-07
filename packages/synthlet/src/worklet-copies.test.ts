@@ -161,6 +161,7 @@ describe("the measuring instrument", () => {
     expect(spectrumPackages).toEqual([
       "digital-delay",
       "granite",
+      "lfo",
       "wavetable-oscillator",
     ]);
   });

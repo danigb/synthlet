@@ -138,16 +138,32 @@ export function createLfo(sampleRate: number, audioRate: boolean) {
     phase = nextPhase;
   }
 
+  // `read()` runs once per block and every parameter here is k-rate, so the
+  // generator, the increment and the two scalars are all fixed for the whole
+  // block: hoisting them turns 128 closure-variable reads and 128 indirect
+  // loads into four. Measured at 34% of this function on node 24
+  // (`benchmarks/lfo-rate/`), which is why it is written this way and not the
+  // obvious way. The arithmetic is unchanged - `dt * $frequency` is the same
+  // product every iteration - so the output is bit-identical.
   function generateAudioRate(output: Float32Array, params: Params) {
     read(params);
-    for (let i = 0; i < output.length; i++) {
-      let nextPhase = phase + dt * $frequency;
+    const generate = gen;
+    const gain = $gain;
+    const offset = $offset;
+    const increment = dt * $frequency;
+    const length = output.length;
+    let current = phase;
+
+    for (let i = 0; i < length; i++) {
+      let nextPhase = current + increment;
       if (nextPhase >= 1) {
         nextPhase -= 1;
       }
-      output[i] = gen(phase, nextPhase) * $gain + $offset;
-      phase = nextPhase;
+      output[i] = generate(current, nextPhase) * gain + offset;
+      current = nextPhase;
     }
+
+    phase = current;
   }
 
   return audioRate ? generateAudioRate : generateControlRate;

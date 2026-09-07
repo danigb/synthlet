@@ -2,13 +2,25 @@ import type { ParamDescriptor } from "./_worklet";
 
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
+//
+// Fifteen parameters, two of them a-rate - the largest surface in the
+// library, and the number any future `processorOptions` conversation starts
+// from.
+//
+// `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
+// every `k-rate` below is an explicit opt-out and carries a reason for being
+// one. `scripts/_worklet.ts`, next to `ParamDescriptor`, has the two grounds.
 export const PARAMS: readonly ParamDescriptor[] = [
   {
+    // The pluck. a-rate because `dsp.ts` already renders the block in segments
+    // split at each rising edge, so a pluck scheduled mid-block starts
+    // mid-block and two plucks inside one quantum are two plucks. All of that
+    // was reachable only by a caller who knew to set the rate by hand.
     name: "trigger",
     defaultValue: 0,
     minValue: 0,
     maxValue: 1,
-    automationRate: "k-rate",
+    automationRate: "a-rate",
   },
   {
     // The top is measured, not declared. Above about 5 kHz the loop is under

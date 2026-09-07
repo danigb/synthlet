@@ -165,11 +165,14 @@ export function createLimiter(sampleRate: number, lookaheadMs: number) {
     }
     const a = releaseCoeff;
 
-    // Web Audio hands over an array of either 1 or `blockSize` values. The
+    // Web Audio hands over an array of either 1 or one value per sample. The
     // dB conversion is a `Math.pow`, so do it once per block in the common
     // constant case and per sample only when the parameter is truly a-rate.
-    const thresholdIsARate = threshold.length === blockSize && blockSize > 1;
-    const driveIsARate = gain.length === blockSize && blockSize > 1;
+    // The house `length > 1` check - see `_worklet.ts` next to
+    // `ParamDescriptor`. It used to read `length === blockSize && blockSize > 1`,
+    // which is the same test written the long way round.
+    const thresholdIsARate = threshold.length > 1;
+    const driveIsARate = gain.length > 1;
     let ceiling = dbToGain(threshold[0]);
     let drive = dbToGain(gain[0]);
 

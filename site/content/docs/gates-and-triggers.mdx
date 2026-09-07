@@ -86,33 +86,37 @@ rather than a duration on purpose — see below.
 
 ## Timing
 
-Trigger params are `k-rate`, which the Web Audio spec defines as sampled once
-per render quantum: _"the value of a k-rate parameter MUST be sampled at the
-time of the very first sample-frame, and that value MUST be used for the entire
-block."_ A render quantum is 128 frames — about **2.9 ms** at 44.1 kHz — so by
-default a trigger lands on the next block boundary.
-
-This is why gate widths are fractions of a beat and not milliseconds: a fixed
-short pulse (some environments use 1 ms) can fall entirely inside one block and
-be invisible. At 120 BPM the default `pulseWidth` of `0.5` is 250 ms, about 86
-render quanta.
-
-For sample-accurate sequencing, [AD](/docs/modulators/ad) and
-[ADSR](/docs/modulators/adsr) read their control param per sample when it is
-`a-rate`, so you can opt in:
+Every gate and trigger parameter in Synthlet is `a-rate`, which the Web Audio
+spec defines as one value per sample-frame. **A trigger takes effect at the
+sample you scheduled it for**, not at the next render quantum:
 
 ```ts
-env.gate.automationRate = "a-rate";
-env.gate.setValueAtTime(1, exactTime);
+const amp = AdAmp(audioContext, { attack: 0.01, decay: 0.3 });
+
+amp.trigger.setValueAtTime(1, exactTime); // fires at exactTime
+amp.trigger.setValueAtTime(0, exactTime + 0.001);
 ```
 
-<Callout title="Verified in Chrome" type="info">
-  Overriding `automationRate` on an `AudioWorkletNode` parameter is allowed by
-  the spec — it is a writable attribute, and the fixed-rate constraints apply to
-  three other node types, not to worklets — and an `OfflineAudioContext` probe
-  against Chrome 152 confirms it works: a parameter declared `k-rate` and
-  switched to `a-rate` before rendering delivers 128 values per block to the
-  processor while an automation ramp runs. Other engines, and changing the rate
-  mid-render, remain untested. The default `k-rate` behaviour is unaffected
-  either way.
+There is nothing to opt into. It used to be `k-rate` — sampled once per
+128-frame block, so a note landed up to **2.9 ms** late, by a different amount
+for every event, and a repeated pattern did not swing consistently. Two triggers
+inside one block were one trigger, and a pulse narrower than a block was no
+trigger at all.
+
+<Callout title="What this costs" type="info">
+  Nothing measurable. An unautomated parameter still arrives as a single value —
+  the spec allows it and browsers do it — so a patch that sets `trigger.value`
+  and never automates it runs exactly the code it ran before. And when a node
+  *is* connected, the modulator is rendered either way: `k-rate` was paying the
+  same price and discarding the samples.
 </Callout>
+
+Gate widths are still fractions of a beat rather than milliseconds. That is
+about musical scaling, not about block sizes: at 120 BPM the default
+`pulseWidth` of `0.5` is 250 ms, and it stays half a step at any tempo.
+
+[Impulse](/docs/sources/impulse) is the one module whose _output_ is still
+placed at the start of the block rather than at the trigger's own sample. It
+emits a single sample, and index 0 is where a k-rate consumer — including a
+native `AudioParam` you have not changed — can see it. Its **detection** is
+per-sample, so it no longer misses a short pulse.

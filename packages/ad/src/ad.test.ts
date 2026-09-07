@@ -265,9 +265,9 @@ describe("AdWorkletNode", () => {
       expect(fired(runProcessMono(node, 10, params(1)))).toBe(true);
     });
 
-    // Ticket 05: the trigger is read per sample when it is a-rate, so a caller
-    // who opts in gets sample-accurate firing instead of one quantised to the
-    // 128-frame block boundary.
+    // The trigger is read per sample. Envelopes 05 made the read
+    // rate-agnostic behind an opt-in; automation-rate 03 declared the
+    // parameter a-rate, so this is the default rather than an opt-in.
     it("starts at the sample an a-rate trigger rises, not at index 0", () => {
       const EDGE = 4;
       const aRate = new Float32Array(10);

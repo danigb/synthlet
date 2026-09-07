@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>synthlet — automation rate benchmark</title>
+    <style>
+      body {
+        font:
+          13px/1.5 ui-monospace,
+          SFMono-Regular,
+          Menlo,
+          monospace;
+        margin: 2rem;
+        max-width: 60rem;
+      }
+      h1 {
+        font-size: 1.1rem;
+      }
+      button {
+        font: inherit;
+        padding: 0.4rem 0.9rem;
+      }
+      #status {
+        margin: 1rem 0;
+        color: #555;
+      }
+      pre {
+        background: #f5f5f5;
+        padding: 1rem;
+        overflow-x: auto;
+        white-space: pre;
+      }
+      table {
+        border-collapse: collapse;
+        margin: 1rem 0;
+      }
+      th,
+      td {
+        border: 1px solid #ddd;
+        padding: 0.25rem 0.6rem;
+        text-align: right;
+      }
+      th:first-child,
+      td:first-child {
+        text-align: left;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Automation rate benchmark</h1>
+    <p>
+      Renders through <code>OfflineAudioContext</code>. The number that matters
+      is the <strong>realtime factor</strong> — wall-clock seconds to render one
+      second of audio. Takes a few minutes. Keep this tab focused.
+    </p>
+    <button id="run">Run</button>
+    <div id="status"></div>
+    <div id="table"></div>
+    <pre id="out"></pre>
+
+    <script src="bench.js"></script>
+    <script>
+      const $ = (id) => document.getElementById(id);
+
+      function renderTable(data) {
+        const cols = [
+          ["label", "case"],
+          ["declare", "declared"],
+          ["rate", "rate"],
+          ["read", "read"],
+          ["instances", "nodes"],
+          ["medianMs", "median ms"],
+          ["realtimeFactor", "×realtime"],
+          ["perNodeUs", "µs/node/block"],
+        ];
+        let h = "<table><tr>";
+        for (const [, t] of cols) h += `<th>${t}</th>`;
+        h += "</tr>";
+        for (const r of data.results) {
+          h += "<tr>";
+          for (const [k] of cols) h += `<td>${r[k]}</td>`;
+          h += "</tr>";
+        }
+        h += "</table>";
+
+        const seen = data.results.filter((r) => r.observedLengths);
+        if (seen.length) {
+          h +=
+            "<p><strong>Observed <code>parameters[name].length</code></strong></p><table>";
+          h +=
+            "<tr><th>case</th><th>rate</th><th>automated</th><th>p0 length</th></tr>";
+          for (const r of seen) {
+            const first = r.observedLengths["p0"];
+            h += `<tr><td>${r.label}</td><td>${r.rate}</td><td>${r.automate}</td><td>${first ?? "-"}</td></tr>`;
+          }
+          h += "</table>";
+        }
+        $("table").innerHTML = h;
+      }
+
+      $("run").onclick = async () => {
+        $("run").disabled = true;
+        $("out").textContent = "";
+        try {
+          const data = await window.__run((i, n, label) => {
+            $("status").textContent = `${i}/${n} — ${label}`;
+          });
+          $("status").textContent = "done";
+          renderTable(data);
+          $("out").textContent = JSON.stringify(data, null, 2);
+        } catch (err) {
+          $("status").textContent = "failed";
+          $("out").textContent = String(err && err.stack ? err.stack : err);
+        } finally {
+          $("run").disabled = false;
+        }
+      };
+    </script>
+  </body>
+</html>
