@@ -15,14 +15,24 @@ import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
 const createSynth = (ac: AudioContext) => {
+  // A 110 Hz sawtooth, not the 5 kHz one this demo used to have. A source that
+  // high is what you end up choosing when you tune by ear against a filter
+  // whose corner is really 30 Hz; with a cutoff that means Hz, what a filter
+  // demo needs is a source with harmonics all the way up and a cutoff that
+  // starts in the middle of them.
   const volume = Param.db(ac, -12);
-  const osc = Oscillator(ac, { type: "sawtooth", frequency: 5000 });
+  const osc = Oscillator(ac, { type: "sawtooth", frequency: 110 });
   const lfo = Lfo(ac, {
     frequency: 10,
     type: LfoType.RandSampleHold,
     gain: 0,
   });
-  const filter = VirtualAnalogFilter(ac, { frequency: 2000, detune: lfo });
+  const filter = VirtualAnalogFilter(ac, {
+    frequency: 800,
+    resonance: 0.7,
+    drive: 1,
+    detune: lfo,
+  });
   const out = Gain(ac, { gain: volume });
 
   osc.connect(filter).connect(out);
@@ -58,24 +68,32 @@ function Example() {
           synth.filter.type.value = parseInt(e.target.value);
         }}
       >
-        <option value={VirtualAnalogFilter.MOOG_LADDER}>Moog Ladder</option>
-        <option value={VirtualAnalogFilter.MOOG_HALF_LADDER}>
-          Moog Half Ladder
+        <option value={VirtualAnalogFilter.MOOG_LADDER}>
+          Moog Ladder — 4-pole, self-oscillates
         </option>
-        <option value={VirtualAnalogFilter.KORG35_LPF}>Korg35 Low Pass</option>
-        <option value={VirtualAnalogFilter.KORG35_HPF}>Korg35 High Pass</option>
-        <option value={VirtualAnalogFilter.DIODE_LADDER}>Diode Ladder</option>
+        <option value={VirtualAnalogFilter.MOOG_HALF_LADDER}>
+          Moog Half Ladder — 2-pole, self-oscillates
+        </option>
+        <option value={VirtualAnalogFilter.KORG35_LPF}>
+          Korg 35 Low Pass — linear
+        </option>
+        <option value={VirtualAnalogFilter.KORG35_HPF}>
+          Korg 35 High Pass — linear
+        </option>
+        <option value={VirtualAnalogFilter.DIODE_LADDER}>
+          Diode Ladder — 4-pole, saturates
+        </option>
         <option value={VirtualAnalogFilter.OBERHEIM_LPF}>
-          Oberheim Low Pass
+          Oberheim SEM — low-pass tap
         </option>
         <option value={VirtualAnalogFilter.OBERHEIM_HPF}>
-          Oberheim High Pass
+          Oberheim SEM — high-pass tap
         </option>
         <option value={VirtualAnalogFilter.OBERHEIM_BPF}>
-          Oberheim Band Pass
+          Oberheim SEM — band-pass tap
         </option>
         <option value={VirtualAnalogFilter.OBERHEIM_BSF}>
-          Oberheim Band Stop
+          Oberheim SEM — band-stop tap
         </option>
       </select>
       <div></div>
@@ -92,6 +110,13 @@ function Example() {
         param={synth.filter.resonance}
         min={0}
         max={1}
+      />
+      <Slider
+        label="Drive"
+        inputClassName="col-span-2"
+        param={synth.filter.drive}
+        min={0}
+        max={20}
       />
       <Slider
         label="Modulation"

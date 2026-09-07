@@ -13,6 +13,7 @@ describe("VAFProcessor", () => {
     frequency: [1000],
     detune: [0],
     resonance: [0.5],
+    drive: [1],
   };
   const impulse = () => {
     const signal = new Float32Array(16);
@@ -87,6 +88,92 @@ describe("VAFProcessor", () => {
     expect(Array.from(backToMoog).some((value) => value !== 0)).toBe(true);
   });
 
+  describe("surviving a non-finite sample", () => {
+    // A ladder is all state and `NaN + anything` is `NaN`, so one bad input
+    // sample used to kill the node for the life of the AudioContext. There is
+    // no recovery path in Web Audio: the graph emits `NaN` or silence until
+    // somebody rebuilds it.
+    const poisoned = () => {
+      const signal = new Float32Array(16);
+      signal[0] = NaN;
+      signal[1] = 1;
+      return signal;
+    };
+
+    // One per circuit: Moog, half ladder, Korg 35, diode, Oberheim.
+    const TYPES = [0, 1, 2, 4, 5];
+
+    it.each(TYPES)("type %p is finite again on the next block", (type) => {
+      const node = new Worklet();
+      const withType = { ...params, type: [type] };
+      const [bad] = runProcessChannels(node, [poisoned()], withType);
+      // The offending block is silence, not NaN. Zeroing it is what keeps the
+      // damage inside the block that caused it.
+      expect(Array.from(bad)).toEqual(Array.from(new Float32Array(16)));
+
+      // Two blocks, because the module now has 16 samples of latency and
+      // these are 16-sample blocks: the two Korg 35 types are delayed to match
+      // the seven that resample, so an impulse at the start of the next block
+      // arrives in the one after it.
+      const heard: number[] = [];
+      for (let n = 0; n < 3; n++) {
+        const [good] = runProcessChannels(
+          node,
+          [n === 0 ? impulse() : new Float32Array(16)],
+          withType,
+        );
+        heard.push(...Array.from(good));
+      }
+      expect(heard.every(Number.isFinite)).toBe(true);
+      expect(heard.some((value) => value !== 0)).toBe(true);
+    });
+
+    it("recovers on the automated path too", () => {
+      // A different route into the same check: the segment renderer calls
+      // `process()` once per sample here, and the guard is still once per
+      // block.
+      const node = new Worklet();
+      const swept = {
+        ...params,
+        frequency: Array.from({ length: 16 }, (_, i) => 500 + 40 * i),
+      };
+      runProcessChannels(node, [poisoned()], swept);
+      const [good] = runProcessChannels(node, [impulse()], swept);
+      expect(Array.from(good).every(Number.isFinite)).toBe(true);
+      expect(Array.from(good).some((value) => value !== 0)).toBe(true);
+    });
+
+    it("does not reset the other channel", () => {
+      // Each channel has its own bank and its own change-detection slot, so a
+      // NaN on the left must not silence the right one's ringing.
+      const node = new Worklet();
+      runProcessChannels(node, [impulse(), impulse()], params);
+      const [, right] = runProcessChannels(
+        node,
+        [poisoned(), new Float32Array(16)],
+        params,
+      );
+      // Still ringing from the first block.
+      expect(Array.from(right).some((value) => value !== 0)).toBe(true);
+    });
+
+    it("does not reset the other types in the bank", () => {
+      // The bank exists so that switching `type` mid-note resumes where that
+      // model left off. Only the filter that rendered can have been poisoned.
+      const korg = { ...params, type: [KORG35_LPF] };
+      const node = new Worklet();
+      runProcessChannels(node, [impulse()], korg);
+      runProcessChannels(node, [poisoned()], params);
+      // Two blocks again, for the 16 samples of latency.
+      const heard: number[] = [];
+      for (let n = 0; n < 2; n++) {
+        const [back] = runProcessChannels(node, [new Float32Array(16)], korg);
+        heard.push(...Array.from(back));
+      }
+      expect(heard.some((value) => value !== 0)).toBe(true);
+    });
+  });
+
   it("is a no-op for an input with no channels", () => {
     const outputs = [[new Float32Array(16)]];
     expect(() => new Worklet().process([[]], outputs, params)).not.toThrow();
@@ -115,6 +202,7 @@ describe("type selection", () => {
       frequency: [1000],
       detune: [0],
       resonance: [0.5],
+      drive: [1],
     });
     return Array.from(out);
   };
@@ -146,13 +234,16 @@ describe("a-rate cutoff", () => {
   // These run at 44.1 kHz, unlike the tests above: a cutoff sweep needs a real
   // sample rate to mean anything.
   let Worklet: any;
+  let OVERSAMPLE: number;
   const SAMPLE_RATE = 44100;
   const BLOCK = 128;
   const MOOG_LADDER = 0;
 
   beforeAll(async () => {
     createWorkletTestContext(SAMPLE_RATE);
-    Worklet = (await import("./worklet")).VAF;
+    const module = await import("./worklet");
+    Worklet = module.VAF;
+    OVERSAMPLE = module.OVERSAMPLE;
   });
 
   const noise = (length: number) => {
@@ -177,6 +268,7 @@ describe("a-rate cutoff", () => {
       frequency: [1000],
       detune: [0],
       resonance: [0.5],
+      drive: [1],
       ...params,
     });
     return outputs[0][0];
@@ -196,10 +288,35 @@ describe("a-rate cutoff", () => {
 
     expect(update).toHaveBeenCalledTimes(BLOCK);
     expect(process).toHaveBeenCalledTimes(BLOCK);
-    // And between them they cover the block exactly once, in order.
+    // And between them they cover the block exactly once, in order - in the
+    // *oversampled* domain, because the resampler brackets the block and the
+    // runs are rendered inside it. The coefficient updates are still one per
+    // base-rate sample, which is the property that matters.
     const ranges = process.mock.calls.map((call: any) => [call[2], call[3]]);
-    expect(ranges[0]).toEqual([0, 1]);
-    expect(ranges[BLOCK - 1]).toEqual([BLOCK - 1, BLOCK]);
+    expect(ranges[0]).toEqual([0, OVERSAMPLE]);
+    expect(ranges[BLOCK - 1]).toEqual([
+      (BLOCK - 1) * OVERSAMPLE,
+      BLOCK * OVERSAMPLE,
+    ]);
+  });
+
+  it("splits the block on a moving drive, like any other a-rate parameter", () => {
+    // Easy to add a parameter and forget the run-splitting comparison, which
+    // would apply the last sample's drive to the whole block - the failure
+    // mode `worklet.ts` already warns about for the others.
+    const worklet = new Worklet();
+    run(worklet, noise(BLOCK), {});
+    const filter = worklet.p[0][MOOG_LADDER];
+    const update = jest.spyOn(filter, "update");
+    const process = jest.spyOn(filter, "process");
+
+    run(worklet, noise(BLOCK), { drive: ramp(BLOCK, 1, 8) });
+
+    expect(update).toHaveBeenCalledTimes(BLOCK);
+    expect(process).toHaveBeenCalledTimes(BLOCK);
+    // And the value each run is rendered with is that run's own drive.
+    expect(update.mock.calls[0][2]).toBeCloseTo(1, 6);
+    expect(update.mock.calls[BLOCK - 1][2]).toBeCloseTo(8, 6);
   });
 
   it("costs one update and one process when nothing is automated", () => {
@@ -215,7 +332,7 @@ describe("a-rate cutoff", () => {
     // Change detection skips the update entirely: nothing moved.
     expect(update).not.toHaveBeenCalled();
     expect(process).toHaveBeenCalledTimes(1);
-    expect(process.mock.calls[0].slice(2)).toEqual([0, BLOCK]);
+    expect(process.mock.calls[0].slice(2)).toEqual([0, BLOCK * OVERSAMPLE]);
   });
 
   it("collapses an a-rate parameter that holds still", () => {
@@ -244,6 +361,7 @@ describe("a-rate cutoff", () => {
       frequency: ramp(BLOCK, 200, 4000),
       detune: [0],
       resonance: [0.5],
+      drive: [1],
     });
 
     // Same input and same sweep, so the two channels must agree - and neither
@@ -264,6 +382,7 @@ describe("a-rate cutoff", () => {
         const block = run(worklet, new Float32Array(BLOCK).fill(1), {
           frequency: aRate ? cutoff : [cutoff[0]],
           resonance: [0.2],
+          drive: [1],
         });
         out.push(...Array.from(block));
       }
@@ -306,6 +425,7 @@ describe("a-rate cutoff", () => {
       const out = run(worklet, noise(BLOCK), {
         frequency: ramp(BLOCK, up ? 20 : 20000, up ? 20000 : 20),
         resonance: [1],
+        drive: [1],
       });
       expect(Array.from(out).every(Number.isFinite)).toBe(true);
       expect(Math.max(...Array.from(out).map(Math.abs))).toBeLessThan(100);
@@ -326,7 +446,11 @@ describe("a-rate cutoff", () => {
     run(worklet, noise(BLOCK), {}); // build the bank
     const filter = worklet.p[0][MOOG_LADDER];
     const update = jest.spyOn(filter, "update");
-    run(worklet, noise(BLOCK), { frequency: modulator, resonance: [0.2] });
+    run(worklet, noise(BLOCK), {
+      frequency: modulator,
+      resonance: [0.2],
+      drive: [1],
+    });
 
     const cutoffs = update.mock.calls.map((call: any) => call[0]);
     expect(cutoffs).toHaveLength(BLOCK);
