@@ -196,7 +196,21 @@ export function createFilter(sampleRate: number) {
     _a3 = g * _a2;
   }
 
-  return function filter(
+  /**
+   * Clears the integrator state. The package has never had one of these -
+   * `createFilter` returned a bare function, so the only way to clear a filter
+   * was to throw the closure away - and the block guard below is written in
+   * terms of it rather than open-coding two assignments.
+   */
+  function reset() {
+    _ic1eq = 0;
+    _ic2eq = 0;
+    _v1 = 0;
+    _v2 = 0;
+    _v3 = 0;
+  }
+
+  function filter(
     input: Float32Array,
     output: Float32Array,
     type: number,
@@ -223,5 +237,22 @@ export function createFilter(sampleRate: number) {
 
       output[i] = out;
     }
-  };
+
+    // One non-finite sample at the *input* and the filter is dead for the life
+    // of the AudioContext: `_ic1eq` and `_ic2eq` feed back into themselves
+    // every sample, so there is no arithmetic path back from NaN. An upstream
+    // divide by zero, a GainNode driven by an unconnected parameter, a decoded
+    // buffer with a bad sample - none of that is this package's to prevent, and
+    // a BiquadFilterNode survives it only because a finite delay line flushes.
+    // A recursive filter has nothing to flush.
+    //
+    // Checked once a block on the *state* rather than 128 times on the input:
+    // two comparisons against a loop that already costs about 21 ns a sample,
+    // and it catches every route in rather than only this one. Recovery is a
+    // click, which is the honest answer to a signal that was already broken;
+    // ramping or muting would be guessing.
+    if (!Number.isFinite(_ic1eq) || !Number.isFinite(_ic2eq)) reset();
+  }
+
+  return { filter, reset };
 }

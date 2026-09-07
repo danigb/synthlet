@@ -14,11 +14,11 @@ import { createFilter, createPrewarp, SvfType } from "./dsp";
  * only response anybody has had a reason to measure until now, and which stays
  * where it is.
  *
- * `it.failing` is the handover between tickets here. Ticket 03 turned three of
- * these on by prewarping the cutoff, deleting the set that named them; ticket
- * 05 turns on the fourth by noticing a non-finite state. A ticket that fixes
- * one of these has to delete its way out of the list, so the diff is the
- * evidence.
+ * `it.failing` was the handover between tickets here. Four cases were written
+ * failing and turned on by the tickets that fixed them: three sample rates by
+ * ticket 03's prewarping, and the poisoned-state recovery by ticket 05's
+ * per-block check. A ticket that fixes one had to delete its way out of the
+ * list, so the diff was the evidence. None are left.
  */
 
 const MAX_FREQUENCY = 20000; // `frequency.maxValue` in params.ts
@@ -47,7 +47,7 @@ function measure(
     input[n] = Math.sin((2 * Math.PI * f * n) / sampleRate);
   }
 
-  createFilter(sampleRate)(input, output, type, frequency, q);
+  createFilter(sampleRate).filter(input, output, type, frequency, q);
 
   let i = 0;
   let quad = 0;
@@ -262,7 +262,13 @@ describe("ByPass", () => {
     const output = new Float32Array(input.length);
     const frequency = new Float32Array(input.length).fill(1000);
 
-    createFilter(48000)(input, output, SvfType.ByPass, frequency, 0.7071);
+    createFilter(48000).filter(
+      input,
+      output,
+      SvfType.ByPass,
+      frequency,
+      0.7071,
+    );
     expect(Array.from(output)).toEqual(Array.from(input));
   });
 });
@@ -285,7 +291,13 @@ describe("stability under a fast sweep", () => {
       frequency[n] = 20 + ((MAX_FREQUENCY - 20) * (lfo + 1)) / 2;
     }
 
-    createFilter(SAMPLE_RATE)(input, output, SvfType.LowPass, frequency, q);
+    createFilter(SAMPLE_RATE).filter(
+      input,
+      output,
+      SvfType.LowPass,
+      frequency,
+      q,
+    );
 
     expect(Array.from(output).every(Number.isFinite)).toBe(true);
     expect(Math.max(...Array.from(output).map(Math.abs))).toBeLessThan(1.1);
@@ -404,24 +416,91 @@ describe("the declared cutoff range", () => {
 });
 
 describe("recovery from a poisoned state", () => {
-  // One non-finite sample - a disconnected node, a division in an upstream
-  // graph - and the state is NaN forever, because NaN propagates through every
-  // one of the five state updates. Ticket 05 adds the per-block check that
-  // turns this from a dead node into a click.
-  it.failing("comes back after a single Infinity at the input", () => {
-    const filter = createFilter(48000);
-    const frequency = new Float32Array(128).fill(1000);
+  // One non-finite sample - a disconnected node, an upstream division - and the
+  // state was NaN forever, because NaN propagates through every one of the five
+  // state updates and both integrators feed back into themselves. The per-block
+  // check turns a permanently dead node into a click.
+  const frequency = () => new Float32Array(128).fill(1000);
+
+  it("comes back within one block after an Infinity at the input", () => {
+    const { filter } = createFilter(48000);
     const poisoned = new Float32Array(128);
     poisoned[0] = Infinity;
     const output = new Float32Array(128);
 
-    filter(poisoned, output, SvfType.LowPass, frequency, 0.7071);
+    filter(poisoned, output, SvfType.LowPass, frequency(), 0.7071);
 
-    const clean = new Float32Array(128);
-    for (let block = 0; block < 100; block++) {
-      filter(clean, output, SvfType.LowPass, frequency, 0.7071);
+    // The block that carried the Infinity is a write-off; the *next* one is
+    // not. Not "within 100 blocks" - within one.
+    const clean = new Float32Array(128).fill(0.25);
+    filter(clean, output, SvfType.LowPass, frequency(), 0.7071);
+    expect(Array.from(output).every(Number.isFinite)).toBe(true);
+  });
+
+  it("does not fire on well-formed audio", () => {
+    // The thing most likely to go wrong silently here is a guard that trips on
+    // legitimate signal, so: the worst case the a-rate path can be handed has
+    // to come out bit-identical to a filter that never checks anything.
+    const sampleRate = 48000;
+    const length = sampleRate;
+    const input = new Float32Array(length);
+    const freq = new Float32Array(length);
+    for (let n = 0; n < length; n++) {
+      input[n] = Math.sin((2 * Math.PI * 220 * n) / sampleRate);
+      const lfo = Math.sin((2 * Math.PI * 3000 * n) / sampleRate);
+      freq[n] = 20 + ((MAX_FREQUENCY - 20) * (lfo + 1)) / 2;
     }
 
-    expect(Array.from(output).every(Number.isFinite)).toBe(true);
+    const guarded = new Float32Array(length);
+    createFilter(sampleRate).filter(input, guarded, SvfType.LowPass, freq, 40);
+
+    // A second pass through a fresh filter, block by block the way the worklet
+    // drives it: if the guard ever fired, the two disagree.
+    const blocked = new Float32Array(length);
+    const { filter } = createFilter(sampleRate);
+    for (let off = 0; off + 128 <= length; off += 128) {
+      filter(
+        input.subarray(off, off + 128),
+        blocked.subarray(off, off + 128),
+        SvfType.LowPass,
+        freq.subarray(off, off + 128),
+        40,
+      );
+    }
+    const upTo = length - (length % 128);
+    expect(Array.from(blocked.subarray(0, upTo))).toEqual(
+      Array.from(guarded.subarray(0, upTo)),
+    );
+  });
+
+  it("clears the state on reset()", () => {
+    const impulse = new Float32Array(128);
+    impulse[0] = 1;
+    const silence = new Float32Array(128);
+
+    // Ring a filter, reset it, and let it run on silence...
+    const rung = createFilter(48000);
+    const afterReset = new Float32Array(128);
+    rung.filter(
+      impulse,
+      new Float32Array(128),
+      SvfType.LowPass,
+      frequency(),
+      40,
+    );
+    rung.reset();
+    rung.filter(silence, afterReset, SvfType.LowPass, frequency(), 40);
+
+    // ...which has to be exactly what a filter that was never rung produces.
+    const fresh = new Float32Array(128);
+    createFilter(48000).filter(
+      silence,
+      fresh,
+      SvfType.LowPass,
+      frequency(),
+      40,
+    );
+    expect(Array.from(afterReset)).toEqual(Array.from(fresh));
+    expect(Array.from(afterReset).every((v) => v === 0)).toBe(true);
   });
 });
