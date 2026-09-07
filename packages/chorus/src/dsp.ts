@@ -43,6 +43,53 @@ export enum ChorusMode {
  */
 const MAX_DELAY_MS = 20;
 
+const TAU = 2 * Math.PI;
+
+/**
+ * The golden ratio, the real number worst approximated by any fraction.
+ *
+ * It is here because of what the old engine got wrong. Its eight LFOs ran at
+ * `rate x {1, 1/2, 1/3, 1/4, 1/6, 1/7, 1/8}` Hz, every one of them a rational
+ * fraction of every other, so the whole eight-voice pattern closed on a period
+ * of `8/rate` seconds - a sixteen-second loop at the default setting. That is
+ * the RS-101 construction, one clock divided 1:2:4:8, and the RS-101 is
+ * described as sounding correspondingly more regular than the RS-09, which
+ * used four *independent* LFOs. Mutable's `Ensemble` takes the other road with
+ * two accumulators at 0.75 Hz and 6.57 Hz.
+ *
+ * Those two are the numbers to steal, but their exact ratio is `219/25`, so
+ * the pair still closes after 25 slow cycles - 33 s at the default rate, and
+ * inside the 60 s this package holds itself to. `6*PHI - 1 = 8.7082` is
+ * irrational by construction, and it puts the fast LFO at 6.531 Hz against
+ * Plaits' 6.57: 0.6 % away, musically the same pair, and incommensurate for
+ * good rather than for 33 seconds.
+ */
+const PHI = (1 + Math.sqrt(5)) / 2;
+
+/** The `ENSEMBLE` fast/slow rate ratio. See `PHI`. */
+export const FAST_MULTIPLIER = 6 * PHI - 1;
+
+/**
+ * The deepest excursion that is still musical at a given LFO rate, in
+ * milliseconds.
+ *
+ * Martens & Marui (2006) tested 25 listeners across vibrato, flange and stereo
+ * chorus at 2/3/4/6/9 Hz with depths log-spaced over 0.04-1.0 ms, and found
+ * the useful-range boundaries substantially the same for all three effects.
+ * Regressed on modulation *period*, which linearises them, the upper bound -
+ * useful to "too extreme" - is `D(us) = 4800*(1/rate) - 350`, R^2 = 0.94. It
+ * could only be fitted at 4, 6 and 9 Hz: at 2 and 3 Hz nothing in the tested
+ * range ever became too extreme, which is why the voicing's own ceiling has to
+ * be the other half of the clamp.
+ *
+ * The shape is that faster LFOs need proportionally less depth, and it is what
+ * makes one `depth` knob musical across the whole `rate` range instead of at
+ * one setting. Exported so the coupling can be asserted against the derivation
+ * rather than only against a trend.
+ */
+export const usefulDepthMs = (rateHz: number) =>
+  rateHz > 0 ? (4800 / rateHz - 350) / 1000 : Infinity;
+
 /** Where a voice reads. The mid is both lines averaged, for a centred voice. */
 export enum Source {
   Left = 0,
@@ -139,6 +186,22 @@ export function createChorus(sampleRate: number) {
   let width = tWidth;
   let primed = false;
 
+  // The LFO bank: two accumulators, and a voice reads whichever of them its
+  // weights ask for. `phase += inc; if (phase >= 1) phase -= 1` is the house
+  // idiom, and `Math.sin` rather than a wavetable is deliberate - the table is
+  // exactly what broke in the engine this replaces. `fillTable` there ignored
+  // its `fn` argument, so both of Faust's `os.oscp` tables held a cosine and
+  // the per-voice phase offsets did not compute: `table[0]` read 1.000000
+  // where `sin` gives 0.
+  let slowPhase = 0;
+  let fastPhase = 0;
+
+  /** The voicing's own excursion ceiling in ms. */
+  const maxDepthMs = 2;
+  /** Multipliers on `rate` for the two accumulators. */
+  const slowMul = 1;
+  const fastMul = FAST_MULTIPLIER;
+
   function update(
     rateHz: number,
     depthAmount: number,
@@ -159,6 +222,8 @@ export function createChorus(sampleRate: number) {
     mix = tMix;
     width = tWidth;
     primed = false;
+    slowPhase = 0;
+    fastPhase = 0;
   }
 
   function compute(
@@ -193,6 +258,21 @@ export function createChorus(sampleRate: number) {
       mix += dMix;
       width += dWidth;
 
+      // The phase increment follows the ramped rate rather than the target, so
+      // a jump in `rate` moves the speed and never the phase.
+      const slowInc = (rate * slowMul) / sampleRate;
+      const fastInc = (rate * fastMul) / sampleRate;
+      slowPhase += slowInc;
+      if (slowPhase >= 1) slowPhase -= 1;
+      fastPhase += fastInc;
+      if (fastPhase >= 1) fastPhase -= 1;
+
+      // `rate: 0` leaves both increments at zero, so every phase holds where
+      // it is. That is a legitimate setting - a static comb - as well as what
+      // the tests need to read a base delay without chasing a moving tap.
+      const useful = usefulDepthMs(rate);
+      const excursion = depth * (useful < maxDepthMs ? useful : maxDepthMs);
+
       const dryL = inL[i];
       const dryR = inR[i];
       left.write(dryL);
@@ -202,11 +282,13 @@ export function createChorus(sampleRate: number) {
       let wetR = 0;
       for (let v = 0; v < voices.length; v++) {
         const voice = voices[v];
-        // No modulation yet: the LFO bank is the next ticket, and until it
-        // arrives every voice sits still at its base delay. With one voice and
-        // `mix: 0.5` this is a fixed comb filter, which is the correct
-        // intermediate state and not something to tune by ear.
-        const delay = clampDelay(voice.delayMs * msToSamples);
+        const modulation =
+          voice.slow * Math.sin(TAU * (slowPhase + voice.phase)) +
+          voice.fast * Math.sin(TAU * (fastPhase + voice.phase));
+        const delay = clampDelay(
+          (voice.delayMs + modulation * voice.modScale * excursion) *
+            msToSamples,
+        );
         const sample = read(voice.source, delay);
         wetL += sample * voice.gainL * perVoice;
         wetR += sample * voice.gainR * perVoice;

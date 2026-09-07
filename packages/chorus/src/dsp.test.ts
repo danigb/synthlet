@@ -1,6 +1,6 @@
 import { createDelayLine } from "./_delay";
 import { maxAbsoluteDifference, render } from "./_spectrum";
-import { createChorus } from "./dsp";
+import { createChorus, FAST_MULTIPLIER, usefulDepthMs } from "./dsp";
 import {
   centsFromExcursion,
   correlation,
@@ -22,9 +22,7 @@ import {
 // and every one of them failed. The engine is gone; the ones it can no longer
 // be asked about went with it, and the rest are here in the units they were
 // always meant to be in. What is still `it.failing()` is what the engine does
-// not have yet - there is no LFO bank until the next ticket, so every reading
-// that needs a moving read position is still red, and still carries the value
-// it has to reach.
+// not have yet.
 
 const SAMPLE_RATE = 48000;
 const RATES = [44100, 48000, 96000];
@@ -97,7 +95,7 @@ describe("the fractional read", () => {
 
 describe.each(RATES)("at %i Hz", (sampleRate) => {
   it("puts the tap at the delay it was asked for, in milliseconds", () => {
-    const at = taps(engine(sampleRate), params({ depth: 0 }), {
+    const at = taps(engine(sampleRate), params({ rate: 0, depth: 0 }), {
       sampleRate,
       warmup: WARMUP,
     });
@@ -110,7 +108,7 @@ describe.each(RATES)("at %i Hz", (sampleRate) => {
   });
 
   it("puts the dry path at the gain `mix` asks for", () => {
-    const at = taps(engine(sampleRate), params({ mix: 0.25, depth: 0 }), {
+    const at = taps(engine(sampleRate), params({ mix: 0.25, rate: 0 }), {
       sampleRate,
       warmup: WARMUP,
     });
@@ -124,41 +122,137 @@ describe.each(RATES)("at %i Hz", (sampleRate) => {
 // ---------------------------------------------------------------------------
 
 describe("the LFO", () => {
-  it.failing(
-    "runs at the rate it was asked for, in hertz",
-    () => {
-      const length = SAMPLE_RATE * 20;
-      const input = sine(length, 440, SAMPLE_RATE);
+  it.each(RATES)(
+    "runs at the rate it was asked for at %i Hz",
+    (sampleRate) => {
+      const length = sampleRate * 20;
+      const input = sine(length, 440, sampleRate);
       const measure = (rate: number) => {
-        const [left] = render(engine()(), {
+        const [left] = render(engine(sampleRate)(), {
           length,
-          sampleRate: SAMPLE_RATE,
+          sampleRate,
           input,
-          params: params({ rate }),
+          params: params({ rate, depth: 1 }),
         });
-        return lfoHz(left, SAMPLE_RATE, 0.05, 10);
+        return lfoHz(left, sampleRate, 0.05, 12);
       };
 
+      // Three settings, not one: the ratios are the load-bearing part of the
+      // claim that the parameter is in hertz rather than merely monotonic in it.
       expect(measure(1)).toBeCloseTo(1, 1);
       expect(measure(3)).toBeCloseTo(3, 1);
-      // The range the Faust source declared and the wrapper truncated to 1 Hz.
+      // 7 Hz is the range the Faust source declared and the wrapper truncated to
+      // 1 Hz on the way in.
       expect(measure(7)).toBeCloseTo(7, 1);
     },
-    180000,
+    240000,
   );
 
-  it.failing(
-    "moves the read position by the depth it was asked for",
-    () => {
-      const swing = excursionMs(engine(), params({ rate: 1, depth: 1 }), {
+  it("holds every phase still at rate 0", () => {
+    // A legitimate setting - a static comb - and the reason the impulse
+    // measurements above do not have to chase a moving tap.
+    const first = taps(engine(), params({ rate: 0, depth: 1 }), {
+      sampleRate: SAMPLE_RATE,
+      warmup: WARMUP,
+    });
+    const later = taps(engine(), params({ rate: 0, depth: 1 }), {
+      sampleRate: SAMPLE_RATE,
+      warmup: WARMUP + 4096,
+    });
+    expect(later[1].ms).toBeCloseTo(first[1].ms, 3);
+  });
+
+  it.each([
+    // rate Hz, measured excursion ms. `JUNO`'s ceiling is 2 ms, and Martens &
+    // Marui's bound is what binds above 2.4 Hz.
+    [0.5, 2.0],
+    [2, 2.0],
+    [6, usefulDepthMs(6)],
+    [7, usefulDepthMs(7)],
+  ])(
+    "swings the expected excursion at depth 1 and rate %p Hz",
+    (rate, expected) => {
+      const swing = excursionMs(engine(), params({ rate, depth: 1 }), {
         sampleRate: SAMPLE_RATE,
         warmup: WARMUP,
-        rateHz: 1,
+        rateHz: rate,
+        steps: 24,
       });
-      expect(swing).toBeGreaterThan(0.1);
+      // A 24-point sweep of one cycle reads the peak of a sine to within
+      // 1 - cos(pi/24) = 0.9 %, and the tap centroid adds a fraction of a
+      // sample; the tolerance is 8 % of the expected value.
+      expect(swing).toBeGreaterThan(expected * 0.92);
+      expect(swing).toBeLessThan(expected * 1.08);
     },
-    120000,
+    240000,
   );
+
+  it("couples depth to rate rather than holding it fixed", () => {
+    // The shape of the rule: faster LFOs need proportionally less depth. If
+    // `depth` were a millisecond value these two would be equal, and one of
+    // them would be wrong.
+    const slow = usefulDepthMs(0.5);
+    const fast = usefulDepthMs(6);
+    expect(slow / fast).toBeGreaterThan(10);
+    // Regression rows from the paper, to three decimals.
+    expect(usefulDepthMs(4)).toBeCloseTo(0.85, 3);
+    expect(usefulDepthMs(6)).toBeCloseTo(0.45, 3);
+    expect(usefulDepthMs(9)).toBeCloseTo(0.1833, 3);
+  });
+
+  it("puts the detune range in cents", () => {
+    // What a musician can act on. `JUNO` at its 2 ms ceiling and 0.5 Hz is
+    // +/- 10.8 cents; at 6 Hz the coupling holds it to +/- 29.1, which is why
+    // the rule exists.
+    expect(centsFromExcursion(2, 0.5)).toBeCloseTo(10.8436, 3);
+    expect(centsFromExcursion(usefulDepthMs(6), 6)).toBeCloseTo(29.1, 1);
+  });
+
+  it("does not click when the rate steps mid-render", () => {
+    const length = SAMPLE_RATE * 2;
+    const input = sine(length, 220, SAMPLE_RATE);
+    const [left] = render(engine()(), {
+      length,
+      sampleRate: SAMPLE_RATE,
+      input,
+      params: (seconds) =>
+        seconds < 1 ? params({ rate: 0.5 }) : params({ rate: 7 }),
+    });
+    expect(maxAbsoluteDifference(left)).toBeLessThan(0.1);
+  }, 60000);
+
+  it("does not click when the depth is swept end to end in one block", () => {
+    // The read position travels the whole excursion inside one 128-sample
+    // block, which is faster than any automation can ask for it to: the wet
+    // path is momentarily resampled at 1.75x. That is a pitch bend, and it has
+    // to stay a pitch bend rather than becoming a step.
+    const length = SAMPLE_RATE;
+    const input = sine(length, 220, SAMPLE_RATE);
+    const [left] = render(engine()(), {
+      length,
+      sampleRate: SAMPLE_RATE,
+      input,
+      params: (seconds) =>
+        seconds < 0.5
+          ? params({ rate: 1, depth: 0 })
+          : params({ rate: 1, depth: 1 }),
+    });
+
+    expect(maxAbsoluteDifference(left)).toBeLessThan(0.1);
+  }, 60000);
+
+  it("uses an irrational fast/slow ratio", () => {
+    // The RS-101 trap: a set of rates that are all rational multiples of each
+    // other closes on a common period, and the pattern audibly repeats. This
+    // is the property that is easy to reintroduce by picking round numbers.
+    expect(FAST_MULTIPLIER).toBeCloseTo(8.7082, 4);
+    // No fraction with a denominator under 60 comes within 1e-9, so the pair
+    // has no common period under 60 s at any rate at or above 1 Hz.
+    for (let q = 1; q < 60; q++) {
+      const p = Math.round(FAST_MULTIPLIER * q);
+      expect(Math.abs(FAST_MULTIPLIER - p / q)).toBeGreaterThan(1e-9);
+    }
+  });
 });
 
 describe("the stereo image", () => {
