@@ -22,7 +22,12 @@ export function Oberheim(sampleRate: number, type: number) {
     fHslider1 = resonance;
   }
 
-  function process(input: Float32Array, output: Float32Array) {
+  function process(
+    input: Float32Array,
+    output: Float32Array,
+    from: number,
+    to: number,
+  ) {
     let fSlow0 = Math.tan(fConst1 * Math.pow(1e1, fConst2 * fHslider0 + 1.0));
     let fSlow1 = 1.0 / (29.293 * fHslider1 + 0.707) + fSlow0;
     let fSlow2 = fSlow0 * fSlow1 + 1.0;
@@ -30,7 +35,7 @@ export function Oberheim(sampleRate: number, type: number) {
     let fSlow4 = 1.0 / fSlow2;
     let fSlow5 = 2.0 * fSlow0;
 
-    for (let i = 0; i < input.length; i++) {
+    for (let i = from; i < to; i++) {
       let fTemp0 = input[0] - (fRec4[1] + fSlow1 * fRec5[1]);
       let fTemp1 = fSlow3 * fTemp0;
       let fTemp2 = Math.max(-1.0, Math.min(1.0, fRec5[1] + fTemp1));
