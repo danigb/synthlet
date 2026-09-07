@@ -1,6 +1,13 @@
 import { createDelayLine } from "./_delay";
-import { maxAbsoluteDifference, render } from "./_spectrum";
-import { createChorus, FAST_MULTIPLIER, usefulDepthMs } from "./dsp";
+import { fundamental, maxAbsoluteDifference, render } from "./_spectrum";
+import {
+  CHORUS_MODE_DEFAULTS,
+  ChorusMode,
+  createChorus,
+  FAST_MULTIPLIER,
+  usefulDepthMs,
+  VOICINGS,
+} from "./dsp";
 import {
   centsFromExcursion,
   correlation,
@@ -30,13 +37,19 @@ const RATES = [44100, 48000, 96000];
 /** The base delay every voice sits on until the voicing table lands. */
 const BASE_MS = 3;
 
-type Settings = { rate?: number; depth?: number; mix?: number; width?: number };
-type Values = [number, number, number, number];
+type Settings = {
+  mode?: number;
+  rate?: number;
+  depth?: number;
+  mix?: number;
+  width?: number;
+};
+type Values = [number, number, number, number, number];
 
 /** Parameters in `update()` order. */
 const params = (over: Settings = {}): Values => {
-  const s = { rate: 0.5, depth: 0.5, mix: 0.5, width: 1, ...over };
-  return [s.rate, s.depth, s.mix, s.width];
+  const s = { mode: 0, rate: 0.5, depth: 0.5, mix: 0.5, width: 1, ...over };
+  return [s.mode, s.rate, s.depth, s.mix, s.width];
 };
 
 const engine =
@@ -294,6 +307,174 @@ describe("the stereo image", () => {
       ).toBeLessThan(1.5);
     },
     60000,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// The three voicings. Every candidate topology is the same computation - N
+// taps on one line per channel, Hermite reads, an LFO bank, an output matrix -
+// so what separates a Juno from a Solina from a Dimension D is five tables.
+// These assertions are about the tables.
+// ---------------------------------------------------------------------------
+
+/** Peak-to-peak pitch excursion in cents, from the fundamental tracker. */
+const pitchSpreadCents = (mode: number, over: Settings = {}) => {
+  const length = SAMPLE_RATE * 4;
+  const defaults = CHORUS_MODE_DEFAULTS[mode];
+  const [left] = render(engine()(), {
+    length,
+    sampleRate: SAMPLE_RATE,
+    input: sine(length, 440, SAMPLE_RATE),
+    params: params({ mode, ...defaults, mix: 1, ...over }),
+  });
+
+  const window = 4096;
+  let low = Infinity;
+  let high = -Infinity;
+  for (let at = SAMPLE_RATE; at + window < length; at += window) {
+    const f = fundamental(
+      left.subarray(at, at + window),
+      SAMPLE_RATE,
+      200,
+      900,
+    );
+    if (Number.isFinite(f)) {
+      low = Math.min(low, f);
+      high = Math.max(high, f);
+    }
+  }
+  return 1200 * Math.log2(high / low);
+};
+
+describe("the voicings", () => {
+  it("keeps every tap inside the line at every parameter combination", () => {
+    // The bound `readHermite` documents is `[1, size - 4]`; the clamp at the
+    // read site enforces it, and this is the check that no voicing *relies* on
+    // the clamp. Swept from the table rather than from a render, because the
+    // table is where a new voicing would break it.
+    const line = 1 / 44.1; // one sample in ms, at the lowest supported rate
+    for (const v of VOICINGS) {
+      for (const voice of v.voices) {
+        const swing = voice.modScale * v.maxDepthMs;
+        expect(voice.delayMs - swing).toBeGreaterThan(line);
+        expect(voice.delayMs + swing).toBeLessThan(20);
+      }
+      // The weights a voice puts on the two accumulators sum to at most 1, so
+      // `depth: 1` means the voicing's ceiling and not some multiple of it.
+      for (const voice of v.voices) {
+        expect(Math.abs(voice.slow) + Math.abs(voice.fast)).toBeCloseTo(1, 6);
+      }
+    }
+  });
+
+  it.each([
+    [ChorusMode.Juno, 3],
+    [ChorusMode.Ensemble, 4],
+  ])("puts voicing %i on a %p ms centre", (mode, centre) => {
+    const at = taps(engine(), params({ mode, rate: 0, depth: 0 }), {
+      sampleRate: SAMPLE_RATE,
+      warmup: WARMUP,
+    });
+    expect(at[1].ms).toBeCloseTo(centre, 1);
+  });
+
+  it("cancels DIMENSION's wet path exactly when its two voices coincide", () => {
+    // The defining property of the difference matrix, and the cheapest
+    // possible check that it is a difference: `L = d0 - d1` with `d0 === d1`
+    // is zero, so at `depth: 0` there is no wet path at all and the impulse
+    // shows the dry tap and nothing else.
+    const at = taps(
+      engine(),
+      params({ mode: ChorusMode.Dimension, rate: 0, depth: 0 }),
+      { sampleRate: SAMPLE_RATE, warmup: WARMUP },
+    );
+    expect(at).toHaveLength(1);
+    expect(at[0].ms).toBeCloseTo(0, 3);
+  });
+
+  it("puts DIMENSION on an 8.5 ms centre", () => {
+    // With the voices separated the two taps straddle the base delay, so the
+    // centre is their mean. 8.5 ms is the SDD-320's 7.5-10 ms range.
+    const at = taps(
+      engine(),
+      params({ mode: ChorusMode.Dimension, rate: 0, depth: 0.2 }),
+      { sampleRate: SAMPLE_RATE, warmup: WARMUP },
+    );
+    const moving = at.slice(1);
+    expect(moving).toHaveLength(2);
+    expect((moving[0].ms + moving[1].ms) / 2).toBeCloseTo(8.5, 1);
+  });
+
+  it("gives ENSEMBLE three voices where the others have two", () => {
+    // Density is voice count, and it is the reason ENSEMBLE is unreachable
+    // from JUNO at any knob setting - that and the incommensurate rates.
+    expect(VOICINGS[ChorusMode.Juno].voices).toHaveLength(2);
+    expect(VOICINGS[ChorusMode.Ensemble].voices).toHaveLength(3);
+    expect(VOICINGS[ChorusMode.Dimension].voices).toHaveLength(2);
+
+    // And measurably: at `rate: 0` ENSEMBLE's three exact-thirds phases put
+    // its voices at three distinct positions, where JUNO's antiphase pair puts
+    // one voice in each channel.
+    const at = taps(
+      engine(),
+      params({ mode: ChorusMode.Ensemble, rate: 0, depth: 1 }),
+      { sampleRate: SAMPLE_RATE, warmup: WARMUP },
+    );
+    // The dry tap plus two of the three voices; the third is panned hard right.
+    expect(at.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("gives DIMENSION far less pitch modulation than JUNO", () => {
+    // The whole point of the difference output: the common-mode pitch
+    // modulation cancels while the differential spatial motion survives.
+    // Measured at each voicing's own defaults, wet only:
+    //   JUNO 13.00 cents   ENSEMBLE 38.88 cents   DIMENSION 0.31 cents
+    const juno = pitchSpreadCents(ChorusMode.Juno);
+    const dimension = pitchSpreadCents(ChorusMode.Dimension);
+
+    expect(juno).toBeGreaterThan(8);
+    expect(dimension).toBeLessThan(2);
+    expect(juno / dimension).toBeGreaterThan(5);
+  }, 120000);
+
+  it("does not click when the mode changes mid-render", () => {
+    // A mode change is a topology change, so it cross-fades: out over 5 ms,
+    // swap the table at the envelope's zero, back in.
+    const length = SAMPLE_RATE * 2;
+    const input = sine(length, 220, SAMPLE_RATE);
+    const [left] = render(engine()(), {
+      length,
+      sampleRate: SAMPLE_RATE,
+      input,
+      params: (seconds) =>
+        params({
+          mode: seconds < 1 ? ChorusMode.Juno : ChorusMode.Dimension,
+          mix: 1,
+        }),
+    });
+
+    expect(maxAbsoluteDifference(left)).toBeLessThan(0.1);
+  }, 60000);
+
+  it.each([0, 1, 2])(
+    "stays finite across voicing %i's whole range",
+    (mode) => {
+      const length = SAMPLE_RATE;
+      const input = sine(length, 220, SAMPLE_RATE);
+      for (const depth of [0, 0.5, 1]) {
+        for (const rate of [0, 0.05, 3, 7]) {
+          const [left, right] = render(engine()(), {
+            length,
+            sampleRate: SAMPLE_RATE,
+            input,
+            params: params({ mode, rate, depth, mix: 1 }),
+          });
+          expect(Array.from(left).every(Number.isFinite)).toBe(true);
+          expect(Array.from(right).every(Number.isFinite)).toBe(true);
+        }
+      }
+    },
+    120000,
   );
 });
 

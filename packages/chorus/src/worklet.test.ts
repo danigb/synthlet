@@ -27,6 +27,7 @@ describe("ChorusProcessor", () => {
     }
     const outputs = [[new Float32Array(length), new Float32Array(length)]];
     const params = {
+      mode: [0],
       rate: [0.5],
       depth: [0.5],
       mix: [0.5],
@@ -47,6 +48,7 @@ describe("ChorusProcessor", () => {
     processor.port.onmessage({ data: { type: "DISPOSE" } });
     const outputs = [[new Float32Array(8), new Float32Array(8)]];
     const params = {
+      mode: [0],
       rate: [0.5],
       depth: [0.5],
       mix: [0.5],

@@ -122,6 +122,170 @@ export type Voice = {
 };
 
 /**
+ * How long a mode change takes to cross-fade, in milliseconds.
+ *
+ * A mode change is a topology change - a different voice count on different
+ * base delays through a different output matrix - so it cannot be stepped.
+ * `rune06` fades out, switches at the fade envelope's zero and fades back in,
+ * with `FADE_MS = 5.0`, and this is that.
+ */
+const FADE_MS = 5;
+
+/**
+ * A voicing: five tables and an output matrix.
+ *
+ * Every candidate topology in the survey - Juno, Solina, Dimension D, white
+ * chorus, the Hammond scanner - is the same computation. N taps on one line
+ * per channel, read with `readHermite`, moved by an LFO bank, combined by an
+ * output matrix. What separates one from another is voice count, LFO rate set,
+ * phase offsets, output matrix and wet EQ, and that is data rather than code.
+ * It is why "which algorithm" was the wrong question and why three of them fit
+ * inside `vision.md`'s `< ~10 KB` inline-processor budget.
+ */
+export type Voicing = {
+  voices: readonly Voice[];
+  /** Multiplier on `rate` for the slow accumulator. */
+  slowMul: number;
+  /** Multiplier on `rate` for the fast accumulator. See `FAST_MULTIPLIER`. */
+  fastMul: number;
+  /** This voicing's own excursion ceiling in ms, the other half of the clamp. */
+  maxDepthMs: number;
+  /** What `Chorus(ac, { mode })` should set the other four knobs to. */
+  defaults: { rate: number; depth: number; mix: number; width: number };
+};
+
+const voice = (
+  delayMs: number,
+  phase: number,
+  source: Source,
+  gainL: number,
+  gainR: number,
+  slow = 1,
+  fast = 0,
+  modScale = 1,
+): Voice => ({ delayMs, modScale, phase, slow, fast, source, gainL, gainR });
+
+/**
+ * Plaits' `Ensemble` mixes its two accumulators `slow * 160 + fast * 16`
+ * samples, with the comment `// Max deviation: 176`. Those are the
+ * proportions; normalising them to 1 keeps `depth` meaning the same thing in
+ * every voicing.
+ */
+const ENSEMBLE_SLOW = 160 / 176;
+const ENSEMBLE_FAST = 16 / 176;
+
+/**
+ * The three voicings, with every number's source beside it. A number with no
+ * citation is a number nobody can re-derive.
+ *
+ * The output matrix is the pair of gains on each voice, and it is where
+ * `DIMENSION` differs from `JUNO`: the same two antiphase taps, combined as a
+ * difference instead of one to each channel. That is the whole of the SDD-320
+ * trick, and it is the argument for both voicings fitting rather than the
+ * argument against one of them.
+ */
+/**
+ * **No voicing has feedback, and that was measured rather than assumed.**
+ *
+ * Dattorro's Table 6 offers "white chorus" - blend 0.7071, feedforward 1.0,
+ * feedback 0.7071 from a *fixed* tap at the nominal centre, deliberately not
+ * modulated because "we prefer not to feed back a modulating signal because
+ * the modulation induces pitch change". The claim is that the circuit then
+ * approximates an allpass and the comb colouration of the summed troughs
+ * cancels.
+ *
+ * Measured here as peak-to-peak magnitude ripple over 100 Hz - 10 kHz, from
+ * the impulse response of one voice frozen at 3 ms + 2 ms (LTI, so the
+ * response is exact; rectangular FFT, because a window would zero the
+ * impulse):
+ *
+ * | structure | ripple |
+ * | --- | --- |
+ * | plain feedforward, blend 1.0 / ff 0.7071 | **15.31 dB** |
+ * | white chorus, fixed feedback tap | 30.62 dB |
+ * | white chorus, feedback from the moving tap | 22.63 dB |
+ *
+ * Every variant measures *more* coloured than the plain feedforward path, not
+ * less, so it is dropped. Two caveats worth stating: Dattorro's argument is
+ * about the summed response under modulation rather than one frozen tap, so
+ * this is evidence against carrying it here rather than a refutation of his
+ * design; and the real Juno has no feedback path at all, which is the other
+ * reason the answer came out this way.
+ */
+export const VOICINGS: readonly Voicing[] = [
+  {
+    // JUNO. Two lines modulated in antiphase from one LFO, one to each
+    // channel, dry summed. `rune06`'s CE-2 model centres at
+    // `CENTER_DELAY_MS = 3.0`; the Juno-60's three modes are 0.5 / 0.8 / 1 Hz
+    // and are reachable through `rate` rather than needing their own rows.
+    // 3 ms +/- 2 ms sits inside Dattorro Table 7's chorus range (1-30 ms,
+    // nominal 5) rather than his doubling range (10-100), which is where the
+    // engine this replaces had put its defaults.
+    // Phases at a quarter and three quarters rather than 0 and a half: still
+    // exactly antiphase, but it puts the two voices at opposite ends of their
+    // travel when the LFO is stopped, so `rate: 0` is a static two-tap comb
+    // rather than both voices landing on the same sample.
+    voices: [
+      voice(3, 0.25, Source.Left, 1, 0),
+      voice(3, 0.75, Source.Right, 0, 1),
+    ],
+    slowMul: 1,
+    fastMul: FAST_MULTIPLIER,
+    maxDepthMs: 2,
+    defaults: { rate: 0.5, depth: 0.6, mix: 0.5, width: 1 },
+  },
+  {
+    // ENSEMBLE. Three taps 120 degrees apart on a dual-rate LFO pair - the
+    // Solina and Roland string-machine construction, and the voicing that is
+    // unreachable from JUNO at any knob setting because it needs a third voice
+    // and incommensurate rates. Plaits' `Ensemble` is the known-good set of
+    // numbers: a 192-sample base at 48 kHz (4.0 ms), three phases at exact
+    // thirds, deviation `slow * 160 + fast * 16` with a maximum of 176 samples
+    // (3.67 ms). The centre voice reads the mid of both lines so a stereo
+    // source stays centred rather than leaning on whichever line it was given.
+    voices: [
+      voice(4, 0, Source.Left, 1, 0, ENSEMBLE_SLOW, ENSEMBLE_FAST),
+      voice(
+        4,
+        1 / 3,
+        Source.Mid,
+        Math.SQRT1_2,
+        Math.SQRT1_2,
+        ENSEMBLE_SLOW,
+        ENSEMBLE_FAST,
+      ),
+      voice(4, 2 / 3, Source.Right, 0, 1, ENSEMBLE_SLOW, ENSEMBLE_FAST),
+    ],
+    slowMul: 1,
+    fastMul: FAST_MULTIPLIER,
+    maxDepthMs: 3.67,
+    // 0.75 Hz is Plaits' slow accumulator: `phase_1_ += 67289` is
+    // `67289/2^32 * 48000 = 0.752 Hz`. The frequency travels between sample
+    // rates; the increment does not.
+    defaults: { rate: 0.75, depth: 0.7, mix: 0.5, width: 1 },
+  },
+  {
+    // DIMENSION. Antiphase like JUNO, but the stereo output is formed as a
+    // difference: `L = d0 - d1`, `R = d1 - d0`. The common-mode pitch
+    // modulation cancels perceptually while the differential spatial motion
+    // survives - chorus without the vibrato, which is what makes it usable on
+    // sustained pads and on a bus where JUNO's wobble becomes seasickness.
+    // SDD-320 numbers: 7.5-10 ms base, +/- 1.5-2.5 ms, 0.25 or 0.5 Hz.
+    voices: [
+      voice(8.5, 0.25, Source.Left, 1, -1),
+      voice(8.5, 0.75, Source.Right, -1, 1),
+    ],
+    slowMul: 1,
+    fastMul: FAST_MULTIPLIER,
+    maxDepthMs: 2.5,
+    defaults: { rate: 0.5, depth: 0.8, mix: 0.5, width: 1 },
+  },
+];
+
+/** What each voicing sets the other four knobs to. */
+export const CHORUS_MODE_DEFAULTS = VOICINGS.map((v) => v.defaults);
+
+/**
  * A hand-written chorus engine.
  *
  * Pure: it touches no worklet globals, so the tests drive it directly through
@@ -144,32 +308,8 @@ export function createChorus(sampleRate: number) {
   const clampDelay = (samples: number) =>
     samples < 1 ? 1 : samples > limit ? limit : samples;
 
-  // Two voices in antiphase on a 3 ms centre - the Juno shape, and the only
-  // one this file knows about until the voicing table lands.
-  const voices: Voice[] = [
-    {
-      delayMs: 3,
-      modScale: 1,
-      phase: 0,
-      slow: 1,
-      fast: 0,
-      source: Source.Left,
-      gainL: 1,
-      gainR: 0,
-    },
-    {
-      delayMs: 3,
-      modScale: 1,
-      phase: 0.5,
-      slow: 1,
-      fast: 0,
-      source: Source.Right,
-      gainL: 0,
-      gainR: 1,
-    },
-  ];
-
   // Targets, set by `update` once per block.
+  let tMode = ChorusMode.Juno;
   let tRate = 0.5;
   let tDepth = 0.5;
   let tMix = 0.5;
@@ -186,6 +326,16 @@ export function createChorus(sampleRate: number) {
   let width = tWidth;
   let primed = false;
 
+  // `mode` is structural, so it is resolved here rather than in the inner
+  // loop: the loop branches on nothing `mode` decides.
+  let mode = ChorusMode.Juno;
+  let voicing = VOICINGS[mode];
+  // 1 fully in, 0 fully out. A mode change fades the wet path out, swaps the
+  // table at the envelope's zero, and fades back in.
+  let fade = 1;
+  let fadeDirection = 0;
+  const fadeStep = 1 / Math.max(1, Math.round((FADE_MS / 1000) * sampleRate));
+
   // The LFO bank: two accumulators, and a voice reads whichever of them its
   // weights ask for. `phase += inc; if (phase >= 1) phase -= 1` is the house
   // idiom, and `Math.sin` rather than a wavetable is deliberate - the table is
@@ -196,18 +346,15 @@ export function createChorus(sampleRate: number) {
   let slowPhase = 0;
   let fastPhase = 0;
 
-  /** The voicing's own excursion ceiling in ms. */
-  const maxDepthMs = 2;
-  /** Multipliers on `rate` for the two accumulators. */
-  const slowMul = 1;
-  const fastMul = FAST_MULTIPLIER;
-
   function update(
+    modeIndex: number,
     rateHz: number,
     depthAmount: number,
     mixAmount: number,
     widthAmount: number,
   ) {
+    const rounded = Math.round(modeIndex);
+    tMode = rounded >= 0 && rounded < VOICINGS.length ? rounded : mode;
     tRate = rateHz;
     tDepth = depthAmount;
     tMix = mixAmount;
@@ -224,6 +371,10 @@ export function createChorus(sampleRate: number) {
     primed = false;
     slowPhase = 0;
     fastPhase = 0;
+    mode = tMode;
+    voicing = VOICINGS[mode];
+    fade = 1;
+    fadeDirection = 0;
   }
 
   function compute(
@@ -243,6 +394,18 @@ export function createChorus(sampleRate: number) {
       depth = tDepth;
       mix = tMix;
       width = tWidth;
+      mode = tMode;
+      voicing = VOICINGS[mode];
+    }
+
+    // Structural, and resolved once per block. The wet path is already at zero
+    // when the swap happens, so the topology never changes under a live
+    // signal.
+    if (tMode !== mode && fadeDirection === 0) fadeDirection = -1;
+    if (fadeDirection < 0 && fade <= 0) {
+      mode = tMode;
+      voicing = VOICINGS[mode];
+      fadeDirection = 1;
     }
 
     const step = 1 / n;
@@ -250,7 +413,11 @@ export function createChorus(sampleRate: number) {
     const dDepth = (tDepth - depth) * step;
     const dMix = (tMix - mix) * step;
     const dWidth = (tWidth - width) * step;
+    const voices = voicing.voices;
     const perVoice = 1 / voices.length;
+    const slowMul = voicing.slowMul;
+    const fastMul = voicing.fastMul;
+    const maxDepthMs = voicing.maxDepthMs;
 
     for (let i = 0; i < n; i++) {
       rate += dRate;
@@ -272,6 +439,17 @@ export function createChorus(sampleRate: number) {
       // the tests need to read a base delay without chasing a moving tap.
       const useful = usefulDepthMs(rate);
       const excursion = depth * (useful < maxDepthMs ? useful : maxDepthMs);
+
+      if (fadeDirection < 0) {
+        fade -= fadeStep;
+        if (fade < 0) fade = 0;
+      } else if (fadeDirection > 0) {
+        fade += fadeStep;
+        if (fade >= 1) {
+          fade = 1;
+          fadeDirection = 0;
+        }
+      }
 
       const dryL = inL[i];
       const dryR = inR[i];
@@ -298,8 +476,9 @@ export function createChorus(sampleRate: number) {
       // and narrowing the effect should not narrow the source.
       const mid = 0.5 * (wetL + wetR);
       const side = 0.5 * (wetL - wetR) * width;
-      outL[i] = dryL * (1 - mix) + (mid + side) * mix;
-      outR[i] = dryR * (1 - mix) + (mid - side) * mix;
+      const wet = mix * fade;
+      outL[i] = dryL * (1 - mix) + (mid + side) * wet;
+      outR[i] = dryR * (1 - mix) + (mid - side) * wet;
     }
   }
 

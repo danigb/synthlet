@@ -8,6 +8,18 @@ import type { ParamDescriptor } from "./_worklet";
 // one. `scripts/_worklet.ts`, next to `ParamDescriptor`, has the two grounds.
 export const PARAMS: readonly ParamDescriptor[] = [
   {
+    // Structural: an index into a table of three voicings, each a different
+    // voice count on different base delays through a different output matrix.
+    // Moving it mid-block is a topology change rather than a feature, which is
+    // the first of the two grounds and the `virtual-analog-filter.type`
+    // precedent.
+    name: "mode",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 2,
+    automationRate: "k-rate",
+  },
+  {
     // LFO rate in hertz. Consumed once per block and ramped per sample inside
     // `compute()`, which is the second of the two grounds.
     name: "rate",
