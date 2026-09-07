@@ -9,6 +9,12 @@
     "synthesis",
     "synthlet"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/dattorro-reverb"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/dattorro",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

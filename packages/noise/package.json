@@ -5,6 +5,12 @@
   "keywords": [
     "noise"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/noise"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/noise",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

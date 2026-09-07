@@ -9,6 +9,12 @@
     "synthesis",
     "synthlet"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/level-meter"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/level-meter",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

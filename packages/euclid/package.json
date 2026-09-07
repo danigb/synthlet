@@ -9,6 +9,12 @@
     "synthesis",
     "synthlet"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/euclid"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/euclid",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

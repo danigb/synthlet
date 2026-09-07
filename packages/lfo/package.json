@@ -10,12 +10,19 @@
     "synth",
     "web audio"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/lfo"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/lfo",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
+  "author": "danigb@gmail.com",
   "license": "MIT",
   "publishConfig": {
     "access": "public"

@@ -8,6 +8,12 @@
     "webaudio",
     "control-voltage"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/synthlet"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/quick-start",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

@@ -8,12 +8,19 @@
     "synthesis",
     "synthlet"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/adsr"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/adsr",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
+  "author": "danigb@gmail.com",
   "license": "MIT",
   "publishConfig": {
     "access": "public"
