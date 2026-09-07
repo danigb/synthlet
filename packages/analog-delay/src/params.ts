@@ -10,6 +10,19 @@ import type { ParamDescriptor } from "./_worklet";
 // different tap positions, which is a difference in kind rather than a filter
 // preset. There is deliberately no `tone`: bandwidth is derived from `time`
 // and `age`, because that is what the hardware does.
+//
+// Eight parameters, none of them a-rate, and the ground is the same for all
+// eight rather than eight copies of one sentence: every one is an argument to
+// `update()`, which recomputes the line's read positions, its filter
+// coefficients and its wobble depth once per block. The line itself is what
+// moves per sample - a delay whose length changed every sample would be a
+// pitch shifter, which is the effect this models rather than the control it
+// offers. `mix` and `feedback` are the two that would be meaningful per sample
+// and are listed as candidates in the automation-rate folder's ticket 06.
+//
+// `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
+// every `k-rate` below is an explicit opt-out and carries a reason for being
+// one. `scripts/_worklet.ts`, next to `ParamDescriptor`, has the two grounds.
 export const PARAMS: readonly ParamDescriptor[] = [
   {
     // Seconds, record head to first playback head. Narrower than
@@ -32,6 +45,11 @@ export const PARAMS: readonly ParamDescriptor[] = [
     automationRate: "k-rate",
   },
   {
+    // Dry/wet, as a plain crossfade at the output. **A bet, and the weakest in
+    // this file**: nothing about the delay line would object to moving it per
+    // sample, and an envelope on the mix is an ordinary production move. The
+    // reason it is k-rate is that it arrives through the same `update()` call
+    // as everything else, which is a shape rather than an argument.
     name: "mix",
     defaultValue: 0.3,
     minValue: 0,

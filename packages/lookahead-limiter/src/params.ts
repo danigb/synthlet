@@ -2,6 +2,12 @@ import type { ParamDescriptor } from "./_worklet";
 
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
+//
+// Three parameters, two of them a-rate.
+//
+// `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
+// every `k-rate` below is an explicit opt-out and carries a reason for being
+// one. `scripts/_worklet.ts`, next to `ParamDescriptor`, has the two grounds.
 export const PARAMS: readonly ParamDescriptor[] = [
   {
     // The true-peak ceiling, in dBTP. a-rate: automating it is safe, though a
