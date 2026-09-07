@@ -49,14 +49,34 @@ try {
   const blocks = Math.round((SAMPLE_RATE * SECONDS) / BLOCK);
   const output = new Float32Array(BLOCK);
 
-  /** Microseconds per block, median of `REPEATS` runs. */
-  function measure(audioRate, type) {
-    const params = {
+  /** A parameter block as the processor receives one. */
+  function block(type, frequency) {
+    return {
       type: [type],
-      frequency: [5],
+      frequency,
       gain: [1],
       offset: [0],
+      // The a-rate params, at their unconnected length-1 shape.
+      sync: [0],
+      gate: [0],
+      delay: [0],
+      attack: [0],
     };
+  }
+
+  /** A rate that varies every sample: the branch a modulated `frequency` takes. */
+  const varying = Float32Array.from({ length: BLOCK }, (_, i) => 5 + i / BLOCK);
+
+  /**
+   * Microseconds per block, median of `REPEATS` runs.
+   *
+   * `frequency` is a-rate since ticket 06 of the lfo folder, and an a-rate
+   * parameter arrives as either one value or one per sample. `modulated`
+   * chooses which of the two branches is measured; the length-1 shape is what
+   * every unmodulated patch takes, including a *connected constant*.
+   */
+  function measure(audioRate, type, modulated = false) {
+    const params = block(type, modulated ? varying : [5]);
     const times = [];
     for (let run = 0; run < REPEATS; run++) {
       const generate = createLfo(SAMPLE_RATE, audioRate);
@@ -68,15 +88,25 @@ try {
     return times[REPEATS >> 1];
   }
 
-  // One untimed pass so the JIT has seen both shapes before anything counts.
+  // One untimed pass so the JIT has seen every shape before anything counts.
   for (const audioRate of [false, true]) measure(audioRate, LfoType.Sine);
+  measure(true, LfoType.Sine, true);
 
   const rows = [];
   for (const name of Object.keys(LfoType).filter((k) => isNaN(Number(k)))) {
     const type = LfoType[name];
     const k = measure(false, type);
     const a = measure(true, type);
-    rows.push({ type: name, kRate: k, aRate: a, ratio: a / k, delta: a - k });
+    const m = measure(true, type, true);
+    rows.push({
+      type: name,
+      kRate: k,
+      aRate: a,
+      modulated: m,
+      ratio: a / k,
+      delta: a - k,
+      cost: m / a - 1,
+    });
   }
 
   const pad = (s, n) => String(s).padStart(n);
@@ -84,14 +114,21 @@ try {
     `${SECONDS}s per cell, median of ${REPEATS}, ${SAMPLE_RATE} Hz, ${BLOCK}-sample blocks`,
   );
   console.log("us/block: what one call to the generator costs\n");
-  console.log("| type            | k-rate | a-rate |  delta | ratio |");
-  console.log("| --------------- | ------ | ------ | ------ | ----- |");
+  console.log(
+    "| type            | k-rate | a-rate |  delta | ratio | mod rate |   cost |",
+  );
+  console.log(
+    "| --------------- | ------ | ------ | ------ | ----- | -------- | ------ |",
+  );
   for (const r of rows) {
     console.log(
       `| ${r.type.padEnd(15)} | ${pad(r.kRate.toFixed(3), 6)} | ${pad(
         r.aRate.toFixed(3),
         6,
-      )} | ${pad(r.delta.toFixed(3), 6)} | ${pad(r.ratio.toFixed(2), 5)} |`,
+      )} | ${pad(r.delta.toFixed(3), 6)} | ${pad(r.ratio.toFixed(2), 5)} | ${pad(
+        r.modulated.toFixed(3),
+        8,
+      )} | ${pad((r.cost * 100).toFixed(1) + "%", 6)} |`,
     );
   }
 
@@ -103,6 +140,11 @@ try {
     "Ticket 00 put an Lfo's parameter plumbing at ~2.7 us/node/block, so",
   );
   console.log("read the delta against that, not against zero.");
+  const dearest = rows.reduce((a, b) => (a.cost > b.cost ? a : b));
+  console.log(
+    `modulated rate: worst ${dearest.type}, +${(dearest.cost * 100).toFixed(1)}%` +
+      " over the hoisted increment.",
+  );
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

@@ -89,6 +89,24 @@ Both `Clock` and `Euclid` take a `pulseWidth`: how much of each beat (or step)
 the gate is high for, as a fraction, defaulting to `0.5`. It is a _fraction_
 rather than a duration on purpose — see below.
 
+## Which modules take one
+
+| Module                                         | Param     | Notes                                             |
+| ---------------------------------------------- | --------- | ------------------------------------------------- |
+| [AD](/docs/modulators/ad)                      | `trigger` | Fires the attack; runs to completion              |
+| [ADSR](/docs/modulators/adsr)                  | `gate`    | Sustains while high, releases when it falls       |
+| [Arp](/docs/sequencers/arp)                    | `trigger` | Advances one step                                 |
+| [Impulse](/docs/sources/impulse)               | `trigger` | Emits one sample                                  |
+| [Karplus-Strong](/docs/sources/ks)             | `trigger` | Excites the string                                |
+| [Lfo](/docs/modulators/lfo)                    | `sync`    | Restarts the phase — per-note vibrato, tempo sync |
+| [PolyblepOscillator](/docs/sources/polyblep)   | `sync`    | Hard sync, placed to the sub-sample               |
+| [WavetableOscillator](/docs/sources/wavetable) | `sync`    | The same                                          |
+
+`Lfo` is on both tables: its square output is a gate, and its `sync` input takes
+one. `clock.gate` into `lfo.sync` is the whole of tempo sync in this library —
+there is no `bpm` parameter on the LFO and no division enum, because a division
+is `frequency` relative to a tempo the caller already knows.
+
 ## Timing
 
 Every gate and trigger parameter in Synthlet is `a-rate`, which the Web Audio
