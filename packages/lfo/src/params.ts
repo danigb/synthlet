@@ -43,20 +43,34 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // and the answer to it today is a `Gain` node between the LFO and its
     // destination, which is a-rate and native. Same hoisting argument as
     // `frequency`.
+    //
+    // **Bipolar, and that is the whole of it**: a negative gain inverts the
+    // waveform, which is how a filter closes as the amp opens and how two LFOs
+    // run in antiphase. `[-20000, 20000]` is not a bespoke number - `ad`,
+    // `adsr` and `param` compute the same `x * gain + offset` and declare the
+    // same range, and `descriptors.test.ts` pins the four together. An
+    // `AudioParam` clamps its *computed* value to this range, so a `minValue`
+    // of 0 forbade inversion even from a connected modulator.
     name: "gain",
     defaultValue: 1,
-    minValue: 0,
-    maxValue: 10000,
+    minValue: -20000,
+    maxValue: 20000,
     automationRate: "k-rate",
   },
   {
     // Where the waveform is centred. **A bet**, and the weakest of the three:
     // adding a signal here is exactly what the destination `AudioParam`'s own
     // summing does, so a caller who wants it has a better route already.
+    //
+    // Same `[-20000, 20000]` as the siblings, and for a reason of its own: the
+    // canonical use is centring the LFO in its destination's units, and the
+    // destinations reach much further than the 1000 this used to allow -
+    // `Svf.frequency` goes to 20000 and every `detune` is in cents. A unipolar
+    // 0…1 sweep of a filter cutoff is `gain: 10000, offset: 10000`.
     name: "offset",
     defaultValue: 0,
-    minValue: -1000,
-    maxValue: 1000,
+    minValue: -20000,
+    maxValue: 20000,
     automationRate: "k-rate",
   },
 ];

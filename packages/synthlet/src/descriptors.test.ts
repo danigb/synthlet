@@ -217,6 +217,28 @@ describe("descriptors", () => {
   // library's standing decision rather than a slip: `connectParams` writes
   // `param.value = 0` for every connected input, so a positive minimum makes
   // Chrome clamp that write and warn. 0 and 1 are both one segment in the DSP.
+  // Four packages compute the same expression - `x * gain + offset` - and a
+  // caller moving a patch between them should not have to look up two different
+  // ranges. `lfo` was the odd one out at `gain: [0, 10000]`, which forbade a
+  // negative depth: there was no way to invert an LFO, and inverted modulation
+  // is ordinary.
+  it("agrees on the depth range across every x * gain + offset module", () => {
+    const range = (factory: Factory, name: string) => {
+      const descriptor = factory.descriptors.find((d) => d.name === name);
+      return [descriptor?.minValue, descriptor?.maxValue];
+    };
+
+    for (const factory of [
+      synthlet.AdEnv,
+      synthlet.AdsrEnv,
+      synthlet.Param,
+      synthlet.Lfo,
+    ]) {
+      expect(range(factory, "gain")).toEqual([-20000, 20000]);
+      expect(range(factory, "offset")).toEqual([-20000, 20000]);
+    }
+  });
+
   it("keeps WavetableOscillator's stochastic mode off by default", () => {
     const byName = Object.fromEntries(
       synthlet.WavetableOscillator.descriptors.map((d) => [d.name, d]),

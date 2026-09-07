@@ -42,12 +42,12 @@ osc.connect(ac.destination);
 
 `output = gen(phase) × gain + offset`
 
-| Param       | Default | Range     | Rate   | Meaning                       |
-| ----------- | ------- | --------- | ------ | ----------------------------- |
-| `type`      | 1       | 0 … 10    | k-rate | Waveform — see `LfoType`      |
-| `frequency` | 10      | 0 … 200   | k-rate | Rate in Hz                    |
-| `gain`      | 1       | 0 … 10000 | k-rate | Amplitude                     |
-| `offset`    | 0       | ±1000     | k-rate | Where the waveform is centred |
+| Param       | Default | Range   | Rate   | Meaning                       |
+| ----------- | ------- | ------- | ------ | ----------------------------- |
+| `type`      | 1       | 0 … 10  | k-rate | Waveform — see `LfoType`      |
+| `frequency` | 10      | 0 … 200 | k-rate | Rate in Hz                    |
+| `gain`      | 1       | ±20000  | k-rate | Depth — negative inverts      |
+| `offset`    | 0       | ±20000  | k-rate | Where the waveform is centred |
 
 ## Shapes
 
@@ -85,6 +85,11 @@ once per block, which lets the generator hoist its phase increment out of the
 sample loop; a modulated `frequency` still moves, one step per render quantum.
 For an envelope on the depth, put a native `GainNode` between the LFO and its
 destination — that is a-rate and free.
+
+`gain` is bipolar: **a negative depth inverts the waveform**, which is how a
+filter closes as the amp opens and how two LFOs run in antiphase. `gain` and
+`offset` are `±20000`, the same range `@synthlet/ad`, `@synthlet/adsr` and
+`@synthlet/param` declare for the identical `x × gain + offset`.
 
 ## Credits
 

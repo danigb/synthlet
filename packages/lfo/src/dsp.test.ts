@@ -311,6 +311,63 @@ describe("independent instances", () => {
   });
 });
 
+describe("gain and offset", () => {
+  // `gain` was `[0, 10000]` where `ad`, `adsr` and `param` - the other three
+  // packages computing `x * gain + offset` - are all `[-20000, 20000]`. An
+  // `AudioParam` clamps its *computed* value to the descriptor's range, so the
+  // floor of 0 forbade inversion even from a connected modulator, and the only
+  // way to invert an LFO was a whole `Param.inv` node for a sign. The DSP never
+  // had a sign assumption; these are the assertions that say so.
+
+  const DETERMINISTIC_TYPES = [
+    LfoType.None,
+    LfoType.Sine,
+    LfoType.Triangle,
+    LfoType.RampUp,
+    LfoType.RampDown,
+    LfoType.Square,
+    LfoType.ExpRampUp,
+    LfoType.ExpRampDown,
+    LfoType.ExpTriangle,
+    LfoType.Impulse,
+  ];
+
+  it.each(DETERMINISTIC_TYPES.map((type) => [LfoType[type], type]))(
+    "%s at gain -1 is %s at gain 1, negated",
+    (_name, type) => {
+      const positive = audioRate(2 * CYCLE, params({ type, gain: 1 }));
+      const negative = audioRate(2 * CYCLE, params({ type, gain: -1 }));
+      // `+ 0` normalises −0 to 0: an exact negation produces −0 wherever the
+      // shape reads 0, and `toEqual` treats the two as different values.
+      expect(Array.from(negative, (value) => value + 0)).toEqual(
+        Array.from(positive, (value) => -value + 0),
+      );
+    },
+  );
+
+  it("RandSampleHold at gain -1 holds the negation of a held value", () => {
+    // Two renders are two instances now, so the values differ by construction.
+    // What a negative gain promises about a stochastic shape is that its range
+    // is mirrored and its holds are in the same places, which is assertable.
+    const p = params({ type: LfoType.RandSampleHold, gain: -1 });
+    const signal = audioRate(4 * CYCLE, p);
+    expect(Math.max(...signal)).toBeLessThanOrEqual(1);
+    expect(Math.min(...signal)).toBeGreaterThanOrEqual(-1);
+    expect(new Set(signal).size).toBeGreaterThanOrEqual(4);
+  });
+
+  it("makes a unipolar modulator out of a bipolar one", () => {
+    // The recipe the widened `offset` exists for: half the depth, centred on
+    // half the depth. `gain: 10000, offset: 10000` is the same line on a filter
+    // cutoff, and used to be inexpressible because `offset` stopped at 1000.
+    const signal = audioRate(2 * CYCLE, params({ gain: 0.5, offset: 0.5 }));
+    expect(Math.min(...signal)).toBeGreaterThanOrEqual(0);
+    expect(Math.max(...signal)).toBeLessThanOrEqual(1);
+    expect(Math.min(...signal)).toBeCloseTo(0, 3);
+    expect(Math.max(...signal)).toBeCloseTo(1, 3);
+  });
+});
+
 describe("spectrum", () => {
   // The staircase's fundamental: one step per render quantum is a 344.53 Hz
   // sampler, and its energy is exactly what a-rate output removes.

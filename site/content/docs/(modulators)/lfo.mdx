@@ -19,8 +19,15 @@ const lfo = Lfo(audioContext, {
 
 - `frequency`: the frequency of the oscillator in Hz. Default is 10Hz. Range: [0-200]
 - `type`: the type of the oscillator. You can use `LfoType` enum. Default is `LfoType.Sine`.
-- `gain`: the amplitude of the oscillator. Default is 1. Range: [0-10000]
-- `offset`: the offset of the oscillator. Default is 0. Range: [-1000, 1000]
+- `gain`: the depth of the oscillator. Default is 1. Range: [-20000, 20000]. A
+  **negative gain inverts the waveform** — that is how you get a filter that
+  closes as the amp opens, or two LFOs in antiphase.
+- `offset`: where the waveform is centred. Default is 0. Range: [-20000, 20000].
+  A unipolar 0…1 modulator is `gain: 0.5, offset: 0.5`; a filter cutoff swept
+  over its whole range is `gain: 10000, offset: 10000`.
+
+`gain` and `offset` carry the same range as `Ad`, `Adsr` and `Param`, which
+compute the identical `x × gain + offset`.
 
 ## Shapes
 
