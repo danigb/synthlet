@@ -68,6 +68,15 @@ describe("ProcessorNode", () => {
     expect(Array.from(second[0]).some((value) => value !== 0)).toBe(true);
     expect(second[1]).toEqual(new Float32Array(16));
   });
+
+  it("stops running after DISPOSE", () => {
+    const processor = new Processor();
+    const outputs = [[new Float32Array(16)]];
+    // `true` first, so a regression here fails for the right reason.
+    expect(processor.process([[impulse()]], outputs, params)).toBe(true);
+    processor.port.onmessage({ data: { type: "DISPOSE" } });
+    expect(processor.process([[impulse()]], outputs, params)).toBe(false);
+  });
 });
 
 function createWorkletTestContext(sampleRate = 10) {

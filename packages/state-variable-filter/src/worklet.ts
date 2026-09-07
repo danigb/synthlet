@@ -11,7 +11,7 @@ export class SvfProcessor extends AudioWorkletProcessor {
     this.p = [];
     this.port.onmessage = (event) => {
       switch (event.data.type) {
-        case "STOP":
+        case "DISPOSE":
           this.r = false;
           break;
       }
