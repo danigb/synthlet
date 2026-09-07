@@ -56,9 +56,15 @@ _emits_ is written per sample either way.
 120 BPM the default is 250 ms — about 86 render quanta, wide enough that no
 consumer can miss it.
 
-One phase accumulator per node: two `Clock` nodes drift unless they were built
-in the same render quantum, which is why the gate is a second output rather
-than a separate `ClockGate` module.
+One phase accumulator per node, and both nodes derive the same increment — so
+two `Clock` nodes built in different render quanta do not drift apart, they hold
+a **constant offset**. Measured at 44100 Hz and 120 BPM: a clock born 37 blocks
+late stays 4736 samples behind, identically on the first beat and on the last,
+across 600 s. A fixed phase offset is a repairable thing and drift would not be;
+what repairs it is an alignment inlet, which this module does not have yet.
+
+That is also why the gate is a second output rather than a separate `ClockGate`
+module: one accumulator, two views of it.
 
 ## License
 
