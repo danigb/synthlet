@@ -340,7 +340,7 @@ const create = createWorkletConstructor<
         wavetable.levels && wavetable.levels > 1
           ? wavetable
           : mipmapWavetable(conditionWavetable(wavetable, options));
-      // A copy, then a transfer — `flex-audio-buffer-source/src/index.ts:145-153`'s
+      // A copy, then a transfer — `timestretch-audio-source/src/index.ts:145-153`'s
       // idiom. The copy is not ceremony: `defaultWavetable` memoizes one instance
       // and shares it between every node, and transferring that buffer would
       // detach it and leave the second node with an empty table. At 32 KB for the

@@ -1,11 +1,11 @@
 ---
-title: Flex Audio Buffer Source
+title: Timestretch Audio Source
 description: A sampler with independent time, pitch, region and direction
 ---
 
-import FlexAudioBufferSourceExample from "../../../examples/FlexAudioBufferSourceExample";
+import TimestretchAudioSourceExample from "../../../examples/TimestretchAudioSourceExample";
 
-`@synthlet/flex-audio-buffer-source`
+`@synthlet/timestretch-audio-source`
 
 Web Audio's `AudioBufferSourceNode` is a varispeed: `playbackRate` and `detune`
 both resample, so playing a clip at half speed also drops it an octave. This is
@@ -19,17 +19,17 @@ automatable `AudioParam`s that can be moved while a note sounds.
 
 ```ts
 import {
-  FlexAudioBufferSource,
-  registerFlexAudioBufferSourceWorklet,
-} from "@synthlet/flex-audio-buffer-source";
+  TimestretchAudioSource,
+  registerTimestretchAudioSourceWorklet,
+} from "@synthlet/timestretch-audio-source";
 
 const ac = new AudioContext();
-await registerFlexAudioBufferSourceWorklet(ac);
+await registerTimestretchAudioSourceWorklet(ac);
 
 const bytes = await fetch("/loop.mp3").then((r) => r.arrayBuffer());
 const buffer = await ac.decodeAudioData(bytes);
 
-const src = FlexAudioBufferSource(ac, {
+const src = TimestretchAudioSource(ac, {
   playbackRate: 0.5, // half speed, same pitch
   detune: 300, // +3 semitones, same duration
   startOffset: 2.5, // play from 2.5s...
@@ -43,7 +43,7 @@ src.onended = () => console.log("done");
 src.start();
 ```
 
-<FlexAudioBufferSourceExample />
+<TimestretchAudioSourceExample />
 
 ## Parameters
 

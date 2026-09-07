@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`FlexAudioBufferSourceProcessor has parameter descriptors 1`] = `
+exports[`TimestretchAudioSourceProcessor has parameter descriptors 1`] = `
 [
   {
     "automationRate": "k-rate",

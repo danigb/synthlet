@@ -1,6 +1,6 @@
 // Jest Snapshot v1, https://goo.gl/fbAQLP
 
-exports[`createFlexSource loop renders a snapshot 1`] = `
+exports[`createTimestretchSource loop renders a snapshot 1`] = `
 [
   -0.8696,
   -0.4145,
@@ -25,7 +25,7 @@ exports[`createFlexSource loop renders a snapshot 1`] = `
 ]
 `;
 
-exports[`createFlexSource renders a snapshot 1`] = `
+exports[`createTimestretchSource renders a snapshot 1`] = `
 [
   0.0035,
   0.8071,

@@ -1,26 +1,156 @@
 ---
 title: Granite
-description: A granular effect
+description: A granular delay — a cloud of overlapping, windowed, pitch-shifted reads of its input
 package: granite
 ---
 
-This is a mono-to-stereo granular effect. See [demo](/demos/granite)
+import GraniteExample from "../../../examples/GraniteExample";
+
+This is the third delay in the library, and the three are the same machine read
+three different ways. All of them write their input into the same circular buffer
+at exactly 1× and then read it back somewhere behind the write head.
+[`DigitalDelay`](/docs/digital-delay) reads with a **tap**, and hands over to a
+second tap when you move it. [`AnalogDelay`](/docs/analog-delay) **glides** its
+one head towards where you asked, which is why moving its knob bends pitch.
+`Granite` reads with a **cloud** — up to 64 short windowed playheads at once,
+each with its own start point, playback rate, direction and place in the stereo
+field. That is Bencina's Tapped Delay Line granulator, the variant he calls
+_"appropriate for 'effects' processing of real-time input"_, and it is why this
+module has a `feedback` knob and a `freeze` button rather than a file loader.
+
+**Every per-grain quantity is a `(centre, spread)` pair**, drawn once when the
+grain starts and never re-read — Truax's control model. **Every spread defaults
+to 0**, so eighteen parameters is not eighteen decisions: at the defaults the
+module is deterministic and every grain is identical, a clean quasi-synchronous
+stream. `rate`, `duration`, `position` and `pitch` are the four that make a
+sound; the spreads are what turn that stream into a cloud.
 
 ```ts
 import { Granite } from "synthlet";
 
-const osc = new OscillatorNode(audioContext);
 const granite = Granite(audioContext, {
-  speed: 10,
-  density: 15,
-  spread: 0.5,
+  rate: 80, // grains per second
+  duration: 40, // ms each
+  durationSpread: 0.4, // 32 to 48 ms, grain to grain
+  position: 0.3, // how far back they read
+  spray: 0.3, // and how far that origin smears
+  pitch: 12, // an octave up
+  pitchSpread: 7, // a fifth of detune across the cloud
+  panSpread: 1, // spread across the field
+  jitter: 0.8, // onsets off the grid, at the same density
+  feedback: 0.5,
 });
 
-osc.connect(granite).connect(audioContext.destination);
+source.connect(granite).connect(audioContext.destination);
 ```
+
+<GraniteExample />
+
+Turn `Rate` and `Duration` against each other — their product is the number of
+grains overlapping, and the sound goes from a rhythm through a texture to a wall.
+Then hit `Freeze` and keep moving everything else.
 
 ## Parameters
 
-- `speed`: The sampling of the grains [0, 100]
-- `density`: The density of the grains [0, 30]
-- `spread`: The spread of the grains [0, 1]
+The stream — how many grains there are, and when:
+
+- `rate`: grains per second [0, 2000], **independent of `duration`**. 0 emits
+  none. `rate × duration / 1000` is the number overlapping at any moment, and
+  sweeping the two against each other is the instrument
+- `jitter`: onset scatter [0, 1]. Each interval is drawn from
+  `mean · (1 ± jitter)`, so the mean is preserved and **the density does not
+  change** — only the grid dissolves. 0 is metronomic
+- `intermittency`: probability a scheduled grain is skipped [0, 1]. Unlike
+  `jitter` this **does** lower the density, and it skips the activation, so it
+  costs nothing. 0.1–0.2 is the erratic-contact texture
+
+The grain — what each one is, drawn once at its activation:
+
+- `duration`: grain length in milliseconds [1, 1000]. Below about 10–15 ms the
+  envelope's own spectrum becomes audible around each grain, which is a feature
+  rather than a defect. The ceiling is exactly a quarter of the buffer, which is
+  what the causality clamp allows
+- `durationSpread`: per-grain length [0, 1], a **total width**: 1 runs grains
+  from half to one and a half times `duration`
+- `position`: how far back grains read [0, 1], as a fraction of the buffer they
+  can reach. 0 is the freshest audio the causality clamp allows, not the write
+  head itself
+- `spray`: per-grain read origin [0, 1], and **one-sided** — grains reach further
+  back than `position`, never nearer. This is what decorrelates the cloud, and
+  what makes the gain law hold
+- `pitch`: transposition in semitones [-24, 24]. The playback rate is
+  `2^(pitch/12)`, so ±2 octaves. Reading faster than 1× costs grain length,
+  because a grain must not catch the write head
+- `pitchSpread`: per-grain transposition [0, 24], a **total width** in
+  semitones — 12 spans **one** octave. A detune at small values, a chorus in the
+  middle, and every grain somewhere else in the octave at the top
+- `reverse`: probability a grain plays backwards [0, 1]. A probability rather
+  than a negative rate, because a parameter range is continuous and would have to
+  include 0 — and rate 0 is freeze, a different feature
+- `shape`: envelope asymmetry [0, 1]: 0 is expodec, a fast attack into a long
+  decay and percussive at density; 0.5 is a symmetric bell; 1 is reversed
+  expodec, which sounds like reversed tape. The morph is level-neutral by
+  construction — the envelope's mean square is 3/8 at every setting
+- `pan`: stereo placement [-1, 1]. Constant power for a mono input, L/R balance
+  for a stereo one, because panning a stereo image with a constant-power law
+  would collapse it to a point. 0 is an exact bypass
+- `panSpread`: per-grain pan [0, 1], a **half width** — `pan` is already bipolar,
+  so a total width could not reach the edges of the field
+- `level`: per-grain gain [0, 1], applied before the overlap sum, so with
+  `levelSpread` up it changes the texture where `wet` changes the balance
+- `levelSpread`: per-grain gain [0, 1], **downward** from `level`. One-sided,
+  because spraying upward from 1 would push grains past full scale
+
+The write head, and the output:
+
+- `freeze`: stops recording while `> 0`, so the last few seconds become a
+  playable object. Entering cannot click — the read trajectory is unchanged —
+  and leaving is crossfaded over 100 samples. `feedback` is inert while it is on
+- `feedback`: the grain sum, summed back into the buffer [0, 0.95], through a
+  `tanh` saturator and a one-pole high-pass whose corner rises with the setting.
+  0.95 is not a loop gain of 0.95: the sum of _n_ overlapping grains is not a
+  gain of 1, so the saturator is what sets the ceiling. With `pitch` up it
+  stacks transpositions — an octave, then two, then three
+- `wet`: dry/wet [0, 1], **1 by default**. 0 is an exact bypass, sample for
+  sample
+
+Three construction options are not `AudioParam`s, because a parameter cannot
+resize an allocation or reseed a generator: `maxGrains` (default 64) sizes the
+pool, and a stream denser than the pool **drops** grains rather than stealing one
+that is playing; `bufferSeconds` (default 4) is how far back `position` reaches;
+`seed` (default `0x9e3779b9`) seeds the per-grain draws, so two nodes with
+different seeds double a source without correlating it.
+
+## What it deliberately isn't
+
+granite's write head advances at exactly 1× and cannot be argued with, so grains
+only ever reach **backward** from now. That single fact is most of what this
+module is not: there is no scanner to drive a read position with, no
+`setBuffer`, no loop or region, and no start or stop. To granulate a file, feed a
+[`TimestretchAudioSource`](/docs/timestretch-audio-source) into granite's input —
+it will granulate whatever arrives, including a file already being time-stretched
+— and the stored-sample granulator with a scanner of its own is a separate
+module. **granite: any source, one time.**
+
+There is also no LFO and no modulation matrix. All eighteen parameters are
+`AudioParam`s, so an [`Lfo`](/docs/lfo) connected to any of them is the
+modulation, at any rate and any shape.
+
+## References
+
+- Bencina,
+  [_Implementing Real-Time Granular Synthesis_](https://www.rossbencina.com/static/writings/gs_ap2004.pdf),
+  in _Audio Anecdotes III_, 2001 — the Delay Line Granulator this module is, its
+  scheduler, and its Direct Interonset Specification, which is `jitter`
+- Truax, _Real-Time Granular Synthesis with a Digital Signal Processor_, CMJ
+  12(2), 1988, and _Discovering Inner Complexity_, CMJ 18(2), 1994 — the
+  `(centre, range)` control model every spread here follows, the `[0, 2·mean]`
+  interonset range that makes `jitter` density-preserving, and freeze
+- Roads, Kilgore & DuPlessis, _Emission Control_, Proc. ICMC 2021 — the
+  parameter surface, `shape`'s asymmetry axis, and the rule that a grain's
+  parameters are fixed at its birth
+- Roads, _Microsound_, MIT Press, 2001 — stochastic masking, which is
+  `intermittency`
+- Mutable Instruments Clouds — the causality clamp, the smoothed `1/√(n−1)` gain
+  normalisation, the pan split and the feedback high-pass, read as a worked
+  example and re-derived

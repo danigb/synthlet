@@ -13,7 +13,7 @@ export class PolyBLEProcessor extends AudioWorkletProcessor {
     // `sync` edge restarts it - and an AudioParam would imply it meant
     // something continuously. Read the way `packages/ad/src/worklet.ts:12`
     // reads its `mode`; written the way
-    // `packages/flex-audio-buffer-source/src/index.ts:87-97` writes its
+    // `packages/timestretch-audio-source/src/index.ts:87-97` writes its
     // configuration.
     this.g = createPolyblepOscillator(
       sampleRate,

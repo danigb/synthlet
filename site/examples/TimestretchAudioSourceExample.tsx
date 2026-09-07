@@ -3,23 +3,22 @@
 import { createSynthAudioContext } from "@/app/audio-context";
 import { useEffect, useRef, useState } from "react";
 import {
-  FlexAudioBufferSource,
-  type FlexAudioBufferSourceWorkletNode,
+  TimestretchAudioSource,
+  type TimestretchAudioSourceWorkletNode,
 } from "synthlet";
 import { CheckboxParam } from "./components/CheckboxParam";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 
-// The same clip the granite demo loads.
+// The same clip the granite example loads.
 const CLIP = "/synthlet/track14.mp3";
 
-function FlexAudioBufferSourceExample() {
+function TimestretchAudioSourceExample() {
   const [status, setStatus] = useState<"loading" | "ready" | "playing">(
     "loading",
   );
-  const [source, setSource] = useState<FlexAudioBufferSourceWorkletNode | null>(
-    null,
-  );
+  const [source, setSource] =
+    useState<TimestretchAudioSourceWorkletNode | null>(null);
   // The clip's length, so the region sliders can be in seconds of *this* clip
   // rather than of the parameter's arbitrary 0..3600 range.
   const [duration, setDuration] = useState(0);
@@ -27,7 +26,7 @@ function FlexAudioBufferSourceExample() {
 
   useEffect(() => {
     disposed.current = false;
-    let node: FlexAudioBufferSourceWorkletNode | undefined;
+    let node: TimestretchAudioSourceWorkletNode | undefined;
 
     createSynthAudioContext()
       .then(async (ac) => {
@@ -35,7 +34,7 @@ function FlexAudioBufferSourceExample() {
         const buffer = await ac.decodeAudioData(bytes);
         if (disposed.current) return;
 
-        node = FlexAudioBufferSource(ac, { playbackRate: 1, detune: 0 });
+        node = TimestretchAudioSource(ac, { playbackRate: 1, detune: 0 });
         node.setBuffer(buffer);
         node.connect(ac.destination);
         node.onended = () => setStatus("ready");
@@ -131,7 +130,7 @@ function FlexAudioBufferSourceExample() {
 }
 
 export default () => (
-  <ExamplePane label="Flex Audio Buffer Source">
-    <FlexAudioBufferSourceExample />
+  <ExamplePane label="Timestretch Audio Source">
+    <TimestretchAudioSourceExample />
   </ExamplePane>
 );

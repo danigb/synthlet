@@ -31,7 +31,6 @@ const EXPECTED = [
   "DattorroReverb",
   "DigitalDelay",
   "Euclid",
-  "FlexAudioBufferSource",
   "Gain",
   "Granite",
   "Impulse",
@@ -45,6 +44,7 @@ const EXPECTED = [
   "PolyblepOscillator",
   "ReverbDelay",
   "Svf",
+  "TimestretchAudioSource",
   "VirtualAnalogFilter",
   "WavetableOscillator",
 ];
@@ -77,17 +77,24 @@ describe("descriptors", () => {
   // if the ranges drifted apart, the same signal would drive some modules and
   // not others - which is exactly the bug the shared detector removed.
   //
-  // The **rate** is part of it too, now. Every trigger-like param in the
-  // library is a-rate as of automation-rate ticket 03: a gate scheduled at an
-  // exact sample takes effect at that sample, rather than at the top of the
-  // next 128-frame quantum - up to 2.9 ms late at 44.1 kHz, and by a different
-  // amount for every event, so a repeated pattern did not even swing
-  // consistently. The two `sync` params were already there, because hard sync
-  // has to place a reset *inside* a sample and quantising it costs 20 dB of
-  // alias rejection; the rest have caught up.
+  // The **rate** is not part of the contract, and the list below is where each
+  // module's answer is recorded. Every param here that places an *event* is
+  // a-rate as of automation-rate ticket 03: a gate scheduled at an exact sample
+  // takes effect at that sample rather than at the top of the next 128-frame
+  // quantum - up to 2.9 ms late at 44.1 kHz, and by a different amount for
+  // every event, so a repeated pattern did not even swing consistently. The two
+  // `sync` params were already there, because hard sync has to place a reset
+  // *inside* a sample and quantising it costs 20 dB of alias rejection.
   //
-  // This list is the whole of it, so a new module declaring a k-rate trigger
-  // fails here rather than shipping a quantised one.
+  // **`Granite.freeze` is the one k-rate entry, and it is not an event.** It
+  // borrows the gate's shape - `> 0`, so a scaled control still opens it - to
+  // latch a *mode*: the write head stops, and `dsp.ts` crossfades 100 samples
+  // across each edge precisely because the splice, not the sample the edge
+  // landed on, is what a listener hears. Placing that edge to the sample would
+  // buy nothing the fade does not already cover.
+  //
+  // So the rule this list pins is "an event param is a-rate", and a new module
+  // declaring a k-rate trigger fails here rather than shipping a quantised one.
   it("declares every trigger-like param the same way", () => {
     const TRIGGERS: [string, string, ParamDescriptor["automationRate"]][] = [
       ["AdAmp", "trigger", "a-rate"],
@@ -95,6 +102,7 @@ describe("descriptors", () => {
       ["AdsrAmp", "gate", "a-rate"],
       ["AdsrEnv", "gate", "a-rate"],
       ["Arp", "trigger", "a-rate"],
+      ["Granite", "freeze", "k-rate"],
       ["Impulse", "trigger", "a-rate"],
       ["KarplusStrong", "trigger", "a-rate"],
       ["PolyblepOscillator", "sync", "a-rate"],

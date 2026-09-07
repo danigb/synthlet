@@ -6,7 +6,7 @@
 //
 // Six packages grew their own before this existed - Faust's bitmask rings in
 // `reverb-delay`, `chorus` and `dattorro-reverb`, a modulo ring in
-// `karplus-strong`, a shift-based FIFO in `flex-audio-buffer-source`, a
+// `karplus-strong`, a shift-based FIFO in `timestretch-audio-source`, a
 // monotonic deque in `lookahead-limiter` - sharing no naming, no wrap rule and
 // no interpolation. The 4th-order Lagrange read in `reverb-delay` is written
 // out again at every call site. This file is the one they should have been.
