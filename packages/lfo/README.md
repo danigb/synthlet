@@ -40,7 +40,7 @@ osc.connect(ac.destination);
 
 ## Parameters
 
-`output = gen(phase) × gain + offset`
+`output = gen(phase) × amp × gain + offset`
 
 | Param       | Default | Range   | Rate   | Meaning                       |
 | ----------- | ------- | ------- | ------ | ----------------------------- |
@@ -134,6 +134,43 @@ re-arm.
 The reset lands on the sample the edge was detected on. Unlike
 `@synthlet/polyblep-oscillator`, this package does not interpolate the
 sub-sample crossing instant — 2.9 ms is nothing against a 5 Hz cycle.
+
+## Fading in
+
+Vibrato that arrives a moment after the note, rather than on it, is the most
+common thing an LFO does. `delay` and `attack` are that, and `gate` is what
+starts it:
+
+```ts
+const vibrato = Lfo(ac, {
+  frequency: 5,
+  gain: 10,
+  delay: 0.3, // 300 ms of nothing
+  attack: 0.7, // then 700 ms fading up to full depth
+  gate, // restarted by the note
+});
+```
+
+**`delay: 0, attack: 0` — the defaults — means no envelope at all.** The depth
+is 1, `gate` is ignored, and the output is bit-identical to a build without any
+of it.
+
+| Behaviour              | What happens                                      |
+| ---------------------- | ------------------------------------------------- |
+| Rising edge on `gate`  | The fade restarts at zero depth                   |
+| Gate held high         | The fade advances — legato is **one** ramp        |
+| Gate falls             | The fade **freezes**; it does not reset           |
+| Gate rises again       | Back to zero, and off again                       |
+| `gate` never connected | Armed at construction: it fades in once and stays |
+
+`attack` is seconds to **99%** of full depth, the same meaning `Ad` and `Adsr`
+give their own `attack`. A Juno-6 with its delay slider at maximum is
+`attack: 6.91` — its ramp is a time constant of 1.5 s, and the two conventions
+differ by exactly `ln(100)`.
+
+**`sync` and `gate` are different parameters.** `sync` resets the _phase_;
+`gate` restarts the _depth ramp_. A Juno's LFO free-runs while its depth fades
+in, which is only expressible if the two are separate.
 
 ## Credits
 

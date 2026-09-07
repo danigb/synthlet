@@ -57,6 +57,48 @@ type LfoParams = {
    * instant - 2.9 ms is nothing against a 5 Hz cycle.
    */
   sync?: ParamInput;
+  /**
+   * The depth envelope's note, a-rate. A **rising edge** restarts the fade at
+   * zero depth; while the gate is high the fade advances, and while it is low
+   * it **freezes** rather than resetting - so releasing mid-fade holds the
+   * depth and the next note continues from there. A gate held high across
+   * several legato notes is one edge and therefore one ramp.
+   *
+   * **This is not `sync`.** `sync` resets the phase; `gate` restarts the depth
+   * ramp. A Juno's LFO free-runs while its depth fades in, which is only
+   * expressible if the two are separate parameters.
+   */
+  gate?: ParamInput;
+  /**
+   * Seconds held at zero depth before the ramp begins, `0…10`, k-rate.
+   * Default 0.
+   */
+  delay?: ParamInput;
+  /**
+   * Seconds from zero to **99%** of full depth, `0…10`, k-rate. Default 0 -
+   * and `delay: 0, attack: 0` means no depth envelope at all, so `gate` is
+   * ignored and the output is what it was before these parameters existed.
+   *
+   * Seconds are how long the move takes, the same meaning `Ad` and `Adsr` give
+   * their own `attack`. A Juno-6 with its delay slider at maximum is
+   * `attack: 6.91`: its ramp is a time constant of 1.5 s, and the two
+   * conventions differ by exactly `ln(100)`.
+   *
+   * ```ts
+   * // Vibrato that arrives 300 ms after the note and fades up over 700 ms.
+   * const vibrato = Lfo(ac, {
+   *   frequency: 5,
+   *   gain: 10,
+   *   delay: 0.3,
+   *   attack: 0.7,
+   *   gate,
+   * });
+   * ```
+   *
+   * With no `gate` ever connected the fade arms at construction: it runs once
+   * from t=0 and stays at full depth.
+   */
+  attack?: ParamInput;
 };
 
 export type LfoInputs = LfoParams & {
@@ -89,6 +131,9 @@ export type LfoWorklet = AudioWorkletNode & {
   offset: AudioParam;
   type: AudioParam;
   sync: AudioParam;
+  gate: AudioParam;
+  delay: AudioParam;
+  attack: AudioParam;
   dispose(): void;
 };
 

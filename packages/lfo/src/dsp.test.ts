@@ -51,6 +51,9 @@ type Params = {
   gain: number[];
   offset: number[];
   sync: ArrayLike<number>;
+  gate: ArrayLike<number>;
+  delay: number[];
+  attack: number[];
 };
 
 /**
@@ -61,8 +64,14 @@ type Params = {
  * whole block, which is what a connected node produces.
  */
 const params = (
-  over: Partial<Record<"type" | "frequency" | "gain" | "offset", number>> & {
+  over: Partial<
+    Record<
+      "type" | "frequency" | "gain" | "offset" | "delay" | "attack",
+      number
+    >
+  > & {
     sync?: ArrayLike<number>;
+    gate?: ArrayLike<number>;
   } = {},
 ): Params => ({
   type: [over.type ?? LfoType.Sine],
@@ -70,6 +79,9 @@ const params = (
   gain: [over.gain ?? 1],
   offset: [over.offset ?? 0],
   sync: over.sync ?? [0],
+  gate: over.gate ?? [0],
+  delay: [over.delay ?? 0],
+  attack: [over.attack ?? 0],
 });
 
 /** Drive a generator over `samples` in blocks, exactly as the processor does. */
@@ -630,6 +642,218 @@ describe("sync and phase", () => {
       for (let beat = 0; beat < BEATS; beat++) {
         expect(signal[beat * BEAT]).toBeCloseTo(fresh, 6);
       }
+    }
+  });
+});
+
+describe("depth envelope", () => {
+  // The most common thing an LFO does is fade in. `MonoSynth` used to fake it
+  // by defaulting the vibrato to `gain: 0` and expecting the caller to write an
+  // automation curve, which is not vibrato - it is a note in the docs.
+  //
+  // Not an `AdEnv` through a `GainNode`: an AD decays where this stays,
+  // retriggers on every edge where this ignores legato, and cannot freeze.
+  //
+  // The probe throughout is `LfoType.Square` at `gain: 1`, whose first half
+  // cycle is +1: for those samples the output *is* the envelope. `frequency: 0`
+  // with `phase: 0` freezes the square at +1 for as long as a test needs, which
+  // makes the depth directly readable for any duration.
+
+  const depthParams = (over: Parameters<typeof params>[0] = {}) =>
+    params({ type: LfoType.Square, frequency: 0, ...over });
+
+  /** A gate high from `from` to `to`, in samples. */
+  function gateBetween(length: number, from: number, to = length) {
+    const gate = new Float32Array(length);
+    gate.fill(1, from, to);
+    return gate;
+  }
+
+  const EVERY_TYPE = Object.values(LfoType).filter(
+    (value): value is LfoType => typeof value === "number",
+  );
+
+  it.each(EVERY_TYPE.map((type) => [LfoType[type], type]))(
+    "%s: the defaults change nothing",
+    (_name, type) => {
+      // Non-negotiable: nine packages depend on this one and none of them
+      // connects a gate. With `delay` and `attack` at zero there is no
+      // envelope, `amp` is exactly 1, and the arithmetic is untouched.
+      const plain = audioRate(4 * CYCLE, params({ type }));
+      const gated = audioRate(
+        4 * CYCLE,
+        params({ type, gate: new Float32Array(BLOCK).fill(1) }),
+      );
+      if (type === LfoType.RandSampleHold) {
+        const changes = (signal: Float32Array) =>
+          Array.from(signal.subarray(1))
+            .map((value, i) => (value !== signal[i] ? i : -1))
+            .filter((i) => i >= 0);
+        expect(changes(gated)).toEqual(changes(plain));
+      } else {
+        expect(Array.from(gated)).toEqual(Array.from(plain));
+      }
+    },
+  );
+
+  it.each([1, 2])("attack: %s reaches 0.99 at %s.00 seconds", (attack) => {
+    const length = Math.round((attack + 0.5) * SAMPLE_RATE);
+    const depth = audioRate(
+      length,
+      depthParams({ attack, gate: gateBetween(length, 0) }),
+      length,
+    );
+
+    const reached = depth.findIndex((value) => value >= 0.99);
+    // +/- 1 ms. `attack` seconds is the time to 0.99, which is what a time
+    // parameter means everywhere in this library.
+    expect(Math.abs(reached / SAMPLE_RATE - attack)).toBeLessThan(0.001);
+    expect(depth[length - 1]).toBeGreaterThan(0.99);
+  });
+
+  it("holds at zero for delay, then ramps", () => {
+    const length = Math.round(1.5 * SAMPLE_RATE);
+    const depth = audioRate(
+      length,
+      depthParams({ delay: 0.5, attack: 0.5, gate: gateBetween(length, 0) }),
+      length,
+    );
+
+    const hold = Math.round(0.5 * SAMPLE_RATE);
+    for (let i = 0; i < hold; i++) expect(depth[i]).toBe(0);
+    expect(depth[hold]).toBeGreaterThan(0);
+
+    const reached = depth.findIndex((value) => value >= 0.99);
+    expect(Math.abs(reached / SAMPLE_RATE - 1)).toBeLessThan(0.001);
+  });
+
+  it("restarts on a rising edge", () => {
+    const second = Math.round(1.5 * SAMPLE_RATE);
+    const length = 3 * SAMPLE_RATE;
+    // High for 1.5 s - long enough to finish a 0.5 s ramp - then low, then high.
+    const gate = new Float32Array(length);
+    gate.fill(1, 0, SAMPLE_RATE);
+    gate.fill(1, second);
+    const depth = audioRate(length, depthParams({ attack: 0.5, gate }), length);
+
+    expect(depth[SAMPLE_RATE - 1]).toBeGreaterThan(0.99);
+    expect(depth[second]).toBeLessThan(0.01);
+    expect(depth[second + Math.round(0.5 * SAMPLE_RATE)]).toBeGreaterThan(0.98);
+  });
+
+  it("freezes on a low gate rather than resetting", () => {
+    // Both halves of the Juno's behaviour: the fade advances only while a voice
+    // is active, so releasing mid-fade holds the depth where it is.
+    const half = Math.round(0.5 * SAMPLE_RATE);
+    const length = 3 * SAMPLE_RATE;
+    const gate = gateBetween(length, 0, half);
+    const depth = audioRate(length, depthParams({ attack: 1, gate }), length);
+
+    const atRelease = depth[half - 1];
+    expect(atRelease).toBeGreaterThan(0.5);
+    expect(atRelease).toBeLessThan(0.99);
+    for (let i = half; i < length; i++) {
+      expect(depth[i]).toBeCloseTo(atRelease, 6);
+    }
+  });
+
+  it("treats legato as one ramp", () => {
+    // A gate held continuously high across what would be several notes is one
+    // edge, so it is one ramp with no discontinuity in it.
+    const length = 2 * SAMPLE_RATE;
+    const depth = audioRate(
+      length,
+      depthParams({ attack: 1, gate: gateBetween(length, 0) }),
+      length,
+    );
+
+    for (let i = 1; i < length; i++) {
+      expect(depth[i]).toBeGreaterThanOrEqual(depth[i - 1]);
+    }
+    // A restart would be a step down; the largest step here is the first one.
+    let worst = 0;
+    for (let i = 1; i < length; i++) {
+      worst = Math.max(worst, depth[i - 1] - depth[i]);
+    }
+    expect(worst).toBe(0);
+  });
+
+  it("arms itself when no gate is ever connected", () => {
+    // The deliberate departure from rune06, whose LFO starts silent because a
+    // `Synth` always drives it. A standalone node has no such guarantee.
+    const length = Math.round(1.5 * SAMPLE_RATE);
+    const depth = audioRate(length, depthParams({ attack: 1 }), length);
+
+    const reached = depth.findIndex((value) => value >= 0.99);
+    expect(Math.abs(reached / SAMPLE_RATE - 1)).toBeLessThan(0.001);
+    expect(depth[length - 1]).toBeGreaterThan(0.99);
+  });
+
+  it("converts the Juno-6 delay slider exactly", () => {
+    // rune06's `tau = slider * 1.5` is a *time constant*; this library's
+    // seconds are how long the move takes, to 99%. The two differ by exactly
+    // `ln(100)`, so its maximum setting is `attack: 6.91` - asserted against
+    // the formula rather than against captured numbers.
+    const length = 8 * SAMPLE_RATE;
+    const depth = audioRate(
+      length,
+      depthParams({ attack: 6.91, gate: gateBetween(length, 0) }),
+      length,
+    );
+
+    for (let ms = 0; ms <= 8000; ms += 100) {
+      const t = ms / 1000;
+      const at = Math.min(length - 1, Math.round(t * SAMPLE_RATE));
+      expect(depth[at]).toBeCloseTo(1 - Math.exp(-t / 1.5), 3);
+    }
+  });
+
+  it("keeps gate and sync independent", () => {
+    const length = SAMPLE_RATE;
+    const edge = new Float32Array(length);
+    edge.fill(1, 10000);
+
+    // A `gate` edge does not move the phase: with no envelope engaged the
+    // output is the free-running LFO whatever the gate does.
+    const free = audioRate(length, params(), length);
+    const gated = audioRate(length, params({ gate: edge }), length);
+    expect(Array.from(gated)).toEqual(Array.from(free));
+
+    // A `sync` edge does not touch the depth. Read on a *running* square, so
+    // the reset really does move the phase: `|output|` is the depth whatever
+    // half of the cycle the square is in, which is what makes the two
+    // separable in one signal.
+    const shaped = params({ type: LfoType.Square, attack: 0.5 });
+    const withoutSync = audioRate(
+      length,
+      { ...shaped, gate: gateBetween(length, 0) },
+      length,
+    );
+    const withSync = audioRate(
+      length,
+      { ...shaped, gate: gateBetween(length, 0), sync: edge },
+      length,
+    );
+    expect(Array.from(withSync, Math.abs)).toEqual(
+      Array.from(withoutSync, Math.abs),
+    );
+    // ...and it did move the phase.
+    expect(Array.from(withSync)).not.toEqual(Array.from(withoutSync));
+  });
+
+  it("still holds the shape while the depth is full", () => {
+    // The envelope multiplies; it does not replace. Once at full depth the
+    // waveform is the waveform.
+    const length = 2 * SAMPLE_RATE;
+    const signal = audioRate(
+      length,
+      params({ attack: 0.1, gate: gateBetween(length, 0) }),
+      length,
+    );
+    const plain = audioRate(length, params(), length);
+    const from = Math.round(0.5 * SAMPLE_RATE);
+    for (let i = from; i < length; i += 997) {
+      expect(signal[i]).toBeCloseTo(plain[i], 5);
     }
   });
 });

@@ -35,6 +35,44 @@ const lfo = Lfo(audioContext, {
 `gain` and `offset` carry the same range as `Ad`, `Adsr` and `Param`, which
 compute the identical `x × gain + offset`.
 
+- `gate`: a-rate. A rising edge restarts the **depth ramp**. Not `sync` — see
+  below.
+- `delay`: seconds held at zero depth before the ramp begins. Default 0. Range:
+  [0, 10].
+- `attack`: seconds from zero to 99% of full depth. Default 0. Range: [0, 10].
+
+## Fading in
+
+Vibrato that arrives a moment after the note is the most common thing an LFO
+does. `delay` and `attack` are that, and `gate` starts it:
+
+```ts
+const vibrato = Lfo(audioContext, {
+  frequency: 5,
+  gain: 10,
+  delay: 0.3, // 300 ms of nothing
+  attack: 0.7, // then 700 ms fading up to full depth
+  gate, // restarted by the note
+});
+```
+
+**`delay: 0, attack: 0` — the defaults — means no envelope at all.** The depth is
+1, `gate` is ignored, and the output is bit-identical to a build without it.
+
+| Behaviour              | What happens                                      |
+| ---------------------- | ------------------------------------------------- |
+| Rising edge on `gate`  | The fade restarts at zero depth                   |
+| Gate held high         | The fade advances — legato is **one** ramp        |
+| Gate falls             | The fade **freezes**; it does not reset           |
+| `gate` never connected | Armed at construction: it fades in once and stays |
+
+`attack` is seconds to **99%** of full depth, the same meaning `Ad` and `Adsr`
+give theirs. A Juno-6 with its delay slider at maximum is `attack: 6.91`.
+
+**`sync` and `gate` are different parameters.** `sync` resets the _phase_;
+`gate` restarts the _depth ramp_. A Juno's LFO free-runs while its depth fades
+in, which is only expressible if the two are separate.
+
 ## Options
 
 `phase` is a **construction option**, not an `AudioParam`: it is a one-time

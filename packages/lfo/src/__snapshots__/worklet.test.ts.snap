@@ -37,5 +37,26 @@ exports[`LfoWorkletProcessor has parameter descriptors 1`] = `
     "minValue": 0,
     "name": "sync",
   },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "gate",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 10,
+    "minValue": 0,
+    "name": "delay",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 10,
+    "minValue": 0,
+    "name": "attack",
+  },
 ]
 `;

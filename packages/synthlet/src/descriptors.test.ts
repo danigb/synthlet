@@ -110,6 +110,11 @@ describe("descriptors", () => {
       // shape is the same one, so `clock.gate`, an `AdEnv` or a `Param` all
       // drive it.
       ["Lfo", "sync", "a-rate"],
+      // And its second: `gate` drives the depth envelope. Two event params on
+      // one module, deliberately - `sync` resets the phase, `gate` restarts the
+      // depth ramp, and delayed vibrato on a free-running LFO needs both to be
+      // separately reachable.
+      ["Lfo", "gate", "a-rate"],
       ["PolyblepOscillator", "sync", "a-rate"],
       ["WavetableOscillator", "sync", "a-rate"],
     ];

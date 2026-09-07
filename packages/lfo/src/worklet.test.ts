@@ -32,6 +32,9 @@ describe("LfoWorkletProcessor", () => {
     gain: [1],
     offset: [0],
     sync,
+    gate: [0],
+    delay: [0],
+    attack: [0],
   });
 
   it("writes a per-sample signal, not one value per block", () => {

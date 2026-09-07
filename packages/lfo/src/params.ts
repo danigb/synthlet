@@ -3,7 +3,7 @@ import type { ParamDescriptor } from "./_worklet";
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 //
-// Five parameters, one of them a-rate - and this module's *output* is the
+// Seven parameters, two of them a-rate - and this module's *output* is the
 // signal, which is a different question. `worklet.ts` builds the audio-rate
 // generator, so the LFO emits one value per sample; what follows is about what
 // it reads, and `dsp.ts` reads the four shaping parameters once per block in
@@ -99,5 +99,58 @@ export const PARAMS: readonly ParamDescriptor[] = [
     minValue: 0,
     maxValue: 1,
     automationRate: "a-rate",
+  },
+  {
+    // The depth envelope's note, a-rate. **This is not `sync`.** `sync` resets
+    // the *phase*; `gate` restarts the *depth ramp*. They are separate
+    // parameters because they are separate ideas, and a module that conflated
+    // them could not do delayed vibrato on a free-running LFO - which is what a
+    // Juno does, and rune06's `gate_on` pointedly does not touch `phase`.
+    //
+    // A rising edge restarts the fade at zero. While the gate is high the fade
+    // advances; while it is low the fade **freezes** rather than resetting, so
+    // releasing mid-fade holds the depth and the next note continues from
+    // there. A gate held high across several legato notes is one edge and
+    // therefore one ramp.
+    //
+    // a-rate for the same reason as `sync`: an event's whole content is *when*,
+    // and this is the shape every trigger param in the library declares.
+    name: "gate",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "a-rate",
+  },
+  // The depth envelope's shape: two durations, each consumed as one sample
+  // count or one exponential coefficient per block. A duration that changed
+  // every sample would not be a duration. k-rate is what they mean rather than
+  // a saving - the same ground `ad/src/params.ts` gives for its own two.
+  //
+  // **`delay: 0, attack: 0` - the defaults - means no envelope at all.** The
+  // depth is 1, `gate` is ignored, and the output is bit-identical to a build
+  // without any of this. That matters more here than anywhere: nine packages
+  // depend on this one, and none of them connects a gate.
+  {
+    // Seconds held at zero depth before the ramp begins. The Juno-6 has no
+    // hold and is `delay: 0`; the Juno-106's firmware holds first, and this is
+    // that behaviour without its fixed-point arithmetic.
+    name: "delay",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 10,
+    automationRate: "k-rate",
+  },
+  {
+    // Seconds from zero to 99% of full depth, one-pole. **Seconds mean how
+    // long the move takes**, which is this library's rule since the envelope
+    // packages settled it - not a time constant. rune06 uses the other
+    // convention, and the conversion is exact and constant: its `tau` is
+    // `attack / ln(100)`, so a Juno-6 with its delay slider at maximum
+    // (tau = 1.5 s) is `attack: 6.91`.
+    name: "attack",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 10,
+    automationRate: "k-rate",
   },
 ];

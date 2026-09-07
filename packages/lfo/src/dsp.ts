@@ -212,12 +212,29 @@ function initialPhase(phase: number | "random" | undefined): number {
   return wrapped >= 0 && wrapped < 1 ? wrapped : 0;
 }
 
+/**
+ * `ln(100)`: the ramp's own definition of "done".
+ *
+ * A one-pole never arrives, so a duration has to name a fraction. This library
+ * says a time parameter is **how long the move takes**, and takes 99% as the
+ * move - so `attack` seconds is `attack * sampleRate` steps to 0.99, which
+ * makes the coefficient `1 - exp(-LN100 / (attack * sampleRate))`.
+ *
+ * rune06 takes the other convention: its `tau = slider * 1.5` is a time
+ * constant, 63.2% at tau. The two differ by exactly this factor, so a Juno-6
+ * with its delay slider at maximum is `attack: 6.91`.
+ */
+const LN100 = Math.log(100);
+
 type Params = {
   type: number[];
   frequency: number[];
   gain: number[];
   offset: number[];
   sync: ArrayLike<number>;
+  gate: ArrayLike<number>;
+  delay: number[];
+  attack: number[];
 };
 
 export function createLfo(
@@ -236,6 +253,10 @@ export function createLfo(
    * and it is a one-time initial condition.
    */
   const phaseStart = initialPhase(startPhase);
+
+  // Two detectors, not one. `sync` and `gate` are separate edges with separate
+  // memory, and sharing a detector would make a `sync` pulse eat a `gate` one.
+  const detectSync = createGateDetector();
   const detectGate = createGateDetector();
 
   // Params
@@ -243,10 +264,35 @@ export function createLfo(
   let $frequency = 10;
   let $gain = 1;
   let $offset = 0;
+  let $delay = -1;
+  let $attack = -1;
 
   // State
   let gen: Gen = generators[1] ?? none;
   let phase = phaseStart;
+
+  /**
+   * The depth envelope: hold at zero for `delay`, ramp to full over `attack`,
+   * then stay. `out = gen(phase) * amp * gain + offset`.
+   *
+   * The most common thing an LFO does is fade in - vibrato that arrives a
+   * moment after the note rather than on it - and it is the one feature a
+   * Juno-6 LFO needs that this package did not have. It is *not* an `AdEnv`
+   * through a `GainNode`: an AD decays where this stays, retriggers on every
+   * edge where this ignores legato, and cannot freeze.
+   *
+   * `running` starts true, so an LFO whose `gate` is never connected fades in
+   * once from construction and stays at full depth. That is a deliberate
+   * departure from rune06, whose LFO starts silent because a `Synth` always
+   * drives it; a standalone node has no such guarantee, and "constructed with
+   * `attack: 2` and never heard from again" is not a behaviour to ship.
+   */
+  let enveloped = false;
+  let amp = 0;
+  let held = 0;
+  let running = true;
+  let holdLength = 0;
+  let coefficient = 1;
 
   function read(params: Params) {
     if (params.type[0] !== $type) {
@@ -256,6 +302,42 @@ export function createLfo(
     $frequency = params.frequency[0];
     $offset = params.offset[0];
     $gain = params.gain[0];
+
+    if (params.delay[0] !== $delay) {
+      $delay = params.delay[0];
+      holdLength = Math.round($delay * sampleRate);
+    }
+    if (params.attack[0] !== $attack) {
+      $attack = params.attack[0];
+      // `attack: 0` is an instant jump, not a division by zero.
+      coefficient =
+        $attack > 0 ? 1 - Math.exp(-LN100 / ($attack * sampleRate)) : 1;
+    }
+    // Decided here rather than per sample: with both at zero there is no
+    // envelope, `amp` is exactly 1, and every patch written before this
+    // parameter existed renders bit-identically.
+    enveloped = $delay + $attack > 0;
+    if (!enveloped) amp = 1;
+  }
+
+  /** One step of the depth envelope, given this sample's gate value. */
+  function advanceDepth(gate: number) {
+    const edge = detectGate(gate);
+    if (edge === true) {
+      // A note after silence restarts the fade.
+      amp = 0;
+      held = 0;
+      running = true;
+    } else if (edge === false) {
+      // A release **freezes** it rather than resetting it, so the next note
+      // continues from where this one left off.
+      running = false;
+    }
+    if (running) {
+      if (held < holdLength) held++;
+      else amp += coefficient * (1 - amp);
+    }
+    return amp;
   }
 
   function generateControlRate(output: Float32Array, params: Params) {
@@ -267,9 +349,16 @@ export function createLfo(
     const sync = params.sync;
     let reset = false;
     for (let i = 0; i < sync.length; i++) {
-      if (detectGate(sync[i]) === true) reset = true;
+      if (detectSync(sync[i]) === true) reset = true;
     }
     if (reset) phase = phaseStart;
+
+    // One envelope step per block, from the whole block's gate: same rule as
+    // the reset above, and the same reason.
+    if (enveloped) {
+      const gate = params.gate;
+      for (let i = 0; i < gate.length; i++) advanceDepth(gate[i]);
+    }
 
     let nextPhase = phase + output.length * dt * $frequency;
     if (nextPhase >= 1) {
@@ -277,7 +366,7 @@ export function createLfo(
     } else if (nextPhase < 0) {
       nextPhase += 1;
     }
-    const value = gen(phase, nextPhase) * $gain + $offset;
+    const value = gen(phase, nextPhase) * amp * $gain + $offset;
     output.fill(value);
     phase = nextPhase;
   }
@@ -302,6 +391,12 @@ export function createLfo(
     // `scripts/check-param-rates.mjs` enforces it.
     const sync = params.sync;
     const syncRate = sync.length > 1;
+    const gate = params.gate;
+    const gateRate = gate.length > 1;
+    // One hoisted, perfectly predicted branch rather than a second copy of this
+    // loop: duplicating it to save the test would duplicate the arithmetic
+    // `dsp.test.ts` asserts the waveform specification against.
+    const fade = enveloped;
     let current = phase;
 
     for (let i = 0; i < length; i++) {
@@ -309,9 +404,10 @@ export function createLfo(
       // LFO does not need the sub-sample crossing instant that the two
       // oscillators interpolate, because 2.9 ms is nothing against a 5 Hz
       // cycle. Deliberate, not forgotten - see `params.ts`.
-      if (detectGate(syncRate ? sync[i] : sync[0]) === true) {
+      if (detectSync(syncRate ? sync[i] : sync[0]) === true) {
         current = phaseStart;
       }
+      if (fade) advanceDepth(gateRate ? gate[i] : gate[0]);
       let nextPhase = current + increment;
       if (nextPhase >= 1) {
         nextPhase -= 1;
@@ -320,7 +416,7 @@ export function createLfo(
         // the phase backwards, and it has to come back round at 0.
         nextPhase += 1;
       }
-      output[i] = generate(current, nextPhase) * gain + offset;
+      output[i] = generate(current, nextPhase) * amp * gain + offset;
       current = nextPhase;
     }
 
