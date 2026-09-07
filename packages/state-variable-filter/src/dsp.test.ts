@@ -1,4 +1,5 @@
 import { createFilter, createPrewarp, SvfType } from "./dsp";
+import { PARAMS } from "./params";
 
 // `Q` is a-rate, so it arrives as an array. Length 1 is what a browser delivers
 // for an unmodulated parameter, and it is the path every measurement here wants.
@@ -97,7 +98,8 @@ function analytic(
       numerator = 1;
       break;
     case SvfType.BandPass:
-      numerator = Math.abs(t);
+      // Normalized: unity gain at the centre frequency, not a gain of Q.
+      numerator = k * Math.abs(t);
       break;
     case SvfType.HighPass:
       numerator = t * t;
@@ -274,6 +276,89 @@ describe("ByPass", () => {
       held(0.7071),
     );
     expect(Array.from(output)).toEqual(Array.from(input));
+  });
+});
+
+describe("the bandpass", () => {
+  // It used to be the raw tap, whose peak gain at the centre frequency is
+  // exactly Q: -6.02 dB at Q=0.5, +32.04 dB at Q=40. Sweeping resonance swept
+  // 38 dB of level with it, which is not what `BiquadFilterNode` does and is
+  // actively wrong now that `Q` tracks an envelope.
+  const SAMPLE_RATE = 48000;
+  const CUTOFF = 1000;
+  const QS = [0.025, 0.5, 2, 10, 40];
+
+  it.each(QS)("has unity gain at the centre frequency at Q=%p", (q) => {
+    const { amplitude } = measure(
+      SAMPLE_RATE,
+      SvfType.BandPass,
+      CUTOFF,
+      q,
+      CUTOFF,
+    );
+    expect(db(amplitude)).toBeCloseTo(0, 4);
+  });
+
+  it.each(QS)("keeps the shape it had at Q=%p", (q) => {
+    // Only the level moved. In the warped variable `t = tan(pi*f/fs)/g` the
+    // -3 dB points of `s/(s^2 + ks + 1)` are at `sqrt(1 + k^2/4) -/+ k/2`,
+    // which follows from the prototype and says nothing about normalisation -
+    // so asserting them asserts that the bandwidth is untouched.
+    const k = 1 / Math.max(q, 0.0001);
+    const g = Math.tan((CUTOFF * Math.PI) / SAMPLE_RATE);
+    const half = Math.sqrt(1 + (k * k) / 4);
+
+    for (const t of [half - k / 2, half + k / 2]) {
+      const f = (Math.atan(t * g) * SAMPLE_RATE) / Math.PI;
+
+      // The edge really is at -3 dB below the (now unity) peak...
+      expect(
+        db(analytic(SAMPLE_RATE, SvfType.BandPass, CUTOFF, q, f)),
+      ).toBeCloseTo(-3.01, 2);
+
+      // ...and the filter is that curve. Measured at the nearest integer
+      // frequency, because the demodulator needs a whole number of cycles;
+      // compared against the model at the same frequency, so the rounding
+      // cancels instead of being absorbed by a loose tolerance. At Q=40 the
+      // response moves 0.14 dB in half a hertz here, which is what a rounded
+      // -3.01 dB assertion would have had to swallow.
+      const at = Math.round(f);
+      const { amplitude } = measure(
+        SAMPLE_RATE,
+        SvfType.BandPass,
+        CUTOFF,
+        q,
+        at,
+      );
+      expect(
+        Math.abs(
+          amplitude - analytic(SAMPLE_RATE, SvfType.BandPass, CUTOFF, q, at),
+        ),
+      ).toBeLessThan(1e-6);
+    }
+  });
+});
+
+describe("the declared defaults", () => {
+  it("are a Butterworth lowpass at 1 kHz", () => {
+    // Asserted against `params.ts` rather than against literals, so that
+    // `Svf(ac, {})` and this test cannot drift apart.
+    const defaults = Object.fromEntries(
+      PARAMS.map((p) => [p.name, p.defaultValue]),
+    );
+    expect(defaults.type).toBe(SvfType.LowPass);
+    expect(defaults.frequency).toBe(1000);
+
+    const sampleRate = 48000;
+    const at = (f: number) =>
+      measure(sampleRate, defaults.type, defaults.frequency, defaults.Q, f)
+        .amplitude;
+
+    // Butterworth: maximally flat, and exactly -3 dB at the cutoff. The old
+    // default of 0.5 was over-damped and had no -3 dB point there at all.
+    expect(db(at(defaults.frequency))).toBeCloseTo(-3.01, 2);
+    expect(db(at(100))).toBeCloseTo(0, 3);
+    expect(db(at(100))).toBeLessThanOrEqual(1e-6); // no peak anywhere
   });
 });
 

@@ -171,11 +171,23 @@ export function createFilter(sampleRate: number) {
         _m2 = 1;
         _mixReadsK = false;
         break;
+      // The *normalized* bandpass: unity gain at the centre frequency rather
+      // than a gain of Q. The raw tap `_m1 = 1` peaks at exactly Q - +32 dB at
+      // Q=40 - so sweeping resonance on a bandpass swept 38 dB of level with
+      // it, which is not what `BiquadFilterNode` does and not what anyone
+      // wants once `Q` tracks an envelope. Lazzarini & Timoney section 3.5:
+      // "it is a simple matter of scaling it by a 1/Q factor in order to
+      // rectify this". Zavalishin treats the normalized one as primary
+      // throughout Chapter 4 (section 4.5, eq. 4.15), building notch and
+      // allpass from it.
+      //
+      // Only the level moves: the -3 dB bandwidth at each Q is what it was.
+      // The raw tap is recoverable with a gain of Q after the filter.
       case SvfType.BandPass:
         _m0 = 0;
-        _m1 = 1;
+        _m1 = _k;
         _m2 = 0;
-        _mixReadsK = false;
+        _mixReadsK = true;
         break;
 
       case SvfType.HighPass:

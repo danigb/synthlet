@@ -74,7 +74,7 @@ function Example() {
         label="Q"
         inputClassName="col-span-2"
         param={synth.filter.Q}
-        min={0}
+        min={0.025}
         max={40}
       />
       <Slider

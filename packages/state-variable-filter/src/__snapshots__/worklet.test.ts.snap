@@ -18,7 +18,7 @@ exports[`ProcessorNode has parameter descriptors 1`] = `
   },
   {
     "automationRate": "a-rate",
-    "defaultValue": 0.5,
+    "defaultValue": 0.7071,
     "maxValue": 40,
     "minValue": 0.025,
     "name": "Q",

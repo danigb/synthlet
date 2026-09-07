@@ -46,8 +46,15 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // a different `q` each time adds an array index, not a division. An
     // unmodulated filter pays nothing at all - Chrome delivers length 1 for a
     // constant, and `dsp.ts` takes the same branch it always did.
+    //
+    // The default is Butterworth. 0.5 - what it was - measures as a -0.09 dB
+    // peak: over-damped, with no -3 dB point at the cutoff at all. It is not
+    // Butterworth, it is not `BiquadFilterNode`'s default of 1, and it is not a
+    // decision recorded anywhere in this repository's history: nobody chose it.
+    // 0.7071 measures as exactly 0.000 dB with -3 dB at the cutoff, which is
+    // what someone arriving from `BiquadFilterNode` means by "no resonance".
     name: "Q",
-    defaultValue: 0.5,
+    defaultValue: 0.7071,
     minValue: 0.025,
     maxValue: 40,
     automationRate: "a-rate",
