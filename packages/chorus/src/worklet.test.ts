@@ -27,10 +27,10 @@ describe("ChorusProcessor", () => {
     }
     const outputs = [[new Float32Array(length), new Float32Array(length)]];
     const params = {
-      delay: [0.5],
       rate: [0.5],
       depth: [0.5],
-      deviation: [0.5],
+      mix: [0.5],
+      width: [1],
     };
 
     const running = processor.process([[input]], outputs, params);
@@ -47,10 +47,10 @@ describe("ChorusProcessor", () => {
     processor.port.onmessage({ data: { type: "DISPOSE" } });
     const outputs = [[new Float32Array(8), new Float32Array(8)]];
     const params = {
-      delay: [0.5],
       rate: [0.5],
       depth: [0.5],
-      deviation: [0.5],
+      mix: [0.5],
+      width: [1],
     };
     expect(processor.process([[new Float32Array(8)]], outputs, params)).toBe(
       false,

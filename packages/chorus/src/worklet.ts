@@ -24,16 +24,10 @@ export class ChorusProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     if (inputs[0].length === 0) return this.r;
 
-    this.u(
-      params.delay[0],
-      params.rate[0],
-      params.depth[0],
-      params.deviation[0],
-    );
-    const input = inputs[0][0];
-    const outputL = outputs[0][0];
-    const outputR = outputs[0][1];
-    this.g(input, outputL, outputR);
+    this.u(params.rate[0], params.depth[0], params.mix[0], params.width[0]);
+    const inL = inputs[0][0];
+    const inR = inputs[0].length > 1 ? inputs[0][1] : inL;
+    this.g(inL, inR, outputs[0][0], outputs[0][1]);
     return this.r;
   }
 

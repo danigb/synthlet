@@ -9,19 +9,21 @@ import { PROCESSOR } from "./processor";
 export const registerChorusWorklet = createRegistrar("CHORUS", PROCESSOR);
 
 export type ChorusInputs = {
-  delay: ParamInput;
-  rate: ParamInput;
-  depth: ParamInput;
-  deviation: ParamInput;
+  rate?: ParamInput;
+  depth?: ParamInput;
+  mix?: ParamInput;
+  width?: ParamInput;
 };
 
 export type ChorusWorkletNode = AudioWorkletNode & {
-  delay: AudioParam;
   rate: AudioParam;
   depth: AudioParam;
-  deviation: AudioParam;
+  mix: AudioParam;
+  width: AudioParam;
   dispose(): void;
 };
+
+export { ChorusMode } from "./dsp";
 
 export const Chorus = createWorkletConstructor<ChorusWorkletNode, ChorusInputs>(
   {
