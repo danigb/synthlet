@@ -73,17 +73,20 @@ describe("descriptors", () => {
     ]);
   });
 
-  // One gate/trigger contract means one shape for the param that carries it:
-  // if these drifted apart, the same signal would drive some modules and not
-  // others - which is exactly the bug the shared detector removed.
+  // One gate/trigger contract means one *shape* for the param that carries it:
+  // if the ranges drifted apart, the same signal would drive some modules and
+  // not others - which is exactly the bug the shared detector removed.
   //
-  // The rate is the one thing that is *not* part of the contract, so it is a
-  // column rather than a constant. Every gate in the library only has to decide
-  // which block it fired in, and is k-rate; `WavetableOscillator`'s `sync` has
-  // to decide where inside a *sample*, because a reset quantised to a render
-  // quantum is 2.9 ms of jitter at 44.1 kHz and costs 20 dB of alias rejection.
+  // The **rate** is not part of that contract, and each entry declares its own.
+  // Every module here but two only has to decide which 128-frame block a
+  // trigger fired in, and k-rate says so. The two `sync` params have to decide
+  // where *inside a sample*: it is hard sync, the reset is placed at the
+  // interpolated crossing instant, and a value read once per quantum would
+  // quantise it to 2.9 ms at 44.1 kHz - 20 dB of alias rejection. That is a
+  // per-module decision about resolution, not a weakening of the shared shape,
+  // which is why the shape below is still asserted whole.
   it("declares every trigger-like param the same way", () => {
-    const TRIGGERS: [string, string, AutomationRate][] = [
+    const TRIGGERS: [string, string, ParamDescriptor["automationRate"]][] = [
       ["AdAmp", "trigger", "k-rate"],
       ["AdEnv", "trigger", "k-rate"],
       ["AdsrAmp", "gate", "k-rate"],
@@ -92,6 +95,7 @@ describe("descriptors", () => {
       ["Granite", "freeze", "k-rate"],
       ["Impulse", "trigger", "k-rate"],
       ["KarplusStrong", "trigger", "k-rate"],
+      ["PolyblepOscillator", "sync", "a-rate"],
       ["WavetableOscillator", "sync", "a-rate"],
     ];
 
@@ -116,6 +120,23 @@ describe("descriptors", () => {
       (d) => d.automationRate === "a-rate",
     );
     expect(aRate.map((d) => d.name)).toEqual(["frequency"]);
+  });
+
+  it("keeps PolyblepOscillator's frequency, detune, width and sync at a-rate", () => {
+    // Everything but `type` is a signal: audio-rate FM, sample-accurate pitch,
+    // pulse-width modulation and sub-sample hard sync, instead of the 344.5 Hz
+    // control rate one value per render quantum gives. `type` selects a
+    // waveform, so it stays k-rate and its changes are scheduled as a step by
+    // the DSP.
+    const aRate = synthlet.PolyblepOscillator.descriptors.filter(
+      (d) => d.automationRate === "a-rate",
+    );
+    expect(aRate.map((d) => d.name)).toEqual([
+      "frequency",
+      "detune",
+      "width",
+      "sync",
+    ]);
   });
 
   // Scanning a wavetable at audio rate is one of the format's signature sounds,

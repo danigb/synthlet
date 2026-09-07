@@ -1,14 +1,24 @@
-import { createPolyblep } from "./dsp";
+import { createPolyblepOscillator } from "./dsp";
 import { PARAMS } from "./params";
 
 export class PolyBLEProcessor extends AudioWorkletProcessor {
   r: boolean; // running
-  g: ReturnType<typeof createPolyblep>;
+  g: ReturnType<typeof createPolyblepOscillator>;
 
-  constructor() {
+  constructor(options?: any) {
     super();
     this.r = true;
-    this.g = createPolyblep(sampleRate);
+    // `phase` is a construction option rather than an AudioParam: it is a
+    // one-time initial condition - where the oscillator starts, and where a
+    // `sync` edge restarts it - and an AudioParam would imply it meant
+    // something continuously. Read the way `packages/ad/src/worklet.ts:12`
+    // reads its `mode`; written the way
+    // `packages/flex-audio-buffer-source/src/index.ts:87-97` writes its
+    // configuration.
+    this.g = createPolyblepOscillator(
+      sampleRate,
+      options?.processorOptions?.phase,
+    );
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -20,7 +30,16 @@ export class PolyBLEProcessor extends AudioWorkletProcessor {
 
   process(_inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     let output = outputs[0][0];
-    this.g(output, params.type[0], params.frequency[0], params.detune[0]);
+    // `frequency`, `detune`, `width` and `sync` are a-rate: pass the whole
+    // array through and let the DSP branch on its length.
+    this.g(
+      output,
+      params.type[0],
+      params.frequency,
+      params.detune,
+      params.width,
+      params.sync,
+    );
     return this.r;
   }
 

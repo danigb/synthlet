@@ -17,6 +17,12 @@
   ],
   "author": "danigb@gmail.com",
   "license": "MIT",
+  "homepage": "https://danigb.github.io/synthlet/docs/polyblep",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/polyblep-oscillator"
+  },
   "publishConfig": {
     "access": "public"
   },
