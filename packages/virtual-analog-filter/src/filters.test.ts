@@ -45,65 +45,44 @@ type Model = {
   make: (sampleRate: number) => Filter;
   /** Order of the topology, for the skirt assertion. */
   poles: number;
-  /**
-   * Whether the model's cutoff is expected to be about two decades low today.
-   * True for eight of the nine: their generated bodies take the modern
-   * `vaeffects.lib` log map `2*10^(3*normFreq+1)` and the `.dsp` wrappers hand
-   * it `cutoffHz / nyquist`. `moog.ts` escapes because its transcription is
-   * stale - `tan(PI*f/SR)` is linear in Hz. Ticket 03 is what makes this false
-   * everywhere.
-   */
-  mistuned: boolean;
 };
 
 const LOWPASS: Model[] = [
-  { name: "MOOG_LADDER", make: (sr) => Moog(sr), poles: 4, mistuned: false },
+  { name: "MOOG_LADDER", make: (sr) => Moog(sr), poles: 4 },
   {
     name: "MOOG_HALF_LADDER",
     make: (sr) => MoogHalf(sr),
     poles: 2,
-    mistuned: true,
   },
-  { name: "KORG35_LPF", make: (sr) => Korg35(sr, 0), poles: 2, mistuned: true },
-  { name: "DIODE_LADDER", make: (sr) => Diode(sr), poles: 4, mistuned: true },
+  { name: "KORG35_LPF", make: (sr) => Korg35(sr, 0), poles: 2 },
+  { name: "DIODE_LADDER", make: (sr) => Diode(sr), poles: 4 },
   {
     name: "OBERHEIM_LPF",
     make: (sr) => Oberheim(sr, 0),
     poles: 2,
-    mistuned: true,
   },
 ];
 
 const OTHERS: Model[] = [
-  { name: "KORG35_HPF", make: (sr) => Korg35(sr, 1), poles: 2, mistuned: true },
+  { name: "KORG35_HPF", make: (sr) => Korg35(sr, 1), poles: 2 },
   {
     name: "OBERHEIM_HPF",
     make: (sr) => Oberheim(sr, 1),
     poles: 2,
-    mistuned: true,
   },
   {
     name: "OBERHEIM_BPF",
     make: (sr) => Oberheim(sr, 2),
     poles: 2,
-    mistuned: true,
   },
   {
     name: "OBERHEIM_BSF",
     make: (sr) => Oberheim(sr, 3),
     poles: 2,
-    mistuned: true,
   },
 ];
 
 const ALL = [...LOWPASS, ...OTHERS];
-
-/** `it`, or `it.failing` when the assertion is a known defect. */
-const when = (broken: boolean) => (broken ? it.failing : it);
-
-/** Names the ticket that will flip a defect back to a plain `it`. */
-const because = (broken: boolean, ticket: string) =>
-  broken ? ` - see ticket ${ticket}` : "";
 
 function tuned(
   model: Model,
@@ -126,24 +105,29 @@ function db(
 }
 
 describe("the measured corner tracks the requested one", () => {
-  // Per-topology, and stated rather than fitted: a cascade of one-pole
-  // sections reaches -3 dB *below* its design cutoff (each section is already
-  // -0.75 dB there), so a 4-pole model sits low and a 2-pole model sits close
-  // to unity. The bands are wide because the resonant feedback shifts the
-  // corner too, and they are still two orders tighter than the ~80x error the
-  // group is looking for.
+  // Per topology, and stated rather than fitted. A cascade of four identical
+  // one-pole sections is -0.75 dB per section at the design cutoff, so its
+  // composite -3 dB point sits at 0.435 * f; resonant feedback lifts the
+  // response near the corner and moves the crossing back up. A 2-pole section
+  // is -3 dB at its cutoff by construction and its own feedback pushes the
+  // crossing above it. The bands allow +/-15-20% around what each topology
+  // predicts, which is two orders tighter than the ~80x error this group was
+  // written to catch and loose enough not to be a snapshot.
   const RATIO: Record<string, [number, number]> = {
-    MOOG_LADDER: [0.6, 1.15],
-    DIODE_LADDER: [0.5, 1.15],
-    MOOG_HALF_LADDER: [0.7, 1.4],
-    KORG35_LPF: [0.7, 1.4],
-    OBERHEIM_LPF: [0.7, 1.4],
+    // 4-pole. 0.435 for a pure cascade, lifted by k = 4*resonance = 0.8.
+    MOOG_LADDER: [0.75, 1.1],
+    // 4-pole, with the ladder's own feedback zeros; closest to the cascade.
+    DIODE_LADDER: [0.4, 0.7],
+    // 2-pole.
+    MOOG_HALF_LADDER: [1.0, 1.35],
+    KORG35_LPF: [0.75, 1.05],
+    // 2-pole plus the integrator in its feedback path, which sits it highest.
+    OBERHEIM_LPF: [1.3, 1.75],
   };
 
   for (const model of LOWPASS) {
-    when(model.mistuned)(
-      `${model.name}${because(model.mistuned, "03, a cutoff that is in Hz")}`,
-      () => {
+    it(`${model.name}`, () => {
+      {
         const [min, max] = RATIO[model.name];
         for (const request of [100, 500, 1000, 5000]) {
           const corner = findCorner(() => model.make(48000), request, R, 48000);
@@ -151,27 +135,25 @@ describe("the measured corner tracks the requested one", () => {
           expect(ratio).toBeGreaterThan(min);
           expect(ratio).toBeLessThan(max);
         }
-      },
-    );
+      }
+    });
   }
 });
 
 describe("the corner does not move with the sample rate", () => {
   for (const model of LOWPASS) {
-    when(model.mistuned)(
-      `${model.name}${because(model.mistuned, "03, a cutoff that is in Hz")}`,
-      () => {
-        const corners = RATES.map((rate) =>
-          findCorner(() => model.make(rate), 1000, R, rate),
-        );
-        // 5%: a bilinear-prewarped corner is exact at the cutoff by
-        // construction, so what is left is the fourth-order cascade's own drift
-        // between 44.1k and 96k. The Nyquist-fraction bug produces ~20% over the
-        // same span, which is what this separates.
-        const ratio = Math.max(...corners) / Math.min(...corners);
-        expect(ratio).toBeLessThan(1.05);
-      },
-    );
+    it(`${model.name}`, () => {
+      const corners = RATES.map((rate) =>
+        findCorner(() => model.make(rate), 1000, R, rate),
+      );
+      // 5%: a bilinear-prewarped corner is exact at the cutoff by
+      // construction, so what is left is each topology's own drift between
+      // 44.1k and 96k - measured at 0.05% for the Moog and 1.9% for the diode
+      // ladder, whose feedback term reads the cutoff a second time. The
+      // Nyquist-fraction bug produced ~20% over the same span.
+      const ratio = Math.max(...corners) / Math.min(...corners);
+      expect(ratio).toBeLessThan(1.05);
+    });
   }
 });
 
@@ -218,26 +200,24 @@ describe("recovers from a poisoned state", () => {
 
 describe("survives a cutoff past Nyquist", () => {
   // `frequency: 1000, detune: 127` is inside both declared ranges and folds to
-  // 1.54 MHz, which every model is handed unclamped.
+  // 1.54 MHz. What bounds it is `normFreq()`'s clamp, which is the library's
+  // own 20 Hz..20 kHz domain. Ticket 04 replaces that hard breakpoint with a
+  // continuous prewarp - a discontinuity in dg/df is audible when a cutoff is
+  // swept through it - but the bound itself is here.
   const WILD = 1000 * Math.pow(2, 127 / 12);
-  const BLOWS_UP = ["MOOG_LADDER", "DIODE_LADDER"];
 
   for (const model of ALL) {
-    const broken = BLOWS_UP.includes(model.name);
-    when(broken)(
-      `${model.name}${because(broken, "04, clamp the cutoff")}`,
-      () => {
-        const filter = tuned(model, 48000, WILD, 0.5);
-        const input = new Float32Array(128);
-        const output = new Float32Array(128);
-        for (let n = 0; n < 128; n++) input[n] = 2e-3 * Math.random() - 1e-3;
-        filter.process(input, output, 0, 128);
-        for (const sample of output) {
-          expect(Number.isFinite(sample)).toBe(true);
-          expect(Math.abs(sample)).toBeLessThan(1);
-        }
-      },
-    );
+    it(`${model.name}`, () => {
+      const filter = tuned(model, 48000, WILD, 0.5);
+      const input = new Float32Array(128);
+      const output = new Float32Array(128);
+      for (let n = 0; n < 128; n++) input[n] = 2e-3 * Math.random() - 1e-3;
+      filter.process(input, output, 0, 128);
+      for (const sample of output) {
+        expect(Number.isFinite(sample)).toBe(true);
+        expect(Math.abs(sample)).toBeLessThan(1);
+      }
+    });
   }
 });
 

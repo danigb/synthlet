@@ -1,4 +1,15 @@
-Generated with FAUST 2.72.14.
+FAUST 2.85.9.
+vaeffects.lib 1.5.0, git blob 3aa5fe856b9dbea7c125d518666d764771cd54d1
+  (unchanged upstream between faustlibraries ab116d8, 2026-03-11, and
+  56729e3, 2026-08-26).
+
+Check the library before regenerating:
+  git hash-object "$(dirname "$(readlink -f "$(which faust)")")/../share/faust/vaeffects.lib"
+
+`ve.moogLadder` and `ve.korg35LPF` in this package were once generated from
+revisions with *incompatible* normFreq conventions and checked in side by
+side, which is how a two-decade cutoff error survived three audits. Recording
+the commands without the library version is what allowed it.
 
  faust -lang rust -cn Moog moog.dsp -o moog.rs
  faust -lang rust -cn MoogHalf moog-half.dsp -o moog-half.rs
@@ -7,13 +18,16 @@ Generated with FAUST 2.72.14.
  faust -lang rust -cn Oberheim oberheim.dsp -o oberheim.rs
  faust -lang rust -cn Diode diode.dsp -o diode.rs
 
-The .ts files in ../src are hand transcriptions of these .rs files. Two
+The .ts files in ../src are hand transcriptions of these .rs files. Three
 divergences are intended and must survive a regeneration:
 
   * `process()` takes `from`/`to` bounds so the worklet can render a block in
     runs of constant coefficients (see the 0.13.0 CHANGELOG).
   * oberheim.ts exposes one output selected by `type` rather than the four
     output buffers the Rust emits, with the tap mix hoisted out of the loop.
+  * The clamped normFreq expression Faust inlines into every `fSlow0` is a
+    named function, `normFreq()` in ../src/norm-freq.ts. Five copies of one
+    logarithm drift apart; one does not.
 
 Anything else is a bug. `input[0]` where the Rust reads `*input0` was one, and
 it made four of the nine models filter a DC value re-latched once per block.

@@ -1,6 +1,8 @@
 // Generated from the Faust function `ve.diodeLadder` (vaeffects.lib).
 // Author: Eric Tarr. Licence: LicenseRef-STK-4.3.
 // See THIRD-PARTY-LICENSES.md at the repository root.
+import { normFreq } from "./norm-freq";
+
 export function Diode(sampleRate: number) {
   let fHslider0 = 0;
   let fHslider1 = 0;
@@ -9,10 +11,7 @@ export function Diode(sampleRate: number) {
   let fRec3 = [0, 0];
   let fRec4 = [0, 0];
 
-  const fConst0 = Math.min(1.92e5, Math.max(1.0, sampleRate));
-  const fConst1 = 6.2831855 / fConst0;
-  const fConst2 = 6.0 / fConst0;
-  const fConst3 = 2.0 / fConst0;
+  const fConst0 = 6.2831855 / Math.min(1.92e5, Math.max(1.0, sampleRate));
 
   return { update, process };
 
@@ -27,8 +26,8 @@ export function Diode(sampleRate: number) {
     from: number,
     to: number,
   ) {
-    let fSlow0 = fHslider0;
-    let fSlow1 = Math.tan(fConst1 * Math.pow(1e1, fConst2 * fSlow0 + 1.0));
+    let fSlow0 = normFreq(fHslider0);
+    let fSlow1 = Math.tan(fConst0 * Math.pow(1e1, 3.0 * fSlow0 + 1.0));
     let fSlow2 = fSlow1 + 1.0;
     let fSlow3 = fSlow1 / fSlow2;
     let fSlow4 = fSlow1 * fSlow1;
@@ -42,7 +41,7 @@ export function Diode(sampleRate: number) {
     let fSlow12 = fSlow1 / fSlow9;
     let fSlow13 = 0.5 * fSlow12;
     let fSlow14 = fSlow1 * (1.0 - fSlow13) + 1.0;
-    let fSlow15 = 17.0 - 9.7 * Math.pow(fConst3 * fSlow0, 1e1);
+    let fSlow15 = 17.0 - 9.7 * Math.pow(fSlow0, 1e1);
     let fSlow16 = 24.293 * fHslider1 + -0.00010678119;
     let fSlow17 =
       (0.5 * (fSlow4 / (fSlow9 * fSlow14)) + 1.0) /
