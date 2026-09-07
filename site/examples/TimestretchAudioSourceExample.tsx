@@ -17,9 +17,8 @@ function TimestretchAudioSourceExample() {
   const [status, setStatus] = useState<"loading" | "ready" | "playing">(
     "loading",
   );
-  const [source, setSource] = useState<TimestretchAudioSourceWorkletNode | null>(
-    null,
-  );
+  const [source, setSource] =
+    useState<TimestretchAudioSourceWorkletNode | null>(null);
   // The clip's length, so the region sliders can be in seconds of *this* clip
   // rather than of the parameter's arbitrary 0..3600 range.
   const [duration, setDuration] = useState(0);

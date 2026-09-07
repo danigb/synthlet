@@ -1,4 +1,8 @@
-import { createTimestretchSource, DEFAULT_CONFIG, type TimestretchConfig } from "./dsp";
+import {
+  createTimestretchSource,
+  DEFAULT_CONFIG,
+  type TimestretchConfig,
+} from "./dsp";
 import { PARAMS } from "./params";
 
 /**
@@ -30,7 +34,8 @@ export class TimestretchAudioSourceProcessor extends AudioWorkletProcessor {
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
-    const given = (options?.processorOptions ?? {}) as Partial<TimestretchConfig>;
+    const given = (options?.processorOptions ??
+      {}) as Partial<TimestretchConfig>;
     this.config = {
       sampleRate,
       channels: DEFAULT_CONFIG.channels,

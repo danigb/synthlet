@@ -31,7 +31,9 @@ function render(
   detune: number,
   over: Partial<TimestretchConfig> = {},
 ) {
-  const stretch = createTimestretchSource(config({ channels: source.length, ...over }));
+  const stretch = createTimestretchSource(
+    config({ channels: source.length, ...over }),
+  );
   stretch.setBuffer(source);
   stretch.start();
 

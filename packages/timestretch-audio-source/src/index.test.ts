@@ -234,7 +234,9 @@ describe("TimestretchAudioSource", () => {
     });
 
     it("throws when there is no buffer", () => {
-      expect(() => TimestretchAudioSource(context).start()).toThrow(/no buffer/);
+      expect(() => TimestretchAudioSource(context).start()).toThrow(
+        /no buffer/,
+      );
     });
 
     it("can be restarted once it has ended", () => {
