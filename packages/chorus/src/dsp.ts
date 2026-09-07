@@ -132,6 +132,43 @@ export type Voice = {
 const FADE_MS = 5;
 
 /**
+ * Alternating sign, so it cannot accumulate as DC. Without it a wet path
+ * decaying towards zero eventually runs entirely in denormals, and a filter
+ * that never stops running never recovers from that. `digital-delay`'s
+ * constant, for the same reason.
+ */
+const DENORMAL = 1e-20;
+
+/** The most wet-path lowpass poles any voicing asks for. */
+const MAX_POLES = 4;
+
+/**
+ * How far the dry path ducks at full wet: Mutable's `Ensemble` rule,
+ * `dry = 1 - amount*0.5`, copied verbatim because it is tuned rather than
+ * derived.
+ *
+ * Note that dry is *not* `1 - amount`. The dry only drops to half at full wet,
+ * which is what keeps the effect from sucking the centre out as `mix` rises,
+ * and it is what makes the mono sum survivable: measured on pink noise at each
+ * voicing's defaults, the mono sum lands at -0.51 dB (`JUNO`), -0.70 dB
+ * (`ENSEMBLE`) and -1.02 dB (`DIMENSION`). With `dry = 1 - mix` the same three
+ * read -2.91, -3.18 and -4.54 dB.
+ *
+ * The cost is that `mix: 1` is not fully wet, so Dattorro's vibrato - blend 0,
+ * feedforward 1 - is not reachable from this knob. That is a deliberate trade:
+ * a chorus is an insert effect and a centre that ducks 4.5 dB is a defect a
+ * user finds out about from a mix engineer.
+ */
+const DRY_DUCK = 0.5;
+
+/** TPT one-pole coefficient for a cutoff in Hz, `g/(1+g)` with `g = tan(pi*fc/SR)`. */
+const onePoleG = (hz: number, sampleRate: number) => {
+  const clamped = Math.min(hz, 0.45 * sampleRate);
+  const g = Math.tan((Math.PI * clamped) / sampleRate);
+  return g / (1 + g);
+};
+
+/**
  * A voicing: five tables and an output matrix.
  *
  * Every candidate topology in the survey - Juno, Solina, Dimension D, white
@@ -150,6 +187,17 @@ export type Voicing = {
   fastMul: number;
   /** This voicing's own excursion ceiling in ms, the other half of the clamp. */
   maxDepthMs: number;
+  /**
+   * Wet-path lowpass cutoffs in Hz, cascaded. The single most audible thing an
+   * analog chorus does that a digital one does not is roll the wet path off,
+   * and it is what makes the delayed copies sit *behind* the dry instead of
+   * hissing on top of it.
+   */
+  wetLowpassHz: readonly number[];
+  /** Wet-path highpass in Hz, or 0. `DIMENSION` needs one; see its entry. */
+  wetHighpassHz: number;
+  /** Complementary dry low shelf, or `null`. Paired with `wetHighpassHz`. */
+  dryLowShelf: { hz: number; gain: number } | null;
   /** What `Chorus(ac, { mode })` should set the other four knobs to. */
   defaults: { rate: number; depth: number; mix: number; width: number };
 };
@@ -171,6 +219,36 @@ const voice = (
  * proportions; normalising them to 1 keeps `depth` meaning the same thing in
  * every voicing.
  */
+/**
+ * `rune06`'s CE-2 model, the most concrete inheritance in it from the
+ * schematic: a 4-pole cascade before the bucket brigade and another after, at
+ * these cutoffs. Huovilainen notes a BBD needs anti-alias and reconstruction
+ * filters, "typically 2nd to 4th order", and that the output filter also
+ * removes clock bleed.
+ *
+ * **Only the post-filter is here.** A BBD needs one before the line because
+ * the line is a sampler; a digital line is not, so that half's anti-alias role
+ * does not exist and what is left of it is a second helping of the same
+ * rolloff - which the post cascade can supply for half the poles.
+ *
+ * **Four poles rather than two, and here is where it stopped mattering.**
+ * Composite magnitudes at 48 kHz, against the two lower poles alone:
+ *
+ * | | -3 dB | 1 kHz | 2 kHz | 4 kHz | 8 kHz | 16 kHz |
+ * | --- | --- | --- | --- | --- | --- | --- |
+ * | 4 poles | 2931 Hz | -0.4 | -1.5 | -5.1 | -15.3 | -43.5 |
+ * | 7234 + 4020 | 3339 Hz | -0.3 | -1.2 | -4.0 | -11.0 | -27.2 |
+ *
+ * The two are within **0.3 dB below 2 kHz** and within **1.1 dB at 4 kHz**;
+ * they diverge by 4.2 dB at 8 kHz and 16.3 dB at 16 kHz. So two poles buy the
+ * whole audible body of the effect, and the other two buy the top two octaves
+ * - which is exactly the region that decides whether the wet copies sit
+ * behind the dry or hiss on top of them. Kept at four for `JUNO` and
+ * `DIMENSION`, at a cost of eight one-poles per channel pair; `ENSEMBLE` takes
+ * the two-pole version because a string machine wants the air.
+ */
+const CE2_POLES = [10620, 8830, 7234, 4020] as const;
+
 const ENSEMBLE_SLOW = 160 / 176;
 const ENSEMBLE_FAST = 16 / 176;
 
@@ -232,6 +310,9 @@ export const VOICINGS: readonly Voicing[] = [
     slowMul: 1,
     fastMul: FAST_MULTIPLIER,
     maxDepthMs: 2,
+    wetLowpassHz: CE2_POLES,
+    wetHighpassHz: 0,
+    dryLowShelf: null,
     defaults: { rate: 0.5, depth: 0.6, mix: 0.5, width: 1 },
   },
   {
@@ -259,6 +340,12 @@ export const VOICINGS: readonly Voicing[] = [
     slowMul: 1,
     fastMul: FAST_MULTIPLIER,
     maxDepthMs: 3.67,
+    // Two poles rather than four: a string machine wants air, and the whole
+    // point of three taps is the density they add above the fundamental. The
+    // two lower poles of the CE-2 set.
+    wetLowpassHz: [7234, 4020],
+    wetHighpassHz: 0,
+    dryLowShelf: null,
     // 0.75 Hz is Plaits' slow accumulator: `phase_1_ += 67289` is
     // `67289/2^32 * 48000 = 0.752 Hz`. The frequency travels between sample
     // rates; the increment does not.
@@ -278,6 +365,15 @@ export const VOICINGS: readonly Voicing[] = [
     slowMul: 1,
     fastMul: FAST_MULTIPLIER,
     maxDepthMs: 2.5,
+    wetLowpassHz: CE2_POLES,
+    // The difference cancels the common-mode signal, and at low frequencies
+    // the two delayed copies are nearly identical, so the bass cancels with
+    // it. The SDD-320 high-passes the wet difference and gives the dry a
+    // complementary low boost; without that pair the mode is a thin phasey
+    // artefact rather than a wide one, and it reads as a broken mode rather
+    // than a missing filter.
+    wetHighpassHz: 150,
+    dryLowShelf: { hz: 150, gain: 1.4 },
     defaults: { rate: 0.5, depth: 0.8, mix: 0.5, width: 1 },
   },
 ];
@@ -336,6 +432,50 @@ export function createChorus(sampleRate: number) {
   let fadeDirection = 0;
   const fadeStep = 1 / Math.max(1, Math.round((FADE_MS / 1000) * sampleRate));
 
+  // The wet path's filters. Allocated here and never again; the coefficients
+  // are recomputed when the voicing changes, which is once per block at most.
+  const lpG = new Float64Array(MAX_POLES);
+  const lpL = new Float64Array(MAX_POLES);
+  const lpR = new Float64Array(MAX_POLES);
+  let poles = 0;
+  let hpG = 0;
+  let hpL = 0;
+  let hpR = 0;
+  let shelfG = 0;
+  let shelfGain = 1;
+  let shelfL = 0;
+  let shelfR = 0;
+  let denormal = DENORMAL;
+  // Per-channel output normalisation. Not `1/voices`: a voice panned hard to
+  // one channel is the only thing in it, so dividing JUNO's two by two would
+  // halve an effect that never sums. What has to be normalised is what each
+  // channel actually receives, which is the sum of the gains that reach it -
+  // 1 for JUNO, 1.707 for ENSEMBLE's centre-plus-side pair, 2 for DIMENSION's
+  // difference.
+  let normL = 1;
+  let normR = 1;
+
+  function tune() {
+    let sumL = 0;
+    let sumR = 0;
+    for (const v of voicing.voices) {
+      sumL += Math.abs(v.gainL);
+      sumR += Math.abs(v.gainR);
+    }
+    normL = sumL > 0 ? 1 / sumL : 0;
+    normR = sumR > 0 ? 1 / sumR : 0;
+    poles = Math.min(voicing.wetLowpassHz.length, MAX_POLES);
+    for (let i = 0; i < poles; i++)
+      lpG[i] = onePoleG(voicing.wetLowpassHz[i], sampleRate);
+    hpG =
+      voicing.wetHighpassHz > 0
+        ? onePoleG(voicing.wetHighpassHz, sampleRate)
+        : 0;
+    const shelf = voicing.dryLowShelf;
+    shelfG = shelf ? onePoleG(shelf.hz, sampleRate) : 0;
+    shelfGain = shelf ? shelf.gain : 1;
+  }
+
   // The LFO bank: two accumulators, and a voice reads whichever of them its
   // weights ask for. `phase += inc; if (phase >= 1) phase -= 1` is the house
   // idiom, and `Math.sin` rather than a wavetable is deliberate - the table is
@@ -345,6 +485,8 @@ export function createChorus(sampleRate: number) {
   // where `sin` gives 0.
   let slowPhase = 0;
   let fastPhase = 0;
+
+  tune();
 
   function update(
     modeIndex: number,
@@ -375,6 +517,14 @@ export function createChorus(sampleRate: number) {
     voicing = VOICINGS[mode];
     fade = 1;
     fadeDirection = 0;
+    lpL.fill(0);
+    lpR.fill(0);
+    hpL = 0;
+    hpR = 0;
+    shelfL = 0;
+    shelfR = 0;
+    denormal = DENORMAL;
+    tune();
   }
 
   function compute(
@@ -396,6 +546,7 @@ export function createChorus(sampleRate: number) {
       width = tWidth;
       mode = tMode;
       voicing = VOICINGS[mode];
+      tune();
     }
 
     // Structural, and resolved once per block. The wet path is already at zero
@@ -405,6 +556,7 @@ export function createChorus(sampleRate: number) {
     if (fadeDirection < 0 && fade <= 0) {
       mode = tMode;
       voicing = VOICINGS[mode];
+      tune();
       fadeDirection = 1;
     }
 
@@ -414,7 +566,6 @@ export function createChorus(sampleRate: number) {
     const dMix = (tMix - mix) * step;
     const dWidth = (tWidth - width) * step;
     const voices = voicing.voices;
-    const perVoice = 1 / voices.length;
     const slowMul = voicing.slowMul;
     const fastMul = voicing.fastMul;
     const maxDepthMs = voicing.maxDepthMs;
@@ -468,17 +619,77 @@ export function createChorus(sampleRate: number) {
             msToSamples,
         );
         const sample = read(voice.source, delay);
-        wetL += sample * voice.gainL * perVoice;
-        wetR += sample * voice.gainR * perVoice;
+        wetL += sample * voice.gainL;
+        wetR += sample * voice.gainR;
       }
 
       // Mid/side width, applied to the wet path only: the dry is the anchor
       // and narrowing the effect should not narrow the source.
+      wetL *= normL;
+      wetR *= normR;
       const mid = 0.5 * (wetL + wetR);
       const side = 0.5 * (wetL - wetR) * width;
+      denormal = -denormal;
+      let voicedL = mid + side + denormal;
+      let voicedR = mid - side + denormal;
+
+      for (let k = 0; k < poles; k++) {
+        const g = lpG[k];
+        const vL = (voicedL - lpL[k]) * g;
+        voicedL = vL + lpL[k];
+        lpL[k] = voicedL + vL;
+        const vR = (voicedR - lpR[k]) * g;
+        voicedR = vR + lpR[k];
+        lpR[k] = voicedR + vR;
+      }
+
+      let boostedL = dryL;
+      let boostedR = dryR;
+      if (hpG > 0) {
+        const vL = (voicedL - hpL) * hpG;
+        const lowL = vL + hpL;
+        hpL = lowL + vL;
+        voicedL -= lowL;
+        const vR = (voicedR - hpR) * hpG;
+        const lowR = vR + hpR;
+        hpR = lowR + vR;
+        voicedR -= lowR;
+
+        // The complementary half: what the wet difference cannot carry, the
+        // dry is given back.
+        const sL = (dryL - shelfL) * shelfG;
+        const dLow = sL + shelfL;
+        shelfL = dLow + sL;
+        boostedL = dryL + (shelfGain - 1) * dLow;
+        const sR = (dryR - shelfR) * shelfG;
+        const dRow = sR + shelfR;
+        shelfR = dRow + sR;
+        boostedR = dryR + (shelfGain - 1) * dRow;
+      }
+
+      // Mutable's law with the constant re-derived - see `DRY_DUCK`. The dry
+      // only falls to `1 - DRY_DUCK` at full wet, which is what keeps the
+      // effect from sucking the centre out as `mix` rises.
+      const dryGain = 1 - mix * DRY_DUCK;
       const wet = mix * fade;
-      outL[i] = dryL * (1 - mix) + (mid + side) * wet;
-      outR[i] = dryR * (1 - mix) + (mid - side) * wet;
+      outL[i] = boostedL * dryGain + voicedL * wet;
+      outR[i] = boostedR * dryGain + voicedR * wet;
+    }
+
+    // A delay line flushes, so an input NaN clears itself. The wet path's
+    // filters do not: every one of them is `state = state + g * something`,
+    // and `NaN + anything` is `NaN`, so one poisoned sample would silence the
+    // effect for the lifetime of the graph. This is `vaf 05`'s finding and its
+    // answer - scan the block once, and if anything is non-finite, reset and
+    // zero it. A click, which is the honest response to a signal that was
+    // already broken.
+    for (let i = 0; i < n; i++) {
+      if (!Number.isFinite(outL[i]) || !Number.isFinite(outR[i])) {
+        reset();
+        outL.fill(0);
+        outR.fill(0);
+        return;
+      }
     }
   }
 

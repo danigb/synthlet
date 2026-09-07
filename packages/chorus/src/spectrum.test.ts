@@ -1,14 +1,20 @@
 import { readFileSync } from "fs";
 import { join } from "path";
 import {
+  bandCorrelation,
+  bandMonoDb,
+  bandpass,
   centsFromExcursion,
+  cornerHz,
   correlation,
   envelope,
   lfoHz,
   monoSumDb,
   noise,
+  pink,
   rms,
   sine,
+  transferDb,
 } from "./measure";
 
 // The instruments, calibrated against signals whose answer is known before the
@@ -132,6 +138,119 @@ describe("rms", () => {
       Math.SQRT1_2,
       3,
     );
+  });
+});
+
+/** One TPT one-pole lowpass, the same structure `dsp.ts` cascades. */
+function onePole(signal: ArrayLike<number>, hz: number) {
+  const g = Math.tan((Math.PI * hz) / SAMPLE_RATE);
+  const a = g / (1 + g);
+  const out = new Float32Array(signal.length);
+  let state = 0;
+  for (let i = 0; i < signal.length; i++) {
+    const v = (signal[i] - state) * a;
+    out[i] = v + state;
+    state = out[i] + v;
+  }
+  return out;
+}
+
+describe("transferDb", () => {
+  it("reads a one-pole's corner where the design put it", () => {
+    // The calibration that matters: an impulse response through a one-pole at
+    // 1000 Hz has to read -3 dB at 1000 Hz. A windowed FFT would taper the
+    // impulse itself away, which is why this one is rectangular.
+    const size = 16384;
+    const impulse = new Float32Array(size);
+    impulse[0] = 1;
+    const db = transferDb(onePole(impulse, 1000), size);
+    const bin = SAMPLE_RATE / size;
+    expect(db[Math.round(1000 / bin)] - db[Math.round(20 / bin)]).toBeCloseTo(
+      -3,
+      0,
+    );
+  });
+});
+
+describe("cornerHz", () => {
+  it("finds a lowpass corner through a comb", () => {
+    // The reason it exists: a chorus tap is a comb, and reading a corner
+    // straight off one finds the first null. A 3 ms comb plus a 2 kHz
+    // one-pole, and the answer has to be the one-pole.
+    const size = 16384;
+    const impulse = new Float32Array(size);
+    impulse[0] = 1;
+    const delay = Math.round(0.003 * SAMPLE_RATE);
+    const combed = new Float32Array(size);
+    for (let i = 0; i < size; i++)
+      combed[i] = impulse[i] + (i >= delay ? impulse[i - delay] : 0);
+
+    const bare = cornerHz(
+      transferDb(onePole(impulse, 2000), size),
+      SAMPLE_RATE,
+      size,
+    );
+    const through = cornerHz(
+      transferDb(onePole(combed, 2000), size),
+      SAMPLE_RATE,
+      size,
+    );
+    // Within a third of an octave of each other: the comb moves the reading,
+    // and the running maximum is what keeps it from moving it by an octave.
+    expect(through / bare).toBeGreaterThan(0.8);
+    expect(through / bare).toBeLessThan(1.25);
+  });
+});
+
+describe("bandpass", () => {
+  it("passes its own band and rejects the others", () => {
+    const inBand = rms(
+      bandpass(sine(16384, 700, SAMPLE_RATE), SAMPLE_RATE, 300, 1500),
+    );
+    const below = rms(
+      bandpass(sine(16384, 60, SAMPLE_RATE), SAMPLE_RATE, 300, 1500),
+    );
+    const above = rms(
+      bandpass(sine(16384, 9000, SAMPLE_RATE), SAMPLE_RATE, 300, 1500),
+    );
+    expect(inBand).toBeGreaterThan(0.5);
+    expect(below).toBeLessThan(0.2);
+    expect(above).toBeLessThan(0.2);
+  });
+
+  it("gives bandCorrelation and bandMonoDb the broadband answer on flat input", () => {
+    const signal = pink(16384);
+    expect(bandCorrelation(signal, signal, SAMPLE_RATE, 200, 2000)).toBeCloseTo(
+      1,
+      6,
+    );
+    expect(
+      bandMonoDb(signal, signal, signal, SAMPLE_RATE, 200, 2000),
+    ).toBeCloseTo(0, 6);
+  });
+});
+
+describe("pink", () => {
+  it("puts equal energy in every octave", () => {
+    // That *is* pink noise: -3 dB per octave of spectral density is the same
+    // statement as constant energy per octave band, because an octave band is
+    // twice as wide as the one below it. Measured across four octaves, the
+    // spread is under 1 dB.
+    const signal = pink(1 << 17);
+    const octave = (hz: number) =>
+      20 * Math.log10(rms(bandpass(signal, SAMPLE_RATE, hz, hz * 2)));
+    const bands = [250, 500, 1000, 2000].map(octave);
+    expect(Math.max(...bands) - Math.min(...bands)).toBeLessThan(1.5);
+  });
+
+  it("is not white noise", () => {
+    // The control, so the assertion above is testing the filter and not the
+    // band-splitter: white noise has constant energy per *hertz*, so each
+    // octave holds twice the one below it - about 3 dB per octave.
+    const signal = noise(1 << 17);
+    const octave = (hz: number) =>
+      20 * Math.log10(rms(bandpass(signal, SAMPLE_RATE, hz, hz * 2)));
+    expect(octave(2000) - octave(250)).toBeGreaterThan(6);
   });
 });
 

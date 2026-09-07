@@ -21,7 +21,7 @@
  * **Test-only.** `index.ts` never imports this file, so `tsup` never bundles
  * it and `esbuild` never sees it. `spectrum.test.ts` asserts that.
  */
-import { render } from "./_spectrum";
+import { fft, render } from "./_spectrum";
 
 /** The shape `render` drives: a `dsp.ts` factory's return value. */
 export type Engine = {
@@ -278,6 +278,61 @@ export function centsFromExcursion(excursionMs: number, rateHz: number) {
   return 1200 * Math.log2(1 + ratio);
 }
 
+/**
+ * Magnitude response in dB from an impulse response, rectangular-windowed.
+ *
+ * No window: an impulse response *is* the transfer function, and
+ * `_spectrum.ts`'s `magnitudes` applies a Blackman-Harris, which would tapers
+ * the impulse itself towards nothing. Verified in `spectrum.test.ts` against a
+ * one-pole whose corner is known.
+ */
+export function transferDb(response: ArrayLike<number>, size = 16384) {
+  const re = new Float64Array(size);
+  const im = new Float64Array(size);
+  for (let i = 0; i < size && i < response.length; i++) re[i] = response[i];
+  fft(re, im);
+  const out = new Float64Array(size / 2);
+  for (let k = 0; k < size / 2; k++)
+    out[k] = 20 * Math.log10(Math.hypot(re[k], im[k]) + 1e-12);
+  return out;
+}
+
+/**
+ * The -3 dB corner of a comb-filtered rolloff, in Hz.
+ *
+ * A chorus tap is a comb - roughly +/- 6 dB of ripple on a 333 Hz spacing for
+ * a 3 ms delay - and reading a corner straight off that finds the first null
+ * rather than the filter. The running maximum over `smoothHz` follows the
+ * comb's peak envelope instead, which is the lowpass, and `smoothHz` has to be
+ * wider than one comb period for it to work.
+ */
+export function cornerHz(
+  db: ArrayLike<number>,
+  sampleRate: number,
+  size = 16384,
+  smoothHz = 700,
+) {
+  const bin = sampleRate / size;
+  const half = Math.max(1, Math.round(smoothHz / bin / 2));
+  const peak = (k: number) => {
+    let best = -Infinity;
+    for (
+      let j = Math.max(1, k - half);
+      j <= Math.min(db.length - 1, k + half);
+      j++
+    )
+      if (db[j] > best) best = db[j];
+    return best;
+  };
+
+  // Reference: the envelope where the rolloff has not started, at 100 Hz.
+  const reference = peak(Math.round(100 / bin));
+  for (let k = Math.round(200 / bin); k < db.length; k++) {
+    if (peak(k) < reference - 3) return k * bin;
+  }
+  return NaN;
+}
+
 /** Uniform white noise from an LCG, so every measurement is reproducible. */
 export function noise(length: number, seed = 12345) {
   const out = new Float32Array(length);
@@ -287,6 +342,114 @@ export function noise(length: number, seed = 12345) {
     out[i] = (state / 0x3fffffff - 1) * 0.5;
   }
   return out;
+}
+
+/**
+ * Pink noise, from Paul Kellet's economy filter over the white LCG.
+ *
+ * Correlation is measured on this rather than on white noise, and that matters
+ * enough to say why: white noise puts half its energy above 12 kHz, which no
+ * musical signal does, and a chorus whose wet path is deliberately rolled off
+ * has no wet content up there at all. Measured on white noise, the broadband
+ * L/R correlation of *any* filtered-wet chorus reads near 1 - not because the
+ * effect is narrow but because the measurement is looking where the effect
+ * isn't. Pink is the standard stand-in for programme material.
+ */
+export function pink(length: number, seed = 12345) {
+  const white = noise(length * 2, seed);
+  const out = new Float32Array(length);
+  let b0 = 0;
+  let b1 = 0;
+  let b2 = 0;
+  for (let i = 0; i < length; i++) {
+    const w = white[i + length];
+    b0 = 0.99765 * b0 + w * 0.099046;
+    b1 = 0.963 * b1 + w * 0.2965164;
+    b2 = 0.57 * b2 + w * 1.0526913;
+    out[i] = (b0 + b1 + b2 + w * 0.1848) * 0.35;
+  }
+  return out;
+}
+
+/**
+ * A one-pole band-pass: the signal low-passed at `highHz`, minus that low-pass
+ * again at `lowHz`. Gentle rather than surgical, which is what a per-band
+ * comparison of two channels wants - a steep filter would ring and the ringing
+ * is correlated between them.
+ */
+export function bandpass(
+  signal: ArrayLike<number>,
+  sampleRate: number,
+  lowHz: number,
+  highHz: number,
+) {
+  const aLow = tanG(lowHz, sampleRate);
+  const aHigh = tanG(highHz, sampleRate);
+  const out = new Float32Array(signal.length);
+  let sLow = 0;
+  let sHigh = 0;
+  for (let i = 0; i < signal.length; i++) {
+    const vHigh = (signal[i] - sHigh) * aHigh;
+    const low = vHigh + sHigh;
+    sHigh = low + vHigh;
+    const vLow = (low - sLow) * aLow;
+    const lower = vLow + sLow;
+    sLow = lower + vLow;
+    out[i] = low - lower;
+  }
+  return out;
+}
+
+const tanG = (hz: number, sampleRate: number) => {
+  const g = Math.tan((Math.PI * Math.min(hz, 0.45 * sampleRate)) / sampleRate);
+  return g / (1 + g);
+};
+
+/**
+ * Correlation of `l` and `r` inside one frequency band.
+ *
+ * The per-band shape is the part that is not a matter of taste: the
+ * decorrelation literature measures effective decorrelators at 0.35-0.4 at low
+ * frequencies and 0.1-0.33 at high, and treats that as correct rather than as
+ * a limitation. Bass stays centred.
+ */
+export function bandCorrelation(
+  l: ArrayLike<number>,
+  r: ArrayLike<number>,
+  sampleRate: number,
+  lowHz: number,
+  highHz: number,
+) {
+  return correlation(
+    bandpass(l, sampleRate, lowHz, highHz),
+    bandpass(r, sampleRate, lowHz, highHz),
+  );
+}
+
+/**
+ * Mono-sum level against the input, inside one band.
+ *
+ * The broadband number hides the failure that matters for a difference-output
+ * chorus: `L = d0 - d1` cancels the common mode, and at low frequencies two
+ * short delayed copies are nearly identical, so it is the bass that goes.
+ */
+export function bandMonoDb(
+  l: ArrayLike<number>,
+  r: ArrayLike<number>,
+  input: ArrayLike<number>,
+  sampleRate: number,
+  lowHz: number,
+  highHz: number,
+) {
+  const mono = new Float32Array(l.length);
+  for (let i = 0; i < l.length; i++) mono[i] = 0.5 * (l[i] + r[i]);
+  return (
+    20 *
+    Math.log10(
+      rms(bandpass(mono, sampleRate, lowHz, highHz)) /
+        rms(bandpass(input, sampleRate, lowHz, highHz)),
+    )
+  );
 }
 
 export const sine = (length: number, hz: number, sampleRate: number) =>
