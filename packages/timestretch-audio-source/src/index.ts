@@ -8,8 +8,8 @@ import {
   ParamInput,
 } from "./_worklet";
 
-export const registerFlexAudioBufferSourceWorklet = createRegistrar(
-  "FABS",
+export const registerTimestretchAudioSourceWorklet = createRegistrar(
+  "TIMESTRETCH_AUDIO_SOURCE",
   PROCESSOR,
 );
 
@@ -19,7 +19,7 @@ export type RawBuffer = {
   sampleRate: number;
 };
 
-export type FlexAudioBufferSourceInputs = {
+export type TimestretchAudioSourceInputs = {
   playbackRate?: ParamInput;
   detune?: ParamInput;
   /** Region start, in seconds into the buffer. */
@@ -46,7 +46,7 @@ export type FlexAudioBufferSourceInputs = {
   searchRate?: number;
 };
 
-export type FlexAudioBufferSourceWorkletNode = AudioWorkletNode & {
+export type TimestretchAudioSourceWorkletNode = AudioWorkletNode & {
   playbackRate: AudioParam;
   detune: AudioParam;
   startOffset: AudioParam;
@@ -79,10 +79,10 @@ export type FlexAudioBufferSourceWorkletNode = AudioWorkletNode & {
 };
 
 const create = createWorkletConstructor<
-  FlexAudioBufferSourceWorkletNode,
-  FlexAudioBufferSourceInputs
+  TimestretchAudioSourceWorkletNode,
+  TimestretchAudioSourceInputs
 >({
-  processorName: "FlexAudioBufferSourceProcessor",
+  processorName: "TimestretchAudioSourceProcessor",
   descriptors: PARAMS,
   workletOptions: (inputs) => ({
     numberOfInputs: 0,
@@ -101,7 +101,7 @@ const create = createWorkletConstructor<
  * A sampler whose time, pitch, region and direction all move independently.
  *
  * ```ts
- * const src = FlexAudioBufferSource(ac, {
+ * const src = TimestretchAudioSource(ac, {
  *   playbackRate: 0.5,
  *   detune: 300,
  *   startOffset: 2.5,
@@ -118,11 +118,11 @@ const create = createWorkletConstructor<
  * `reverse` the direction and `loop` whether it cycles. All six are automatable
  * AudioParams, and all six can be moved while a note sounds.
  */
-export const FlexAudioBufferSource = Object.assign(
+export const TimestretchAudioSource = Object.assign(
   (
     context: AudioContext,
-    inputs: FlexAudioBufferSourceInputs = {},
-  ): FlexAudioBufferSourceWorkletNode => {
+    inputs: TimestretchAudioSourceInputs = {},
+  ): TimestretchAudioSourceWorkletNode => {
     const node = create(context, inputs);
     let frames = 0;
     let playing = false;
@@ -155,10 +155,10 @@ export const FlexAudioBufferSource = Object.assign(
     node.start = (when = 0, offset?: number, duration?: number) => {
       if (playing) {
         throw Error(
-          "FlexAudioBufferSource is already playing: stop() it before starting again",
+          "TimestretchAudioSource is already playing: stop() it before starting again",
         );
       }
-      if (frames === 0) throw Error("FlexAudioBufferSource has no buffer");
+      if (frames === 0) throw Error("TimestretchAudioSource has no buffer");
       // Sugar over the params, so the region has one source of truth - and
       // only when the arguments are actually passed, so `start()` on its own
       // cannot clobber a region the caller set deliberately.

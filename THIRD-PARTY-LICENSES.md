@@ -166,7 +166,7 @@ deliberately not transcribed: an earlier attempt to implement them from a
 PDF→markdown conversion produced worse-than-naive aliasing, while the same
 framework reproduced a hand-derived residual to the decimal. The
 table above is therefore **intellectual credit, not the provenance of code** — the
-same standing as the `@synthlet/flex-audio-buffer-source` row under
+same standing as the `@synthlet/timestretch-audio-source` row under
 [Provenance of every other package](#provenance-of-every-other-package). Brandt
 2001 in particular contains no polynomial at all; it is a windowed-sinc table BLEP
 plus MinBLEP, and it is cited here for hard sync, not for the residual.
@@ -241,7 +241,7 @@ inferred. Nothing below derives from third-party source.
 | `@synthlet/clip-amp` | Original. `tanh` and hard-clip shapers |
 | `@synthlet/clock` | Original |
 | `@synthlet/euclid` | Original. Implements the Euclidean rhythm algorithm of Godfried Toussaint, *The Euclidean Algorithm Generates Traditional Musical Rhythms* (2005) |
-| `@synthlet/flex-audio-buffer-source` | Original, re-derived from published algorithm descriptions: J. Driedger and M. Müller, [*A Review of Time-Scale Modification of Music Signals*](https://doi.org/10.3390/app6020057), Applied Sciences 6(2):57, 2016, §4.1 (equations 6-11) and §7.2 (pitch-shifting as resampling plus TSM); W. Verhelst and M. Roelands, [*An Overlap-Add Technique Based on Waveform Similarity (WSOLA) for High Quality Time-Scale Modification of Speech*](https://doi.org/10.1109/ICASSP.1993.319366), Proc. ICASSP-93; M. Roelands and W. Verhelst, [*WSOLA for Time-Scale Modification of Speech: Structures and Evaluation*](https://doi.org/10.21437/Eurospeech.1993-59), Proc. EUROSPEECH'93; and J. O. Smith III, [*Digital Audio Resampling Home Page*](https://ccrma.stanford.edu/~jos/resample/) for the windowed-sinc pitch stage. Which published equation each step implements is recorded in the header of `src/wsola.ts`, along with the seven things it does that the sources do not |
+| `@synthlet/timestretch-audio-source` | Original, re-derived from published algorithm descriptions: J. Driedger and M. Müller, [*A Review of Time-Scale Modification of Music Signals*](https://doi.org/10.3390/app6020057), Applied Sciences 6(2):57, 2016, §4.1 (equations 6-11) and §7.2 (pitch-shifting as resampling plus TSM); W. Verhelst and M. Roelands, [*An Overlap-Add Technique Based on Waveform Similarity (WSOLA) for High Quality Time-Scale Modification of Speech*](https://doi.org/10.1109/ICASSP.1993.319366), Proc. ICASSP-93; M. Roelands and W. Verhelst, [*WSOLA for Time-Scale Modification of Speech: Structures and Evaluation*](https://doi.org/10.21437/Eurospeech.1993-59), Proc. EUROSPEECH'93; and J. O. Smith III, [*Digital Audio Resampling Home Page*](https://ccrma.stanford.edu/~jos/resample/) for the windowed-sinc pitch stage. Which published equation each step implements is recorded in the header of `src/wsola.ts`, along with the seven things it does that the sources do not |
 | `@synthlet/granite` | Original granular engine |
 | `@synthlet/impulse` | Original |
 | `@synthlet/karplus-strong` | Original, from the published algorithm: Karplus & Strong, [*Digital Synthesis of Plucked String and Drum Timbres*](https://users.soe.ucsc.edu/~karplus/papers/digitar.pdf), CMJ 7(2), 1983 |
@@ -270,7 +270,7 @@ package claims about that filter is therefore measured, not inherited — a
 full-scale sine reads within ±0.1 dB from 60 Hz to 10 kHz at 48 kHz, and within
 ±0.35 dB from there to 20 kHz, asserted by `dsp.test.ts`.
 
-**On the strength of the flex-audio-buffer-source claim.** The same standard,
+**On the strength of the timestretch-audio-source claim.** The same standard,
 and the same caveat. This package was written after reading a description of an
 internal InVideo WSOLA implementation — its frame length, overlap, tolerance,
 decimated search rate and semitone cap — so it is re-derivation with the chain

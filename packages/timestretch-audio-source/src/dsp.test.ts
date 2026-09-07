@@ -1,14 +1,14 @@
 import {
   centsToRatio,
-  createFlexSource,
+  createTimestretchSource,
   DEFAULT_CONFIG,
-  type FlexConfig,
+  type TimestretchConfig,
 } from "./dsp";
 import { HALF_TAPS, reachFor, resampleAt } from "./resampler";
 
 const SAMPLE_RATE = 44100;
 
-const config = (over: Partial<FlexConfig> = {}): FlexConfig => ({
+const config = (over: Partial<TimestretchConfig> = {}): TimestretchConfig => ({
   sampleRate: SAMPLE_RATE,
   ...DEFAULT_CONFIG,
   channels: 1,
@@ -29,18 +29,18 @@ function render(
   source: Float32Array[],
   playbackRate: number,
   detune: number,
-  over: Partial<FlexConfig> = {},
+  over: Partial<TimestretchConfig> = {},
 ) {
-  const flex = createFlexSource(config({ channels: source.length, ...over }));
-  flex.setBuffer(source);
-  flex.start();
+  const stretch = createTimestretchSource(config({ channels: source.length, ...over }));
+  stretch.setBuffer(source);
+  stretch.start();
 
   const block = 128;
   const chunks: Float32Array[][] = [];
   let guard = 0;
   while (guard++ < 4000) {
     const outputs = source.map(() => new Float32Array(block));
-    const done = flex.process(outputs, 0, block, playbackRate, detune);
+    const done = stretch.process(outputs, 0, block, playbackRate, detune);
     chunks.push(outputs);
     if (done) break;
   }
@@ -135,7 +135,7 @@ describe("resampleAt", () => {
   });
 });
 
-describe("createFlexSource", () => {
+describe("createTimestretchSource", () => {
   describe("time, at constant pitch", () => {
     it.each([
       [0.5, 2],
@@ -224,9 +224,9 @@ describe("createFlexSource", () => {
   // character - is still a listening test.
   it("changes tempo mid-playback without moving the pitch", () => {
     const input = sine(60000, 220);
-    const flex = createFlexSource(config());
-    flex.setBuffer([input]);
-    flex.start();
+    const stretch = createTimestretchSource(config());
+    stretch.setBuffer([input]);
+    stretch.start();
 
     const block = 128;
     const halves: Float32Array[][] = [[], []];
@@ -235,7 +235,7 @@ describe("createFlexSource", () => {
     for (let b = 0; b < 120; b++) {
       const rate = b < 50 ? 1 : b > 70 ? 0.5 : 1 - ((b - 50) / 20) * 0.5;
       const out = [new Float32Array(block)];
-      flex.process(out, 0, block, rate, 0);
+      stretch.process(out, 0, block, rate, 0);
       if (b < 40) halves[0].push(out[0]);
       if (b >= 80) halves[1].push(out[0]);
     }
@@ -263,11 +263,11 @@ describe("createFlexSource", () => {
     // the same number of output blocks covers half as much of the source.
     const input = sine(80000, 220);
     const consumed = (rate: number) => {
-      const flex = createFlexSource(config());
-      flex.setBuffer([input]);
-      flex.start();
+      const stretch = createTimestretchSource(config());
+      stretch.setBuffer([input]);
+      stretch.start();
       let blocks = 0;
-      while (!flex.process([new Float32Array(128)], 0, 128, rate, 0)) {
+      while (!stretch.process([new Float32Array(128)], 0, 128, rate, 0)) {
         if (++blocks > 4000) throw Error("never ended");
       }
       return blocks;
@@ -280,13 +280,13 @@ describe("createFlexSource", () => {
 
   it("plays a region given by startOffset and endOffset", () => {
     const input = sine(30000, 440);
-    const flex = createFlexSource(config());
-    flex.setBuffer([input]);
-    flex.setControls(10000 / SAMPLE_RATE, 15000 / SAMPLE_RATE, 0, 0);
-    flex.start();
+    const stretch = createTimestretchSource(config());
+    stretch.setBuffer([input]);
+    stretch.setControls(10000 / SAMPLE_RATE, 15000 / SAMPLE_RATE, 0, 0);
+    stretch.start();
 
     const out = [new Float32Array(64)];
-    flex.process(out, 0, 64, 1, 0);
+    stretch.process(out, 0, 64, 1, 0);
     for (let i = 0; i < 64; i++) {
       expect(out[0][i]).toBeCloseTo(input[10000 + i], 5);
     }
@@ -295,14 +295,14 @@ describe("createFlexSource", () => {
   describe("a live region", () => {
     /** Render `blocks` quanta of 128 and return them joined. */
     const play = (
-      flex: ReturnType<typeof createFlexSource>,
+      stretch: ReturnType<typeof createTimestretchSource>,
       blocks: number,
     ) => {
       const joined = new Float32Array(blocks * 128);
       const out = [new Float32Array(128)];
       let ended = -1;
       for (let b = 0; b < blocks; b++) {
-        if (flex.process(out, 0, 128, 1, 0) && ended < 0) ended = b;
+        if (stretch.process(out, 0, 128, 1, 0) && ended < 0) ended = b;
         joined.set(out[0], b * 128);
       }
       return { joined, ended };
@@ -313,19 +313,19 @@ describe("createFlexSource", () => {
       // would be unmissable: the value would drop back to the new region
       // start instead of carrying on from where the playhead was.
       const input = ramp(40000);
-      const flex = createFlexSource(config());
-      flex.setBuffer([input]);
-      flex.setControls(5000 / SAMPLE_RATE, 0, 0, 0);
-      flex.start();
+      const stretch = createTimestretchSource(config());
+      stretch.setBuffer([input]);
+      stretch.setControls(5000 / SAMPLE_RATE, 0, 0, 0);
+      stretch.start();
 
-      const { joined: before } = play(flex, 20);
+      const { joined: before } = play(stretch, 20);
       const at = before[before.length - 1];
       expect(at).toBeCloseTo(7559 / 40000, 3);
 
       // Both edges move, with the playhead left inside: start back to the top
       // of the buffer, end pulled in to 30000.
-      flex.setControls(0, 30000 / SAMPLE_RATE, 0, 0);
-      const { joined: after } = play(flex, 5);
+      stretch.setControls(0, 30000 / SAMPLE_RATE, 0, 0);
+      const { joined: after } = play(stretch, 5);
 
       // Continuous across the change: the first sample carries on from the
       // last of the old region rather than rewinding to the new start.
@@ -337,36 +337,36 @@ describe("createFlexSource", () => {
 
     it("ends playback when endOffset sweeps in past the playhead", () => {
       const input = ramp(40000);
-      const flex = createFlexSource(config());
-      flex.setBuffer([input]);
-      flex.setControls(0, 0, 0, 0);
-      flex.start();
+      const stretch = createTimestretchSource(config());
+      stretch.setBuffer([input]);
+      stretch.setControls(0, 0, 0, 0);
+      stretch.start();
 
-      play(flex, 20);
-      expect(flex.isPlaying()).toBe(true);
+      play(stretch, 20);
+      expect(stretch.isPlaying()).toBe(true);
 
       // A region end well behind where the playhead already is.
-      flex.setControls(0, 1000 / SAMPLE_RATE, 0, 0);
-      const { ended } = play(flex, 20);
+      stretch.setControls(0, 1000 / SAMPLE_RATE, 0, 0);
+      const { ended } = play(stretch, 20);
       expect(ended).toBeGreaterThanOrEqual(0);
-      expect(flex.isPlaying()).toBe(false);
+      expect(stretch.isPlaying()).toBe(false);
     });
 
     it("holds the previous region when one arrives inverted", () => {
       // A region swept by an LFO can cross itself for a block or two. That
       // must not kill the note.
       const input = sine(40000, 220);
-      const flex = createFlexSource(config());
-      flex.setBuffer([input]);
-      flex.setControls(0, 0, 0, 0);
-      flex.start();
+      const stretch = createTimestretchSource(config());
+      stretch.setBuffer([input]);
+      stretch.setControls(0, 0, 0, 0);
+      stretch.start();
 
-      play(flex, 10);
-      flex.setControls(0.5, 0.2, 0, 0); // end before start
-      const { joined, ended } = play(flex, 10);
+      play(stretch, 10);
+      stretch.setControls(0.5, 0.2, 0, 0); // end before start
+      const { joined, ended } = play(stretch, 10);
 
       expect(ended).toBe(-1);
-      expect(flex.isPlaying()).toBe(true);
+      expect(stretch.isPlaying()).toBe(true);
       expect(rms(joined)).toBeGreaterThan(0.5);
     });
 
@@ -374,10 +374,10 @@ describe("createFlexSource", () => {
       // The hold rule above is for a region moving *under* a playing note.
       // Starting into an empty one still has to refuse, or the worklet never
       // posts ENDED and the main thread's `playing` latch sticks.
-      const flex = createFlexSource(config());
-      flex.setBuffer([sine(4000, 300)]);
-      flex.setControls(1, 0, 0, 0); // one second into a 0.09 s clip
-      expect(flex.start()).toBe(false);
+      const stretch = createTimestretchSource(config());
+      stretch.setBuffer([sine(4000, 300)]);
+      stretch.setControls(1, 0, 0, 0); // one second into a 0.09 s clip
+      expect(stretch.start()).toBe(false);
     });
   });
 
@@ -389,17 +389,17 @@ describe("createFlexSource", () => {
       playbackRate = 1,
       detune = 0,
     ) {
-      const flex = createFlexSource(config());
-      flex.setBuffer([input]);
-      flex.setControls(...controls);
-      flex.start();
+      const stretch = createTimestretchSource(config());
+      stretch.setBuffer([input]);
+      stretch.setControls(...controls);
+      stretch.start();
 
       const block = 128;
       const chunks: Float32Array[] = [];
       let guard = 0;
       while (guard++ < 4000) {
         const out = [new Float32Array(block)];
-        const done = flex.process(out, 0, block, playbackRate, detune);
+        const done = stretch.process(out, 0, block, playbackRate, detune);
         chunks.push(out[0]);
         if (done) break;
       }
@@ -470,16 +470,16 @@ describe("createFlexSource", () => {
     describe("flipped mid-playback", () => {
       /** `before` blocks forwards, then `after` blocks reversed. */
       const flipped = (input: Float32Array, before: number, after: number) => {
-        const flex = createFlexSource(config());
-        flex.setBuffer([input]);
-        flex.setControls(0, 0, 0, 0);
-        flex.start();
+        const stretch = createTimestretchSource(config());
+        stretch.setBuffer([input]);
+        stretch.setControls(0, 0, 0, 0);
+        stretch.start();
 
         const out = [new Float32Array(128)];
         const joined = new Float32Array((before + after) * 128);
         for (let b = 0; b < before + after; b++) {
-          if (b === before) flex.setControls(0, 0, 1, 0);
-          flex.process(out, 0, 128, 1, 0);
+          if (b === before) stretch.setControls(0, 0, 1, 0);
+          stretch.process(out, 0, 128, 1, 0);
           joined.set(out[0], b * 128);
         }
         return joined;
@@ -539,19 +539,19 @@ describe("createFlexSource", () => {
       blocks: number,
       reverse = 0,
     ) {
-      const flex = createFlexSource(config());
-      flex.setBuffer([input]);
-      flex.setControls(from / SAMPLE_RATE, to / SAMPLE_RATE, reverse, 1);
-      flex.start();
+      const stretch = createTimestretchSource(config());
+      stretch.setBuffer([input]);
+      stretch.setControls(from / SAMPLE_RATE, to / SAMPLE_RATE, reverse, 1);
+      stretch.start();
 
       const out = [new Float32Array(128)];
       const joined = new Float32Array(blocks * 128);
       let ended = -1;
       for (let b = 0; b < blocks; b++) {
-        if (flex.process(out, 0, 128, 1, 0) && ended < 0) ended = b;
+        if (stretch.process(out, 0, 128, 1, 0) && ended < 0) ended = b;
         joined.set(out[0], b * 128);
       }
-      return { flex, joined, ended };
+      return { stretch, joined, ended };
     }
 
     /** Largest sample-to-sample step, and how many exceed `loud`. */
@@ -625,32 +625,32 @@ describe("createFlexSource", () => {
     });
 
     it("never reports done: ENDED can only come from stop()", () => {
-      const { flex, ended } = loopRender(sine(20000, 220), 5000, 15000, 400);
+      const { stretch, ended } = loopRender(sine(20000, 220), 5000, 15000, 400);
       expect(ended).toBe(-1);
-      expect(flex.isPlaying()).toBe(true);
+      expect(stretch.isPlaying()).toBe(true);
 
-      flex.stop();
-      expect(flex.isPlaying()).toBe(false);
+      stretch.stop();
+      expect(stretch.isPlaying()).toBe(false);
     });
 
     it("plays out to endOffset when loop is turned off mid-cycle", () => {
       const input = sine(60000, 220);
-      const flex = createFlexSource(config());
-      flex.setBuffer([input]);
-      flex.setControls(5000 / SAMPLE_RATE, 15000 / SAMPLE_RATE, 0, 1);
-      flex.start();
+      const stretch = createTimestretchSource(config());
+      stretch.setBuffer([input]);
+      stretch.setControls(5000 / SAMPLE_RATE, 15000 / SAMPLE_RATE, 0, 1);
+      stretch.start();
 
       const out = [new Float32Array(128)];
       let ended = -1;
       for (let b = 0; b < 400; b++) {
         // Half-way through a cycle, drop the loop.
         if (b === 120) {
-          flex.setControls(5000 / SAMPLE_RATE, 15000 / SAMPLE_RATE, 0, 0);
+          stretch.setControls(5000 / SAMPLE_RATE, 15000 / SAMPLE_RATE, 0, 0);
         }
-        if (flex.process(out, 0, 128, 1, 0) && ended < 0) ended = b;
+        if (stretch.process(out, 0, 128, 1, 0) && ended < 0) ended = b;
       }
       expect(ended).toBeGreaterThan(120);
-      expect(flex.isPlaying()).toBe(false);
+      expect(stretch.isPlaying()).toBe(false);
     });
 
     it("cycles the region at the length it was asked for", () => {
@@ -688,10 +688,10 @@ describe("createFlexSource", () => {
       // playhead is simply past the new edge, and the modulo wrap carries it
       // back into the region however far past it has got.
       const input = sine(60000, 220);
-      const flex = createFlexSource(config());
-      flex.setBuffer([input]);
-      flex.setControls(5000 / SAMPLE_RATE, 25000 / SAMPLE_RATE, 0, 1);
-      flex.start();
+      const stretch = createTimestretchSource(config());
+      stretch.setBuffer([input]);
+      stretch.setControls(5000 / SAMPLE_RATE, 25000 / SAMPLE_RATE, 0, 1);
+      stretch.start();
 
       const out = [new Float32Array(128)];
       const joined = new Float32Array(300 * 128);
@@ -699,15 +699,15 @@ describe("createFlexSource", () => {
       for (let b = 0; b < 300; b++) {
         // Pull the end in to 10000, well behind where the playhead has got.
         if (b === 120) {
-          flex.setControls(5000 / SAMPLE_RATE, 10000 / SAMPLE_RATE, 0, 1);
+          stretch.setControls(5000 / SAMPLE_RATE, 10000 / SAMPLE_RATE, 0, 1);
         }
-        if (flex.process(out, 0, 128, 1, 0) && ended < 0) ended = b;
+        if (stretch.process(out, 0, 128, 1, 0) && ended < 0) ended = b;
         joined.set(out[0], b * 128);
       }
 
       const after = joined.subarray(20000);
       expect(ended).toBe(-1);
-      expect(flex.isPlaying()).toBe(true);
+      expect(stretch.isPlaying()).toBe(true);
       expect(rms(after)).toBeGreaterThan(0.5);
       // ...and the smaller region's seam is still a seam, not a click.
       expect(steps(after).largest).toBeLessThan(2 * THEORY);
@@ -750,52 +750,52 @@ describe("createFlexSource", () => {
 
   it("reports done once and then falls silent", () => {
     const input = sine(4000, 300);
-    const flex = createFlexSource(config());
-    flex.setBuffer([input]);
-    flex.start();
+    const stretch = createTimestretchSource(config());
+    stretch.setBuffer([input]);
+    stretch.start();
 
     let ended = 0;
     for (let i = 0; i < 200; i++) {
-      if (flex.process([new Float32Array(128)], 0, 128, 1, 0)) ended++;
+      if (stretch.process([new Float32Array(128)], 0, 128, 1, 0)) ended++;
     }
     expect(ended).toBe(1);
-    expect(flex.isPlaying()).toBe(false);
+    expect(stretch.isPlaying()).toBe(false);
 
     const after = [new Float32Array(128)];
-    flex.process(after, 0, 128, 1, 0);
+    stretch.process(after, 0, 128, 1, 0);
     expect(Array.from(after[0])).toEqual(new Array(128).fill(0));
   });
 
   it("is silent before start and after stop", () => {
     const input = sine(20000, 300);
-    const flex = createFlexSource(config());
-    flex.setBuffer([input]);
+    const stretch = createTimestretchSource(config());
+    stretch.setBuffer([input]);
 
     const before = [new Float32Array(64)];
-    flex.process(before, 0, 64, 1, 0);
+    stretch.process(before, 0, 64, 1, 0);
     expect(Array.from(before[0])).toEqual(new Array(64).fill(0));
 
-    flex.start();
-    flex.process([new Float32Array(64)], 0, 64, 1, 0);
-    flex.stop();
+    stretch.start();
+    stretch.process([new Float32Array(64)], 0, 64, 1, 0);
+    stretch.stop();
 
     const after = [new Float32Array(64)];
-    flex.process(after, 0, 64, 1, 0);
+    stretch.process(after, 0, 64, 1, 0);
     expect(Array.from(after[0])).toEqual(new Array(64).fill(0));
   });
 
   it("restarts from the top", () => {
     const input = sine(20000, 275);
-    const flex = createFlexSource(config());
-    flex.setBuffer([input]);
+    const stretch = createTimestretchSource(config());
+    stretch.setBuffer([input]);
 
     const first = [new Float32Array(256)];
-    flex.start();
-    flex.process(first, 0, 256, 0.8, 300);
+    stretch.start();
+    stretch.process(first, 0, 256, 0.8, 300);
 
     const second = [new Float32Array(256)];
-    flex.start();
-    flex.process(second, 0, 256, 0.8, 300);
+    stretch.start();
+    stretch.process(second, 0, 256, 0.8, 300);
 
     expect(Array.from(second[0])).toEqual(Array.from(first[0]));
   });
@@ -814,15 +814,15 @@ describe("createFlexSource", () => {
     // Without the guard on that, returning to detune 0 wrote NaN into every
     // remaining sample of the playback - and NaN never washes out.
     const input = sine(40000, 220);
-    const flex = createFlexSource(config());
-    flex.setBuffer([input]);
-    flex.start();
+    const stretch = createTimestretchSource(config());
+    stretch.setBuffer([input]);
+    stretch.start();
 
     const out = [new Float32Array(128)];
-    for (let b = 0; b < 5; b++) flex.process(out, 0, 128, 1, 700);
+    for (let b = 0; b < 5; b++) stretch.process(out, 0, 128, 1, 700);
     const shifted = rms(out[0]);
 
-    for (let b = 0; b < 20; b++) flex.process(out, 0, 128, 1, 0);
+    for (let b = 0; b < 20; b++) stretch.process(out, 0, 128, 1, 0);
     expect(Array.from(out[0]).every(Number.isFinite)).toBe(true);
     // Still playing the sample, not silently dropped to zero.
     expect(rms(out[0])).toBeGreaterThan(0.5 * shifted);
@@ -830,11 +830,11 @@ describe("createFlexSource", () => {
 
   it("allocates nothing after construction", () => {
     const input = sine(40000, 220);
-    const flex = createFlexSource(config());
-    flex.setBuffer([input]);
-    flex.start();
+    const stretch = createTimestretchSource(config());
+    stretch.setBuffer([input]);
+    stretch.start();
     const outputs = [new Float32Array(128)];
-    flex.process(outputs, 0, 128, 1, 0);
+    stretch.process(outputs, 0, 128, 1, 0);
 
     const before = (globalThis as any).Float32Array;
     let allocations = 0;
@@ -849,13 +849,13 @@ describe("createFlexSource", () => {
       for (let i = 0; i < 150; i++) {
         // Every control sweeping, not just the two the render loop consumes:
         // `setControls` runs on the audio thread too.
-        flex.setControls(
+        stretch.setControls(
           ((i % 11) * 1000) / SAMPLE_RATE,
           i % 3 === 0 ? (20000 + (i % 13) * 500) / SAMPLE_RATE : 0,
           i % 4 === 0 ? 1 : 0,
           i % 5 === 0 ? 1 : 0,
         );
-        flex.process(outputs, 0, 128, 0.8 + (i % 5) * 0.1, (i % 7) * 100);
+        stretch.process(outputs, 0, 128, 0.8 + (i % 5) * 0.1, (i % 7) * 100);
         for (const value of outputs[0]) {
           if (!Number.isFinite(value)) finite = false;
         }

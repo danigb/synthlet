@@ -3,12 +3,12 @@
 const SAMPLE_RATE = 44100;
 const BLOCK = 128;
 
-describe("FlexAudioBufferSourceProcessor", () => {
+describe("TimestretchAudioSourceProcessor", () => {
   let Worklet: any;
 
   beforeAll(async () => {
     createWorkletTestContext(SAMPLE_RATE);
-    Worklet = (await import("./worklet")).FlexAudioBufferSourceProcessor;
+    Worklet = (await import("./worklet")).TimestretchAudioSourceProcessor;
   });
 
   beforeEach(() => {
@@ -71,7 +71,7 @@ describe("FlexAudioBufferSourceProcessor", () => {
 
   it("registers the processor", () => {
     expect(global.registerProcessor).toHaveBeenCalledWith(
-      "FlexAudioBufferSourceProcessor",
+      "TimestretchAudioSourceProcessor",
       Worklet,
     );
   });

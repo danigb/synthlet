@@ -1,5 +1,5 @@
 {
-  "name": "@synthlet/flex-audio-buffer-source",
+  "name": "@synthlet/timestretch-audio-source",
   "version": "0.1.0",
   "description": "Audio buffer player with independent time and pitch, as an audio worklet",
   "keywords": [

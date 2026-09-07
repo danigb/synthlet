@@ -1,4 +1,4 @@
-# @synthlet/flex-audio-buffer-source
+# @synthlet/timestretch-audio-source
 
 > A sampler whose time, pitch, region and direction all move independently, as
 > an AudioWorklet
@@ -18,7 +18,7 @@ sampler is actually for: choose the slice, choose the direction, cycle it. Six
 ## Install
 
 ```bash
-npm i @synthlet/flex-audio-buffer-source
+npm i @synthlet/timestretch-audio-source
 ```
 
 Or `npm i synthlet` for every module, from which the same names are exported.
@@ -27,17 +27,17 @@ Or `npm i synthlet` for every module, from which the same names are exported.
 
 ```ts
 import {
-  FlexAudioBufferSource,
-  registerFlexAudioBufferSourceWorklet,
-} from "@synthlet/flex-audio-buffer-source";
+  TimestretchAudioSource,
+  registerTimestretchAudioSourceWorklet,
+} from "@synthlet/timestretch-audio-source";
 
 const ac = new AudioContext();
-await registerFlexAudioBufferSourceWorklet(ac);
+await registerTimestretchAudioSourceWorklet(ac);
 
 const bytes = await fetch("/loop.mp3").then((r) => r.arrayBuffer());
 const buffer = await ac.decodeAudioData(bytes);
 
-const src = FlexAudioBufferSource(ac, {
+const src = TimestretchAudioSource(ac, {
   playbackRate: 0.5, // half speed, same pitch
   detune: 300, // +3 semitones, same duration
   startOffset: 2.5, // play from 2.5s...
@@ -78,7 +78,7 @@ src.playbackRate.setValueAtTime(1, ac.currentTime);
 src.playbackRate.linearRampToValueAtTime(0.5, ac.currentTime + 4);
 ```
 
-The same list is available at runtime as `FlexAudioBufferSource.descriptors`, if
+The same list is available at runtime as `TimestretchAudioSource.descriptors`, if
 you're generating UI from it.
 
 **`detune`'s range is the cap.** The engine is good for ±12 semitones, and that
