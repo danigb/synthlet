@@ -10,12 +10,19 @@ import type { ParamDescriptor } from "./_worklet";
 // one. `scripts/_worklet.ts`, next to `ParamDescriptor`, has the two grounds.
 export const PARAMS: readonly ParamDescriptor[] = [
   {
-    // Not a gate: a phase ramp, rising 0 to 1 over each beat, and the step
+    // Not a gate: a phase ramp, rising 0 towards 1 over each beat, and the step
     // boundary is the wrap. a-rate so that boundary lands on its own sample
     // rather than at the top of the next render quantum - the same quantity as
     // every other event parameter in the library, arrived at differently.
     // A `Clock` is a node by construction, so k-rate here bought nothing: the
     // ramp was rendered either way and 127 of its 128 samples thrown away.
+    //
+    // That justification was aspirational until clock ticket 03. `Clock` used
+    // to advance its phase by a whole block and fill the block with one value,
+    // so the boundary *was* at the top of the next render quantum by
+    // construction and the 128 values read here were identical. It now renders
+    // per sample, and a hit lands on the same sample as `Clock.gate` - which
+    // `packages/euclid/src/clock-skew.test.ts` is what keeps true.
     name: "clock",
     defaultValue: 0,
     minValue: 0,

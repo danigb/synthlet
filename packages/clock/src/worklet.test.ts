@@ -1,9 +1,14 @@
-// 128-frame blocks at 16384 Hz and 120 BPM: a beat is exactly 64 blocks and the
-// phase advances by 1/64 per block - a power of two, so nothing below drifts
-// on the way through a Float32Array.
+// 128-frame blocks at 16384 Hz and 120 BPM: a beat is exactly 8192 samples, so
+// nothing below drifts on the way through a Float32Array.
+//
+// That exactness is also this rate's blind spot - a beat is a whole number of
+// blocks here, which is why a clock that rendered one value per render quantum
+// looked correct in this file for a year. `dsp.test.ts` is where the rates that
+// do not divide live. What stays here is what needs the processor: the
+// registration, the descriptors, and the two outputs seen through `process()`.
 const SAMPLE_RATE = 16384;
 const BLOCK = 128;
-const BLOCKS_PER_BEAT = 64;
+const SAMPLES_PER_BEAT = 8192;
 
 describe("ClockWorkletProcessor", () => {
   let Worklet: any;
@@ -24,54 +29,67 @@ describe("ClockWorkletProcessor", () => {
     expect(Worklet.parameterDescriptors).toMatchSnapshot();
   });
 
-  it("leaves the phase output exactly as it was", () => {
-    // The oracle is the expression this processor shipped with. Euclid
-    // subdivides the clock by multiplying this ramp, so it cannot move.
-    const expected: number[] = [];
-    let p = 0;
-    const increment = 120 / 60 / SAMPLE_RATE;
-    for (let i = 0; i < 3 * BLOCKS_PER_BEAT; i++) {
-      let nextPhase = p + BLOCK * increment;
-      if (nextPhase > 1) nextPhase -= 1;
-      expected.push(nextPhase < p ? 1 : p);
-      p = nextPhase;
-    }
+  it("emits a phase that rises every sample and wraps once per beat", () => {
+    // This replaces an oracle test that re-implemented the block-constant
+    // expression and asserted equality with it, under the comment "Euclid
+    // subdivides the clock by multiplying this ramp, so it cannot move". The
+    // reasoning was backwards: a per-sample ramp is the one that survives
+    // multiplication, and the block-constant one is what made a fast
+    // subdivision drop steps. The property below is what that test was
+    // reaching for.
+    const { phase } = run(new Worklet(), 3 * SAMPLES_PER_BEAT);
 
-    const { phase } = run(new Worklet(), 3 * BLOCKS_PER_BEAT);
-    expect(phase).toEqual(expected.map(Math.fround));
+    const wraps = phase.flatMap((v, i) =>
+      i > 0 && v < phase[i - 1] ? [i] : [],
+    );
+    expect(wraps).toEqual([SAMPLES_PER_BEAT, 2 * SAMPLES_PER_BEAT]);
+
+    // Strictly increasing everywhere else, and never exactly 1.0: the phase is
+    // `[0, 1)`, which is what `gatePulse` and `Euclid`'s wrap detector assume.
+    for (let i = 1; i < phase.length; i++) {
+      if (!wraps.includes(i)) expect(phase[i]).toBeGreaterThan(phase[i - 1]);
+    }
+    expect(Math.max(...phase)).toBeLessThan(1);
   });
 
   it("emits a gate that rises once per beat", () => {
-    const { gate } = run(new Worklet(), 3 * BLOCKS_PER_BEAT);
-    expect(risingEdges(gate)).toEqual([0, 64, 128]);
+    const { gate } = run(new Worklet(), 3 * SAMPLES_PER_BEAT);
+    expect(risingEdges(gate)).toEqual([
+      0,
+      SAMPLES_PER_BEAT,
+      2 * SAMPLES_PER_BEAT,
+    ]);
   });
 
-  it("rises on the same block the phase reaches 1", () => {
-    // The migration property: `KickDrum({ trigger: clock.gate })` fires on the
-    // block `KickDrum({ trigger: clock })` used to fire on under `=== 1`.
-    const { phase, gate } = run(new Worklet(), 3 * BLOCKS_PER_BEAT);
-    const plateaus = phase.flatMap((v, i) => (v === 1 ? [i] : []));
-    expect(plateaus).toEqual([64, 128]);
+  it("rises on the sample the phase wraps", () => {
+    // The migration property, now exact: `KickDrum({ trigger: clock.gate })`
+    // fires on the sample the phase restarts, not on the block it restarts in.
+    // There is no 1.0 plateau to find any more - that plateau was the old
+    // `> 1` wrap letting exactly 1.0 through for one block.
+    const { phase, gate } = run(new Worklet(), 3 * SAMPLES_PER_BEAT);
+    const wraps = phase.flatMap((v, i) =>
+      i > 0 && v < phase[i - 1] ? [i] : [],
+    );
     // Plus one at startup: a clock fires its first beat immediately.
-    expect(risingEdges(gate)).toEqual([0, ...plateaus]);
+    expect(risingEdges(gate)).toEqual([0, ...wraps]);
   });
 
   it("holds the gate for `pulseWidth` of the beat", () => {
-    for (const [pulseWidth, expected] of [
-      [0.5, 31],
-      [0.25, 15],
-      [0.75, 47],
-    ] as const) {
-      const { gate } = run(new Worklet(), BLOCKS_PER_BEAT, { pulseWidth });
-      expect(gate.filter((v) => v === 1)).toHaveLength(expected);
+    // Samples, not blocks. This used to read 31 of 64 blocks for 0.5, which is
+    // the same quantity seen through the quantisation this ticket removed.
+    for (const pulseWidth of [0.25, 0.5, 0.75]) {
+      const { gate } = run(new Worklet(), SAMPLES_PER_BEAT, { pulseWidth });
+      expect(gate.filter((v) => v === 1)).toHaveLength(
+        pulseWidth * SAMPLES_PER_BEAT,
+      );
     }
   });
 
   it("emits no gate while it is stopped", () => {
     // bpm 0 never advances the phase, so a phase-derived gate would otherwise
     // latch open at 0 forever.
-    const { gate } = run(new Worklet(), 10, { bpm: 0 });
-    expect(gate).toEqual(new Array(10).fill(0));
+    const { gate } = run(new Worklet(), 10 * BLOCK, { bpm: 0 });
+    expect(gate).toEqual(new Array(10 * BLOCK).fill(0));
   });
 });
 
@@ -79,23 +97,23 @@ function risingEdges(values: number[]) {
   return values.flatMap((v, i) => (v > 0 && !(values[i - 1] > 0) ? [i] : []));
 }
 
-// Both outputs are filled with a single value per block, so one sample each is
-// the whole block.
+// Whole blocks, flattened: both outputs are written per sample, so reading one
+// sample per block would be measuring one value in 128.
 function run(
   worklet: any,
-  blocks: number,
+  samples: number,
   params: { bpm?: number; pulseWidth?: number } = {},
 ) {
   const phase: number[] = [];
   const gate: number[] = [];
-  for (let i = 0; i < blocks; i++) {
+  for (let i = 0; i < samples / BLOCK; i++) {
     const outputs = [[new Float32Array(BLOCK)], [new Float32Array(BLOCK)]];
     worklet.process([], outputs, {
       bpm: [params.bpm ?? 120],
       pulseWidth: [params.pulseWidth ?? 0.5],
     });
-    phase.push(outputs[0][0][0]);
-    gate.push(outputs[1][0][0]);
+    phase.push(...outputs[0][0]);
+    gate.push(...outputs[1][0]);
   }
   return { phase, gate };
 }

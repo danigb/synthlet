@@ -28,81 +28,102 @@ import { createClock } from "./dsp";
 /** One render quantum - the block size the processor is actually called with. */
 const BLOCK = 128;
 
-/** 16384: the rate `worklet.test.ts` runs at, where a beat is 64 blocks
- * exactly. 44100 and 48000: the two a browser actually hands you. */
-const RATES = [16384, 44100, 48000];
-
 describe("createClock", () => {
-  it("matches the shipped phase expression at every sample rate", () => {
-    // The oracle is the expression this module shipped with, recomputed here
-    // rather than imported: Euclid subdivides the clock by multiplying this
-    // ramp, so it cannot move without a ticket that says so.
+  /**
+   * The two tests that stood here until clock ticket 03 were oracle tests: they
+   * re-implemented the block-constant expression the engine shipped with and
+   * asserted equality with it. They were written as ticket 01's proof that
+   * extracting the engine out of the processor changed nothing, and they did
+   * that job. Once the engine renders per sample they can only assert the
+   * defect, so they are gone rather than adjusted - do not restore them.
+   *
+   * What replaces them is the property they were reaching for.
+   */
+  it("emits a ramp that rises every sample and wraps once per beat", () => {
     for (const sampleRate of RATES) {
-      const blocks = blocksPerBeat(sampleRate, 120) * 3;
-      const expected: number[] = [];
-      let p = 0;
-      const increment = 120 / 60 / sampleRate;
-      for (let i = 0; i < blocks; i++) {
-        let nextPhase = p + BLOCK * increment;
-        if (nextPhase > 1) nextPhase -= 1;
-        expected.push(nextPhase < p ? 1 : p);
-        p = nextPhase;
+      const samplesPerBeat = (sampleRate * 60) / 120;
+      const phase = renderPhase(createClock(sampleRate), sampleRate, 3, {
+        bpm: 120,
+      });
+
+      const wraps = phase.flatMap((v, i) =>
+        i > 0 && v < phase[i - 1] ? [i] : [],
+      );
+      // A wrap every beat, on the sample it is due on.
+      wraps.forEach((wrap, i) => {
+        expect(Math.abs(wrap - (i + 1) * samplesPerBeat)).toBeLessThanOrEqual(
+          1,
+        );
+      });
+      expect(wraps.length).toBeGreaterThan(2);
+
+      // Strictly increasing everywhere else. At 44100/120 that is 22050
+      // distinct values in a beat, not the 172 the block fill produced.
+      const beat = phase.slice(0, wraps[0]);
+      expect(new Set(beat).size).toBe(beat.length);
+      for (let i = 1; i < beat.length; i++) {
+        expect(beat[i]).toBeGreaterThan(beat[i - 1]);
       }
 
-      const { phase } = render(createClock(sampleRate), blocks);
-      expect(phase).toEqual(expected.map(Math.fround));
+      // `[0, 1)`: nothing emits exactly 1.0. The old `> 1` wrap let it through
+      // for a whole block, and that plateau is what `Euclid` failed to see as
+      // a step boundary.
+      expect(phase.every((v) => v >= 0 && v < 1)).toBe(true);
     }
   });
 
-  it("rises the gate on the block the phase reaches 1", () => {
-    // The relationship between the two outputs: the gate is taken from the
-    // phase *after* the wrap, so its rising edge lands on the plateau block.
+  it("rises the gate on the sample the phase wraps", () => {
+    // One accumulator, both outputs read from it at the same sample, so they
+    // cannot describe different instants. This is defect 2 of ticket 03 closed
+    // by construction rather than by adjustment.
     for (const sampleRate of RATES) {
-      const blocks = blocksPerBeat(sampleRate, 120) * 3;
-      const { phase, gate } = render(createClock(sampleRate), blocks);
-      const plateaus = phase.flatMap((v, i) => (v === 1 ? [i] : []));
-      expect(plateaus).toHaveLength(2);
+      const phase = renderPhase(createClock(sampleRate), sampleRate, 3, {
+        bpm: 120,
+      });
+      const wraps = phase.flatMap((v, i) =>
+        i > 0 && v < phase[i - 1] ? [i] : [],
+      );
+      const edges = renderEdges(createClock(sampleRate), sampleRate, 3, {
+        bpm: 120,
+      });
       // Plus one at startup: a clock fires its first beat immediately.
-      expect(risingEdges(gate)).toEqual([0, ...plateaus]);
+      expect(edges).toEqual([0, ...wraps]);
     }
   });
 
   it("holds the gate for `pulseWidth` of the beat", () => {
     const sampleRate = 44100;
-    const perBeat = blocksPerBeat(sampleRate, 120);
-    const widths = [0.25, 0.5, 0.75];
-    const highs = widths.map(
-      (pulseWidth) =>
-        render(createClock(sampleRate), perBeat, { pulseWidth }).gate.filter(
-          (v) => v === 1,
-        ).length,
-    );
-    // Not an exact block count: at 44100 a beat is 172.27 blocks, which is the
-    // whole reason this file exists. Monotonic in the width, and within a
-    // block of the fraction, is what the block-constant gate can promise.
-    expect(highs).toEqual([...highs].sort((a, b) => a - b));
-    highs.forEach((high, i) => {
-      expect(Math.abs(high - widths[i] * perBeat)).toBeLessThanOrEqual(1);
-    });
+    for (const pulseWidth of [0.25, 0.5, 0.75]) {
+      const { highs, periods } = renderGateWidths(
+        createClock(sampleRate),
+        sampleRate,
+        10,
+        { bpm: 120, pulseWidth },
+      );
+      highs.slice(1).forEach((high, i) => {
+        expect(Math.abs(high - pulseWidth * periods[i])).toBeLessThanOrEqual(1);
+      });
+    }
   });
 
   it("emits no gate while it is stopped", () => {
     // bpm 0 never advances the phase, so a phase-derived gate would otherwise
     // latch open at 0 forever. The guard is on the increment, not the tempo.
-    const { gate } = render(createClock(44100), 10, { bpm: 0 });
-    expect(gate).toEqual(new Array(10).fill(0));
+    expect(renderEdges(createClock(44100), 44100, 1, { bpm: 0 })).toEqual([]);
   });
 
   it("re-derives the increment when the tempo changes", () => {
     const clock = createClock(44100);
-    render(clock, 4);
-    const slow = render(clock, 1, { bpm: 60 }).phase[0];
-    const fast = render(clock, 1, { bpm: 240 }).phase[0];
-    // Both are read *before* their own block advances the phase, so compare
-    // the deltas the two tempi produced rather than the values themselves.
-    const afterSlow = render(clock, 1, { bpm: 240 }).phase[0];
-    expect(fast - slow).toBeCloseTo((BLOCK * 60) / 60 / 44100, 9);
-    expect(afterSlow - fast).toBeCloseTo((BLOCK * 240) / 60 / 44100, 9);
+    const phaseOut = new Float32Array(BLOCK);
+    const slow = new Float32Array(BLOCK);
+    const fast = new Float32Array(BLOCK);
+    clock(phaseOut, undefined, 60, 0.5);
+    clock(slow, undefined, 60, 0.5);
+    clock(fast, undefined, 240, 0.5);
+    // Float32 storage, so the difference of two adjacent ramp values carries
+    // about seven digits - hence 9 rather than 12.
+    expect(slow[1] - slow[0]).toBeCloseTo(60 / 60 / 44100, 9);
+    expect(fast[1] - fast[0]).toBeCloseTo(240 / 60 / 44100, 9);
   });
 
   it("renders the phase with no gate output", () => {
@@ -110,36 +131,38 @@ describe("createClock", () => {
     const clock = createClock(44100);
     const phaseOut = new Float32Array(BLOCK);
     expect(() => clock(phaseOut, undefined, 120, 0.5)).not.toThrow();
-    clock(phaseOut, undefined, 120, 0.5);
-    expect(phaseOut[0]).toBeGreaterThan(0);
+    expect(phaseOut[1]).toBeGreaterThan(phaseOut[0]);
   });
 });
 
-describe("timing", () => {
-  /**
-   * Every bound below was measured against this engine with `renderEdges`, at
-   * the rate and tempo named next to it, over 600 s. Reproduce before trusting.
-   *
-   * 600 s is 26.5 M samples per render and the whole block costs ~400 ms of
-   * wall clock, because nothing retains a buffer: `renderEdges` scans each
-   * block for edges and keeps only the indices.
-   */
-  const RATES = [44100, 48000];
-  const TEMPOS = [60, 120, 137.3, 400];
-  const SECONDS = 600;
+/**
+ * Every timing bound below was measured against this engine, at the rate and
+ * tempo named next to it, over 600 s. Reproduce before trusting.
+ *
+ * 600 s is 26.5 M samples per render and the whole set costs well under a
+ * second of wall clock, because nothing retains a buffer: `renderEdges` scans
+ * each block for edges and keeps only the indices.
+ */
+/** The two rates a browser actually hands you, and neither divides. 16384 -
+ * the rate `worklet.test.ts` runs at - is deliberately absent: see above. */
+const RATES = [44100, 48000];
+const TEMPOS = [60, 120, 137.3, 400];
+const SECONDS = 600;
 
-  it("keeps every beat within one render quantum of its ideal time", () => {
-    // Measured at 44100/120 over 600 s: deviation in [-2.902, 0.000] ms, which
-    // is exactly one render quantum (128 / 44100 = 2.902 ms) and no more. The
-    // sign is one-sided negative because the block-constant fill takes its
-    // value from the top of the block: an edge can only arrive early, never
-    // late. At 48000/120 the range is [-1.333, 0.000] ms.
+describe("timing", () => {
+  it("keeps every beat within one sample of its ideal time", () => {
+    // Before clock ticket 03 this bound was one render quantum: measured at
+    // 44100/120 over 600 s, the deviation ran [-2.902, 0.000] ms - one-sided
+    // negative, because the block-constant fill took its value from the top of
+    // the block and an edge could only arrive early.
     //
-    // This is the weak half of what a clock should promise, and ticket 03
-    // tightens it to one sample. It is asserted now so that 03 has something
-    // to tighten rather than something to invent.
+    // Rendering per sample makes it [-1, 0] samples: [-0.023, 0.000] ms at
+    // 44100, [-0.021, 0.000] at 48000. A factor of 128, and the residue is a
+    // rounding rather than a bias - at rates where the beat divides (400 BPM
+    // at 44100) it is exactly zero. Beating one sample needs a fractional
+    // sub-sample output and a consumer that could read one; nothing in this
+    // library can, which is why the bound is written in samples.
     for (const sampleRate of RATES) {
-      const quantumMs = (1000 * BLOCK) / sampleRate;
       for (const bpm of TEMPOS) {
         const edges = renderEdges(
           createClock(sampleRate),
@@ -150,25 +173,22 @@ describe("timing", () => {
           },
         );
         expect(edges.length).toBeGreaterThan(500);
-        for (const d of deviationMs(edges, sampleRate, bpm)) {
-          expect(Math.abs(d)).toBeLessThanOrEqual(quantumMs);
-        }
+        const ideal = (sampleRate * 60) / bpm;
+        edges.forEach((edge, i) => {
+          expect(Math.abs(edge - i * ideal)).toBeLessThanOrEqual(1);
+        });
       }
     }
   });
 
   it("does not accumulate drift", () => {
     // The property that separates "the edge is quantised" from "the tempo is
-    // wrong". The accumulator is exact, so the deviation at beat 1200 is drawn
-    // from the same bounded set as the deviation at beat 1 - it does not grow.
-    // Measured at 44100/120 over 600 s: first beat 0.000 ms, last -1.406 ms,
-    // and the beat period only ever takes two values, 22016 or 22144 samples,
-    // straddling the ideal 22050.
-    //
-    // This is why ticket 03 is a change to how the phase is *rendered* and not
-    // a rewrite of the accumulator.
+    // wrong", and the one thing the block-constant implementation got right:
+    // the accumulator is exact, so the deviation at beat 1200 is drawn from
+    // the same bounded set as the deviation at beat 1 - it does not grow.
+    // This must not regress; it is why ticket 03 changed how the phase is
+    // *rendered* and not how it is accumulated.
     for (const sampleRate of RATES) {
-      const quantumMs = (1000 * BLOCK) / sampleRate;
       for (const bpm of TEMPOS) {
         const edges = renderEdges(
           createClock(sampleRate),
@@ -179,7 +199,8 @@ describe("timing", () => {
           },
         );
         const dev = deviationMs(edges, sampleRate, bpm);
-        expect(Math.abs(dev[dev.length - 1])).toBeLessThanOrEqual(quantumMs);
+        const oneSampleMs = 1000 / sampleRate;
+        expect(Math.abs(dev[dev.length - 1])).toBeLessThanOrEqual(oneSampleMs);
 
         // And the periods themselves straddle the ideal rather than sitting to
         // one side of it, which a wrong tempo could not do.
@@ -230,12 +251,11 @@ describe("timing", () => {
   });
 
   it("holds the gate for `pulseWidth` of the beat, in samples", () => {
-    // `worklet.test.ts` counts blocks - 31 of 64 for `pulseWidth: 0.5`. This is
-    // the same quantisation from the other side, and it is the reading that
-    // survives ticket 03. Measured at 44100/120: the gate is high for 22016 x
-    // pulseWidth samples, plus or minus one quantum.
+    // This used to read 31 of 64 blocks for 0.5 in `worklet.test.ts` - the
+    // same quantity seen through the quantisation ticket 03 removed. Now it is
+    // `pulseWidth` x the beat period to within a sample.
     for (const sampleRate of RATES) {
-      const quantum = BLOCK;
+      const quantum = 1;
       for (const pulseWidth of [0.25, 0.5, 0.75]) {
         const { highs, periods } = renderGateWidths(
           createClock(sampleRate),
@@ -345,30 +365,26 @@ function renderGateWidths(
   return { highs, periods: beatPeriods(edges) };
 }
 
-/** Blocks in one beat, rounded down - only 16384/120 is a whole number. */
-function blocksPerBeat(sampleRate: number, bpm: number) {
-  return Math.floor((sampleRate * 60) / bpm / BLOCK);
-}
-
-function risingEdges(values: number[]) {
-  return values.flatMap((v, i) => (v > 0 && !(values[i - 1] > 0) ? [i] : []));
-}
-
-// Both outputs are filled with a single value per block, so one sample each is
-// the whole block.
-function render(
+/**
+ * Render `seconds` of phase into one flat array.
+ *
+ * Whole blocks, not one sample per block: after clock ticket 03 the output is
+ * no longer constant within a block, and reading `phaseOut[0]` would be
+ * measuring one value in 128. Used only by the short renders - the timing
+ * assertions go through `renderEdges`, which keeps no buffer.
+ */
+function renderPhase(
   clock: ReturnType<typeof createClock>,
-  blocks: number,
+  sampleRate: number,
+  seconds: number,
   params: { bpm?: number; pulseWidth?: number } = {},
 ) {
   const phase: number[] = [];
-  const gate: number[] = [];
-  for (let i = 0; i < blocks; i++) {
-    const phaseOut = new Float32Array(BLOCK);
-    const gateOut = new Float32Array(BLOCK);
-    clock(phaseOut, gateOut, params.bpm ?? 120, params.pulseWidth ?? 0.5);
-    phase.push(phaseOut[0]);
-    gate.push(gateOut[0]);
+  const phaseOut = new Float32Array(BLOCK);
+  const blocks = Math.floor((sampleRate * seconds) / BLOCK);
+  for (let b = 0; b < blocks; b++) {
+    clock(phaseOut, undefined, params.bpm ?? 120, params.pulseWidth ?? 0.5);
+    phase.push(...phaseOut);
   }
-  return { phase, gate };
+  return phase;
 }

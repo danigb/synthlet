@@ -4,8 +4,20 @@ import { createClock } from "../../clock/src/dsp";
  * `Clock.gate` against a `Euclid` on the same clock.
  *
  * The first test in this repository that drives two packages together, and the
- * measurement the clock folder exists for: layer a kick off `clock.gate` and a
- * hat off a `Euclid` fed by the same clock, and they do not land together.
+ * regression test for the defect the clock folder exists for: layer a kick off
+ * `clock.gate` and a hat off a `Euclid` fed by the same clock, and they must
+ * land on the same sample.
+ *
+ * They did not. Until clock ticket 03 the clock advanced its phase by a whole
+ * block and filled the block with one number, so `Euclid` saw the 1.0 plateau,
+ * failed to wrap on it, and fired a block late - **128 samples, 2.90 ms at
+ * 44100**, at every subdivision. That is flam and comb filtering, not rounding.
+ * The same quantisation capped how fast a subdivision could go: `Euclid` could
+ * see one step boundary per block, so 600 BPM x subdivision 20 produced 579 of
+ * 800 hits and 1000 BPM x 20 - the declared maximum tempo - produced 76 of
+ * 1333.
+ *
+ * Both numbers below are now exact, and this file is what keeps them that way.
  *
  * ## Why it lives here, and how it imports
  *
@@ -20,14 +32,6 @@ import { createClock } from "../../clock/src/dsp";
  * specifiers - so this adds no cross-package dev dependency. The alternative
  * considered was a harness under `benchmarks/`, which is outside the jest run
  * and would therefore be a measurement that exists and never runs.
- *
- * ## What it records
- *
- * The skew is **one render quantum**: 128 samples, 2.90 ms at 44100. Ticket 03
- * of the clock folder - a phase that moves every sample - drives it to zero,
- * and the assertions below are written to fail when it does. That is
- * deliberate: this file is the evidence for that change, not a description of
- * the current behaviour to be preserved.
  */
 
 const BLOCK = 128;
@@ -41,46 +45,47 @@ describe("Clock and Euclid on one clock", () => {
     Worklet = (await import("./worklet")).EuclidProcessor;
   });
 
-  it("lands a Euclid hit one render quantum after the clock's own gate", () => {
+  it("lands every Euclid hit on the same sample as the clock's own gate", () => {
     const { gate, hits } = render(60);
 
-    // Both fire at sample 0: a clock fires its first beat immediately, and
-    // `Euclid` plays step 0 before the first wrap advances it.
-    expect(gate[0]).toBe(0);
-    expect(hits[0]).toBe(0);
-
-    // Every beat after that is a quantum apart. `Clock` takes its gate from
-    // the phase *after* the wrap, so it fires on the block the phase reaches
-    // 1; `Euclid` sees the wrap as `currentClock < prevClock`, which cannot be
-    // true until the block *after* the one that wrapped. 128 samples at 44100
-    // is 2.90 ms - a kick and a hat layered from one clock, audibly apart.
-    //
-    // When clock ticket 03 renders the phase per sample this becomes 0 or 1
-    // sample and the assertion fails. Tighten it to `[0]` or a `<= 1` bound
-    // then; do not widen it.
-    const n = Math.min(gate.length, hits.length);
-    const skews = Array.from(
-      { length: n - 1 },
-      (_, i) => hits[i + 1] - gate[i + 1],
-    );
-    expect([...new Set(skews)]).toEqual([BLOCK]);
-    expect((1000 * BLOCK) / SAMPLE_RATE).toBeCloseTo(2.902, 3);
+    // Identical, not "within a quantum". One accumulator rendered per sample
+    // means `Clock` fires its gate on the sample the phase wraps and `Euclid`
+    // sees `currentClock < prevClock` on that same sample - there is no longer
+    // anything for them to disagree about.
+    expect(gate.length).toBeGreaterThan(100);
+    expect(hits).toEqual(gate);
   });
 
-  it("skews the same amount whatever the subdivision", () => {
-    // The skew is a property of how the ramp is rendered, not of how far
-    // `Euclid` multiplies it, so subdividing does not divide it away: the hit
-    // on each beat boundary is still exactly one quantum late.
+  it("stays aligned at every subdivision", () => {
+    // The alignment is a property of how the ramp is rendered, not of how far
+    // `Euclid` multiplies it, so every beat-boundary hit is still coincident.
     for (const subdivision of [1, 2, 4]) {
-      const { gate, hits } = render(30, { subdivision, steps: 1, beats: 1 });
-      const nearest = gate.slice(1).map((edge) => {
-        const closest = hits.reduce((best, hit) =>
-          Math.abs(hit - edge) < Math.abs(best - edge) ? hit : best,
-        );
-        return closest - edge;
-      });
-      expect(nearest.length).toBeGreaterThan(10);
-      expect([...new Set(nearest)]).toEqual([BLOCK]);
+      const { gate, hits } = render(30, { subdivision });
+      expect(gate.length).toBeGreaterThan(50);
+      // Every clock gate has a hit on exactly its sample; the extra hits are
+      // the subdivided steps in between.
+      expect(gate.every((edge) => hits.includes(edge))).toBe(true);
+      expect(hits.length).toBe(gate.length * subdivision);
+    }
+  });
+
+  it("drops no step at the fastest subdivision the parameters allow", () => {
+    // `subdivision` maxes at 20 and `bpm` at 1000, so the corner of the
+    // declared parameter space is 333 steps/s - well under one per block at
+    // 44100, but the old block-constant ramp could only carry one boundary per
+    // block and dropped the rest.
+    const SECONDS = 4;
+    for (const [bpm, subdivision] of [
+      [120, 20],
+      [600, 20],
+      [1000, 20],
+    ] as const) {
+      const stepsPerSecond = (bpm / 60) * subdivision;
+      // One hit per step boundary in [0, SECONDS), and a clock fires its first
+      // beat immediately - so the boundary at 0 counts.
+      const expected = Math.ceil(stepsPerSecond * SECONDS);
+      const { hits } = render(SECONDS, { bpm, subdivision });
+      expect(hits.length).toBe(expected);
     }
   });
 });
