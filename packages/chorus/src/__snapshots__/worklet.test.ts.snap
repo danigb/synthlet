@@ -18,7 +18,7 @@ exports[`ChorusProcessor has parameter descriptors 1`] = `
   },
   {
     "automationRate": "k-rate",
-    "defaultValue": 0.5,
+    "defaultValue": 0.6,
     "maxValue": 1,
     "minValue": 0,
     "name": "depth",

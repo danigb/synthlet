@@ -1,5 +1,10 @@
 import { createDelayLine } from "./_delay";
-import { fundamental, maxAbsoluteDifference, render } from "./_spectrum";
+import {
+  fundamental,
+  maxAbsoluteDifference,
+  peakFrequency,
+  render,
+} from "./_spectrum";
 import {
   CHORUS_MODE_DEFAULTS,
   ChorusMode,
@@ -8,6 +13,7 @@ import {
   usefulDepthMs,
   VOICINGS,
 } from "./dsp";
+import { PARAMS } from "./params";
 import {
   centsFromExcursion,
   correlation,
@@ -569,6 +575,81 @@ describe("the engine", () => {
     dsp.compute(input, input, again, againR);
 
     expect(Array.from(again)).toEqual(Array.from(first));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The parameter surface. Four parameters used to be wired to the wrong four
+// things; this is the group that would have caught it on the day.
+// ---------------------------------------------------------------------------
+
+describe("the parameters", () => {
+  it("defaults to JUNO at JUNO's own settings", () => {
+    // `Chorus(ac)` with nothing passed has to be a complete answer, which
+    // means the descriptor defaults and the default voicing's defaults are the
+    // same four numbers.
+    const byName = Object.fromEntries(PARAMS.map((p) => [p.name, p]));
+    const juno = CHORUS_MODE_DEFAULTS[ChorusMode.Juno];
+
+    expect(byName.mode.defaultValue).toBe(ChorusMode.Juno);
+    expect(byName.rate.defaultValue).toBe(juno.rate);
+    expect(byName.depth.defaultValue).toBe(juno.depth);
+    expect(byName.mix.defaultValue).toBe(juno.mix);
+    expect(byName.width.defaultValue).toBe(juno.width);
+    // And the range the wrapper lost: Faust declared 0.01 ... 7 Hz and
+    // `params.ts` declared 0 ... 1.
+    expect(byName.rate.maxValue).toBe(7);
+  });
+
+  it.each([[ChorusMode.Juno], [ChorusMode.Ensemble]])(
+    "puts voicing %i inside Dattorro's chorus range",
+    (mode) => {
+      // Table 7: chorus is 1-30 ms, nominal 5; doubling is 10-100, nominal 20.
+      // The engine this replaces defaulted to voices at 5.33-42.67 ms, so half
+      // of it was doubling. `DIMENSION` is deliberately not in this list - at
+      // 8.5 ms it is in the overlap, and that is the SDD-320's number.
+      for (const v of VOICINGS[mode].voices) {
+        expect(v.delayMs).toBeGreaterThanOrEqual(1);
+        expect(v.delayMs).toBeLessThanOrEqual(30);
+      }
+    },
+  );
+
+  it("keeps a stereo source stereo", () => {
+    // `worklet.ts` read `inputs[0][0]` and nothing else, so a stereo source
+    // was silently halved. Different tones in each channel, and each channel's
+    // own tone has to still be the loudest thing in it afterwards.
+    const length = 32768;
+    const left = sine(length, 220, SAMPLE_RATE);
+    const right = sine(length, 550, SAMPLE_RATE);
+    const [outL, outR] = render(engine()(), {
+      length,
+      sampleRate: SAMPLE_RATE,
+      input: [left, right],
+      params: params({ mix: 1, width: 1 }),
+    });
+
+    expect(peakFrequency(outL, SAMPLE_RATE)).toBeCloseTo(220, -1);
+    expect(peakFrequency(outR, SAMPLE_RATE)).toBeCloseTo(550, -1);
+    expect(Array.from(outL)).not.toEqual(Array.from(outR));
+  });
+
+  it("flushes rather than freezing when the input goes away", () => {
+    // A chorus holds up to 20 ms, so it has a tail. Silence in has to come out
+    // as the tail and then nothing, not as the last block held forever.
+    const dsp = createChorus(SAMPLE_RATE);
+    dsp.update(...params({ mix: 1 }));
+    const n = 128;
+    const input = sine(n, 220, SAMPLE_RATE);
+    const outL = new Float32Array(n);
+    const outR = new Float32Array(n);
+    const quiet = new Float32Array(n);
+    for (let block = 0; block < 8; block++)
+      dsp.compute(input, input, outL, outR);
+    for (let block = 0; block < 20; block++)
+      dsp.compute(quiet, quiet, outL, outR);
+
+    expect(Math.max(...Array.from(outL).map(Math.abs))).toBeLessThan(1e-6);
   });
 });
 
