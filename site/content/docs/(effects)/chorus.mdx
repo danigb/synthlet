@@ -1,35 +1,106 @@
 ---
 title: Chorus
-description: A chorus effect implemented in Faust
+description: A stereo chorus in three voicings
 package: chorus
 ---
 
 import ChorusExample from "../../../examples/ChorusExample";
 
-This is a mono-to-stereo chorus effect implemented in Faust and ported to the web.
+Several delayed copies of the input, each read at a position its own LFO moves,
+summed to a stereo pair. Mono in, stereo out — the width comes from spreading
+the voices' LFOs apart rather than from panning — and a stereo source stays
+stereo.
+
+Three voicings, one engine. The voicing is the choice that matters; the four
+knobs are the adjustment afterwards.
 
 ```ts
 import { Chorus } from "synthlet";
 
 const osc = new OscillatorNode(audioContext);
-const chorus = Chorus(audioContext, {
-  rate: 0.5,
-  depth: 0.5,
-  feedback: 0.5,
-});
+const chorus = Chorus(audioContext);
 
 osc.connect(chorus).connect(audioContext.destination);
 ```
 
 <ChorusExample />
 
+## Upgrading from 0.2
+
+**All four of the old parameters were wired to the wrong four things**, so every
+patch that set any of them will sound different. Faust declared its sliders in
+one order and mapped them in another, and the port assigned them in declaration
+order. If you have a patch, this is the table you need:
+
+| You set     | You were actually setting            | Now use                              |
+| ----------- | ------------------------------------ | ------------------------------------ |
+| `delay`     | the dry/wet mix, as `dry = 1 − knob` | `mix`                                |
+| `rate`      | the base delay time, 0 … 85 ms       | nothing — the voicing owns the delay |
+| `depth`     | the spread between the voices        | `mode`, which chooses the spread     |
+| `deviation` | **the LFO rate in Hz**, capped at 1  | `rate`, in Hz, up to 7               |
+
+The delay time is no longer exposed. It was how the defaults ended up at
+5.33–42.67 ms, which is a doubling effect rather than a chorus.
+
+## Voicings
+
+| Mode        | What it is                                                    | Reach for it when                          |
+| ----------- | ------------------------------------------------------------- | ------------------------------------------ |
+| `JUNO`      | Two voices in antiphase on a 3 ms centre, one LFO             | Anything. It is the default for a reason   |
+| `ENSEMBLE`  | Three taps 120° apart on two incommensurate LFOs, 4 ms centre | String stacks and thick pads               |
+| `DIMENSION` | Antiphase with a **difference** output, 8.5 ms centre         | Sustained pads and buses — wide, no wobble |
+
+`DIMENSION` measures **4.5 cents** of pitch modulation at its defaults where
+`JUNO` measures 15.5: the common-mode wobble cancels and the spatial motion
+survives. That is what makes it usable on a pad where `JUNO` becomes seasick.
+
+Each voicing carries its own settings for the other four parameters, exported
+as `CHORUS_MODE_DEFAULTS`:
+
+```ts
+import { Chorus, ChorusMode, CHORUS_MODE_DEFAULTS } from "synthlet";
+
+const chorus = Chorus(ac);
+
+function setVoicing(mode: ChorusMode) {
+  const defaults = CHORUS_MODE_DEFAULTS[mode];
+  chorus.mode.value = mode;
+  chorus.rate.value = defaults.rate;
+  chorus.depth.value = defaults.depth;
+  chorus.mix.value = defaults.mix;
+  chorus.width.value = defaults.width;
+}
+```
+
+A `mode` change cross-fades over 5 ms, so it can be switched while sound is
+playing.
+
 ## Parameters
 
-- `delay`: The delay time [0, 1]
-- `rate`: The modulation rate [0, 1]
-- `depth`: The modulation depth [0, 1]
-- `deviation`: The modulation deviation [0, 1]
+| Param   | Default | Range        | Rate   | Meaning                                                          |
+| ------- | ------- | ------------ | ------ | ---------------------------------------------------------------- |
+| `mode`  | `JUNO`  | 0 … 2        | k-rate | Which voicing                                                    |
+| `rate`  | 0.5     | 0 … 7 **Hz** | k-rate | LFO speed. 0 stops them, leaving a static comb                   |
+| `depth` | 0.6     | 0 … 1        | k-rate | Excursion, as a fraction of what this rate and voicing can carry |
+| `mix`   | 0.5     | 0 … 1        | k-rate | Dry/wet. 0 is an exact bypass                                    |
+| `width` | 1       | 0 … 1        | k-rate | Stereo field control on the wet path                             |
+
+`depth` is the one parameter that is not a physical unit, and deliberately: the
+useful excursion depends on `rate` — faster LFOs need proportionally less depth
+— and on the voicing, so a millisecond value would be a number you have to
+solve a regression to choose. `1` means "as deep as this rate and this voicing
+can carry".
+
+All five are `k-rate` and handed to the engine's per-block update, then ramped
+per sample inside it. **The engine's own LFOs are what move per sample**, which
+is what makes this a chorus rather than a delay you have to modulate yourself.
 
 ## References
 
-- [Faust original code](https://github.com/grame-cncm/faust/blob/master-dev/examples/SAM/chorus/chorus.dsp)
+- Jon Dattorro, _Effect Design Part 2: Delay-Line Modulation and Chorus_, JAES
+  45(10), 1997 — the interpolation warning, the coefficient table and the stereo
+  field control
+- W. L. Martens and A. Marui, _Perceptual Evaluation of Chorus Effects_, 2006 —
+  the depth/rate coupling
+- Olli Niemitalo, _Polynomial Interpolators for High-Quality Resampling of
+  Oversampled Audio_, 2001 — the 4-point Hermite kernel

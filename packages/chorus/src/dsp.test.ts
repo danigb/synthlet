@@ -230,13 +230,21 @@ describe("the LFO", () => {
     expect(usefulDepthMs(9)).toBeCloseTo(0.1833, 3);
   });
 
-  it("puts the detune range in cents", () => {
-    // What a musician can act on. `JUNO` at its 2 ms ceiling and 0.5 Hz is
-    // +/- 10.8 cents; at 6 Hz the coupling holds it to +/- 29.1, which is why
-    // the rule exists.
-    expect(centsFromExcursion(2, 0.5)).toBeCloseTo(10.8436, 3);
-    expect(centsFromExcursion(usefulDepthMs(6), 6)).toBeCloseTo(29.1, 1);
-  });
+  it.each([
+    // The README's detune table, so it cannot drift from the engine. Every row
+    // is `depth * min(voicing ceiling, Martens & Marui's bound)` put through
+    // Dattorro's extrema.
+    [ChorusMode.Juno, 0.5, 1, 2.0, 10.84],
+    [ChorusMode.Juno, 6, 1, 0.45, 29.12],
+    [ChorusMode.Ensemble, 0.75, 0.7, 2.569, 20.83],
+  ])(
+    "detunes voicing %i at %p Hz and depth %p by %p ms / %p cents",
+    (mode, rate, depth, ms, cents) => {
+      const ceiling = Math.min(VOICINGS[mode].maxDepthMs, usefulDepthMs(rate));
+      expect(depth * ceiling).toBeCloseTo(ms, 2);
+      expect(centsFromExcursion(depth * ceiling, rate)).toBeCloseTo(cents, 1);
+    },
+  );
 
   it("does not click when the rate steps mid-render", () => {
     const length = SAMPLE_RATE * 2;
