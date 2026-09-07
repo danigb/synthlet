@@ -1,4 +1,8 @@
-import { createFlexSource, DEFAULT_CONFIG, type FlexConfig } from "./dsp";
+import {
+  createTimestretchSource,
+  DEFAULT_CONFIG,
+  type TimestretchConfig,
+} from "./dsp";
 import { PARAMS } from "./params";
 
 /**
@@ -17,20 +21,21 @@ import { PARAMS } from "./params";
  * guard that remains is against starting a source that is *already playing* -
  * that is a mistake, not a rewind, and `index.ts` throws on it.
  */
-export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
+export class TimestretchAudioSourceProcessor extends AudioWorkletProcessor {
   static get parameterDescriptors() {
     return PARAMS;
   }
 
-  private flex: ReturnType<typeof createFlexSource> | null = null;
-  private config: FlexConfig;
+  private stretch: ReturnType<typeof createTimestretchSource> | null = null;
+  private config: TimestretchConfig;
   private running = true;
   private startFrame: number | null = null;
   private stopFrame: number | null = null;
 
   constructor(options?: AudioWorkletNodeOptions) {
     super();
-    const given = (options?.processorOptions ?? {}) as Partial<FlexConfig>;
+    const given = (options?.processorOptions ??
+      {}) as Partial<TimestretchConfig>;
     this.config = {
       sampleRate,
       channels: DEFAULT_CONFIG.channels,
@@ -73,12 +78,12 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
   /** Rebuilding on a new buffer is where this module is allowed to allocate. */
   private setBuffer(channels: Float32Array[]) {
     if (!channels?.length) {
-      this.flex = null;
+      this.stretch = null;
       return;
     }
     this.config = { ...this.config, channels: channels.length };
-    this.flex = createFlexSource(this.config);
-    this.flex.setBuffer(channels);
+    this.stretch = createTimestretchSource(this.config);
+    this.stretch.setBuffer(channels);
     this.startFrame = null;
     this.stopFrame = null;
   }
@@ -90,7 +95,7 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
   ) {
     const output = outputs[0];
     const count = output[0]?.length ?? 0;
-    if (!this.flex || count === 0) {
+    if (!this.stretch || count === 0) {
       for (const channel of output) channel.fill(0);
       return this.running;
     }
@@ -102,7 +107,7 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
     const cents = parameters.detune[0];
     // Pushed before the start check, so a `start()` in this very block plays
     // the region the params ask for rather than the previous one.
-    this.flex.setControls(
+    this.stretch.setControls(
       parameters.startOffset[0],
       parameters.endOffset[0],
       parameters.reverse[0],
@@ -121,7 +126,7 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
       // A region with nothing in it - an offset past the end of the buffer, a
       // duration of zero - is over before it began. Say so, rather than leave
       // the main thread's `playing` latch set with no ENDED ever coming.
-      if (!this.flex.start()) {
+      if (!this.stretch.start()) {
         ended = true;
       }
       this.startFrame = null;
@@ -134,8 +139,8 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
         this.renderInto(output, at, until - at, playbackRate, cents) || ended;
     }
     if (stopAt !== null) {
-      const wasPlaying = this.flex.isPlaying();
-      this.flex.stop();
+      const wasPlaying = this.stretch.isPlaying();
+      this.stretch.stop();
       this.stopFrame = null;
       for (const channel of output) channel.fill(0, stopAt, count);
       if (wasPlaying) ended = true;
@@ -159,11 +164,11 @@ export class FlexAudioBufferSourceProcessor extends AudioWorkletProcessor {
     playbackRate: number,
     cents: number,
   ) {
-    return this.flex!.process(output, at, count, playbackRate, cents);
+    return this.stretch!.process(output, at, count, playbackRate, cents);
   }
 }
 
 registerProcessor(
-  "FlexAudioBufferSourceProcessor",
-  FlexAudioBufferSourceProcessor,
+  "TimestretchAudioSourceProcessor",
+  TimestretchAudioSourceProcessor,
 );

@@ -125,7 +125,7 @@ const create = createWorkletConstructor<
 /**
  * The factory takes the wider input type - params *and* `phase` - while
  * `createWorkletConstructor` only ever sees the params. The wrapper is
- * `packages/flex-audio-buffer-source/src/index.ts:121-217`'s shape, including
+ * `packages/timestretch-audio-source/src/index.ts:121-217`'s shape, including
  * re-attaching `descriptors`, which `packages/synthlet/src/descriptors.test.ts`
  * requires of every module factory.
  */

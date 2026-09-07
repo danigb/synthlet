@@ -244,7 +244,7 @@ export const PARAMS: readonly ParamDescriptor[] = [
     //
     // It is not signed *rate*: a signed rate spans zero, and rate 0 is freeze,
     // which is a different feature. Backwards grains are `reverse` below - the
-    // same argument `flex-audio-buffer-source/src/params.ts` makes for its own
+    // same argument `timestretch-audio-source/src/params.ts` makes for its own
     // flag.
     //
     // Reading faster than 1x is the case Bencina warns about ("the non-causal
@@ -279,7 +279,7 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // rate: EC2 uses a signed rate over [-32, 32] and synthlet cannot, because
     // an `AudioParam` range is continuous and would have to include 0 - and
     // rate 0 is freeze, a different feature with its own semantics.
-    // `flex-audio-buffer-source/src/params.ts` argues this in full for its own
+    // `timestretch-audio-source/src/params.ts` argues this in full for its own
     // `reverse`, and it is the same argument.
     //
     // A probability is also the more granular-idiomatic form, and it is

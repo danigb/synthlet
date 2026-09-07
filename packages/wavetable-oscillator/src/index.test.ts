@@ -9,7 +9,7 @@ import { WavetableOscillator as WavetableOscillatorUnit } from "./wavetable-osci
  * exists to keep — a `WavetableOscillator` makes a sound the moment it is
  * constructed, with no network of any kind.
  *
- * The mock is the one `flex-audio-buffer-source/src/index.test.ts` established:
+ * The mock is the one `timestretch-audio-source/src/index.test.ts` established:
  * enough for `createWorkletConstructor` to build a node and for the messages it
  * posts to be read back. Kept local so the package stays dependency-free.
  */
@@ -109,7 +109,7 @@ describe("WavetableOscillator", () => {
   });
 
   it("transfers the table rather than cloning it", () => {
-    // `flex-audio-buffer-source/src/index.ts:145-153`'s idiom: 32 KB for the
+    // `timestretch-audio-source/src/index.ts:145-153`'s idiom: 32 KB for the
     // built-in set and 512 KB for a 64-plane one is past the point where a
     // structured clone per node is free. The copy before the transfer is not
     // ceremony - `defaultWavetable` memoizes one instance and shares it, and

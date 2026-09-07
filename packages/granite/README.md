@@ -190,12 +190,12 @@ were fixed for. **granite: any source, one time. strata: one source, any time.**
   still against a moving file, or scrub it. A scanner is what makes the buffer a
   place rather than a past, and it is the whole of `strata`'s reason to exist.
 - **There is no `setBuffer`.** To granulate a file, feed a
-  [`FlexAudioBufferSource`](https://github.com/danigb/synthlet/tree/main/packages/flex-audio-buffer-source)
+  [`TimestretchAudioSource`](https://github.com/danigb/synthlet/tree/main/packages/timestretch-audio-source)
   into granite's input — it will granulate whatever arrives, including a file
   already being time-stretched. Granting granite a buffer without a scanner
   would be all of the cost and none of the payoff.
 - **There is no loop and no region.** Both are properties of a source with a
-  length, and granite's input has neither; `FlexAudioBufferSource` has both.
+  length, and granite's input has neither; `TimestretchAudioSource` has both.
 - **There is no start and no stop.** granite is an effect: it processes what it
   is given and outputs silence when there is nothing. `rate: 0` emits no grains,
   and `wet: 0` is an exact bypass.

@@ -127,7 +127,7 @@ granite's write head advances at exactly 1× and cannot be argued with, so grain
 only ever reach **backward** from now. That single fact is most of what this
 module is not: there is no scanner to drive a read position with, no
 `setBuffer`, no loop or region, and no start or stop. To granulate a file, feed a
-[`FlexAudioBufferSource`](/docs/flex-audio-buffer-source) into granite's input —
+[`TimestretchAudioSource`](/docs/timestretch-audio-source) into granite's input —
 it will granulate whatever arrives, including a file already being time-stretched
 — and the stored-sample granulator with a scanner of its own is a separate
 module. **granite: any source, one time.**

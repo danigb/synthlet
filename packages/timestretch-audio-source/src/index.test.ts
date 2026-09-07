@@ -1,4 +1,4 @@
-import { FlexAudioBufferSource } from "./index";
+import { TimestretchAudioSource } from "./index";
 import { PARAMS } from "./params";
 
 // A minimal node-level mock: enough for createWorkletConstructor to build the
@@ -66,10 +66,10 @@ beforeAll(() => {
   (global as any).AudioWorkletNode = AudioWorkletNodeMock;
 });
 
-describe("FlexAudioBufferSource", () => {
+describe("TimestretchAudioSource", () => {
   it("is a no-input source with a stereo output by default", () => {
-    const { options, processorName } = created(FlexAudioBufferSource(context));
-    expect(processorName).toBe("FlexAudioBufferSourceProcessor");
+    const { options, processorName } = created(TimestretchAudioSource(context));
+    expect(processorName).toBe("TimestretchAudioSourceProcessor");
     expect(options.numberOfInputs).toBe(0);
     expect(options.numberOfOutputs).toBe(1);
     expect(options.outputChannelCount).toEqual([2]);
@@ -77,13 +77,13 @@ describe("FlexAudioBufferSource", () => {
 
   it("takes its output width from channelCount", () => {
     const { options } = created(
-      FlexAudioBufferSource(context, { channelCount: 1 }),
+      TimestretchAudioSource(context, { channelCount: 1 }),
     );
     expect(options.outputChannelCount).toEqual([1]);
   });
 
   it("passes the engine geometry as processorOptions, with defaults", () => {
-    const { options } = created(FlexAudioBufferSource(context));
+    const { options } = created(TimestretchAudioSource(context));
     expect(options.processorOptions).toEqual({
       frameMs: 30,
       overlap: 0.5,
@@ -94,7 +94,7 @@ describe("FlexAudioBufferSource", () => {
 
   it("lets the geometry be overridden", () => {
     const { options } = created(
-      FlexAudioBufferSource(context, { frameMs: 50, searchRate: 8000 }),
+      TimestretchAudioSource(context, { frameMs: 50, searchRate: 8000 }),
     );
     expect(options.processorOptions).toMatchObject({
       frameMs: 50,
@@ -104,8 +104,8 @@ describe("FlexAudioBufferSource", () => {
   });
 
   it("exposes its parameter descriptors", () => {
-    expect(FlexAudioBufferSource.descriptors).toBe(PARAMS);
-    expect(FlexAudioBufferSource.descriptors.map((d) => d.name)).toEqual([
+    expect(TimestretchAudioSource.descriptors).toBe(PARAMS);
+    expect(TimestretchAudioSource.descriptors.map((d) => d.name)).toEqual([
       "playbackRate",
       "detune",
       "startOffset",
@@ -117,7 +117,7 @@ describe("FlexAudioBufferSource", () => {
 
   describe("setBuffer", () => {
     it("posts the channel data", () => {
-      const source = FlexAudioBufferSource(context);
+      const source = TimestretchAudioSource(context);
       source.setBuffer(audioBuffer(1000, 2));
 
       const message = lastMessage(created(source), "SET_BUFFER");
@@ -131,14 +131,14 @@ describe("FlexAudioBufferSource", () => {
       const buffer = audioBuffer(1000, 1);
       const before = Array.from(buffer.__data[0].subarray(0, 8));
 
-      FlexAudioBufferSource(context).setBuffer(buffer);
+      TimestretchAudioSource(context).setBuffer(buffer);
 
       expect(buffer.__data[0]).toHaveLength(1000);
       expect(Array.from(buffer.__data[0].subarray(0, 8))).toEqual(before);
     });
 
     it("transfers the copy it posts, so nothing is cloned", () => {
-      const source = FlexAudioBufferSource(context);
+      const source = TimestretchAudioSource(context);
       source.setBuffer(audioBuffer(1000, 2));
 
       const [message, transfer] =
@@ -151,7 +151,7 @@ describe("FlexAudioBufferSource", () => {
     });
 
     it("accepts raw channel data as well as an AudioBuffer", () => {
-      const source = FlexAudioBufferSource(context);
+      const source = TimestretchAudioSource(context);
       source.setBuffer({
         channels: [new Float32Array(500)],
         sampleRate: SAMPLE_RATE,
@@ -163,7 +163,7 @@ describe("FlexAudioBufferSource", () => {
     });
 
     it("resamples a mismatched rate at load time", () => {
-      const source = FlexAudioBufferSource(context);
+      const source = TimestretchAudioSource(context);
       // 48 kHz into a 44.1 kHz context: shorter by the rate ratio.
       source.setBuffer(audioBuffer(48000, 1, 48000));
 
@@ -173,7 +173,7 @@ describe("FlexAudioBufferSource", () => {
     });
 
     it("leaves a matching rate alone", () => {
-      const source = FlexAudioBufferSource(context);
+      const source = TimestretchAudioSource(context);
       source.setBuffer(audioBuffer(4410, 1, SAMPLE_RATE));
       expect(
         lastMessage(created(source), "SET_BUFFER").channels[0],
@@ -183,7 +183,7 @@ describe("FlexAudioBufferSource", () => {
 
   describe("scheduling", () => {
     const started = () => {
-      const source = FlexAudioBufferSource(context);
+      const source = TimestretchAudioSource(context);
       source.setBuffer(audioBuffer(44100, 1));
       return source;
     };
@@ -234,7 +234,9 @@ describe("FlexAudioBufferSource", () => {
     });
 
     it("throws when there is no buffer", () => {
-      expect(() => FlexAudioBufferSource(context).start()).toThrow(/no buffer/);
+      expect(() => TimestretchAudioSource(context).start()).toThrow(
+        /no buffer/,
+      );
     });
 
     it("can be restarted once it has ended", () => {
@@ -286,7 +288,7 @@ describe("FlexAudioBufferSource", () => {
 
   describe("setDuration", () => {
     const oneSecond = () => {
-      const source = FlexAudioBufferSource(context);
+      const source = TimestretchAudioSource(context);
       source.setBuffer(audioBuffer(SAMPLE_RATE, 1));
       return source;
     };
@@ -330,7 +332,7 @@ describe("FlexAudioBufferSource", () => {
     });
 
     it("does nothing without a buffer", () => {
-      const source = FlexAudioBufferSource(context);
+      const source = TimestretchAudioSource(context);
       expect(source.naturalDuration).toBe(0);
       source.setDuration(2);
       expect(source.playbackRate.value).toBe(0);
@@ -338,7 +340,7 @@ describe("FlexAudioBufferSource", () => {
   });
 
   it("posts DISPOSE and disconnects on dispose", () => {
-    const source = FlexAudioBufferSource(context);
+    const source = TimestretchAudioSource(context);
     source.dispose();
     expect(created(source).disconnect).toHaveBeenCalled();
     expect(lastMessage(created(source), "DISPOSE")).toEqual({

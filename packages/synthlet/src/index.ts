@@ -8,7 +8,6 @@ import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
 import { registerDigitalDelayWorklet } from "@synthlet/digital-delay";
 import { registerEuclidWorklet } from "@synthlet/euclid";
-import { registerFlexAudioBufferSourceWorklet } from "@synthlet/flex-audio-buffer-source";
 import { registerGraniteWorklet } from "@synthlet/granite";
 import { registerImpulseWorklet } from "@synthlet/impulse";
 import { registerKarplusStrongWorklet } from "@synthlet/karplus-strong";
@@ -20,6 +19,7 @@ import { registerParamWorklet } from "@synthlet/param";
 import { registerPolyblepOscillatorWorklet } from "@synthlet/polyblep-oscillator";
 import { registerReverbDelayWorklet } from "@synthlet/reverb-delay";
 import { registerSvfWorklet } from "@synthlet/state-variable-filter";
+import { registerTimestretchAudioSourceWorklet } from "@synthlet/timestretch-audio-source";
 import { registerVirtualAnalogFilterWorklet } from "@synthlet/virtual-analog-filter";
 import { registerWavetableOscillatorWorklet } from "@synthlet/wavetable-oscillator";
 
@@ -33,7 +33,6 @@ export * from "@synthlet/clock";
 export * from "@synthlet/dattorro-reverb";
 export * from "@synthlet/digital-delay";
 export * from "@synthlet/euclid";
-export * from "@synthlet/flex-audio-buffer-source";
 export * from "@synthlet/granite";
 export * from "@synthlet/impulse";
 export * from "@synthlet/karplus-strong";
@@ -45,6 +44,7 @@ export * from "@synthlet/param";
 export * from "@synthlet/polyblep-oscillator";
 export * from "@synthlet/reverb-delay";
 export * from "@synthlet/state-variable-filter";
+export * from "@synthlet/timestretch-audio-source";
 export * from "@synthlet/virtual-analog-filter";
 export * from "@synthlet/wavetable-oscillator";
 
@@ -88,7 +88,6 @@ export function registerAllWorklets(
     registerDattorroReverbWorklet(context),
     registerDigitalDelayWorklet(context),
     registerEuclidWorklet(context),
-    registerFlexAudioBufferSourceWorklet(context),
     registerGraniteWorklet(context),
     registerImpulseWorklet(context),
     registerKarplusStrongWorklet(context),
@@ -100,6 +99,7 @@ export function registerAllWorklets(
     registerPolyblepOscillatorWorklet(context),
     registerReverbDelayWorklet(context),
     registerSvfWorklet(context),
+    registerTimestretchAudioSourceWorklet(context),
     registerVirtualAnalogFilterWorklet(context),
     registerWavetableOscillatorWorklet(context),
   ]).then(() => context);

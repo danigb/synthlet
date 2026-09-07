@@ -31,7 +31,6 @@ const EXPECTED = [
   "DattorroReverb",
   "DigitalDelay",
   "Euclid",
-  "FlexAudioBufferSource",
   "Gain",
   "Granite",
   "Impulse",
@@ -45,6 +44,7 @@ const EXPECTED = [
   "PolyblepOscillator",
   "ReverbDelay",
   "Svf",
+  "TimestretchAudioSource",
   "VirtualAnalogFilter",
   "WavetableOscillator",
 ];

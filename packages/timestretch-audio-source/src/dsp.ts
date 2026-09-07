@@ -24,7 +24,7 @@ import { createWsolaEngine } from "./wsola";
  * which is the whole point of the module.
  */
 
-export type FlexConfig = {
+export type TimestretchConfig = {
   sampleRate: number;
   channels: number;
   frameMs: number;
@@ -47,7 +47,7 @@ const MAX_BETA = 2; // 2 ** (1200 / 1200)
 
 export const centsToRatio = (cents: number) => Math.pow(2, cents / 1200);
 
-export function createFlexSource(config: FlexConfig) {
+export function createTimestretchSource(config: TimestretchConfig) {
   const engine = createWsolaEngine();
   engine.configure(config);
 
