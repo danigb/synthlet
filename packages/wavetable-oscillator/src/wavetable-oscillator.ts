@@ -523,19 +523,20 @@ export function WavetableOscillator(
     const detune = inputs.detune ?? NO_DETUNE;
     const morph = inputs.morph;
     const sync = inputs.sync;
-    // The house a-rate check, once per block and once per parameter: a connected
-    // AudioParam arrives as one value per sample, an unconnected one as a single
-    // value. `state-variable-filter/src/dsp.ts:103-117` is where the idiom comes
-    // from; hoisting the length tests is the whole of it.
-    const fRate = frequency.length === n;
-    const dRate = detune.length === n;
-    const mRate = morph.length === n;
+    // The house a-rate check, once per block and once per parameter: an a-rate
+    // parameter arrives as one value per sample, or as a single value when
+    // nothing varying is connected. `_worklet.ts`, next to `ParamDescriptor`,
+    // is where the idiom is written down; hoisting the length tests is the
+    // whole of it, and `> 1` rather than `=== n` is the half that matters.
+    const fRate = frequency.length > 1;
+    const dRate = detune.length > 1;
+    const mRate = morph.length > 1;
     // An absent or zero-length `sync` is "not synced", and it is what skips the
     // whole path - the gate read, the ring and the two samples of latency -
     // rather than a flag tested per sample. `polyblep-oscillator/src/dsp.ts`
     // spells the same test for the same reason.
     const synced = sync !== undefined && sync.length > 0;
-    const sRate = synced && sync.length === n;
+    const sRate = synced && sync.length > 1;
 
     // Ticket 11's stage, engaged for this block or not.
     //
@@ -554,20 +555,23 @@ export function WavetableOscillator(
     // is holding, and the boundary below is where it lets go.
     //
     // The two barriers are tested for presence rather than substituted with
-    // `OFF`, and that is not symmetry with `detune` going missing: a one-element
-    // stand-in has `length === n` when the block is one sample long, which the
-    // block-size tests render, and the a-rate arm of the rule above would then
-    // engage the stage on an input nobody supplied. The two step sizes can be
-    // substituted, because their rate only decides which element to read and
-    // both elements of a stand-in are the same zero.
+    // `OFF`, and that is not symmetry with `detune` going missing: the flag
+    // below has to mean "somebody connected something", and a stand-in cannot
+    // say that. It used to matter more: under the old `length === n` spelling a
+    // one-element stand-in *was* a-rate whenever the block was one sample long,
+    // which the block-size tests render, and the stage engaged on an input
+    // nobody supplied. `length > 1` is never true of a stand-in, so that hazard
+    // is gone and only the presence question is left. The two step sizes can
+    // still be substituted, because their rate only decides which element to
+    // read and both elements of a stand-in are the same zero.
     const pitchSpread = inputs.pitchSpread;
     const ampSpread = inputs.ampSpread;
     const pitchChaos = inputs.pitchChaos ?? OFF;
     const ampChaos = inputs.ampChaos ?? OFF;
-    const psRate = pitchSpread !== undefined && pitchSpread.length === n;
-    const asRate = ampSpread !== undefined && ampSpread.length === n;
-    const pcRate = pitchChaos.length === n;
-    const acRate = ampChaos.length === n;
+    const psRate = pitchSpread !== undefined && pitchSpread.length > 1;
+    const asRate = ampSpread !== undefined && ampSpread.length > 1;
+    const pcRate = pitchChaos.length > 1;
+    const acRate = ampChaos.length > 1;
     if (psRate || (pitchSpread !== undefined && pitchSpread[0] > 0))
       pitchWalks = true;
     if (asRate || (ampSpread !== undefined && ampSpread[0] > 0))

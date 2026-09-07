@@ -11,6 +11,52 @@ export type ParamInput = number | Connector<AudioNode> | AudioNode;
 
 // A module's description of one of its parameters: exactly what Web Audio's
 // `parameterDescriptors` needs, and the shape exposed as `X.descriptors`.
+//
+// ## How to read a parameter, and the one spelling for it
+//
+// `automationRate` defaults to `"a-rate"` in the spec, so a `"k-rate"`
+// declaration is an explicit **opt-out** and should carry a reason. There are
+// two grounds for one: the value is *structural* and modulating it would be a
+// discontinuity rather than a feature (an index into a bank of models), or the
+// engine *consumes it per block* and there is nothing a per-sample value could
+// mean. "Nobody would modulate it" is not a third ground - it costs the same
+// either way, so the honest version of that claim is one of the first two.
+//
+// What a processor is handed does not follow the declaration. An a-rate
+// parameter arrives as **either one value or one per sample**: the spec's
+// `MAY`, and browsers use it - Chrome delivers length 1 for an unconnected
+// parameter *and* for a connected constant, and only a genuinely varying value
+// forces the full block. So every a-rate read has to handle both, and the
+// length-1 case is the common one rather than a corner.
+//
+// The house spelling, hoisted once per block and once per parameter:
+//
+// ```ts
+// const fRate = frequency.length > 1;      // once, outside the loop
+// const rRate = resonance.length > 1;
+// for (let i = 0; i < n; i++) {
+//   const f = fRate ? frequency[i] : frequency[0];
+//   const r = rRate ? resonance[i] : resonance[0];
+//   ...
+// }
+// ```
+//
+// **`length > 1`, not `length === n`.** The two agree whenever the block being
+// rendered is a whole render quantum, and `=== n` is silently wrong the moment
+// a DSP renders a *sub-block*: `karplus-strong` splits a block at each trigger
+// edge and renders the segments between them, and `virtual-analog-filter`
+// renders one segment per distinct cutoff. In a segment of 40 samples a
+// 128-sample parameter has `length !== n`, so `=== n` would read `x[0]` for the
+// whole segment - and produce audio that still sounds like audio.
+//
+// Not a helper function: a call per sample per parameter costs more than the
+// ternary it replaces, and the point of the guard is that it is free.
+//
+// `scripts/check-param-rates.mjs` checks this: a parameter declared a-rate
+// whose processor reads `params.x[0]` fails CI. Rate bugs are silent - a k-rate
+// read of an a-rate parameter does not throw and does not warn - so the check
+// is the thing that catches the next one, and every rate bug this convention
+// was written for was found by reading rather than by testing.
 export type ParamDescriptor = {
   name: string;
   defaultValue: number;

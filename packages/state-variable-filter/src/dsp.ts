@@ -108,7 +108,9 @@ export function createFilter(sampleRate: number) {
     q: number,
   ) {
     update(type, frequency[0], q);
-    const isARateParam = frequency.length === input.length;
+    // The house a-rate check, hoisted. `> 1` and not `=== input.length`:
+    // see `_worklet.ts` next to `ParamDescriptor`.
+    const isARateParam = frequency.length > 1;
     for (let i = 0; i < input.length; i++) {
       let x = input[i];
       let freq = frequency[i];
