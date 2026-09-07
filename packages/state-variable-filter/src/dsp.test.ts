@@ -1,4 +1,4 @@
-import { createFilter, SvfType } from "./dsp";
+import { createFilter, createPrewarp, SvfType } from "./dsp";
 
 /**
  * What this filter promises, as numbers.
@@ -14,29 +14,15 @@ import { createFilter, SvfType } from "./dsp";
  * only response anybody has had a reason to measure until now, and which stays
  * where it is.
  *
- * Four cases are `it.failing`. That is not a gap, it is the handover: ticket 03
- * turns three of them on by clamping the cutoff and ticket 05 turns on the
- * fourth by noticing a non-finite state. A ticket that fixes one of these has
- * to delete its way out of the list, so the diff is the evidence.
+ * `it.failing` is the handover between tickets here. Ticket 03 turned three of
+ * these on by prewarping the cutoff, deleting the set that named them; ticket
+ * 05 turns on the fourth by noticing a non-finite state. A ticket that fixes
+ * one of these has to delete its way out of the list, so the diff is the
+ * evidence.
  */
 
 const MAX_FREQUENCY = 20000; // `frequency.maxValue` in params.ts
 const SAMPLE_RATES = [8000, 22050, 32000, 44100, 48000, 96000];
-
-// Every sample rate at which the declared cutoff range breaks the filter today.
-// `frequency.maxValue` is 20000 and Nyquist is not, so wherever 20 kHz is above
-// fs/2 the argument of `tan` walks past its pole:
-//
-//   8000   Nyquist is 4000. A cutoff of 6000 gives g = -1 and the state
-//          diverges; a cutoff of 20000 gives tan(2.5*PI) = +3.3e15 and the
-//          lowpass silently degenerates into a bypass. The mapping from
-//          requested cutoff to actual cutoff is neither monotonic nor finite.
-//   22050  g = -0.301 at maxValue, state reaches 1.5e140, output is Infinity
-//   32000  g = -2.414 at maxValue, state reaches 6.9e198, output is Infinity
-//
-// Ticket 03 replaces `tan` with a prewarping that is finite and monotonic at
-// every sample rate. Delete this set there.
-const FAILS_UNTIL_TICKET_03 = new Set([8000, 22050, 32000]);
 
 /**
  * Run a steady sine of `f` Hz through the filter and measure the amplitude and
@@ -306,18 +292,79 @@ describe("stability under a fast sweep", () => {
   });
 });
 
+describe("the prewarped cutoff", () => {
+  // Zavalishin section 3.8 eq. 3.23. The three properties that make it a fix
+  // rather than a change: it is exact below the ceiling, it is monotonic above
+  // it, and its first derivative is continuous through the join.
+  const CEILING_FRACTION = 0.72;
+
+  it.each(SAMPLE_RATES)(
+    "is bit-identical to Math.tan below the ceiling at %p Hz",
+    (sampleRate) => {
+      // Criterion 3, asserted at its source rather than through a tolerance on
+      // the output: below the ceiling nothing about any existing patch moves.
+      //
+      // The reference is `f * (1/fs) * PI`, which is the expression dsp.ts used
+      // before this ticket, and not the algebraically identical `f * PI / fs`.
+      // They differ in the last bit, and "bit-identical" is a claim about the
+      // code that was replaced, not about real arithmetic.
+      const prewarp = createPrewarp(sampleRate);
+      const ceiling = (CEILING_FRACTION * sampleRate) / 2;
+      for (const fraction of [0.001, 0.01, 0.1, 0.5, 0.9, 0.999]) {
+        const f = ceiling * fraction;
+        expect(prewarp(f)).toBe(Math.tan(f * (1 / sampleRate) * Math.PI));
+      }
+    },
+  );
+
+  it.each(SAMPLE_RATES)(
+    "stays positive and strictly increasing over the whole declared range at %p Hz",
+    (sampleRate) => {
+      const prewarp = createPrewarp(sampleRate);
+      let previous = 0;
+      for (let f = 20; f <= MAX_FREQUENCY; f += 10) {
+        const g = prewarp(f);
+        expect(Number.isFinite(g)).toBe(true);
+        expect(g).toBeGreaterThan(previous);
+        previous = g;
+      }
+    },
+  );
+
+  it("has a continuous first derivative through the breakpoint", () => {
+    // Criterion 4. Stepping the cutoff by 1 Hz at 48 kHz, a smooth curve gives
+    // a second difference of about g'' * h^2 = 24 * (PI/48000)^2 ~ 1e-7, while
+    // eq. 3.22's hard breakpoint would drop the slope by 5.599 in one step and
+    // give ~3.7e-4. Two orders of magnitude of daylight either side of 1e-6,
+    // which is what makes this an assertion about the *kink* and not about the
+    // curvature.
+    const sampleRate = 48000;
+    const prewarp = createPrewarp(sampleRate);
+    const ceiling = (CEILING_FRACTION * sampleRate) / 2;
+
+    let worst = 0;
+    for (let f = ceiling - 200; f <= ceiling + 200; f++) {
+      const second = prewarp(f + 1) - 2 * prewarp(f) + prewarp(f - 1);
+      worst = Math.max(worst, Math.abs(second));
+    }
+    expect(worst).toBeLessThan(1e-6);
+  });
+});
+
 describe("the declared cutoff range", () => {
   // The property this asserts is not a level but a *shape*: raising the cutoff
-  // of a lowpass can never lower its gain at a fixed probe tone. That is true
-  // of any sane prewarping and does not prejudge where ticket 03 puts its
-  // ceiling - a cutoff far above Nyquist is legitimately "wide open", and the
-  // ticket's fix does not pretend otherwise. What it must not be is negative,
-  // infinite, or backwards, all three of which happen today.
+  // of a lowpass can never lower its gain at a fixed probe tone. It deliberately
+  // does not assert a level, because a cutoff far above Nyquist is legitimately
+  // "wide open" and the prewarping does not pretend otherwise - it slows the
+  // curve, it does not clamp it. What `g` must never be is negative, infinite
+  // or backwards, and before ticket 03 it was all three: `frequency.maxValue`
+  // is a compile-time 20000, Nyquist is not, and at 8000 Hz a cutoff of 6000
+  // gave `g = -1` while 20000 gave `tan(2.5*PI) = 3.3e15`.
   //
-  // dsp.ts:51 claims the range is "[16, sampleRate / 2] (clamped by
-  // AudioWorklet)". AudioParam clamps to the descriptor's compile-time
-  // constants and has never known the sample rate. That sentence is why this
-  // survived three readings of the file.
+  // The comment that hid it for three audits claimed the range was
+  // "[16, sampleRate / 2] (clamped by AudioWorklet)". `AudioParam` clamps to
+  // the descriptor's compile-time constants and has never known the sample
+  // rate.
   const Q = 0.7071; // k^2 = 2, so |H|^2 = 1/(1+u^4): monotone in the cutoff
   const CUTOFFS = [
     20,
@@ -333,31 +380,27 @@ describe("the declared cutoff range", () => {
     MAX_FREQUENCY,
   ];
 
-  for (const sampleRate of SAMPLE_RATES) {
-    const run = FAILS_UNTIL_TICKET_03.has(sampleRate) ? it.failing : it;
+  it.each(SAMPLE_RATES)("is finite and monotonic at %p Hz", (sampleRate) => {
+    // A fifth of the sample rate: under Nyquist everywhere, above the cutoff
+    // at the bottom of the sweep and below it at the top, so the measured
+    // magnitude has to climb the whole way.
+    const probe = Math.round(0.2 * sampleRate);
+    let previous = -Infinity;
 
-    run(`is finite and monotonic at ${sampleRate} Hz`, () => {
-      // A fifth of the sample rate: under Nyquist everywhere, above the cutoff
-      // at the bottom of the sweep and below it at the top, so the measured
-      // magnitude has to climb the whole way.
-      const probe = Math.round(0.2 * sampleRate);
-      let previous = -Infinity;
-
-      for (const cutoff of CUTOFFS) {
-        const { amplitude } = measure(
-          sampleRate,
-          SvfType.LowPass,
-          cutoff,
-          Q,
-          probe,
-        );
-        expect(Number.isFinite(amplitude)).toBe(true);
-        expect(amplitude).toBeLessThan(1.1);
-        expect(amplitude).toBeGreaterThan(previous - 1e-6);
-        previous = amplitude;
-      }
-    });
-  }
+    for (const cutoff of CUTOFFS) {
+      const { amplitude } = measure(
+        sampleRate,
+        SvfType.LowPass,
+        cutoff,
+        Q,
+        probe,
+      );
+      expect(Number.isFinite(amplitude)).toBe(true);
+      expect(amplitude).toBeLessThan(1.1);
+      expect(amplitude).toBeGreaterThan(previous - 1e-6);
+      previous = amplitude;
+    }
+  });
 });
 
 describe("recovery from a poisoned state", () => {
