@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/reverb-delay",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Faust reverb delay as an audio worklet",
   "keywords": [
     "reverb-delay",
@@ -8,6 +8,12 @@
     "synthesis",
     "synthlet"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/reverb-delay"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/reverb-delay",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/state-variable-filter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "State Variable Filter module for synthlet",
   "keywords": [
     "modular",
@@ -8,6 +8,12 @@
     "filter",
     "synthlet"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/state-variable-filter"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/state-variable-filter",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

@@ -10,17 +10,33 @@ reacting after it, and it measures peaks on a 4× oversampled reconstruction —
 so a signal that never exceeds full scale sample-by-sample, but overshoots
 between samples, is still caught.
 
-```ts
-import { LookaheadLimiter } from "synthlet";
+## Install
 
-const limiter = LookaheadLimiter(audioContext, {
+```bash
+npm i @synthlet/lookahead-limiter
+```
+
+Or `npm i synthlet` for every module at once.
+
+## Usage
+
+```ts
+import {
+  registerLookaheadLimiterWorklet,
+  LookaheadLimiter,
+} from "@synthlet/lookahead-limiter";
+
+const ac = new AudioContext();
+await registerLookaheadLimiterWorklet(ac);
+
+const limiter = LookaheadLimiter(ac, {
   threshold: -1, // dBTP ceiling
   release: 168, // ms, 10-90% recovery
   gain: 6, // dB of drive, applied *before* the detector
   lookahead: 2, // ms - construction-time, sizes the delay line
 });
 
-source.connect(limiter).connect(audioContext.destination);
+source.connect(limiter).connect(ac.destination);
 
 limiter.threshold.value = -3; // an AudioParam: automatable
 limiter.latencySamples; // 102 at 48 kHz with 2 ms of lookahead
@@ -84,3 +100,7 @@ recorded in `src/dsp.ts`.
 
 See the repository's
 [THIRD-PARTY-LICENSES.md](https://github.com/danigb/synthlet/blob/main/THIRD-PARTY-LICENSES.md).
+
+## License
+
+MIT © [danigb](https://github.com/danigb)

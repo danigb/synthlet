@@ -213,3 +213,7 @@ No code is ported from any of these — each is a from-scratch implementation of
 a published algorithm description. See the repository's
 [THIRD-PARTY-LICENSES.md](https://github.com/danigb/synthlet/blob/main/THIRD-PARTY-LICENSES.md)
 for the complete provenance record.
+
+## License
+
+MIT © [danigb](https://github.com/danigb)

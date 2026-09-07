@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/lfo",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A LFO (low frequency oscillator) generator audio worklet",
   "keywords": [
     "lfo",
@@ -10,12 +10,19 @@
     "synth",
     "web audio"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/lfo"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/lfo",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
   "files": [
     "dist"
   ],
+  "author": "danigb@gmail.com",
   "license": "MIT",
   "publishConfig": {
     "access": "public"

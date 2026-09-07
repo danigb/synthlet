@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/digital-delay",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A stereo feedback delay with a filtered, saturated feedback path, as an audio worklet",
   "keywords": [
     "audio-delay",

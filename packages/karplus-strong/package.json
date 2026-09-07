@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/karplus-strong",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "An extended Karplus-Strong plucked string audio worklet",
   "keywords": [
     "karplus-strong",
@@ -10,6 +10,12 @@
     "synthesis",
     "synthlet"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/karplus-strong"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/ks",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

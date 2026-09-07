@@ -281,3 +281,7 @@ structure, which comes from Mutable Instruments' stmlib (`stages/oscillator.h`,
 MIT, © 2017 Emilie Gillet). That derivation, what was taken and what was not, and
 the MIT notice it requires are recorded in
 [`THIRD-PARTY-LICENSES.md`](https://github.com/danigb/synthlet/blob/main/THIRD-PARTY-LICENSES.md).
+
+## License
+
+MIT © [danigb](https://github.com/danigb)

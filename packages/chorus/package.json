@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/chorus",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Chorus audio effect in as an audio worklet",
   "keywords": [
     "chorus",
@@ -8,6 +8,12 @@
     "synthesis",
     "synthlet"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/chorus"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/chorus",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

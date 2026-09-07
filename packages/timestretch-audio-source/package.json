@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/timestretch-audio-source",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "Audio buffer player with independent time and pitch, as an audio worklet",
   "keywords": [
     "audio-buffer",
@@ -12,6 +12,12 @@
     "time-stretch",
     "wsola"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/timestretch-audio-source"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/timestretch-audio-source",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

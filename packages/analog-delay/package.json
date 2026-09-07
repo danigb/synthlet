@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/analog-delay",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "description": "A glide-based tape and bucket-brigade echo with multi-tap heads and a single wear control, as an audio worklet",
   "keywords": [
     "analog",

@@ -109,9 +109,16 @@ osc.connect(ac.destination);
 expose their own parameters, and the modules they're made of:
 
 ```ts
-import { registerAllWorklets, MonoSynth, KickDrum } from "synthlet";
+import {
+  registerDrums,
+  registerMonoSynth,
+  MonoSynth,
+  KickDrum,
+} from "synthlet";
 
-const ac = await registerAllWorklets(new AudioContext());
+// Each compound registers only what it's made of, and they compose
+const ac = new AudioContext();
+await Promise.all([registerMonoSynth(ac), registerDrums(ac)]);
 
 const synth = MonoSynth(ac, { frequency: 220 });
 synth.connect(ac.destination);
@@ -133,27 +140,75 @@ synth.dispose();
 kick.dispose();
 ```
 
-`trigger` and `gate` are `AudioParam`s, read once per render block. For a
-one-shot, schedule the edge with `setValueAtTime` as above — setting `.value` to
-1 and back to 0 in the same tick leaves nothing for the worklet to see.
+`trigger` and `gate` are `AudioParam`s, and every gate and trigger in the
+library is `a-rate`: a note lands on the sample it was scheduled for rather than
+at the top of the next render block, and two triggers inside one block both
+fire. For a one-shot, schedule both edges with `setValueAtTime` as above —
+setting `.value` to 1 and back to 0 in the same tick leaves nothing for the
+worklet to see, because only the last write survives.
+
+## Making your own compound
+
+`MonoSynth` and the drums aren't special. `Compound` is the declaration they're
+built on, and it makes a group of modules behave as one: a single node to
+connect from, a public surface you choose, and one `dispose()` that tears down
+everything inside.
+
+```ts
+import { Compound, Param, PolyblepOscillator, Svf, SvfType } from "synthlet";
+
+function Voice(ac: AudioContext) {
+  const osc = PolyblepOscillator(ac, { frequency: 110 });
+  const cutoff = Param(ac, { input: 1200 });
+  const filter = Svf(ac, { type: SvfType.LowPass, frequency: cutoff });
+  osc.connect(filter);
+
+  return Compound({
+    output: filter,
+    owns: [osc, cutoff],
+    exposes: { cutoff: cutoff.input, osc, filter },
+  });
+}
+
+const voice = Voice(ac);
+voice.connect(ac.destination);
+voice.cutoff.value = 400; // an inlet the compound chose to expose
+voice.dispose(); // tears down osc, cutoff and filter
+```
+
+`owns` is what `dispose()` tears down — the nodes you connected by hand.
+Anything passed _to_ a factory is already owned by the module it was passed to.
+`exposes` is the public surface: an `AudioParam`, a `Param` node's `.input`
+where an inlet needs scaling or fan-out, or the modules themselves.
+
+Every factory also carries the parameters its processor declares, so a UI can be
+built from the module rather than from a hard-coded table:
+
+```ts
+Svf.descriptors;
+// [{ name: "type", defaultValue: 1, minValue: 0, maxValue: 6, automationRate: "k-rate" }, …]
+```
 
 ## Modules
 
 **Sources** — `PolyblepOscillator`, `WavetableOscillator`, `KarplusStrong`,
-`Noise`, `Impulse`
+`Noise`, `Impulse`, `TimestretchAudioSource` (a buffer player with independent
+time and pitch)
 
 **Modifiers** — `Svf` (state variable filter), `VirtualAnalogFilter` (Moog
-ladder, Korg 35, diode ladder, Oberheim), `ClipAmp`, `AdsrAmp`, `LevelMeter`
+ladder, Korg 35, diode ladder, Oberheim), `ClipAmp`, `AdsrAmp`, `AdAmp`,
+`LookaheadLimiter` (true-peak brickwall), `LevelMeter`
 
 **Modulators** — `AdsrEnv`, `AdEnv`, `Lfo`, `Param`
 
 **Sequencers** — `Clock`, `Euclid`, `Arp`
 
-**Effects** — `Chorus`, `ReverbDelay`, `DattorroReverb`, `Granite` (granular)
+**Effects** — `DigitalDelay`, `AnalogDelay` (tape and bucket-brigade), `Chorus`,
+`ReverbDelay`, `DattorroReverb`, `Granite` (granular delay)
 
-**Instruments** — `MonoSynth`, and `KickDrum`, `SnareDrum`, `HiHatDrum`,
-`ClaveDrum`, `CowBellDrum`, `CymbalDrum`, `MaracasDrum`, `HandclapDrum`,
-`TomDrum`, `CongaDrum`
+**Instruments** — `MonoSynth`, and eleven drums: `KickDrum`, `SnareDrum`,
+`HiHatDrum`, `ClaveDrum`, `CowBellDrum`, `CymbalDrum`, `MaracasDrum`,
+`HandclapDrum`, `TomDrum`, `CongaDrum`, `MembraneDrum`
 
 Every module has a matching `register<Name>Worklet` function if you'd rather not
 register all of them.

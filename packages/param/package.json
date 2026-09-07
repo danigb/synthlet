@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/param",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Param generator audio worklet",
   "keywords": [
     "param",
@@ -8,6 +8,12 @@
     "synthesis",
     "synthlet"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/param"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/param",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",

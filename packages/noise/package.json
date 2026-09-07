@@ -1,10 +1,16 @@
 {
   "name": "@synthlet/noise",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Noise generator module for Synthlet",
   "keywords": [
     "noise"
   ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/noise"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/noise",
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
