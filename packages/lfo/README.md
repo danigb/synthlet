@@ -40,14 +40,24 @@ osc.connect(ac.destination);
 
 ## Parameters
 
-`output = gen(phase) × amp × gain + offset`
+`output = gen(phase) × amp × gain + offset`, where `amp` is the depth envelope.
 
-| Param       | Default | Range   | Rate   | Meaning                       |
-| ----------- | ------- | ------- | ------ | ----------------------------- |
-| `type`      | 1       | 0 … 10  | k-rate | Waveform — see `LfoType`      |
-| `frequency` | 10      | 0 … 200 | k-rate | Rate in Hz                    |
-| `gain`      | 1       | ±20000  | k-rate | Depth — negative inverts      |
-| `offset`    | 0       | ±20000  | k-rate | Where the waveform is centred |
+| Param       | Default | Range          | Rate   | Meaning                              |
+| ----------- | ------- | -------------- | ------ | ------------------------------------ |
+| `type`      | 1       | 0 … 12         | k-rate | Waveform — see `LfoType`             |
+| `frequency` | 10      | −200 … 200     | a-rate | Rate in Hz — negative runs backwards |
+| `gain`      | 1       | −20000 … 20000 | k-rate | Depth — negative inverts             |
+| `offset`    | 0       | −20000 … 20000 | k-rate | Where the waveform is centred        |
+| `sync`      | 0       | 0 … 1          | a-rate | Rising edge restarts the phase       |
+| `gate`      | 0       | 0 … 1          | a-rate | Rising edge restarts the depth ramp  |
+| `delay`     | 0       | 0 … 10         | k-rate | Seconds held at zero depth           |
+| `attack`    | 0       | 0 … 10         | k-rate | Seconds from zero to 99% depth       |
+
+Plus one **construction option**, not an `AudioParam`:
+
+| Option  | Default | Meaning                                                                                                                |
+| ------- | ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `phase` | `0`     | Where the LFO starts, and where a `sync` edge sends it. A number is taken modulo 1; `"random"` draws once per instance |
 
 ## Shapes
 
@@ -71,12 +81,24 @@ crossing, and the impulse's single sample _is_ the cycle boundary.
 | `RandSampleHold` (9) | held | held    | held | held    | φ=0      |
 | `Impulse` (10)       | 1    | 0       | 0    | 0       | φ=0      |
 
+The last two members are stochastic and have no such row. What they promise
+instead is a range and a continuity:
+
+| `LfoType`         | Promises                                                                                           |
+| ----------------- | -------------------------------------------------------------------------------------------------- |
+| `RandSmooth` (11) | In ±1. One random target per cycle, faded between targets — continuous, with no corner at a target |
+| `Drift` (12)      | In ±1. Two octaves of gradient noise along the phase — a rate, but no audible period               |
+
 Every shape swings the full ±1 and averages to zero over a cycle, so `gain` is
 the whole depth and nothing here adds DC to what it modulates.
 
 The three `Exp*` shapes are their linear partners bent inward: same zeros, same
 peaks, same sign everywhere, and only the path between them differs. The bend is
 the MMA concave transform (see Credits).
+
+**`packages/lfo/src/dsp.ts` is where this table lives as a specification**, and
+`dsp.test.ts` asserts every row of it. This copy and the one on the docs page
+follow it; change that one first.
 
 `sync`, `gate` and `frequency` are `a-rate`; the rest are read once per block.
 `type` is structural: swapping generator 128 times a block is not waveform

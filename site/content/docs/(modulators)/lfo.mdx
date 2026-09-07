@@ -4,126 +4,75 @@ description: A Low Frequency Oscillator module
 package: lfo
 ---
 
-```ts
-import { Lfo } from "synthlet";
+import LfoExample from "../../../examples/LfoExample";
+import LfoStackExample from "../../../examples/LfoStackExample";
 
-const lfo = Lfo(audioContext, {
-  frequency: 0.5,
-  type: LfoType.Sine,
-  amplitude: 0.5,
-  offset: 0.5,
-});
-```
+The modulation source. Web Audio's `OscillatorNode` gives you four waveforms and
+none of the ones modulation actually wants — no sample-and-hold, no exponential
+ramps, no single-sample impulse — and no depth or offset without two more nodes.
+This is one node with all of it, plus a reset, a starting phase and a depth
+envelope.
 
-## Params
+It emits **a signal, one value per sample**, so a slow sine on a pitch or a gain
+is smooth rather than a 344 Hz staircase.
 
-- `frequency`: the rate in Hz, a-rate. Default is 10. Range: [-200, 200].
-  **Bipolar**: a negative rate runs the phase backwards, and `frequency: 0`
-  freezes the LFO on the value at `phase`. A modulated rate is tracked per
-  sample; an unmodulated one costs nothing.
-- `type`: the type of the oscillator. You can use `LfoType` enum. Default is `LfoType.Sine`.
-- `gain`: the depth of the oscillator. Default is 1. Range: [-20000, 20000]. A
-  **negative gain inverts the waveform** — that is how you get a filter that
-  closes as the amp opens, or two LFOs in antiphase.
-- `offset`: where the waveform is centred. Default is 0. Range: [-20000, 20000].
-  A unipolar 0…1 modulator is `gain: 0.5, offset: 0.5`; a filter cutoff swept
-  over its whole range is `gain: 10000, offset: 10000`.
+## Example
 
-- `sync`: a-rate. A **rising edge** — the transition from non-positive to
-  positive, [synthlet's one gate contract](/docs/gates-and-triggers) — restarts
-  the phase at `phase`. Unconnected it is 0 and nothing happens.
-
-`gain` and `offset` carry the same range as `Ad`, `Adsr` and `Param`, which
-compute the identical `x × gain + offset`.
-
-- `gate`: a-rate. A rising edge restarts the **depth ramp**. Not `sync` — see
-  below.
-- `delay`: seconds held at zero depth before the ramp begins. Default 0. Range:
-  [0, 10].
-- `attack`: seconds from zero to 99% of full depth. Default 0. Range: [0, 10].
-
-## The top of the range
-
-**Above roughly 20 Hz this stops being a modulation source.** The shapes are
-naive, and deliberately: at LFO rates the aliased images fold back onto
-harmonics, so there is nothing inharmonic for a band-limiting scheme to remove.
-At the top of the range the discontinuous shapes show it — measured alias SNR at
-200 Hz is 23.6 dB for the ramps, 25.4 for the square and 16.3 for the exponential
-ramps, against 96 dB or better for all of them at 100 Hz.
-
-Audio-rate _modulation_ at 50–100 Hz is clean and useful, which is why the
-ceiling stays where it is. For an audio-rate _oscillator_, use
-[PolyblepOscillator](/docs/sources/polyblep), which is band-limited.
-
-## Fading in
-
-Vibrato that arrives a moment after the note is the most common thing an LFO
-does. `delay` and `attack` are that, and `gate` starts it:
+<LfoExample />
 
 ```ts
+import { Lfo, LfoType, PolyblepOscillator } from "synthlet";
+
+const osc = PolyblepOscillator(audioContext, { frequency: 440 });
+
+// ±10 Hz of vibrato at 5 Hz, fading in over the first second of each note.
 const vibrato = Lfo(audioContext, {
+  type: LfoType.Sine,
   frequency: 5,
   gain: 10,
-  delay: 0.3, // 300 ms of nothing
-  attack: 0.7, // then 700 ms fading up to full depth
-  gate, // restarted by the note
+  attack: 1,
+  gate,
 });
-```
-
-**`delay: 0, attack: 0` — the defaults — means no envelope at all.** The depth is
-1, `gate` is ignored, and the output is bit-identical to a build without it.
-
-| Behaviour              | What happens                                      |
-| ---------------------- | ------------------------------------------------- |
-| Rising edge on `gate`  | The fade restarts at zero depth                   |
-| Gate held high         | The fade advances — legato is **one** ramp        |
-| Gate falls             | The fade **freezes**; it does not reset           |
-| `gate` never connected | Armed at construction: it fades in once and stays |
-
-`attack` is seconds to **99%** of full depth, the same meaning `Ad` and `Adsr`
-give theirs. A Juno-6 with its delay slider at maximum is `attack: 6.91`.
-
-**`sync` and `gate` are different parameters.** `sync` resets the _phase_;
-`gate` restarts the _depth ramp_. A Juno's LFO free-runs while its depth fades
-in, which is only expressible if the two are separate.
-
-## Options
-
-`phase` is a **construction option**, not an `AudioParam`: it is a one-time
-initial condition, and an `AudioParam` would imply it meant something
-continuously. It is also where a `sync` edge restarts the phase. A number is
-taken modulo 1, so `1.25` and `-0.75` both mean `0.25`; `"random"` draws once
-per instance.
-
-## Starting it
-
-Without `sync`, every `Lfo` in an `AudioContext` free-runs from context time
-zero — so two at the same rate are the _same signal_, forever, and a note-on
-cannot restart a vibrato.
-
-```ts
-// Per-note vibrato: the voice's gate restarts the LFO.
-const vibrato = Lfo(audioContext, { frequency: 5, gain: 10, sync: gate });
 vibrato.connect(osc.frequency);
-
-// Tempo sync: no `bpm` param and no division enum — `clock.gate` is the
-// mechanism, and the division is `frequency` relative to the tempo.
-const clock = Clock(audioContext, { bpm: 120 });
-const perBeat = Lfo(audioContext, { frequency: 2, sync: clock.gate });
-
-// Two independent wobbles, without detuning either.
-const wobble = () => Lfo(audioContext, { frequency: 0.3, phase: "random" });
 ```
 
-Holding `sync` positive fires **once**, not once per sample. The reset lands on
-the sample the edge was detected on: unlike the oscillators, this package does
-not interpolate the sub-sample crossing instant — 2.9 ms is nothing against a
-5 Hz cycle.
+## Parameters
+
+`output = gen(phase) × amp × gain + offset`, where `amp` is the depth envelope.
+
+| Param       | Default | Range          | Rate   | Meaning                              |
+| ----------- | ------- | -------------- | ------ | ------------------------------------ |
+| `type`      | 1       | 0 … 12         | k-rate | Waveform — see `LfoType`             |
+| `frequency` | 10      | −200 … 200     | a-rate | Rate in Hz — negative runs backwards |
+| `gain`      | 1       | −20000 … 20000 | k-rate | Depth — negative inverts             |
+| `offset`    | 0       | −20000 … 20000 | k-rate | Where the waveform is centred        |
+| `sync`      | 0       | 0 … 1          | a-rate | Rising edge restarts the phase       |
+| `gate`      | 0       | 0 … 1          | a-rate | Rising edge restarts the depth ramp  |
+| `delay`     | 0       | 0 … 10         | k-rate | Seconds held at zero depth           |
+| `attack`    | 0       | 0 … 10         | k-rate | Seconds from zero to 99% depth       |
+
+Plus one **construction option**, not an `AudioParam`:
+
+| Option  | Default | Meaning                                                                                                                |
+| ------- | ------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `phase` | `0`     | Where the LFO starts, and where a `sync` edge sends it. A number is taken modulo 1; `"random"` draws once per instance |
+
+`phase` is an option rather than a parameter because it is a one-time initial
+condition, and an `AudioParam` would imply it meant something continuously. Both
+oscillator packages settled this shape first.
+
+`sync`, `gate` and `frequency` are `a-rate`; the rest are read once per block.
+`type` is structural — swapping generator 128 times a block is not waveform
+modulation, it is noise. `gain` and `offset` are `k-rate` because the better
+answer to a signal on either already exists: a native `GainNode` between the LFO
+and its destination is a-rate and free, and adding a signal to `offset` is what
+the destination `AudioParam`'s own summing does.
 
 ## Shapes
 
 **Every continuous shape crosses zero going up at phase 0** — a modulation
-source's zero point is no modulation. `Square` and `Impulse` are the exceptions
+source's zero point is no modulation, so an LFO whose phase is reset starts with
+no effect on what it is patched into. `Square` and `Impulse` are the exceptions
 and cannot be otherwise: a square has no zero crossing, and the impulse's single
 sample _is_ the cycle boundary.
 
@@ -141,13 +90,23 @@ sample _is_ the cycle boundary.
 | `RandSampleHold` (9) | held | held    | held | held    | φ=0      |
 | `Impulse` (10)       | 1    | 0       | 0    | 0       | φ=0      |
 
-The last two are stochastic and have no such row. What they promise instead is a
-range and a continuity:
+The last two members are stochastic and have no such row. What they promise
+instead is a range and a continuity:
 
 | `LfoType`         | Promises                                                                                           |
 | ----------------- | -------------------------------------------------------------------------------------------------- |
 | `RandSmooth` (11) | In ±1. One random target per cycle, faded between targets — continuous, with no corner at a target |
 | `Drift` (12)      | In ±1. Two octaves of gradient noise along the phase — a rate, but no audible period               |
+
+Every shape swings the full ±1 and averages to zero over a cycle, so `gain` is
+the whole depth and nothing here adds DC to what it modulates. The three `Exp*`
+shapes are their linear partners bent inward: same zeros, same peaks, same sign
+everywhere, and only the path between them differs.
+
+This table is asserted, row by row, in `packages/lfo/src/dsp.ts` — which is where
+it lives as a specification, and the copy to change first.
+
+### The random family
 
 `RandSampleHold` steps, and that is its point — it is also the loudest thing this
 module emits, at a measured 1.41623 of single-sample step at 5 Hz where a sine's
@@ -165,8 +124,119 @@ Popov 2018.
 **None of these is a noise source.** [Noise](/docs/sources/noise) is white and
 pink at audio rate; these are one random value per LFO cycle.
 
-Every shape swings the full ±1 and averages to zero over a cycle, so `gain` is
-the whole depth and nothing here adds DC to what it modulates.
+## Behaviour
 
-The three `Exp*` shapes are their linear partners bent inward: same zeros, same
-peaks, same sign everywhere, and only the path between them differs.
+Four things worth knowing before reaching for a parameter that doesn't exist:
+
+- **`sync` and `gate` are different parameters.** `sync` resets the _phase_;
+  `gate` restarts the _depth ramp_. A Juno's LFO free-runs while its depth fades
+  in, which is only expressible if the two are separate. Neither touches the
+  other.
+- **The depth ramp freezes on release, it does not reset.** While `gate` is low
+  the fade holds where it is, so releasing mid-fade means the next note continues
+  from there. A gate held high across several legato notes is one edge and
+  therefore one ramp. With `gate` never connected the fade arms at construction:
+  it runs once from t=0 and stays.
+- **`frequency: 0` holds.** The phase freezes and the output holds the shape's
+  value at `phase`. A negative rate runs the phase backwards — that is the
+  reverse ramp, and there is no separate shape for it.
+- **`delay: 0, attack: 0` — the defaults — means no depth envelope at all.** The
+  depth is 1 and `gate` is ignored, so a patch written before those parameters
+  existed renders bit-identically.
+
+<Callout title="The discontinuous shapes step by the full range" type="warn">
+  `Square`, the ramps, the exponential ramps and `RandSampleHold` jump the whole
+  2.0 peak-to-peak in **one sample**, at every rate. On a pitch that is the
+  point; on a gain it is a click, and on a cutoff a zipper. It is not aliasing
+  and band-limiting is not the fix — smooth the control signal, or reach for
+  `RandSmooth` instead of `RandSampleHold`.
+</Callout>
+
+<Callout title="Above ~20 Hz this is an audio oscillator" type="info">
+  The shapes are naive, and deliberately: at LFO rates the aliased images fold
+  back onto harmonics, so there is nothing inharmonic for a band-limiting scheme
+  to remove. At the top of the range the discontinuous shapes show it — measured
+  alias SNR at 200 Hz is 23.6 dB for the ramps, 25.4 for the square and 16.3 for
+  the exponential ramps, against 96 dB or better for all of them at 100 Hz.
+  Audio-rate _modulation_ at 50–100 Hz is clean and useful, which is why the
+  ceiling stays where it is. For an audio-rate _oscillator_, use
+  [PolyblepOscillator](/docs/sources/polyblep).
+</Callout>
+
+<Callout title="An LFO is a gate source too" type="info">
+  Every shape swings ±1, so a `Square` LFO drives any trigger at 50 % duty and
+  `Impulse` gives one sample per cycle. See [Gates and
+  triggers](/docs/gates-and-triggers) — `Lfo` is on both of its tables now,
+  since `sync` and `gate` make it a consumer as well.
+</Callout>
+
+## Starting it
+
+Without `sync`, every `Lfo` in an `AudioContext` free-runs from context time
+zero — so two at the same rate are the _same signal_, forever, and a note-on
+cannot restart a vibrato.
+
+```ts
+// Per-note vibrato: the voice's gate restarts the LFO.
+const vibrato = Lfo(audioContext, { frequency: 5, gain: 10, sync: gate });
+vibrato.connect(osc.frequency);
+```
+
+### Tempo sync
+
+`clock.gate` into `sync` is the whole mechanism. There is no `bpm` parameter and
+no division enum on purpose: a division is `frequency` relative to a tempo you
+already know, and a `bpm` parameter would be a second `Clock`.
+
+```ts
+const clock = Clock(audioContext, { bpm: 120 });
+const perBeat = Lfo(audioContext, { frequency: 2, sync: clock.gate });
+```
+
+Holding `sync` positive fires **once**, not once per sample. The reset lands on
+the sample the edge was detected on: unlike the oscillators, this package does
+not interpolate the sub-sample crossing instant — 2.9 ms is nothing against a
+5 Hz cycle.
+
+### Two independent wobbles
+
+`phase: "random"` draws once per instance, which separates two slow LFOs without
+detuning either.
+
+<LfoStackExample />
+
+```ts
+const wobble = () => Lfo(audioContext, { frequency: 0.3, phase: "random" });
+wobble().connect(filter.frequency);
+wobble().connect(panner.pan);
+```
+
+## Fading in
+
+Vibrato that arrives a moment after the note is the most common thing an LFO
+does. `delay` and `attack` are that, and `gate` starts it:
+
+```ts
+const vibrato = Lfo(audioContext, {
+  frequency: 5,
+  gain: 10,
+  delay: 0.3, // 300 ms of nothing
+  attack: 0.7, // then 700 ms fading up to full depth
+  gate, // restarted by the note
+});
+```
+
+`attack` is seconds to **99%** of full depth, the same meaning `Ad` and `Adsr`
+give theirs. A Juno-6 with its delay slider at maximum is `attack: 6.91` — its
+ramp is a time constant of 1.5 s, and the two conventions differ by exactly
+`ln(100)`.
+
+## Depth
+
+`gain` is bipolar: **a negative depth inverts the waveform**, which is how a
+filter closes as the amp opens and how two LFOs run in antiphase. `gain` and
+`offset` carry the same range as `Ad`, `Adsr` and `Param`, which compute the
+identical `x × gain + offset`.
+
+A unipolar 0…1 modulator is `gain: 0.5, offset: 0.5`; a filter cutoff swept over
+its whole range is `gain: 10000, offset: 10000`.
