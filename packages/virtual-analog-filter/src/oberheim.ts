@@ -1,7 +1,7 @@
 // Generated from the Faust function `ve.oberheim` (vaeffects.lib).
 // Author: Eric Tarr. Licence: LicenseRef-STK-4.3.
 // See THIRD-PARTY-LICENSES.md at the repository root.
-import { normFreq } from "./norm-freq";
+import { createPrewarp } from "./prewarp";
 
 export function Oberheim(sampleRate: number, type: number) {
   let fHslider0 = 0;
@@ -9,7 +9,7 @@ export function Oberheim(sampleRate: number, type: number) {
   let fRec4 = [0, 0];
   let fRec5 = [0, 0];
 
-  const fConst0 = 6.2831855 / Math.min(1.92e5, Math.max(1.0, sampleRate));
+  const prewarp = createPrewarp(sampleRate);
 
   // The four taps of `ve.oberheim` are four combinations of the same
   // per-sample temporaries - the Rust codegen emits them as four output
@@ -40,9 +40,7 @@ export function Oberheim(sampleRate: number, type: number) {
     from: number,
     to: number,
   ) {
-    let fSlow0 = Math.tan(
-      fConst0 * Math.pow(1e1, 3.0 * normFreq(fHslider0) + 1.0),
-    );
+    let fSlow0 = prewarp(fHslider0);
     let fSlow1 = 1.0 / (29.293 * fHslider1 + 0.707) + fSlow0;
     let fSlow2 = fSlow0 * fSlow1 + 1.0;
     let fSlow3 = fSlow0 / fSlow2;

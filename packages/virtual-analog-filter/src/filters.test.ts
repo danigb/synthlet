@@ -200,22 +200,32 @@ describe("recovers from a poisoned state", () => {
 
 describe("survives a cutoff past Nyquist", () => {
   // `frequency: 1000, detune: 127` is inside both declared ranges and folds to
-  // 1.54 MHz. What bounds it is `normFreq()`'s clamp, which is the library's
-  // own 20 Hz..20 kHz domain. Ticket 04 replaces that hard breakpoint with a
-  // continuous prewarp - a discontinuity in dg/df is audible when a cutoff is
-  // swept through it - but the bound itself is here.
-  const WILD = 1000 * Math.pow(2, 127 / 12);
+  // 1.54 MHz; `frequency: 20, detune: -127` folds to 0.013 Hz. Both ends, and
+  // every sample rate a Web Audio implementation can pick - 8000 and 22050 are
+  // the interesting ones, because `frequency.maxValue` is a compile-time 20000
+  // and Nyquist is not, so below 40 kHz the parameter's own declared maximum is
+  // past the tangent's pole. What bounds it is `prewarp()`, Zavalishin eq. 3.23.
+  const EXTREMES = [
+    1000 * Math.pow(2, 127 / 12),
+    20000 * Math.pow(2, 127 / 12),
+    20 * Math.pow(2, -127 / 12),
+  ];
+  const RATES_INCLUDING_LOW = [8000, 22050, 44100, 48000, 96000];
 
   for (const model of ALL) {
     it(`${model.name}`, () => {
-      const filter = tuned(model, 48000, WILD, 0.5);
-      const input = new Float32Array(128);
-      const output = new Float32Array(128);
-      for (let n = 0; n < 128; n++) input[n] = 2e-3 * Math.random() - 1e-3;
-      filter.process(input, output, 0, 128);
-      for (const sample of output) {
-        expect(Number.isFinite(sample)).toBe(true);
-        expect(Math.abs(sample)).toBeLessThan(1);
+      for (const rate of RATES_INCLUDING_LOW) {
+        for (const frequency of EXTREMES) {
+          const filter = tuned(model, rate, frequency, 0.5);
+          const input = new Float32Array(128);
+          const output = new Float32Array(128);
+          for (let n = 0; n < 128; n++) input[n] = 2e-3 * Math.random() - 1e-3;
+          filter.process(input, output, 0, 128);
+          for (const sample of output) {
+            expect(Number.isFinite(sample)).toBe(true);
+            expect(Math.abs(sample)).toBeLessThan(1);
+          }
+        }
       }
     });
   }

@@ -1,7 +1,7 @@
 // Generated from the Faust function `ve.moogHalfLadder` (vaeffects.lib).
 // Author: Eric Tarr. Licence: LicenseRef-STK-4.3.
 // See THIRD-PARTY-LICENSES.md at the repository root.
-import { normFreq } from "./norm-freq";
+import { createPrewarp } from "./prewarp";
 
 export function MoogHalf(sampleRate: number) {
   let fHslider0 = 0;
@@ -10,7 +10,7 @@ export function MoogHalf(sampleRate: number) {
   let fRec1 = [0, 0];
   let fRec2 = [0, 0];
 
-  const fConst0 = 6.2831855 / Math.min(1.92e5, Math.max(1.0, sampleRate));
+  const prewarp = createPrewarp(sampleRate);
 
   return { update, process };
 
@@ -25,9 +25,7 @@ export function MoogHalf(sampleRate: number) {
     from: number,
     to: number,
   ) {
-    let fSlow0 = Math.tan(
-      fConst0 * Math.pow(1e1, 3.0 * normFreq(fHslider0) + 1.0),
-    );
+    let fSlow0 = prewarp(fHslider0);
     let fSlow1 = fSlow0 + 1.0;
     let fSlow2 = fSlow0 / fSlow1;
     let fSlow3 = 2.0 * fSlow2;

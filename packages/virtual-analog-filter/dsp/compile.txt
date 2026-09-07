@@ -25,9 +25,19 @@ divergences are intended and must survive a regeneration:
     runs of constant coefficients (see the 0.13.0 CHANGELOG).
   * oberheim.ts exposes one output selected by `type` rather than the four
     output buffers the Rust emits, with the tap mix hoisted out of the loop.
-  * The clamped normFreq expression Faust inlines into every `fSlow0` is a
-    named function, `normFreq()` in ../src/norm-freq.ts. Five copies of one
-    logarithm drift apart; one does not.
+  * `fSlow0` is `prewarp(f)` from ../src/prewarp.ts, not `Math.tan(...)`.
+    Two things collapse into that. First, `tan(2*PI/SR * 10^(3*normFreq(f)+1))`
+    is `tan(PI*f/SR)` exactly, because normFreq is the inverse of the library's
+    own map and the round trip is the identity - so the log and the power are
+    two transcendental calls per coefficient update that undo each other, and
+    on a per-sample sweep that is per sample. Second, the tangent has a pole at
+    Nyquist, and `worklet.ts` folds +/-127 semitones of detune into the cutoff:
+    `prewarp()` is Zavalishin eq. 3.23, which follows the tangent below 0.72 of
+    Nyquist and continues it as a tangent line above. This is the largest
+    divergence in the package. A regeneration must not silently undo it.
+  * ../src/norm-freq.ts survives only as the *domain* of diode.ts's
+    `17 - 9.7*normFreq^10` feedback term, which the library designs over 0..1
+    and which is what returned `Infinity` past it.
 
 Anything else is a bug. `input[0]` where the Rust reads `*input0` was one, and
 it made four of the nine models filter a DC value re-latched once per block.
