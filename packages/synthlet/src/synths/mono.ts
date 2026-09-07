@@ -30,10 +30,19 @@ export function MonoSynth(context: AudioContext, inputs: MonoSynthInputs = {}) {
     frequency: inputs.frequency,
     ...inputs.osc,
   });
+  // Delayed vibrato, the way every wind player and every synth patch since
+  // 1970 does it: the note's own gate restarts the LFO's depth ramp, so the
+  // vibrato arrives a moment after the note rather than on it.
+  //
+  // This used to be `gain: 0` and a note in the docs telling the caller to
+  // automate it up. An instrument whose vibrato only works if the caller
+  // remembers to write an automation curve does not have vibrato.
   const vibrato = Lfo(context, {
     type: LfoType.Sine,
-    gain: 0,
-    frequency: 10,
+    gain: 5,
+    frequency: 5,
+    attack: 0.6,
+    gate,
     ...inputs.vibrato,
   });
   const filterEnv = AdsrEnv(context, { gate, gain: 3000, offset: 2000 });
