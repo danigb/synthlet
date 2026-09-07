@@ -49,9 +49,34 @@ osc.connect(ac.destination);
 | `gain`      | 1       | 0 … 10000 | k-rate | Amplitude                     |
 | `offset`    | 0       | ±1000     | k-rate | Where the waveform is centred |
 
-`LfoType` is `None` (0), `Sine` (1), `Triangle` (2), `RampUp` (3), `RampDown`
-(4), `Square` (5), `ExpRampUp` (6), `ExpRampDown` (7), `ExpTriangle` (8),
-`RandSampleHold` (9) and `Impulse` (10).
+## Shapes
+
+`type` is an index into `LfoType`. **Every continuous shape crosses zero going
+up at phase 0** — a modulation source's zero point is no modulation — so an LFO
+whose phase is reset starts with no effect on what it is patched into. `Square`
+and `Impulse` are the exceptions and cannot be otherwise: a square has no zero
+crossing, and the impulse's single sample _is_ the cycle boundary.
+
+| `LfoType`            | φ=0  | φ=¼     | φ=½  | φ=¾     | Jumps at |
+| -------------------- | ---- | ------- | ---- | ------- | -------- |
+| `None` (0)           | 0    | 0       | 0    | 0       | —        |
+| `Sine` (1)           | 0    | +1      | 0    | −1      | —        |
+| `Triangle` (2)       | 0    | +1      | 0    | −1      | —        |
+| `RampUp` (3)         | 0    | +0.5    | −1   | −0.5    | φ=½      |
+| `RampDown` (4)       | 0    | −0.5    | +1   | +0.5    | φ=½      |
+| `Square` (5)         | +1   | +1      | −1   | −1      | φ=0, φ=½ |
+| `ExpRampUp` (6)      | 0    | +0.1246 | −1   | −0.1246 | φ=½      |
+| `ExpRampDown` (7)    | 0    | −0.1246 | +1   | +0.1246 | φ=½      |
+| `ExpTriangle` (8)    | 0    | +1      | 0    | −1      | —        |
+| `RandSampleHold` (9) | held | held    | held | held    | φ=0      |
+| `Impulse` (10)       | 1    | 0       | 0    | 0       | φ=0      |
+
+Every shape swings the full ±1 and averages to zero over a cycle, so `gain` is
+the whole depth and nothing here adds DC to what it modulates.
+
+The three `Exp*` shapes are their linear partners bent inward: same zeros, same
+peaks, same sign everywhere, and only the path between them differs. The bend is
+the MMA concave transform (see Credits).
 
 All four parameters are `k-rate` — what is audio-rate here is the **output**,
 which is a different question. `type` is structural: swapping generator 128

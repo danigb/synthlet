@@ -1,3 +1,56 @@
+/**
+ * The shapes, as a specification.
+ *
+ * An LFO waveform has no analytic reference to check it against - a filter has
+ * a transfer function, but a shape *is* its definition. So the table below is
+ * load-bearing in a way a comment is not: `dsp.test.ts` asserts every row of
+ * it, and the package README and the docs page repeat it. If a generator below
+ * changes, the table is what says whether the change was the fix or the bug.
+ *
+ * ## The phase convention: φ=0 is zero-and-rising
+ *
+ * Every continuous shape crosses zero going up at φ=0. `Sine` always did;
+ * `Triangle`, the ramps and the `Exp*` family did not, and were realigned.
+ *
+ * The reason is that φ=0 is about to become observable. Nothing could reset
+ * the phase, so an `Lfo` free-ran from context time zero and reached φ=0 at an
+ * arbitrary moment; once `sync` lands, φ=0 is *the value every note-on snaps
+ * the LFO to*. A `Triangle` vibrato that starts at −1 would begin every note at
+ * maximum downward pitch deviation. A modulation source's zero point is no
+ * modulation.
+ *
+ * `Square` and `Impulse` are the two exceptions, and cannot be otherwise:
+ * a square has no zero crossing, and the impulse's single sample *is* the
+ * cycle boundary.
+ *
+ * | shape            | φ=0  | φ=¼     | φ=½ | φ=¾     | discontinuity |
+ * | ---------------- | ---- | ------- | --- | ------- | ------------- |
+ * | `None`           | 0    | 0       | 0   | 0       | -             |
+ * | `Sine`           | 0    | +1      | 0   | −1      | -             |
+ * | `Triangle`       | 0    | +1      | 0   | −1      | -             |
+ * | `RampUp`         | 0    | +0.5    | −1  | −0.5    | φ=½           |
+ * | `RampDown`       | 0    | −0.5    | +1  | +0.5    | φ=½           |
+ * | `Square`         | +1   | +1      | −1  | −1      | φ=0, φ=½      |
+ * | `ExpRampUp`      | 0    | +0.1246 | −1  | −0.1246 | φ=½           |
+ * | `ExpRampDown`    | 0    | −0.1246 | +1  | +0.1246 | φ=½           |
+ * | `ExpTriangle`    | 0    | +1      | 0   | −1      | -             |
+ * | `RandSampleHold` | held | held    | held | held   | φ=0           |
+ * | `Impulse`        | 1    | 0       | 0   | 0       | φ=0           |
+ *
+ * ## The `Exp*` family is the linear family, more curved
+ *
+ * `ExpTriangle` used to be `bipolar(concave(|bipolar(φ)|))`, which peaks where
+ * `Triangle` troughs: it was phase-inverted against the shape it is named
+ * after, and had been since the package was written. It is now `curve()` of
+ * the triangle - the MMA concave transform applied to the magnitude with the
+ * sign preserved - so each `Exp*` shape has the same zeros, the same peaks and
+ * the same sign as its linear partner everywhere, and only bends between them.
+ *
+ * That is what `dsp.test.ts` asserts, and it asserts it without naming a
+ * coefficient: `|Exp(φ)| ≤ |Linear(φ)|` with matching signs. The 5/12
+ * correction factor is one legitimate fixed opinion about how much to bend;
+ * pinning it in a test would make the opinion untouchable.
+ */
 export enum LfoType {
   None = 0,
   Sine = 1,
@@ -69,18 +122,59 @@ function createImpulse(): Gen {
 
 type Gen = (phase: number, prev: number) => number;
 const concave = concaveTransform();
-const none = () => 0;
+
+/** Fractional part, for a phase rotated past the end of its cycle. */
+const wrap = (phase: number) => phase - Math.floor(phase);
+
+/**
+ * The concave transform applied to a bipolar value's magnitude, sign kept.
+ *
+ * This is what makes an `Exp*` shape the same shape as its linear partner: it
+ * fixes the zeros and the peaks and bends only what is between them.
+ */
+const curve = (value: number) =>
+  value < 0 ? -concave(-value) : concave(value);
+
+const none: Gen = () => 0;
 const impulse = createImpulse();
 const sine: Gen = (phase) => Math.sin(phase * 2 * Math.PI);
-const triangle: Gen = (phase) => 1.0 - 2.0 * Math.abs(bipolar(phase));
-const rampUp: Gen = (phase) => bipolar(phase);
-const rampDown: Gen = (phase) => -bipolar(phase);
-const square: Gen = (phase) => (phase <= 0.5 ? +1.0 : -1.0);
+// A quarter cycle later than the naive `1 - 2|bipolar(φ)|`, which starts at its
+// trough. See the phase convention above.
+const triangle: Gen = (phase) =>
+  1.0 - 2.0 * Math.abs(bipolar(wrap(phase + 0.25)));
+// Half a cycle later than the naive `bipolar(φ)`: the ordinary saw, zero at
+// φ=0, peaking just before its jump at φ=½.
+const rampUp: Gen = (phase) => bipolar(wrap(phase + 0.5));
+const rampDown: Gen = (phase, prev) => -rampUp(phase, prev);
+// `<` and not `<=`, so the two halves are exactly [0, ½) and [½, 1): equal
+// duty, and a mean of exactly zero over an even-length cycle.
+const square: Gen = (phase) => (phase < 0.5 ? +1.0 : -1.0);
 const rand = () => bipolar(Math.random());
-const expRampUp: Gen = (phase) => bipolar(concave(phase));
-const expRampDown: Gen = (phase) => bipolar(concave(1 - phase));
-const expTriangle: Gen = (phase) => bipolar(concave(Math.abs(bipolar(phase))));
+const expRampUp: Gen = (phase, prev) => curve(rampUp(phase, prev));
+const expRampDown: Gen = (phase, prev) => -expRampUp(phase, prev);
+const expTriangle: Gen = (phase, prev) => curve(triangle(phase, prev));
 const randSampleHold: Gen = createSampleAndHold();
+
+/**
+ * The generators, indexed by `LfoType`.
+ *
+ * Exported so the tests can read a shape at an exact phase rather than infer
+ * it from a render - the difference between asserting the specification above
+ * and asserting today's output.
+ */
+export const GENERATORS: readonly Gen[] = [
+  none,
+  sine,
+  triangle,
+  rampUp,
+  rampDown,
+  square,
+  expRampUp,
+  expRampDown,
+  expTriangle,
+  randSampleHold,
+  impulse,
+];
 
 type Params = {
   type: number[];
@@ -92,21 +186,6 @@ type Params = {
 export function createLfo(sampleRate: number, audioRate: boolean) {
   const dt = 1 / sampleRate;
 
-  // Init gen functions
-  const generators: Gen[] = [
-    none,
-    sine,
-    triangle,
-    rampUp,
-    rampDown,
-    square,
-    expRampUp,
-    expRampDown,
-    expTriangle,
-    randSampleHold,
-    impulse,
-  ];
-
   // Params
   let $type = 1;
   let $frequency = 10;
@@ -114,13 +193,13 @@ export function createLfo(sampleRate: number, audioRate: boolean) {
   let $offset = 0;
 
   // State
-  let gen: Gen = generators[1] ?? none;
+  let gen: Gen = GENERATORS[1] ?? none;
   let phase = 0;
 
   function read(params: Params) {
     if (params.type[0] !== $type) {
       $type = params.type[0];
-      gen = generators[Math.floor($type)] ?? none;
+      gen = GENERATORS[Math.floor($type)] ?? none;
     }
     $frequency = params.frequency[0];
     $offset = params.offset[0];

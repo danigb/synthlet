@@ -22,16 +22,29 @@ const lfo = Lfo(audioContext, {
 - `gain`: the amplitude of the oscillator. Default is 1. Range: [0-10000]
 - `offset`: the offset of the oscillator. Default is 0. Range: [-1000, 1000]
 
-Available waveform types (through `LfoType` enum) are:
+## Shapes
 
-- `0`: Zero
-- `1`: Sine
-- `2`: Triangle
-- `3`: RampUp
-- `4`: RampDown
-- `5`: Square
-- `6`: ExpRampUp
-- `7`: ExpRampDown
-- `8`: ExpTriangle
-- `9`: RandSampleHold
-- `10`: Impulse
+**Every continuous shape crosses zero going up at phase 0** — a modulation
+source's zero point is no modulation. `Square` and `Impulse` are the exceptions
+and cannot be otherwise: a square has no zero crossing, and the impulse's single
+sample _is_ the cycle boundary.
+
+| `LfoType`            | φ=0  | φ=¼     | φ=½  | φ=¾     | Jumps at |
+| -------------------- | ---- | ------- | ---- | ------- | -------- |
+| `None` (0)           | 0    | 0       | 0    | 0       | —        |
+| `Sine` (1)           | 0    | +1      | 0    | −1      | —        |
+| `Triangle` (2)       | 0    | +1      | 0    | −1      | —        |
+| `RampUp` (3)         | 0    | +0.5    | −1   | −0.5    | φ=½      |
+| `RampDown` (4)       | 0    | −0.5    | +1   | +0.5    | φ=½      |
+| `Square` (5)         | +1   | +1      | −1   | −1      | φ=0, φ=½ |
+| `ExpRampUp` (6)      | 0    | +0.1246 | −1   | −0.1246 | φ=½      |
+| `ExpRampDown` (7)    | 0    | −0.1246 | +1   | +0.1246 | φ=½      |
+| `ExpTriangle` (8)    | 0    | +1      | 0    | −1      | —        |
+| `RandSampleHold` (9) | held | held    | held | held    | φ=0      |
+| `Impulse` (10)       | 1    | 0       | 0    | 0       | φ=0      |
+
+Every shape swings the full ±1 and averages to zero over a cycle, so `gain` is
+the whole depth and nothing here adds DC to what it modulates.
+
+The three `Exp*` shapes are their linear partners bent inward: same zeros, same
+peaks, same sign everywhere, and only the path between them differs.

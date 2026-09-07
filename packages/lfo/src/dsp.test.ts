@@ -1,5 +1,5 @@
-import { magnitudes } from "./_spectrum";
-import { createLfo, LfoType } from "./dsp";
+import { magnitudes, peak } from "./_spectrum";
+import { createLfo, GENERATORS, LfoType } from "./dsp";
 
 /**
  * What this package promises, as numbers.
@@ -21,6 +21,16 @@ import { createLfo, LfoType } from "./dsp";
  *
  * Runs in node with no `AudioWorkletProcessor` stub: `dsp.ts` imports nothing
  * from the worklet global scope. `worklet.test.ts` is where the stub lives.
+ *
+ * ## The second axis: the shapes
+ *
+ * Everything above was written about the *rate*. `every shape is the shape it
+ * claims`, at the bottom, is about the *waveform*, and it exists because
+ * nothing here measured one: `ExpTriangle` peaked where `Triangle` troughed
+ * for the life of the package and no test could tell. Those assertions read
+ * `SHAPES` below, which is the same table as the specification at the top of
+ * `dsp.ts` - written out twice on purpose, so that a generator and its
+ * specification cannot be changed in one edit.
  */
 
 const SAMPLE_RATE = 44100;
@@ -166,25 +176,29 @@ describe("every waveform", () => {
     },
   );
 
-  it("Impulse emits a single sample, not a whole block", () => {
-    const signal = audioRate(2 * CYCLE, params({ type: LfoType.Impulse }));
-    const runs: number[] = [];
-    let run = 0;
-    for (const value of signal) {
-      if (value !== 0) run++;
-      else if (run) {
-        runs.push(run);
-        run = 0;
-      }
+  it("Impulse emits one sample of 1.0 per cycle, at the cycle boundary", () => {
+    const signal = audioRate(4 * CYCLE, params({ type: LfoType.Impulse }));
+    const fired: number[] = [];
+    for (let i = 0; i < signal.length; i++) {
+      if (signal[i] !== 0) fired.push(i);
     }
-    if (run) runs.push(run);
 
-    // Two cycles, so two or three impulses depending on where the render
-    // starts in the shared generator's cycle. Each one sample wide: today
-    // `output.fill()` makes every one of them 128 samples wide.
-    expect(runs.length).toBeGreaterThanOrEqual(2);
-    expect(runs.length).toBeLessThanOrEqual(3);
-    expect(runs.every((length) => length === 1)).toBe(true);
+    // Every impulse is one sample wide and full scale. `output.fill()` - the
+    // block-constant generator - makes each of them 128 samples wide instead.
+    expect(fired.length).toBeGreaterThanOrEqual(3);
+    for (const at of fired) {
+      expect(signal[at]).toBe(1);
+      expect(signal[at + 1] ?? 0).toBe(0);
+    }
+
+    // And they are a cycle apart, which is the statement that the impulse is
+    // on the phase wrap rather than merely rare. Where the *first* one falls
+    // is not asserted: `impulse` is built once at module scope in `dsp.ts`, so
+    // this render starts wherever the previous test left the shared generator
+    // (ticket 01 of this folder).
+    const gaps = fired.slice(1).map((at, i) => at - fired[i]);
+    for (const gap of gaps)
+      expect(Math.abs(gap - CYCLE)).toBeLessThanOrEqual(1);
   });
 
   it("RandSampleHold holds one value per cycle", () => {
@@ -275,5 +289,386 @@ describe("the control-rate generator", () => {
     const perBlock = [];
     for (let i = 0; i < signal.length; i += BLOCK) perBlock.push(signal[i]);
     expect(perBlock).toMatchSnapshot();
+  });
+});
+
+/**
+ * The shape axis.
+ *
+ * Nothing above this line asserts that an `LfoType` is the shape its name
+ * claims - not its amplitude, not its symmetry, not its polarity, not its
+ * value at any phase. That is how `ExpTriangle` shipped phase-inverted against
+ * `Triangle` for the life of the package: the snapshot agreed with it, and the
+ * snapshot was captured from the same code.
+ *
+ * So `SHAPES` below is not captured from anything. It is `dsp.ts`'s
+ * specification table typed out a second time, and the two copies are the
+ * point: a generator and its promise cannot be changed in one edit.
+ *
+ * Where a bound here is not exact it is because the *grid* is not exact, never
+ * because the shape is approximate, and each one says which. `N` throughout is
+ * the samples in one cycle, `sampleRate / rate`.
+ */
+describe("every shape is the shape it claims", () => {
+  type Direction = 1 | -1;
+
+  type ShapeSpec = {
+    /** Value at φ = 0, ¼, ½, ¾. */
+    quarters: [number, number, number, number];
+    /** Phases where the shape jumps. Symmetry and monotonicity step around them. */
+    jumps: number[];
+    /** Spans the shape is monotonic over, as `[from, to, direction]`. */
+    monotonic: [number, number, Direction][];
+    /** Where the shape reads exactly ±1, as `[phase, value]`. */
+    full: [number, number][];
+    /** Spends half its cycle above zero and half below, so its mean is zero. */
+    bipolar: boolean;
+    /**
+     * `f(φ + ½) = −f(φ)`, so a cycle sampled at an even number of points sums
+     * to exactly zero rather than to one sample's worth of the jump.
+     */
+    balanced: boolean;
+  };
+
+  /** `concave(0.5)`: the exponential ramp a quarter of the way up its rise. */
+  const EXP_QUARTER = 0.1246;
+
+  const SHAPES: Record<number, ShapeSpec> = {
+    [LfoType.None]: {
+      quarters: [0, 0, 0, 0],
+      jumps: [],
+      monotonic: [],
+      full: [],
+      bipolar: false,
+      balanced: true,
+    },
+    [LfoType.Sine]: {
+      quarters: [0, 1, 0, -1],
+      jumps: [],
+      monotonic: [
+        [0, 0.25, 1],
+        [0.25, 0.75, -1],
+        [0.75, 1, 1],
+      ],
+      full: [
+        [0.25, 1],
+        [0.75, -1],
+      ],
+      bipolar: true,
+      balanced: true,
+    },
+    [LfoType.Triangle]: {
+      quarters: [0, 1, 0, -1],
+      jumps: [],
+      monotonic: [
+        [0, 0.25, 1],
+        [0.25, 0.75, -1],
+        [0.75, 1, 1],
+      ],
+      full: [
+        [0.25, 1],
+        [0.75, -1],
+      ],
+      bipolar: true,
+      balanced: true,
+    },
+    [LfoType.RampUp]: {
+      quarters: [0, 0.5, -1, -0.5],
+      jumps: [0.5],
+      monotonic: [
+        [0, 0.5, 1],
+        [0.5, 1, 1],
+      ],
+      // A sampled saw lands *on* its jump and so reads −1 exactly, and stops
+      // 2/N short of the +1 just before it. One peak, not two.
+      full: [
+        [0.5 - 1e-12, 1],
+        [0.5, -1],
+      ],
+      bipolar: true,
+      balanced: false,
+    },
+    [LfoType.RampDown]: {
+      quarters: [0, -0.5, 1, 0.5],
+      jumps: [0.5],
+      monotonic: [
+        [0, 0.5, -1],
+        [0.5, 1, -1],
+      ],
+      full: [
+        [0.5 - 1e-12, -1],
+        [0.5, 1],
+      ],
+      bipolar: true,
+      balanced: false,
+    },
+    [LfoType.Square]: {
+      quarters: [1, 1, -1, -1],
+      jumps: [0, 0.5],
+      monotonic: [],
+      full: [
+        [0, 1],
+        [0.5, -1],
+      ],
+      bipolar: true,
+      balanced: true,
+    },
+    [LfoType.ExpRampUp]: {
+      quarters: [0, EXP_QUARTER, -1, -EXP_QUARTER],
+      jumps: [0.5],
+      monotonic: [
+        [0, 0.5, 1],
+        [0.5, 1, 1],
+      ],
+      full: [
+        [0.5 - 1e-12, 1],
+        [0.5, -1],
+      ],
+      bipolar: true,
+      balanced: false,
+    },
+    [LfoType.ExpRampDown]: {
+      quarters: [0, -EXP_QUARTER, 1, EXP_QUARTER],
+      jumps: [0.5],
+      monotonic: [
+        [0, 0.5, -1],
+        [0.5, 1, -1],
+      ],
+      full: [
+        [0.5 - 1e-12, -1],
+        [0.5, 1],
+      ],
+      bipolar: true,
+      balanced: false,
+    },
+    [LfoType.ExpTriangle]: {
+      quarters: [0, 1, 0, -1],
+      jumps: [],
+      monotonic: [
+        [0, 0.25, 1],
+        [0.25, 0.75, -1],
+        [0.75, 1, 1],
+      ],
+      full: [
+        [0.25, 1],
+        [0.75, -1],
+      ],
+      bipolar: true,
+      balanced: true,
+    },
+  };
+
+  const DETERMINISTIC = Object.keys(SHAPES).map(Number);
+  const named = (types: number[]) =>
+    types.map((type) => [LfoType[type], type] as const);
+
+  /** Read a shape at an exact phase, with no render and no accumulated drift. */
+  const at = (type: number, phase: number) =>
+    GENERATORS[type](phase, phase + 1e-9);
+
+  it.each(named(DETERMINISTIC))(
+    "%s reads its declared quarters",
+    (_n, type) => {
+      const declared = SHAPES[type].quarters;
+      const read = [0, 0.25, 0.5, 0.75].map((phase) => at(type, phase));
+      read.forEach((value, i) => expect(value).toBeCloseTo(declared[i], 4));
+    },
+  );
+
+  it.each(named(DETERMINISTIC.filter((t) => SHAPES[t].jumps.length === 0)))(
+    "%s starts at zero and rises",
+    (_n, type) => {
+      // The convention `sync` will snap to: no modulation at φ=0. `Square` and
+      // `Impulse` are excluded and cannot comply - a square has no zero
+      // crossing and the impulse's sample *is* the boundary.
+      expect(at(type, 0)).toBeCloseTo(0, 9);
+      if (type !== LfoType.None) expect(at(type, 0.01)).toBeGreaterThan(0);
+    },
+  );
+
+  describe("at every sample rate", () => {
+    // A shape assertion that only holds at one sample rate is not a shape
+    // assertion: `N`, the samples in a cycle, spans 160 to 192000 here.
+    const SAMPLE_RATES = [8000, 22050, 44100, 48000, 96000];
+    const RATES = [0.5, 5, 50];
+
+    /** One cycle, rendered in whole blocks exactly as the processor renders. */
+    function cycle(type: number, sampleRate: number, rate: number) {
+      const samples = sampleRate / rate;
+      const total = Math.ceil(samples / BLOCK) * BLOCK;
+      const out = new Float32Array(total);
+      const block = new Float32Array(BLOCK);
+      const generate = createLfo(sampleRate, true);
+      const p = params({ type, frequency: rate });
+      for (let i = 0; i < total; i += BLOCK) {
+        generate(block, p);
+        out.set(block, i);
+      }
+      return out.subarray(0, samples);
+    }
+
+    const grid = SAMPLE_RATES.flatMap((sampleRate) =>
+      RATES.flatMap((rate) =>
+        DETERMINISTIC.map(
+          (type) =>
+            [LfoType[type], sampleRate, rate, type] as [
+              string,
+              number,
+              number,
+              number,
+            ],
+        ),
+      ),
+    );
+
+    it.each(grid)(
+      "%s at %i Hz, %s Hz: swings full scale and no further",
+      (_n, sampleRate, rate, type) => {
+        const signal = cycle(type, sampleRate, rate);
+        const reached = peak(signal);
+
+        expect(reached).toBeLessThanOrEqual(1);
+        if (!SHAPES[type].bipolar) {
+          expect(reached).toBe(0);
+          return;
+        }
+        // 0.75 and not 1, because two shapes' full-scale excursion sits *at* a
+        // discontinuity and a sample grid does not have to land on one: at the
+        // coarsest grid tested (N = 160) an `ExpRampUp` that misses its jump by
+        // half a step reads `concave(1 - 1/N)` = 0.83. The exact excursions are
+        // asserted on the generator by `reaches ±1`, where there is no grid.
+        expect(reached).toBeGreaterThan(0.75);
+      },
+    );
+
+    it.each(
+      SAMPLE_RATES.flatMap((sampleRate) =>
+        RATES.flatMap((rate) =>
+          DETERMINISTIC.filter((type) => SHAPES[type].bipolar).map(
+            (type) =>
+              [LfoType[type], sampleRate, rate, type] as [
+                string,
+                number,
+                number,
+                number,
+              ],
+          ),
+        ),
+      ),
+    )(
+      "%s at %i Hz, %s Hz: averages to zero over a cycle",
+      (_n, sampleRate, rate, type) => {
+        // Read off the generator at φ = k/N rather than off a render, because
+        // this is a statement about the *shape*: `generateAudioRate` accumulates
+        // its phase, and at a rate whose increment is not a dyadic fraction the
+        // drift moves the odd sample across a discontinuity. That is a property
+        // of floating point, and it is worth 2/N of DC - which `swings full
+        // scale` above bounds, and which this assertion would blame on the
+        // waveform.
+        const samples = sampleRate / rate;
+        let sum = 0;
+        for (let k = 0; k < samples; k++) sum += at(type, k / samples);
+        const mean = sum / samples;
+
+        // Zero mean is the property that makes an `Lfo` safe to sum into an
+        // `AudioParam`. It is 1/N and not zero for the ramps, and the reason is
+        // arithmetic rather than a defect: a cycle of N samples visits
+        // φ = k/N for k = 0…N−1, which lands on the trough and stops one step
+        // short of the peak, so the sum is exactly ∓1. Measured: −1/N for
+        // `RampUp` and `ExpRampUp`, +1/N for their mirrors, +1/N for `Square`
+        // on an odd N, and 1e-17 for everything odd about a half cycle.
+        expect(Math.abs(mean)).toBeLessThan(1.1 / samples);
+        if (SHAPES[type].balanced && samples % 2 === 0) {
+          expect(Math.abs(mean)).toBeLessThan(1e-9);
+        }
+      },
+    );
+  });
+
+  it.each(named(DETERMINISTIC.filter((t) => SHAPES[t].bipolar)))(
+    "%s reaches ±1",
+    (_n, type) => {
+      // Where each excursion is, from the specification. The ramps' peak is the
+      // limit approached at their jump, so it is read a hair before it.
+      for (const [phase, value] of SHAPES[type].full) {
+        expect(at(type, phase)).toBeCloseTo(value, 9);
+      }
+    },
+  );
+
+  describe("symmetry", () => {
+    // Sampled off the discontinuities: an identity between two phases says
+    // nothing at a jump, where the two sides disagree by design.
+    const PHASES = Array.from({ length: 63 }, (_, i) => (i + 1) / 64);
+
+    it.each(named([LfoType.Sine, LfoType.Triangle, LfoType.ExpTriangle]))(
+      "%s is symmetric about its peak at φ=¼",
+      (_n, type) => {
+        for (let d = 1 / 64; d < 0.25; d += 1 / 64) {
+          expect(at(type, 0.25 + d)).toBeCloseTo(at(type, 0.25 - d), 9);
+        }
+      },
+    );
+
+    it.each(
+      named([LfoType.RampDown, LfoType.ExpRampDown]).map(
+        ([name, down], i) =>
+          [name, down, [LfoType.RampUp, LfoType.ExpRampUp][i]] as const,
+      ),
+    )("%s(φ) is %s reversed", (_n, down, up) => {
+      for (const phase of PHASES) {
+        if (phase === 0.5) continue;
+        expect(at(down, phase)).toBeCloseTo(at(up, 1 - phase), 9);
+      }
+    });
+  });
+
+  it.each(named(DETERMINISTIC.filter((t) => SHAPES[t].monotonic.length > 0)))(
+    "%s is monotonic between its discontinuities",
+    (_n, type) => {
+      for (const [from, to, direction] of SHAPES[type].monotonic) {
+        const step = (to - from) / 200;
+        let previous = at(type, from + step / 2);
+        for (let phase = from + step * 1.5; phase < to; phase += step) {
+          const value = at(type, phase);
+          expect((value - previous) * direction).toBeGreaterThanOrEqual(-1e-12);
+          previous = value;
+        }
+      }
+    },
+  );
+
+  it.each([
+    ["ExpRampUp", LfoType.ExpRampUp, LfoType.RampUp],
+    ["ExpRampDown", LfoType.ExpRampDown, LfoType.RampDown],
+    ["ExpTriangle", LfoType.ExpTriangle, LfoType.Triangle],
+  ])("%s is its linear partner, bent inward", (_n, exp, linear) => {
+    // What "exponential" means here, stated without naming Pirkle's 5/12: the
+    // curved shape keeps its partner's sign everywhere - which is the whole of
+    // `ExpTriangle`'s bug, since it used to keep the opposite one - and never
+    // gets further from zero than the straight one does.
+    for (let i = 0; i < 1000; i++) {
+      const phase = i / 1000;
+      const curved = at(exp, phase);
+      const straight = at(linear, phase);
+      expect(curved * straight).toBeGreaterThanOrEqual(0);
+      expect(Math.abs(curved)).toBeLessThanOrEqual(Math.abs(straight) + 1e-12);
+    }
+  });
+
+  it("RandSampleHold rolls a uniform value in [-1, 1]", () => {
+    // Driven straight, one forced wrap per call: the generator returns the
+    // held value and re-rolls, so 1001 calls collect 1000 fresh rolls. The
+    // first is whatever an earlier test left in `dsp.ts`'s module-scope
+    // generator - ticket 01 of this folder is why that sentence is necessary.
+    const generator = GENERATORS[LfoType.RandSampleHold];
+    const held = Array.from({ length: 1001 }, () => generator(0.9, 0.1)).slice(
+      1,
+    );
+
+    expect(held.every((value) => value >= -1 && value <= 1)).toBe(true);
+    const mean = held.reduce((sum, value) => sum + value, 0) / held.length;
+    // 1000 uniform draws have a standard error of 0.018, so 0.1 is 5.5σ.
+    expect(Math.abs(mean)).toBeLessThan(0.1);
   });
 });
