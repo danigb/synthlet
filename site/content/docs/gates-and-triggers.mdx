@@ -58,26 +58,31 @@ Both words mean the same signal; they describe what the reader does with it.
 
 ## Which modules emit one
 
-| Module                            | Emits        | Notes                                           |
-| --------------------------------- | ------------ | ----------------------------------------------- |
-| [Clock](/docs/sequencers/clock)   | `clock.gate` | The node itself is a **phase ramp**, not a gate |
-| [Euclid](/docs/sequencers/euclid) | its output   | One pulse per hit                               |
-| [Impulse](/docs/sources/impulse)  | its output   | A one-sample impulse                            |
-| [Lfo](/docs/modulators/lfo)       | its output   | Bipolar, so a square is a 50 % gate             |
-| [Param](/docs/modulators/param)   | its output   | The usual way to drive a gate from the UI       |
+| Module                            | Emits                          | Notes                                                          |
+| --------------------------------- | ------------------------------ | -------------------------------------------------------------- |
+| [Clock](/docs/sequencers/clock)   | `clock.gate`, `clock.downbeat` | The node itself and `clock.bar` are **phase ramps**, not gates |
+| [Euclid](/docs/sequencers/euclid) | its output                     | One pulse per hit                                              |
+| [Impulse](/docs/sources/impulse)  | its output                     | A one-sample impulse                                           |
+| [Lfo](/docs/modulators/lfo)       | its output                     | Bipolar, so a square is a 50 % gate                            |
+| [Param](/docs/modulators/param)   | its output                     | The usual way to drive a gate from the UI                      |
 
 The important row is the first. A phase ramp is a different kind of signal from
-a gate: it rises from 0 to 1 over each beat, which is what `Euclid` needs to
+a gate: it rises from 0 towards 1 over each beat, which is what `Euclid` needs to
 subdivide a clock, but as a gate it is positive from the first beat onward and
 never falls back — so it would fire once and then latch open forever. Connect
-`clock.gate` to anything that triggers, and the `Clock` node itself only to
-`Euclid`.
+`clock.gate` or `clock.downbeat` to anything that triggers, and the ramps —
+the `Clock` node itself, and `clock.bar` — only to something that subdivides.
+
+`clock.downbeat` is a **subset** of `clock.gate`: same width, same phase, same
+sample, so the two rise and fall together and the downbeat always lands on a
+beat rather than between two.
 
 ```ts
-const clock = Clock(audioContext, { bpm: 120 });
+const clock = Clock(audioContext, { bpm: 120, beatsPerBar: 4 });
 
 Euclid(audioContext, { clock }); // the phase ramp
 KickDrum(audioContext, { trigger: clock.gate }); // the gate
+CowBellDrum(audioContext, { trigger: clock.downbeat }); // once a bar
 ```
 
 Both `Clock` and `Euclid` take a `pulseWidth`: how much of each beat (or step)

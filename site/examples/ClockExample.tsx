@@ -1,20 +1,39 @@
 "use client";
 
-import { ClaveDrum, Clock, Param } from "synthlet";
+import { ClaveDrum, Clock, Compound, CowBellDrum, Gain, Param } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
 import { useSynth } from "./useSynth";
 
-function ExampleSynth(context: AudioContext) {
-  const bpm = Param(context, { input: 60 });
-  const clock = Clock(context, { bpm });
-  // `clock` is the phase ramp and `clock.gate` the gate: a drum wants the gate.
-  const clave = ClaveDrum(context, { trigger: clock.gate });
-  return Object.assign(clave, { bpm: bpm.input });
-}
+const Metronome = (ac: AudioContext) => {
+  const bpm = Param(ac, { input: 100 });
+  const beatsPerBar = Param(ac, { input: 4 });
+  const volume = Param.db(ac, -12);
+  const clock = Clock(ac, { bpm, beatsPerBar });
+
+  // The smallest patch that makes a bar audible. The `Clock` node itself is the
+  // beat phase - a ramp, for `Euclid` to subdivide - and the two gates are what
+  // a drum reads. `clock.downbeat` is `clock.gate` on the first beat of the bar
+  // only, so the bell always lands on a clave rather than between two.
+  const clave = ClaveDrum(ac, { trigger: clock.gate, volume });
+  const bell = CowBellDrum(ac, { trigger: clock.downbeat, volume });
+  const out = Gain(ac);
+
+  [clave, bell].forEach((drum) => drum.connect(out));
+
+  return Compound({
+    output: out,
+    owns: [clave, bell, clock, bpm, beatsPerBar, volume],
+    exposes: {
+      bpm: bpm.input,
+      beatsPerBar: beatsPerBar.input,
+      volume: volume.input,
+    },
+  });
+};
 
 function Example() {
-  const synth = useSynth(ExampleSynth);
+  const synth = useSynth(Metronome);
   if (!synth) return null;
 
   return (
@@ -23,10 +42,18 @@ function Example() {
         <Slider
           label="Tempo"
           inputClassName="col-span-2"
-          min={1}
-          max={1000}
-          units="bpm"
+          min={20}
+          max={300}
           param={synth.bpm}
+          units="bpm"
+        />
+        <Slider
+          label="Beats per bar"
+          inputClassName="col-span-2"
+          min={1}
+          max={8}
+          step={1}
+          param={synth.beatsPerBar}
         />
       </div>
       <div className="flex px-1 pt-2 mt-2 border-t border-fd-border gap-4">
@@ -35,8 +62,8 @@ function Example() {
           inputClassName="flex-grow"
           min={-36}
           max={0}
-          units="dB"
           param={synth.volume}
+          units="dB"
         />
       </div>
     </>
