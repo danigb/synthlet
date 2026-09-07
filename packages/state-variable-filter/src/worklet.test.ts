@@ -1,3 +1,5 @@
+import { createWorkletTestContext } from "./test-utils";
+
 describe("ProcessorNode", () => {
   let Processor: any;
   const sampleRate = 40;
@@ -79,27 +81,6 @@ describe("ProcessorNode", () => {
   });
 });
 
-function createWorkletTestContext(sampleRate = 10) {
-  // @ts-ignore
-  global.sampleRate = sampleRate;
-  // @ts-ignore
-  global.AudioWorkletProcessor = class AudioWorkletNodeStub {
-    port: {
-      postMessage: jest.Mock<any, any, any>;
-      onmessage: jest.Mock<any, any, any>;
-    };
-
-    constructor() {
-      this.port = {
-        postMessage: jest.fn(),
-        onmessage: jest.fn(),
-      };
-    }
-  };
-  // @ts-ignore
-  global.registerProcessor = jest.fn(); // Mock registerProcessor
-}
-
 type Worklet = {
   process: (
     inputs: Float32Array[][],
@@ -119,7 +100,3 @@ function runProcessChannels(
   worklet.process([input], outputs, params);
   return outputs[0];
 }
-
-// This file declares helpers at the top level: make it a module so they don't
-// collide with the identically named helpers in sibling packages.
-export {};
