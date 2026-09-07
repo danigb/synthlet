@@ -152,7 +152,11 @@ const spectrumPackages = packages.filter((pkg) =>
 
 describe("the measuring instrument", () => {
   it("is shared by every package whose tests measure a spectrum", () => {
-    expect(spectrumPackages).toEqual(["digital-delay", "wavetable-oscillator"]);
+    expect(spectrumPackages).toEqual([
+      "digital-delay",
+      "lfo",
+      "wavetable-oscillator",
+    ]);
   });
 });
 

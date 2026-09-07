@@ -1,0 +1,14 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`the control-rate generator still tracks the waveform block by block 1`] = `
+[
+  0,
+  0.09105823934078217,
+  0.1813598871231079,
+  0.2701546549797058,
+  0.3567047119140625,
+  0.44029098749160767,
+  0.5202189683914185,
+  0.5958244800567627,
+]
+`;
