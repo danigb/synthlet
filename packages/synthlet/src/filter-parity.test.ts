@@ -85,6 +85,7 @@ describe("the two filters", () => {
         type: [0],
         frequency: cutoff,
         Q: [1],
+        gain: [0],
       });
       return outputs[0][0];
     });
@@ -141,6 +142,7 @@ describe("the two filters", () => {
           type: [2],
           frequency: [FC],
           Q: perBlock ? [q[0]] : q,
+          gain: [0],
         });
         out.push(...Array.from(outputs[0][0]));
       }

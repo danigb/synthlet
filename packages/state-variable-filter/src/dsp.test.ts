@@ -41,6 +41,7 @@ function measure(
   cutoff: number,
   q: number,
   f: number,
+  gain = 0,
 ) {
   const seconds = 2;
   const length = sampleRate * seconds;
@@ -52,7 +53,14 @@ function measure(
     input[n] = Math.sin((2 * Math.PI * f * n) / sampleRate);
   }
 
-  createFilter(sampleRate).filter(input, output, type, frequency, held(q));
+  createFilter(sampleRate).filter(
+    input,
+    output,
+    type,
+    frequency,
+    held(q),
+    gain,
+  );
 
   let i = 0;
   let quad = 0;
@@ -360,6 +368,156 @@ describe("the declared defaults", () => {
     expect(db(at(100))).toBeCloseTo(0, 3);
     expect(db(at(100))).toBeLessThanOrEqual(1e-6); // no peak anywhere
   });
+});
+
+describe("the gain responses", () => {
+  // Bell, LowShelf and HighShelf, the three that were `// Not implemented yet`
+  // since the package was written. Coefficients read from the rendered
+  // `Solve[]` cells of Simper's notebook PDF - the *code* cells are glyph
+  // placeholders there and in the markdown conversion, the solutions are not.
+  const SAMPLE_RATE = 48000;
+  const CUTOFF = 1000;
+  const Q = 0.7071;
+  const GAINS = [12, 6, -6, -12];
+
+  const at = (type: SvfType, f: number, gain: number, q = Q) =>
+    db(measure(SAMPLE_RATE, type, CUTOFF, q, f, gain).amplitude);
+
+  describe("the bell", () => {
+    it.each(GAINS)("hits %p dB at the centre frequency", (gain) => {
+      expect(at(SvfType.Bell, CUTOFF, gain)).toBeCloseTo(gain, 1);
+    });
+
+    it.each(GAINS)("leaves a decade either side alone at %p dB", (gain) => {
+      // 0.080 dB at 50 Hz and 0.024 dB at 18 kHz, measured. Not zero, and it
+      // should not be: a Butterworth-Q bell is a *wide* bell, and 50 Hz is only
+      // 4.3 octaves below a 1 kHz centre. At Q=4 the same points are 0.003 and
+      // 0.001 dB.
+      expect(Math.abs(at(SvfType.Bell, 50, gain))).toBeLessThan(0.1);
+      expect(Math.abs(at(SvfType.Bell, 18000, gain))).toBeLessThan(0.1);
+    });
+  });
+
+  describe("the low shelf", () => {
+    it.each(GAINS)("shelves at %p dB below the cutoff", (gain) => {
+      expect(at(SvfType.LowShelf, 20, gain)).toBeCloseTo(gain, 1);
+    });
+
+    it.each(GAINS)("passes above it, at half gain at fc, at %p dB", (gain) => {
+      // Simper moves the cutoff by 1/sqrt(A) precisely so that the half-gain
+      // point stays at the cutoff as the shelf gain changes.
+      expect(at(SvfType.LowShelf, CUTOFF, gain)).toBeCloseTo(gain / 2, 1);
+      expect(at(SvfType.LowShelf, 18000, gain)).toBeCloseTo(0, 1);
+    });
+  });
+
+  describe("the high shelf", () => {
+    it.each(GAINS)("shelves at %p dB above the cutoff", (gain) => {
+      expect(at(SvfType.HighShelf, 18000, gain)).toBeCloseTo(gain, 1);
+    });
+
+    it.each(GAINS)("passes below it, at half gain at fc, at %p dB", (gain) => {
+      expect(at(SvfType.HighShelf, CUTOFF, gain)).toBeCloseTo(gain / 2, 1);
+      expect(at(SvfType.HighShelf, 20, gain)).toBeCloseTo(0, 1);
+    });
+  });
+
+  it.each([
+    [SvfType.LowShelf, 12],
+    [SvfType.LowShelf, -12],
+    [SvfType.HighShelf, 12],
+    [SvfType.HighShelf, -12],
+  ])("makes %p monotonic at %p dB", (type, gain) => {
+    // **This is the assertion that catches a wrong sign without knowing the
+    // right answer in advance.** `m1 = k*(A-1)*A` on the high shelf gives a
+    // +12 dB "shelf" that reaches 14.67 dB at the cutoff - a resonant bump, and
+    // visibly not a shelf whatever the algebra says. The correct `k*(1-A)*A`
+    // gives 6.00 dB there and climbs monotonically to 12.
+    const points = [20, 50, 100, 300, 1000, 3000, 6000, 12000, 18000].map((f) =>
+      at(type, f, gain),
+    );
+    const rising = gain > 0 === (type === SvfType.HighShelf);
+
+    for (let i = 1; i < points.length; i++) {
+      if (rising) expect(points[i]).toBeGreaterThan(points[i - 1] - 0.01);
+      else expect(points[i]).toBeLessThan(points[i - 1] + 0.01);
+    }
+    // And no overshoot beyond the shelf gain itself, at either end.
+    const bound = Math.abs(gain) + 0.05;
+    for (const p of points) expect(Math.abs(p)).toBeLessThan(bound);
+  });
+
+  // **`Q` on a shelf is corner resonance, and above Butterworth these shelves
+  // peak - by construction, not by accident.** The ticket asked for "no
+  // overshoot beyond the shelf gain at any Q in the declared range"; that is
+  // not what a resonant shelf is, and asserting it would have meant changing
+  // the filter rather than the assertion. What is asserted instead is the
+  // boundary: flat at and below 1/sqrt(2), resonant above it.
+  //
+  // Measured at +12 dB, worst point over 20 Hz - 20 kHz:
+  //
+  //   Q       low shelf          high shelf
+  //   0.025   9.64 dB @ 20 Hz    9.61 dB @ 19430 Hz   (never reaches the shelf)
+  //   0.5     11.995 @ 20 Hz     11.995 @ 19430 Hz
+  //   0.7071  12.000 @ 20 Hz     12.000 @ 19430 Hz
+  //   4       21.82 @ 695 Hz     21.64 @ 1489 Hz
+  //   40      36.54 @ 695 Hz     40.89 @ 1404 Hz
+  const SHELVES = [SvfType.LowShelf, SvfType.HighShelf];
+  const SWEEP = [20, 100, 300, 695, 1000, 1489, 3000, 6000, 12000, 19430];
+
+  it.each([0.025, 0.5, 0.7071])(
+    "keeps the shelves inside their own gain at Q=%p",
+    (q) => {
+      for (const type of SHELVES) {
+        for (const gain of [12, -12]) {
+          for (const f of SWEEP) {
+            expect(Math.abs(at(type, f, gain, q))).toBeLessThan(
+              Math.abs(gain) + 0.01,
+            );
+          }
+        }
+      }
+    },
+  );
+
+  it.each([4, 40])(
+    "makes the shelves resonate at their corner at Q=%p",
+    (q) => {
+      for (const type of SHELVES) {
+        const peak = Math.max(...SWEEP.map((f) => at(type, f, 12, q)));
+        // A real peak, not drift: at least 6 dB above the shelf at Q=4.
+        expect(peak).toBeGreaterThan(12 + 6);
+        // ...and it is the corner that resonates, not the shelf itself.
+        expect(
+          at(type, type === SvfType.LowShelf ? 20 : 19430, 12, q),
+        ).toBeCloseTo(12, 1);
+      }
+    },
+  );
+
+  it.each([SvfType.Bell, SvfType.LowShelf, SvfType.HighShelf])(
+    "is an exact bypass at gain 0 (%p)",
+    (type) => {
+      // A = 10^0 = 1, so every coefficient collapses: m = (1, 0, 0) and the
+      // cutoff scale is 1. Bit-identical to the input, not merely close.
+      const input = new Float32Array(512);
+      for (let n = 0; n < input.length; n++) {
+        input[n] = Math.sin(n * 0.31) * 0.7 + Math.sin(n * 2.9) * 0.3;
+      }
+      const output = new Float32Array(input.length);
+      const frequency = new Float32Array(input.length).fill(CUTOFF);
+
+      createFilter(SAMPLE_RATE).filter(
+        input,
+        output,
+        type,
+        frequency,
+        held(Q),
+        0,
+      );
+      expect(Array.from(output)).toEqual(Array.from(input));
+    },
+  );
 });
 
 describe("stability under a fast sweep", () => {

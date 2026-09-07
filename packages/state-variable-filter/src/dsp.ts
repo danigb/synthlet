@@ -6,10 +6,17 @@ export enum SvfType {
   Notch = 4,
   Peak = 5,
   AllPass = 6,
-  // Not implemented yet
-  // LowShelf = 7,
-  // HighShelf = 8,
+  Bell = 7,
+  LowShelf = 8,
+  HighShelf = 9,
 }
+
+/**
+ * The half-gain amplitude `A = 10^(dB/40)`, Simper's convention throughout the
+ * shelving and bell derivations. It is a *fortieth* and not a twentieth because
+ * the amplitude term appears squared in the transfer functions.
+ */
+const amplitude = (db: number) => Math.pow(10, db / 40);
 
 export type Filter = () => void;
 
@@ -98,10 +105,18 @@ export function createFilter(sampleRate: number) {
   // whether the current `type`'s mix contains `k`, and so has to be recomputed
   // when Q moves
   let _mixReadsK = false;
+  // Simper's shelves move the cutoff by sqrt(A) so that the frequency at which
+  // half the shelf gain occurs stays put: "the low shelf filter moves the
+  // cutoff frequency lower (divided by Sqrt[A]) as the shelf gain is increased
+  // so as to keep the frequency of the where half the shelf gain occurs
+  // constant", and the high shelf higher by the same factor. 1 for the seven
+  // responses that have no gain.
+  let _gScale = 1;
 
   // previous type, Q and frequency
   let currType = -1;
   let currQ = 0;
+  let currGain = 0;
   let currFreq = 0;
 
   // The output mix. It depends on `type` and on `k`, and on nothing else -
@@ -136,12 +151,14 @@ export function createFilter(sampleRate: number) {
   //
   // Range [0, 6] for `type` and [0.025, 40] for `q`, the compile-time
   // constants in `params.ts`; that is all `AudioParam` clamps to.
-  function updateMixing(type: number, q: number) {
-    if (type === currType && q === currQ) return;
+  function updateMixing(type: number, q: number, gain: number) {
+    if (type === currType && q === currQ && gain === currGain) return;
     const typeChanged = type !== currType;
     currType = type;
     currQ = q;
+    currGain = gain;
     _k = 1 / Math.max(q, 0.0001);
+    _gScale = 1;
     // `a1` reads `k`, so the two halves are not independent: a change in `q`
     // has to invalidate the cutoff coefficients even when the cutoff itself
     // has not moved. `NaN` compares false against every frequency, so the next
@@ -214,6 +231,49 @@ export function createFilter(sampleRate: number) {
         _m2 = 0;
         _mixReadsK = true;
         break;
+
+      // The three responses that use `gain`. All of the coefficients below are
+      // the rendered `Solve[]` output of Simper's notebook, read from the PDF -
+      // the code cells are glyph placeholders in both the PDF and the markdown
+      // conversion, but the solution cells are not.
+      //
+      // The bell is the input plus a scaled bandpass, with the damping divided
+      // by `A`: the paper's denominator is `s^2 + (k/A) s + 1`, so dividing `_k`
+      // here *is* that substitution, and `m1 -> ((A^2 - 1) k)/A` in his `k = 1/Q`
+      // is `_k * (A^2 - 1)` in this one.
+      case SvfType.Bell: {
+        const a = amplitude(gain);
+        _k /= a;
+        _m0 = 1;
+        _m1 = _k * (a * a - 1);
+        _m2 = 0;
+        _mixReadsK = true;
+        break;
+      }
+      // `m0 -> 1, m1 -> (-1 + A) k, m2 -> -1 + A^2`.
+      case SvfType.LowShelf: {
+        const a = amplitude(gain);
+        _gScale = 1 / Math.sqrt(a);
+        _m0 = 1;
+        _m1 = _k * (a - 1);
+        _m2 = a * a - 1;
+        _mixReadsK = true;
+        break;
+      }
+      // `m0 -> A^2, m1 -> -(-1 + A) k A, m2 -> 1 - A^2`. **The sign on `m1` is
+      // the whole ticket**: `k*(A-1)*A` gives a "shelf" that peaks 2.7 dB above
+      // its own shelf gain at +12 dB, which is a resonant bump. The monotonicity
+      // assertion in dsp.test.ts is what catches that without knowing the answer
+      // in advance.
+      case SvfType.HighShelf: {
+        const a = amplitude(gain);
+        _gScale = Math.sqrt(a);
+        _m0 = a * a;
+        _m1 = _k * (1 - a) * a;
+        _m2 = 1 - a * a;
+        _mixReadsK = true;
+        break;
+      }
       default:
         _m0 = 1;
         _m1 = 0;
@@ -234,7 +294,7 @@ export function createFilter(sampleRate: number) {
     if (freq === currFreq) return;
     currFreq = freq;
 
-    const g = prewarp(freq);
+    const g = prewarp(freq) * _gScale;
 
     _a1 = 1 / (1 + g * (g + _k));
     _a2 = g * _a1;
@@ -260,9 +320,13 @@ export function createFilter(sampleRate: number) {
     output: Float32Array,
     type: number,
     frequency: Float32Array,
+    // Defaulted, because it is inert for seven of the ten responses and
+    // `params.ts` defaults it to 0 anyway. `gain: 0` makes `A` exactly 1, which
+    // makes all three gain responses an exact unity bypass.
     Q: Float32Array,
+    gain = 0,
   ) {
-    updateMixing(type, Q[0]);
+    updateMixing(type, Q[0], gain);
     updateCutoff(frequency[0]);
     // The house a-rate check, hoisted, once per parameter. `> 1` and not
     // `=== input.length`: see `_worklet.ts` next to `ParamDescriptor`. A
@@ -277,7 +341,7 @@ export function createFilter(sampleRate: number) {
       let x = input[i];
 
       if (perSample) {
-        if (qRate) updateMixing(type, Q[i]);
+        if (qRate) updateMixing(type, Q[i], gain);
         // Not redundant when only `Q` moves: `a1` reads `k`, and
         // `updateMixing` NaNs `currFreq` for exactly this reason. The guard
         // inside is what makes the call free when nothing moved.

@@ -37,6 +37,10 @@ const createSynth = (ac: AudioContext) => {
   });
 };
 
+// Only the three shelving/bell responses read `gain`; for the other seven it
+// is inert, so the slider would be a control that does nothing.
+const USES_GAIN = new Set([SvfType.Bell, SvfType.LowShelf, SvfType.HighShelf]);
+
 function Example() {
   const [currentType, setCurrentType] = useState(SvfType.LowPass);
   const synth = useSynth(createSynth);
@@ -61,6 +65,9 @@ function Example() {
         <option value={SvfType.Notch}>Notch</option>
         <option value={SvfType.Peak}>Peak</option>
         <option value={SvfType.AllPass}>All pass</option>
+        <option value={SvfType.Bell}>Bell</option>
+        <option value={SvfType.LowShelf}>Low shelf</option>
+        <option value={SvfType.HighShelf}>High shelf</option>
       </select>
       <div></div>
       <Slider
@@ -77,6 +84,15 @@ function Example() {
         min={0.025}
         max={40}
       />
+      {USES_GAIN.has(currentType) && (
+        <Slider
+          label="Gain (dB)"
+          inputClassName="col-span-2"
+          param={synth.filter.gain}
+          min={-40}
+          max={40}
+        />
+      )}
       <Slider
         label="Modulation"
         inputClassName="col-span-2"

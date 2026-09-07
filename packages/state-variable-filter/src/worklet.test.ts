@@ -22,7 +22,7 @@ describe("ProcessorNode", () => {
 
   // A low pass well under Nyquist at this sample rate, so an impulse leaves a
   // ring long enough to compare channel against channel.
-  const params = { type: [1], frequency: [5], Q: [4] };
+  const params = { type: [1], frequency: [5], Q: [4], gain: [0] };
   const impulse = () => {
     const signal = new Float32Array(16);
     signal[0] = 1;

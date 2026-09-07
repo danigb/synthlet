@@ -16,7 +16,7 @@ export const PARAMS: readonly ParamDescriptor[] = [
     name: "type",
     defaultValue: 1,
     minValue: 0,
-    maxValue: 6,
+    maxValue: 9,
     automationRate: "k-rate",
   },
   {
@@ -58,5 +58,24 @@ export const PARAMS: readonly ParamDescriptor[] = [
     minValue: 0.025,
     maxValue: 40,
     automationRate: "a-rate",
+  },
+  {
+    // Shelf and bell gain, in dB, and only `Bell`, `LowShelf` and `HighShelf`
+    // read it - for the other seven responses it is inert.
+    //
+    // k-rate on ground one, and the ground is specific rather than a shrug:
+    // `A = 10^(gain/40)` feeds *both* the mixing coefficients and the cutoff
+    // (the shelves move `g` by `sqrt(A)`, and the bell divides the damping by
+    // `A`), so a per-sample `gain` would recompute the prewarping every sample
+    // as well - it is not the array index that `Q` turned out to be. That is a
+    // ticket, not an impossibility, and what it would have to solve is the cost
+    // of a second tangent per sample rather than any question about whether
+    // anyone would want it. They would: an envelope on a bell's gain is a
+    // perfectly ordinary sound.
+    name: "gain",
+    defaultValue: 0,
+    minValue: -40,
+    maxValue: 40,
+    automationRate: "k-rate",
   },
 ];

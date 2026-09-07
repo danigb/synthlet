@@ -12,12 +12,14 @@ export type SvfInputs = {
   type?: ParamInput;
   frequency?: ParamInput;
   Q?: ParamInput;
+  gain?: ParamInput;
 };
 
 export type SvfWorkletNode = AudioWorkletNode & {
   type: AudioParam;
   frequency: AudioParam;
   Q: AudioParam;
+  gain: AudioParam;
   dispose(): void;
 };
 
