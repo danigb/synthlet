@@ -149,3 +149,7 @@ source was copied.
 
 See the repository's
 [THIRD-PARTY-LICENSES.md](https://github.com/danigb/synthlet/blob/main/THIRD-PARTY-LICENSES.md).
+
+## License
+
+MIT © [Daniel Gómez Blasco](https://github.com/danigb)

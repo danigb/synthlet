@@ -1,5 +1,164 @@
 # @synthlet/impulse
 
+## 0.2.0
+
+### Minor Changes
+
+- 5aa2d2b: Add `Compound`, for declaring a group of modules that is itself a module:
+
+  ```ts
+  function Voice(ac: AudioContext) {
+    const gate = Param(ac);
+    const volume = Param.db(ac, -12);
+    const osc = PolyblepOscillator(ac, { frequency: 440 });
+    const amp = AdsrAmp(ac, { gate });
+    const out = Gain(ac, { gain: volume });
+
+    osc.connect(amp).connect(out);
+
+    return Compound({
+      output: out,
+      owns: [osc, amp, gate, volume],
+      exposes: { gate: gate.input, volume: volume.input, osc },
+    });
+  }
+  ```
+
+  `owns` is what `dispose()` tears down - anything passed to a factory is already
+  owned by the module it was passed to, so it is the list of nodes you connected
+  by hand, and listing extras is free. `exposes` is the compound's public
+  surface. The result is `CompoundNode<GainNode, { gate: AudioParam; … }>`, also
+  exported, so `voice.gate` and `voice.osc` are typed without an annotation.
+
+  `disposable(node, owns?)` is unchanged: it is still the primitive that gives
+  any node a cascading `dispose()`, and it is what `Compound` is built on. Use it
+  when there is no public surface to declare - `Compound` when there is.
+
+  `ConnectedUnit` (the element type of `owns`) is now exported too.
+
+- 5aa2d2b: Export the module contract from every package: `disposable`, and the types
+  `Disposable`, `Connector` and `ParamInput`.
+
+  `Disposable<N>` is what every factory returns - a node with a cascading
+  `dispose()` - and until now no package let you name it. `disposable(node, deps)`
+  is the primitive behind that cascade: it gives `node` a `dispose()` that
+  disconnects it and then disposes each of `deps`. It composes with any `dispose`
+  the node already has and is idempotent. Use it to give hand-built graphs the
+  same teardown the built-in modules have:
+
+  ```ts
+  import { AdsrAmp, disposable, type Disposable } from "@synthlet/adsr";
+
+  const amp = AdsrAmp(ac, { gate });
+  const out = new GainNode(ac);
+  amp.connect(out);
+  const synth: Disposable<GainNode> = disposable(out, [amp]);
+  synth.dispose(); // disconnects out, then disposes amp
+  ```
+
+  `synthlet` previously exported only `ParamInput`; it now exports all four.
+
+- 792d627: One gate/trigger contract, shared by every module that reads one:
+
+  > A gate is on while the signal is positive. A trigger is the transition from
+  > non-positive to positive.
+
+  These five packages used four different detectors between them. `ad`, `arp` and
+  `impulse` fired only when the parameter read **exactly `1`**; `karplus-strong`
+  wanted `>= 1` with the previous value below `0.9`; `adsr` used a Schmitt trigger
+  that opened at `0.9` and closed below `0.1`. So `Param.mul(trigger, 0.5)` drove
+  none of them, a gate peaking at 0.85 was silently ignored by the ADSR, and the
+  same clock fired an AD and an ADSR at different moments.
+
+  `> 0` is the rule SuperCollider, Faust, Max/RNBO and sndkit use - for
+  `@synthlet/ad` it is a return to the contract of the code it ports. It needs no
+  threshold to defend, and it survives `Param`'s `input * gain + offset`, so
+  scaling a gate line can no longer silently stop it working. A bipolar `Lfo` is
+  now a 50 % gate for free.
+
+  **Migration.** Any positive signal now fires. Two cases change:
+
+  - Feeding a `Clock`'s phase ramp straight to a trigger used to fire on the beat
+    by accident, and now latches on. Connect `clock.gate` instead.
+  - A gate driven with `setTargetAtTime` never closes: the signal approaches zero
+    without arriving. Use `setValueAtTime` or `linearRampToValueAtTime` - a gate
+    line is never smoothed, the envelope is the smoother.
+
+  `@synthlet/ad` and `@synthlet/adsr` also read their control param per sample
+  when it is `a-rate`, so `env.gate.automationRate = "a-rate"` gives
+  sample-accurate sequencing instead of one quantised to the 128-frame render
+  quantum (up to 2.9 ms at 44.1 kHz). The declared default is still `k-rate` and
+  that path is byte-identical.
+
+- 5aa2d2b: Every module factory now carries the list of parameters its processor
+  registers, as `X.descriptors`:
+
+  ```ts
+  import { AdsrEnv, type ParamDescriptor } from "@synthlet/adsr";
+
+  for (const p of AdsrEnv.descriptors) {
+    // { name, defaultValue, minValue, maxValue, automationRate }
+    slider(p.name, p.minValue, p.maxValue, p.defaultValue);
+  }
+  ```
+
+  Until now a module's ranges existed only inside the compiled processor string,
+  where the main thread could not see them: building a slider meant guessing.
+  The list is the same one the processor registers - there is exactly one per
+  module now, where before the names were written twice (in the worklet and
+  again in the factory) with nothing checking they agreed. `ParamDescriptor` is
+  exported from every package, and the native wrappers `Gain`, `Oscillator` and
+  `BiquadFilter` in `synthlet` carry `descriptors` too, so a compound author sees
+  one shape for every node.
+
+  Two consequences of the single list, both fixes:
+
+  - **`DattorroReverb` exposes `dryWet` and `level`.** The processor has always
+    declared and read them; the factory listed neither, so two working
+    `AudioParam`s were unreachable. `dryWet` is -1 dry, 0 equal, 1 wet.
+  - **`Euclid`'s `subdivision` is spelled correctly.** `EuclidInputs` and
+    `EuclidWorkletNode` said `subdivison`, so `Euclid(ac, { subdivison: 4 })` was
+    silently ignored and `node.subdivison` was `undefined`. Passing
+    `subdivision` now works; the misspelled field is gone.
+
+  No parameter's default, minimum or maximum changed.
+
+- 75e8ac9: **Note placement moves. Every gate and trigger in the library is now `a-rate`, so a note
+  lands on the sample it was scheduled for.**
+
+  It used to land at the top of the next render quantum — up to **2.9 ms late at 44.1 kHz**,
+  and by a different amount for every event, so a repeated pattern did not even swing
+  consistently. Patches will sound different, and tighter. Pre-1.0 this is free to change;
+  after 1.0 it would not have been.
+
+  Six descriptors flipped: `adsr.gate`, `ad.trigger`, `karplus-strong.trigger`,
+  `impulse.trigger`, `arp.trigger`, `euclid.clock`. Three of them already read their
+  parameter rate-agnostically, behind an opt-in that was invisible in `X.descriptors`,
+  unreachable through a compound, and verified on one browser. The other three got the read.
+
+  Three capabilities that did not exist before:
+
+  - **Retrigger inside one block.** Two triggers within one render quantum are both seen.
+    The second used to be silently dropped.
+  - **Short pulses.** `Impulse` read one sample per block, so a pulse that rose _and_ fell
+    inside a quantum produced no impulse at all — not a late one, none. It now fires.
+  - **Sub-quantum step boundaries.** `Euclid`'s clock is a phase ramp, so its step boundary
+    now lands on its own sample; `Arp`'s note changes at the trigger's sample rather than at
+    the top of a block.
+
+  **Nothing costs more.** An unautomated parameter still arrives as a single value, so a
+  patch that sets `trigger.value` runs the same code it always did — every processor takes a
+  hoisted `length > 1` fast path. When a node _is_ connected the modulator is rendered
+  either way; `k-rate` was paying the same price and discarding the samples.
+
+  `Impulse` still writes its single sample at index 0. That is deliberate and unchanged: a
+  user may have connected it to a native `AudioParam` they left k-rate, which can only see
+  index 0. Its _detection_ is what stopped being quantised. One consequence: two rising
+  edges in one block still yield one impulse.
+
+  `Clock` and `Euclid` as producers are untouched — `gatePulse` still sizes pulses so a
+  k-rate consumer cannot miss them, and a wider pulse is still visible to an a-rate one.
+
 ## 0.1.0
 
 - Initial release

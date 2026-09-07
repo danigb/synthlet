@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/granite",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A granular delay: a cloud of overlapping, windowed, pitch-shifted reads of its input",
   "keywords": [
     "granular-synthesis",

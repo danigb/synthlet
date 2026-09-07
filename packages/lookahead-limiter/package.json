@@ -1,6 +1,6 @@
 {
   "name": "@synthlet/lookahead-limiter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Audio lookahead brickwall limiter audio worklet",
   "keywords": [
     "audio-limiter",
