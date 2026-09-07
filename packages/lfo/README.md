@@ -86,10 +86,54 @@ sample loop; a modulated `frequency` still moves, one step per render quantum.
 For an envelope on the depth, put a native `GainNode` between the LFO and its
 destination — that is a-rate and free.
 
+`frequency` is bipolar too: a negative rate runs the phase backwards — the
+reverse ramp — and `frequency: 0` freezes the LFO on the value at `phase`.
+
 `gain` is bipolar: **a negative depth inverts the waveform**, which is how a
 filter closes as the amp opens and how two LFOs run in antiphase. `gain` and
 `offset` are `±20000`, the same range `@synthlet/ad`, `@synthlet/adsr` and
 `@synthlet/param` declare for the identical `x × gain + offset`.
+
+## Starting it
+
+Without `sync`, every `Lfo` in an `AudioContext` free-runs from context time
+zero — so two at the same rate are the _same signal_, forever, and a note-on
+cannot restart a vibrato. A rising edge on `sync` restarts the phase at `phase`.
+
+**Per-note vibrato.** Send the voice's gate to the LFO as well as the envelope,
+and every note gets the same pitch contour:
+
+```ts
+const vibrato = Lfo(ac, { frequency: 5, gain: 10, sync: gate });
+vibrato.connect(osc.frequency);
+```
+
+**Tempo sync.** There is no `bpm` parameter and no division enum: `clock.gate`
+into `sync` is the whole mechanism, and the division is `frequency` relative to
+a tempo you already know.
+
+```ts
+const clock = Clock(ac, { bpm: 120 });
+const lfo = Lfo(ac, { frequency: 2, sync: clock.gate }); // one cycle per beat
+```
+
+**Two independent wobbles.** `phase: "random"` draws once per instance, which
+separates two slow LFOs without detuning either:
+
+```ts
+const wobble = () => Lfo(ac, { frequency: 0.3, phase: "random" });
+wobble().connect(filter.frequency);
+wobble().connect(panner.pan);
+```
+
+Holding `sync` positive fires **once**, not once per sample — a re-fire needs
+the signal to return to `<= 0` first. Never drive it with `setTargetAtTime`: a
+signal that asymptotes towards zero never reaches it, so the gate would never
+re-arm.
+
+The reset lands on the sample the edge was detected on. Unlike
+`@synthlet/polyblep-oscillator`, this package does not interpolate the
+sub-sample crossing instant — 2.9 ms is nothing against a 5 Hz cycle.
 
 ## Credits
 

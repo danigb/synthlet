@@ -51,6 +51,8 @@
  * correction factor is one legitimate fixed opinion about how much to bend;
  * pinning it in a test would make the opinion untouchable.
  */
+import { createGateDetector } from "./_gate";
+
 export enum LfoType {
   None = 0,
   Sine = 1,
@@ -189,16 +191,52 @@ export function createGenerators(): Gen[] {
   ];
 }
 
+/**
+ * The initial phase, normalised into `[0, 1)`.
+ *
+ * `"random"` draws once, here, at construction - which is the whole point of
+ * the option: two `Lfo`s at 0.3 Hz built from the same factory are otherwise
+ * the *same signal*, and the only way to separate them was to detune one.
+ *
+ * A number is taken modulo 1, so `1.25` and `-0.75` both mean 0.25. Anything
+ * that is neither - a NaN, an infinity, an absent option - is 0, the phase this
+ * package has always started at, so an unset `phase` changes nothing. The
+ * comparison rather than `isFinite` is deliberate: every comparison against a
+ * NaN is false, so a NaN falls through to 0 rather than seeding a phase nothing
+ * recovers from. Copied from `polyblep-oscillator/src/dsp.ts`, which settled
+ * this shape for the library.
+ */
+function initialPhase(phase: number | "random" | undefined): number {
+  if (phase === "random") return Math.random();
+  const wrapped = typeof phase === "number" ? phase - Math.floor(phase) : 0;
+  return wrapped >= 0 && wrapped < 1 ? wrapped : 0;
+}
+
 type Params = {
   type: number[];
   frequency: number[];
   gain: number[];
   offset: number[];
+  sync: ArrayLike<number>;
 };
 
-export function createLfo(sampleRate: number, audioRate: boolean) {
+export function createLfo(
+  sampleRate: number,
+  audioRate: boolean,
+  startPhase?: number | "random",
+) {
   const dt = 1 / sampleRate;
   const generators = createGenerators();
+
+  /**
+   * Where the phase starts, and where a `sync` edge restarts it.
+   *
+   * One value, two jobs, because they are the same thing. Fixed at
+   * construction: an `AudioParam` would imply it meant something continuously,
+   * and it is a one-time initial condition.
+   */
+  const phaseStart = initialPhase(startPhase);
+  const detectGate = createGateDetector();
 
   // Params
   let $type = 1;
@@ -208,7 +246,7 @@ export function createLfo(sampleRate: number, audioRate: boolean) {
 
   // State
   let gen: Gen = generators[1] ?? none;
-  let phase = 0;
+  let phase = phaseStart;
 
   function read(params: Params) {
     if (params.type[0] !== $type) {
@@ -222,9 +260,22 @@ export function createLfo(sampleRate: number, audioRate: boolean) {
 
   function generateControlRate(output: Float32Array, params: Params) {
     read(params);
+
+    // The edge is still detected per sample - a gate held high across a whole
+    // block must fire once, not once per block - but the reset it causes lands
+    // on the block boundary, which is what "control rate" means.
+    const sync = params.sync;
+    let reset = false;
+    for (let i = 0; i < sync.length; i++) {
+      if (detectGate(sync[i]) === true) reset = true;
+    }
+    if (reset) phase = phaseStart;
+
     let nextPhase = phase + output.length * dt * $frequency;
     if (nextPhase >= 1) {
       nextPhase -= 1;
+    } else if (nextPhase < 0) {
+      nextPhase += 1;
     }
     const value = gen(phase, nextPhase) * $gain + $offset;
     output.fill(value);
@@ -245,12 +296,29 @@ export function createLfo(sampleRate: number, audioRate: boolean) {
     const offset = $offset;
     const increment = dt * $frequency;
     const length = output.length;
+    // The house a-rate idiom, hoisted once per block: an a-rate parameter
+    // arrives as either one value or one per sample, and the length-1 case is
+    // the common one. `scripts/_worklet.ts` has the reasoning and
+    // `scripts/check-param-rates.mjs` enforces it.
+    const sync = params.sync;
+    const syncRate = sync.length > 1;
     let current = phase;
 
     for (let i = 0; i < length; i++) {
+      // The reset lands on this sample, not between it and the last one: an
+      // LFO does not need the sub-sample crossing instant that the two
+      // oscillators interpolate, because 2.9 ms is nothing against a 5 Hz
+      // cycle. Deliberate, not forgotten - see `params.ts`.
+      if (detectGate(syncRate ? sync[i] : sync[0]) === true) {
+        current = phaseStart;
+      }
       let nextPhase = current + increment;
       if (nextPhase >= 1) {
         nextPhase -= 1;
+      } else if (nextPhase < 0) {
+        // The other half of a bipolar `frequency`: a negative increment runs
+        // the phase backwards, and it has to come back round at 0.
+        nextPhase += 1;
       }
       output[i] = generate(current, nextPhase) * gain + offset;
       current = nextPhase;

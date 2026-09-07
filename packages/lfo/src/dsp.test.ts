@@ -50,13 +50,26 @@ type Params = {
   frequency: number[];
   gain: number[];
   offset: number[];
+  sync: ArrayLike<number>;
 };
 
-const params = (over: Partial<Record<keyof Params, number>> = {}): Params => ({
+/**
+ * A parameter block as the processor receives one.
+ *
+ * `sync` is the a-rate member, so it takes either a single value - the length-1
+ * array a browser hands an unconnected parameter, and the default here - or a
+ * whole block, which is what a connected node produces.
+ */
+const params = (
+  over: Partial<Record<"type" | "frequency" | "gain" | "offset", number>> & {
+    sync?: ArrayLike<number>;
+  } = {},
+): Params => ({
   type: [over.type ?? LfoType.Sine],
   frequency: [over.frequency ?? RATE],
   gain: [over.gain ?? 1],
   offset: [over.offset ?? 0],
+  sync: over.sync ?? [0],
 });
 
 /** Drive a generator over `samples` in blocks, exactly as the processor does. */
@@ -77,6 +90,14 @@ function render(
 
 const audioRate = (samples: number, p: Params, blockSize = BLOCK) =>
   render(createLfo(SAMPLE_RATE, true), samples, p, blockSize);
+
+/** `audioRate`, with the construction-time initial phase this package takes. */
+const fromPhase = (
+  phase: number | "random",
+  samples: number,
+  p: Params,
+  blockSize = BLOCK,
+) => render(createLfo(SAMPLE_RATE, true, phase), samples, p, blockSize);
 
 const controlRate = (samples: number, p: Params, blockSize = BLOCK) =>
   render(createLfo(SAMPLE_RATE, false), samples, p, blockSize);
@@ -365,6 +386,251 @@ describe("gain and offset", () => {
     expect(Math.max(...signal)).toBeLessThanOrEqual(1);
     expect(Math.min(...signal)).toBeCloseTo(0, 3);
     expect(Math.max(...signal)).toBeCloseTo(1, 3);
+  });
+});
+
+describe("sync and phase", () => {
+  // An `Lfo` used to have no way to be started. Every one in an
+  // `AudioContext` free-ran from context time zero, so two at the same rate
+  // were the *same signal* forever, a note-on could not restart a vibrato, and
+  // there was no wire from a `Clock` to an LFO at all - even though
+  // `clock/src/params.ts` names `Lfo` as the answer to tempo modulation.
+  //
+  // One a-rate param and one construction option answer all four, because a
+  // node into an a-rate param is the library's only sync mechanism and it
+  // already reaches everything.
+
+  const EVERY_TYPE = Object.values(LfoType).filter(
+    (value): value is LfoType => typeof value === "number",
+  );
+
+  /** A gate that steps `0 -> 1` at `at` and stays there: one rising edge. */
+  function edgeAt(at: number, length: number, high = 1) {
+    const gate = new Float32Array(length);
+    gate.fill(high, at);
+    return gate;
+  }
+
+  const SHAPE_TYPES = EVERY_TYPE.filter(
+    (type) => type !== LfoType.RandSampleHold && type !== LfoType.Impulse,
+  );
+
+  it.each(SHAPE_TYPES.map((type) => [LfoType[type], type]))(
+    "%s: a rising edge puts the next sample back at phase 0",
+    (_name, type) => {
+      const p = params({ type });
+      const fresh = audioRate(CYCLE, p, CYCLE);
+      const synced = audioRate(
+        CYCLE,
+        params({ type, sync: edgeAt(3000, CYCLE) }),
+        CYCLE,
+      );
+
+      // Exact, not approximate: the reset lands *on* the sample the edge was
+      // detected on, and the generator is then called with the same pair of
+      // phases a fresh instance opens with - so everything after the edge is a
+      // fresh render, sample for sample.
+      expect(synced.subarray(3000)).toEqual(fresh.subarray(0, CYCLE - 3000));
+
+      // And the reset is observable: the same LFO left alone is elsewhere.
+      // `None` is the one shape it cannot be observable on, being 0 always.
+      if (type !== LfoType.None) {
+        expect(Array.from(synced)).not.toEqual(Array.from(fresh));
+      }
+    },
+  );
+
+  it("keeps the stateful shapes' own state across a reset", () => {
+    // `sync` resets the **phase**, and `Impulse` and `RandSampleHold` carry
+    // state that is not the phase: the impulse fires on a cycle *wrap*, so
+    // after a reset the next one is a full cycle away, and the sample-and-hold
+    // keeps holding. That is coherent - syncing an `Impulse` LFO to a clock
+    // aligns its cycle boundaries, which is where it fires - and it is pinned
+    // here so it is a decision rather than an accident.
+    const synced = audioRate(
+      CYCLE,
+      params({ type: LfoType.Impulse, sync: edgeAt(3000, CYCLE) }),
+      CYCLE,
+    );
+    expect(synced[3000]).toBe(0);
+    expect(synced[0]).toBe(1);
+  });
+
+  it("fires once while the gate is held high", () => {
+    // The gate contract, asserted on the first modulator that has to honour
+    // it: a re-fire needs the signal to return to <= 0 first.
+    const held = new Float32Array(CYCLE);
+    held.fill(1, 100);
+    const synced = audioRate(CYCLE, params({ sync: held }), CYCLE);
+    const fresh = audioRate(CYCLE, params(), CYCLE);
+
+    // One reset at 100, and from there it runs on: if it re-fired every sample
+    // the output would be a constant.
+    expect(synced[100]).toBe(fresh[0]);
+    expect(synced.subarray(100)).toEqual(fresh.subarray(0, CYCLE - 100));
+  });
+
+  it("fires on the crossing, not on the value", () => {
+    // The no-threshold rule from `gates-and-triggers.mdx`. A gate is on while
+    // the signal is positive; a trigger is the transition into positive. So a
+    // step to 0.001 is a trigger and a step down to 0.5 is not.
+    const fresh = audioRate(CYCLE, params(), CYCLE);
+
+    const tiny = audioRate(
+      CYCLE,
+      params({ sync: edgeAt(3000, CYCLE, 0.001) }),
+      CYCLE,
+    );
+    expect(tiny[3000]).toBe(fresh[0]);
+
+    // Held at 1 from sample 0 - which fires once, at 0 - then dropped to 0.5,
+    // which is still positive and so is not an edge.
+    const descending = new Float32Array(CYCLE);
+    descending.fill(1);
+    descending.fill(0.5, 3000);
+    const stepped = audioRate(CYCLE, params({ sync: descending }), CYCLE);
+    expect(stepped[3000]).toBe(fresh[3000]);
+  });
+
+  it.each(EVERY_TYPE.map((type) => [LfoType[type], type]))(
+    "%s: an unconnected sync changes nothing",
+    (_name, type) => {
+      // The assertion that says this ticket is additive. A browser hands an
+      // unconnected a-rate parameter a length-1 array and a connected constant
+      // the same, so both spellings of "no reset" have to render identically -
+      // and identically to a free-running LFO, which is every patch written
+      // before `sync` existed.
+      const single = audioRate(4 * CYCLE, params({ type }));
+      const block = audioRate(
+        4 * CYCLE,
+        params({ type, sync: new Float32Array(BLOCK) }),
+      );
+      if (type === LfoType.RandSampleHold) {
+        // Two renders are two instances; what is comparable is where it moves.
+        const changes = (signal: Float32Array) =>
+          Array.from(signal.subarray(1))
+            .map((value, i) => (value !== signal[i] ? i : -1))
+            .filter((i) => i >= 0);
+        expect(changes(block)).toEqual(changes(single));
+      } else {
+        expect(Array.from(block)).toEqual(Array.from(single));
+      }
+    },
+  );
+
+  it("starts where phase says", () => {
+    const quarter = fromPhase(0.25, CYCLE, params(), CYCLE);
+    const zero = audioRate(CYCLE, params(), CYCLE);
+
+    // A quarter of a cycle in, exactly: the phase grid is the same one shifted.
+    expect(quarter[0]).toBeCloseTo(zero[Math.round(CYCLE / 4)], 6);
+    expect(quarter[0]).toBeCloseTo(1, 6); // Sine at phi = 1/4
+  });
+
+  it("normalises phase the way both oscillators do", () => {
+    const zero = audioRate(4, params(), 4);
+    for (const phase of [0, 1, -1, NaN, Infinity]) {
+      expect(Array.from(fromPhase(phase, 4, params(), 4))).toEqual(
+        Array.from(zero),
+      );
+    }
+    // `1.25` and `-0.75` both mean 0.25.
+    expect(fromPhase(1.25, 4, params(), 4)[0]).toBeCloseTo(
+      fromPhase(-0.75, 4, params(), 4)[0],
+      9,
+    );
+  });
+
+  it("decorrelates ten instances with phase: random", () => {
+    // Without this, two `Lfo`s at 0.3 Hz on two destinations are one signal,
+    // and the only way to separate them was to detune one - a workaround with
+    // a different sound.
+    const SLOW = 0.3;
+    // A whole cycle of it: over a short window a 0.3 Hz sine is nearly a
+    // straight line, and two straight lines correlate whatever their phase.
+    const length = SAMPLE_RATE / SLOW;
+    const p = params({ frequency: SLOW });
+    const runs = Array.from({ length: 10 }, () =>
+      fromPhase("random", length, p, length),
+    );
+
+    expect(new Set(runs.map((run) => run[0])).size).toBe(10);
+
+    const correlation = (a: Float32Array, b: Float32Array) => {
+      let ab = 0;
+      let aa = 0;
+      let bb = 0;
+      for (let i = 0; i < a.length; i++) {
+        ab += a[i] * b[i];
+        aa += a[i] * a[i];
+        bb += b[i] * b[i];
+      }
+      // Signed: two LFOs half a cycle apart correlate at -1, and antiphase is
+      // exactly the decorrelation this option exists to produce.
+      return ab / Math.sqrt(aa * bb);
+    };
+
+    let decorrelated = 0;
+    for (let i = 0; i < runs.length; i++) {
+      for (let j = i + 1; j < runs.length; j++) {
+        if (correlation(runs[i], runs[j]) < 0.9) decorrelated++;
+      }
+    }
+    // Ten draws can land close together, so the claim is about the population
+    // of 45 pairs and not about any one of them.
+    expect(decorrelated).toBeGreaterThanOrEqual(9);
+  });
+
+  it.each(
+    [LfoType.Sine, LfoType.Triangle, LfoType.ExpTriangle].map((t) => [
+      LfoType[t],
+      t,
+    ]),
+  )("%s at a negative frequency is its own time reverse", (_name, type) => {
+    const forward = audioRate(CYCLE, params({ type }), CYCLE);
+    const reverse = audioRate(CYCLE, params({ type, frequency: -RATE }), CYCLE);
+
+    // phi(-r, k) = -k/N mod 1 = 1 - k/N, so sample k of the reverse render is
+    // sample N-k of the forward one. Asserted on the continuous shapes: at a
+    // jump the identity is meaningless for the sample either side of it.
+    for (let k = 1; k < CYCLE; k += 137) {
+      expect(reverse[k]).toBeCloseTo(forward[CYCLE - k], 5);
+    }
+  });
+
+  it("holds at frequency 0", () => {
+    const held = fromPhase(0.3, SAMPLE_RATE, params({ frequency: 0 }), 128);
+    expect(new Set(held).size).toBe(1);
+    expect(held[0]).toBeCloseTo(Math.sin(0.3 * 2 * Math.PI), 6);
+  });
+
+  it("locks to a clock gate, on and off the beat", () => {
+    // 120 BPM is a beat every 22050 samples at 44.1 kHz. The gate is written
+    // here rather than taken from a `Clock`: `dsp.test.ts` runs in node with no
+    // `AudioContext`, and what is under test is the LFO's response to that
+    // signal, not `Clock`.
+    const BEAT = SAMPLE_RATE / 2;
+    const BEATS = 4;
+    const length = BEAT * BEATS;
+    const gate = new Float32Array(length);
+    for (let beat = 0; beat < BEATS; beat++) {
+      gate.fill(1, beat * BEAT, beat * BEAT + 64);
+      gate.fill(0, beat * BEAT + 64, beat * BEAT + 65);
+    }
+
+    const fresh = audioRate(1, params(), 1)[0];
+    for (const frequency of [2, 2.1]) {
+      // 2 Hz is one cycle per beat and needs no help; 2.1 Hz would drift a
+      // twentieth of a cycle per beat, and is dragged back every time.
+      const signal = audioRate(
+        length,
+        params({ frequency, sync: gate }),
+        length,
+      );
+      for (let beat = 0; beat < BEATS; beat++) {
+        expect(signal[beat * BEAT]).toBeCloseTo(fresh, 6);
+      }
+    }
   });
 });
 

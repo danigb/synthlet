@@ -105,6 +105,11 @@ describe("descriptors", () => {
       ["Granite", "freeze", "k-rate"],
       ["Impulse", "trigger", "a-rate"],
       ["KarplusStrong", "trigger", "a-rate"],
+      // The first modulation source on the list. Its a-rate ground is reach
+      // rather than jitter - 2.9 ms is nothing against a 5 Hz cycle - but the
+      // shape is the same one, so `clock.gate`, an `AdEnv` or a `Param` all
+      // drive it.
+      ["Lfo", "sync", "a-rate"],
       ["PolyblepOscillator", "sync", "a-rate"],
       ["WavetableOscillator", "sync", "a-rate"],
     ];

@@ -20,16 +20,18 @@ describe("LfoWorkletProcessor", () => {
   });
 
   it("has parameter descriptors", () => {
-    // All four stay k-rate: this ticket is about the LFO's output, not its
-    // inputs. `read()` is called once per block and `[0]` is the whole read.
+    // Four k-rate shaping params read once per block, and one a-rate `sync`:
+    // an event's whole content is *when*, so a reset read once per block would
+    // be a reset quantised to a block.
     expect(Processor.parameterDescriptors).toMatchSnapshot();
   });
 
-  const params = (type: number) => ({
+  const params = (type: number, sync: ArrayLike<number> = [0]) => ({
     type: [type],
     frequency: [5],
     gain: [1],
     offset: [0],
+    sync,
   });
 
   it("writes a per-sample signal, not one value per block", () => {
@@ -72,6 +74,36 @@ describe("LfoWorkletProcessor", () => {
       expect(output[0]).toBe(1);
       expect(Array.from(output).filter((value) => value !== 0)).toEqual([1]);
     }
+  });
+
+  it("takes its initial phase from processorOptions", () => {
+    // `phase` travels as a construction option rather than as an AudioParam:
+    // it is a one-time initial condition, and this is the seam it arrives
+    // through.
+    const output = new Float32Array(128);
+    new Processor({ processorOptions: { phase: 0.25 } }).process(
+      [],
+      [[output]],
+      params(1 /* Sine */),
+    );
+    expect(output[0]).toBeCloseTo(1, 6);
+
+    const unset = new Float32Array(128);
+    new Processor({}).process([], [[unset]], params(1));
+    expect(unset[0]).toBeCloseTo(0, 6);
+  });
+
+  it("resets the phase on a rising edge of sync", () => {
+    const sync = new Float32Array(128);
+    sync.fill(1, 64);
+    const output = new Float32Array(128);
+    new Processor({}).process([], [[output]], params(1, sync));
+
+    const free = new Float32Array(128);
+    new Processor({}).process([], [[free]], params(1));
+
+    expect(output[64]).toBe(free[0]);
+    expect(output[63]).toBe(free[63]);
   });
 
   it("stops when disposed", () => {

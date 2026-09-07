@@ -13,7 +13,7 @@ exports[`LfoWorkletProcessor has parameter descriptors 1`] = `
     "automationRate": "k-rate",
     "defaultValue": 10,
     "maxValue": 200,
-    "minValue": 0,
+    "minValue": -200,
     "name": "frequency",
   },
   {
@@ -29,6 +29,13 @@ exports[`LfoWorkletProcessor has parameter descriptors 1`] = `
     "maxValue": 20000,
     "minValue": -20000,
     "name": "offset",
+  },
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "sync",
   },
 ]
 `;

@@ -17,7 +17,9 @@ const lfo = Lfo(audioContext, {
 
 ## Params
 
-- `frequency`: the frequency of the oscillator in Hz. Default is 10Hz. Range: [0-200]
+- `frequency`: the rate in Hz. Default is 10. Range: [-200, 200]. **Bipolar**: a
+  negative rate runs the phase backwards, and `frequency: 0` freezes the LFO on
+  the value at `phase`.
 - `type`: the type of the oscillator. You can use `LfoType` enum. Default is `LfoType.Sine`.
 - `gain`: the depth of the oscillator. Default is 1. Range: [-20000, 20000]. A
   **negative gain inverts the waveform** — that is how you get a filter that
@@ -26,8 +28,45 @@ const lfo = Lfo(audioContext, {
   A unipolar 0…1 modulator is `gain: 0.5, offset: 0.5`; a filter cutoff swept
   over its whole range is `gain: 10000, offset: 10000`.
 
+- `sync`: a-rate. A **rising edge** — the transition from non-positive to
+  positive, [synthlet's one gate contract](/docs/gates-and-triggers) — restarts
+  the phase at `phase`. Unconnected it is 0 and nothing happens.
+
 `gain` and `offset` carry the same range as `Ad`, `Adsr` and `Param`, which
 compute the identical `x × gain + offset`.
+
+## Options
+
+`phase` is a **construction option**, not an `AudioParam`: it is a one-time
+initial condition, and an `AudioParam` would imply it meant something
+continuously. It is also where a `sync` edge restarts the phase. A number is
+taken modulo 1, so `1.25` and `-0.75` both mean `0.25`; `"random"` draws once
+per instance.
+
+## Starting it
+
+Without `sync`, every `Lfo` in an `AudioContext` free-runs from context time
+zero — so two at the same rate are the _same signal_, forever, and a note-on
+cannot restart a vibrato.
+
+```ts
+// Per-note vibrato: the voice's gate restarts the LFO.
+const vibrato = Lfo(audioContext, { frequency: 5, gain: 10, sync: gate });
+vibrato.connect(osc.frequency);
+
+// Tempo sync: no `bpm` param and no division enum — `clock.gate` is the
+// mechanism, and the division is `frequency` relative to the tempo.
+const clock = Clock(audioContext, { bpm: 120 });
+const perBeat = Lfo(audioContext, { frequency: 2, sync: clock.gate });
+
+// Two independent wobbles, without detuning either.
+const wobble = () => Lfo(audioContext, { frequency: 0.3, phase: "random" });
+```
+
+Holding `sync` positive fires **once**, not once per sample. The reset lands on
+the sample the edge was detected on: unlike the oscillators, this package does
+not interpolate the sub-sample crossing instant — 2.9 ms is nothing against a
+5 Hz cycle.
 
 ## Shapes
 

@@ -3,10 +3,12 @@ import type { ParamDescriptor } from "./_worklet";
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 //
-// Four parameters, none of them a-rate - and this module's *output* is the
+// Five parameters, one of them a-rate - and this module's *output* is the
 // signal, which is a different question. `worklet.ts` builds the audio-rate
 // generator, so the LFO emits one value per sample; what follows is about what
-// it reads, and `dsp.ts` reads all four once per block in `read()`.
+// it reads, and `dsp.ts` reads the four shaping parameters once per block in
+// `read()`. `sync` is the exception, because it is an event: a reset read once
+// per block would be a reset quantised to a block.
 //
 // `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
 // every `k-rate` below is an explicit opt-out and carries a reason for being
@@ -31,9 +33,13 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // which is worth 34% of the generator (`benchmarks/lfo-rate/`) - a
     // per-sample rate would give that back. The output is smooth either way;
     // what is quantised is how fast it moves. Revisit if a patch wants it.
+    // **Bipolar**: a negative frequency runs the phase backwards, which is the
+    // reverse saw and the reverse ramp, and `frequency: 0` freezes it - the
+    // output holds the shape's value at the instance's `phase` until something
+    // moves it. Elektron's bipolar `SPD` is the same idea in hardware.
     name: "frequency",
     defaultValue: 10,
-    minValue: 0,
+    minValue: -200,
     maxValue: 200,
     automationRate: "k-rate",
   },
@@ -72,5 +78,26 @@ export const PARAMS: readonly ParamDescriptor[] = [
     minValue: -20000,
     maxValue: 20000,
     automationRate: "k-rate",
+  },
+  {
+    // The reset, a-rate. A **rising edge** - non-positive to positive,
+    // synthlet's one gate contract - restarts the phase at the instance's
+    // `phase` option. Unconnected it is 0 and nothing happens, so every patch
+    // written before it existed renders bit-identically.
+    //
+    // a-rate for **reach**, not for jitter. The other two `sync` params in the
+    // library are a-rate because a band-limited oscillator needs the sub-sample
+    // instant of the crossing; an LFO does not - 2.9 ms of quantisation is
+    // nothing against a 5 Hz cycle - and **this package deliberately does not
+    // interpolate it.** The reset lands on the sample the edge was detected on.
+    // What a-rate buys is that any signal in the library can drive it:
+    // `clock.gate` for tempo sync, an `AdEnv`, an `Impulse`, a `Param` from the
+    // UI. It is also the shape `descriptors.test.ts` pins for every event
+    // param, and an event's whole content is *when*.
+    name: "sync",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 1,
+    automationRate: "a-rate",
   },
 ];
