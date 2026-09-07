@@ -94,6 +94,49 @@ describe("VAFProcessor", () => {
   });
 });
 
+describe("type selection", () => {
+  // `worklet.ts` read `Math.floor(params.type)` - the whole `Float32Array`,
+  // with no `[0]` - from the day it was written. It worked because `Math.floor`
+  // coerces, a length-1 array stringifies to its single value, and `type` is
+  // k-rate so the array is always length 1. Correct by accident, and it
+  // detonates the moment anything hands this parameter more than one value.
+  let Worklet: any;
+  const TYPES = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+
+  beforeAll(async () => {
+    Worklet = (await import("./worklet")).VAF;
+  });
+
+  const impulseResponse = (type: ArrayLike<number>) => {
+    const signal = new Float32Array(64);
+    signal[0] = 1;
+    const [out] = runProcessChannels(new Worklet(), [signal], {
+      type,
+      frequency: [1000],
+      detune: [0],
+      resonance: [0.5],
+    });
+    return Array.from(out);
+  };
+
+  it("gives every VaFilterType its own model", () => {
+    const responses = TYPES.map((type) => impulseResponse([type]));
+    const distinct = new Set(responses.map((r) => JSON.stringify(r)));
+    expect(distinct.size).toBe(TYPES.length);
+  });
+
+  it("selects the same model when `type` arrives with more than one value", () => {
+    // The shape that broke it: a length-3 array stringifies to "3,3,3", which
+    // is NaN, and `bank[NaN] || bank[0]` falls back to the Moog ladder for
+    // every type - silently, with audio that still sounds like a filter.
+    for (const type of TYPES) {
+      expect(impulseResponse([type, type, type])).toEqual(
+        impulseResponse([type]),
+      );
+    }
+  });
+});
+
 function createWorkletTestContext(sampleRate = 10) {
   // @ts-ignore
   global.sampleRate = sampleRate;

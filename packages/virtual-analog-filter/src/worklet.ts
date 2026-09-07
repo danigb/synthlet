@@ -32,7 +32,14 @@ export class VAF extends AudioWorkletProcessor {
     const output = outputs[0];
     if (input.length === 0) return this.r;
 
-    const type = Math.floor(params.type);
+    // `[0]`, not the array. `Math.floor` coerces its argument, a
+    // `Float32Array` stringifies through `join`, and a length-1 array
+    // stringifies to its single value - so `Math.floor(params.type)` was
+    // *correct by accident* for as long as `type` stayed k-rate. A length-3
+    // array stringifies to "3,3,3", `Number("3,3,3")` is `NaN`, and
+    // `bank[NaN] || bank[0]` below silently selects the Moog ladder for every
+    // type, with no error and audio that still sounds like a filter.
+    const type = Math.floor(params.type[0]);
     const detune = params.detune[0];
     const frequency =
       params.frequency[0] * (detune ? Math.pow(2, detune / 12) : 1);
