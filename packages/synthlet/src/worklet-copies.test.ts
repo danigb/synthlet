@@ -114,11 +114,14 @@ describe.each(blepPackages)("%s", (pkg) => {
 // a circular buffer. `digital-delay` wrote it and `analog-delay` is the proof
 // it is genuinely shared rather than a private ring buffer with a public name:
 // the two read it differently - a crossfade between two heads against a glide
-// towards one - and neither needed a change to the primitive. Six packages
-// grew their own before it existed and none of them adopt it retroactively for
-// free: `karplus-strong` is next, and swapping its linear interpolator removes
-// the accidental lowpass that is currently its only damping, so that adoption
-// is coupled to its ticket 04 rather than done here.
+// towards one - and neither needed a change to the primitive. `granite` is the
+// third read strategy over the same storage, a cloud of up to 64 independent
+// playheads, and it needed no change either: a grain playhead is a *moving
+// delay*, which is what the masked wrap and the Hermite read already are.
+// Six packages grew their own before it existed and none of them adopt it
+// retroactively for free: `karplus-strong` is next, and swapping its linear
+// interpolator removes the accidental lowpass that is currently its only
+// damping, so that adoption is coupled to its ticket 04 rather than done here.
 const delaySource = readFileSync(join(root, "scripts/_delay.ts"), "utf8");
 const delayPackages = packages.filter((pkg) =>
   existsSync(join(root, "packages", pkg, "src/_delay.ts")),
@@ -126,7 +129,7 @@ const delayPackages = packages.filter((pkg) =>
 
 describe("the delay line", () => {
   it("is shared by every package that needs a circular buffer", () => {
-    expect(delayPackages).toEqual(["analog-delay", "digital-delay"]);
+    expect(delayPackages).toEqual(["analog-delay", "digital-delay", "granite"]);
   });
 });
 
@@ -140,8 +143,11 @@ describe.each(delayPackages)("%s", (pkg) => {
 
 // The measuring instrument is copied the same way, and is the only shared file
 // here that no shipped code imports: it exists so that two packages' alias-SNR
-// and spectrum numbers are comparable. `polyblep-oscillator` is the obvious
-// third consumer and deliberately does not carry a copy yet: it grew its own
+// and spectrum numbers are comparable. `granite` is the third, and its reading
+// is a new one - the modulation depth of a grain stream, taken from the spectrum
+// of the squared signal - so its FFT and window have to be the same ones the
+// other two are calibrated against. `polyblep-oscillator` is the obvious next
+// consumer and deliberately does not carry a copy yet: it grew its own
 // `spectrum.ts` in parallel, pinned to the two sawtooth rows its audit
 // published, and adopting this one has to be a deliberate step that re-pins
 // those numbers rather than a `cp` performed by a merge.
@@ -152,7 +158,11 @@ const spectrumPackages = packages.filter((pkg) =>
 
 describe("the measuring instrument", () => {
   it("is shared by every package whose tests measure a spectrum", () => {
-    expect(spectrumPackages).toEqual(["digital-delay", "wavetable-oscillator"]);
+    expect(spectrumPackages).toEqual([
+      "digital-delay",
+      "granite",
+      "wavetable-oscillator",
+    ]);
   });
 });
 

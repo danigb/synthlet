@@ -157,7 +157,7 @@ ladder, Korg 35, diode ladder, Oberheim), `ClipAmp`, `AdsrAmp`, `LevelMeter`
 **Sequencers** — `Clock`, `Euclid`, `Arp`
 
 **Effects** — `DigitalDelay`, `AnalogDelay` (tape and bucket-brigade), `Chorus`,
-`ReverbDelay`, `DattorroReverb`, `Granite` (granular)
+`ReverbDelay`, `DattorroReverb`, `Granite` (granular delay)
 
 **Instruments** — `MonoSynth`, and `KickDrum`, `SnareDrum`, `HiHatDrum`,
 `ClaveDrum`, `CowBellDrum`, `CymbalDrum`, `MaracasDrum`, `HandclapDrum`,

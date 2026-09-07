@@ -1,17 +1,34 @@
-import { ComputeFn, createDsp, UpdateFn } from "./dsp";
+import {
+  createGranulator,
+  DEFAULT_BUFFER_SECONDS,
+  DEFAULT_MAX_GRAINS,
+  DEFAULT_SEED,
+} from "./dsp";
 import { PARAMS } from "./params";
+
+// Like `digital-delay`, and unlike every other effect in the catalogue, this
+// processor never early-returns on a missing input: the buffer still holds
+// several seconds of audio and grains already in flight have to play through.
+// It feeds silence instead. The render quantum is 128 and does not change, so
+// this is allocated once; it grows only if a test drives a longer block.
+let silence = new Float32Array(128);
 
 export class GraniteProcessor extends AudioWorkletProcessor {
   r: boolean; // running
-  u: UpdateFn;
-  c: ComputeFn;
+  u: ReturnType<typeof createGranulator>["update"];
+  g: ReturnType<typeof createGranulator>["process"];
 
-  constructor() {
+  constructor(options?: AudioWorkletNodeOptions) {
     super();
     this.r = true;
-    const { update, compute } = createDsp(sampleRate);
+    const { update, process } = createGranulator(sampleRate, {
+      maxGrains: options?.processorOptions?.maxGrains ?? DEFAULT_MAX_GRAINS,
+      bufferSeconds:
+        options?.processorOptions?.bufferSeconds ?? DEFAULT_BUFFER_SECONDS,
+      seed: options?.processorOptions?.seed ?? DEFAULT_SEED,
+    });
     this.u = update;
-    this.c = compute;
+    this.g = process;
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
@@ -21,17 +38,45 @@ export class GraniteProcessor extends AudioWorkletProcessor {
     };
   }
 
-  process(inputs: Float32Array[][], outputs: Float32Array[][], p: any) {
-    this.u(p.wet[0], p.speed[0], p.density[0], p.spread[0]);
-    const in1 = inputs[0];
-    const out1 = outputs[0];
+  process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
+    // Every parameter is k-rate, so this is eighteen reads per block. The grains
+    // born inside the block all see the same control values; what makes them
+    // differ is the draw each one takes from them in `activate()`, and what
+    // moves their onsets off the grid is the draw the scheduler takes from
+    // `jitter` and `intermittency`.
+    this.u(
+      params.rate[0],
+      params.jitter[0],
+      params.intermittency[0],
+      params.duration[0],
+      params.durationSpread[0],
+      params.position[0],
+      params.spray[0],
+      params.pitch[0],
+      params.pitchSpread[0],
+      params.reverse[0],
+      params.shape[0],
+      params.pan[0],
+      params.panSpread[0],
+      params.level[0],
+      params.levelSpread[0],
+      params.freeze[0],
+      params.feedback[0],
+      params.wet[0],
+    );
 
-    if (in1.length === 0 || out1.length === 0) {
-      return this.r;
-    }
+    const outL = outputs[0][0];
+    const outR = outputs[0][1];
+    const input = inputs[0];
+    if (silence.length < outL.length) silence = new Float32Array(outL.length);
+    // Mono in feeds both lines; anything wider uses its first two channels. The
+    // flag is what the pan law needs and `process` cannot see: with a mono input
+    // the two lines hold the same signal, so a grain is *placed* in the field
+    // with a constant-power law rather than balanced between two channels.
+    const inL = input.length > 0 ? input[0] : silence.subarray(0, outL.length);
+    const inR = input.length > 1 ? input[1] : inL;
 
-    this.c(in1, out1, in1[0].length);
-
+    this.g(inL, inR, outL, outR, input.length > 1);
     return this.r;
   }
 
