@@ -12,7 +12,12 @@ export class LfoWorkletProcessor extends AudioWorkletProcessor {
     // the zero crossings - a stepped pitch on a frequency parameter, a 344 Hz
     // click train on a gain one. `createLfo`'s `audioRate` argument stays, and
     // `generateControlRate` with it: a documented alternative, still tested.
-    this.g = createLfo(sampleRate, true);
+    // `phase` is a construction option rather than an AudioParam: it is a
+    // one-time initial condition - where the LFO starts, and where a `sync`
+    // edge restarts it - and an AudioParam would imply it meant something
+    // continuously. Both oscillators settled this shape; read the way
+    // `packages/polyblep-oscillator/src/worklet.ts:16` reads its own.
+    this.g = createLfo(sampleRate, true, options?.processorOptions?.phase);
     this.r = true;
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -28,6 +33,8 @@ export class LfoWorkletProcessor extends AudioWorkletProcessor {
     outputs: Float32Array[][],
     parameters: any,
   ) {
+    // `sync` is a-rate, so the whole array goes through and `dsp.ts` branches
+    // on its length; the other four are k-rate and read once per block.
     this.g(outputs[0][0], parameters);
     return this.r;
   }

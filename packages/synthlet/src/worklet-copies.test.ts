@@ -60,6 +60,19 @@ describe("the gate contract", () => {
       "euclid",
       "impulse",
       "karplus-strong",
+      // The first entry that is neither an envelope, a clock, nor an
+      // oscillator: a modulation source that takes a reset. A rising edge on
+      // `Lfo.sync` restarts the phase, which is what makes a vibrato
+      // per-note, two slow LFOs independent, and `clock.gate -> lfo.sync` the
+      // whole of tempo sync.
+      //
+      // Its a-rate ground is **reach, not jitter**. 2.9 ms of quantisation is
+      // nothing against a 5 Hz cycle - the argument below does not apply here,
+      // and this package deliberately does not interpolate the crossing
+      // instant. What a-rate buys is that `sync` accepts any signal in the
+      // library, which is the same shape `check-param-rates.mjs` and
+      // `descriptors.test.ts` pin for every other event param.
+      "lfo",
       // The two consumers that are neither an envelope nor a clock: both take
       // a rising edge on `sync` as a hard-sync reset, and both detect it with
       // the shared detector rather than a second one of their own. They are

@@ -43,7 +43,10 @@ It uses an optimized version described by [Solving continuous SVF equations usin
 
 - `filterType`: the type of the filter. By default is `SvfType.LowPass`.
 - `frequency`: the frequency of the filter in Hz. Default is 1000Hz. Range: [20-20000]
-- `Q`: the resonance of the filter. Default is 0.5. Range: [0.025-40]
+- `Q`: the resonance of the filter. Default is 0.7071 (Butterworth: maximally flat, -3dB at the cutoff). Range: [0.025-40]
+- `gain`: the shelf or bell gain in dB. Only `Bell`, `LowShelf` and `HighShelf` use it; for every other type it is inert. Default is 0, which is an exact bypass. Range: [-40-40]
+
+On the three types that use `gain`, `Q` sets the resonance of the _corner_. At or below 0.7071 the response stays inside the requested gain; above it the corner peaks, which is what a resonant shelf is for — a +12dB high shelf at Q=40 reaches about +41dB at its corner.
 
 Available filter types are:
 
@@ -54,6 +57,9 @@ Available filter types are:
 - `SvfType.Notch` = 4,
 - `SvfType.Peak` = 5,
 - `SvfType.AllPass` = 6,
+- `SvfType.Bell` = 7,
+- `SvfType.LowShelf` = 8,
+- `SvfType.HighShelf` = 9,
 
 ## References
 

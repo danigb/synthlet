@@ -1,6 +1,6 @@
 import { registerSvfWorklet } from "./index";
 
-describe("Noise", () => {
+describe("Svf", () => {
   it("registers only once", () => {
     const context = new AudioContextMock();
     // @ts-ignore

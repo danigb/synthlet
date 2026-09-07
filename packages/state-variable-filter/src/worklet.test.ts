@@ -1,3 +1,5 @@
+import { createWorkletTestContext } from "./test-utils";
+
 describe("ProcessorNode", () => {
   let Processor: any;
   const sampleRate = 40;
@@ -20,7 +22,7 @@ describe("ProcessorNode", () => {
 
   // A low pass well under Nyquist at this sample rate, so an impulse leaves a
   // ring long enough to compare channel against channel.
-  const params = { type: [1], frequency: [5], Q: [4] };
+  const params = { type: [1], frequency: [5], Q: [4], gain: [0] };
   const impulse = () => {
     const signal = new Float32Array(16);
     signal[0] = 1;
@@ -68,28 +70,16 @@ describe("ProcessorNode", () => {
     expect(Array.from(second[0]).some((value) => value !== 0)).toBe(true);
     expect(second[1]).toEqual(new Float32Array(16));
   });
+
+  it("stops running after DISPOSE", () => {
+    const processor = new Processor();
+    const outputs = [[new Float32Array(16)]];
+    // `true` first, so a regression here fails for the right reason.
+    expect(processor.process([[impulse()]], outputs, params)).toBe(true);
+    processor.port.onmessage({ data: { type: "DISPOSE" } });
+    expect(processor.process([[impulse()]], outputs, params)).toBe(false);
+  });
 });
-
-function createWorkletTestContext(sampleRate = 10) {
-  // @ts-ignore
-  global.sampleRate = sampleRate;
-  // @ts-ignore
-  global.AudioWorkletProcessor = class AudioWorkletNodeStub {
-    port: {
-      postMessage: jest.Mock<any, any, any>;
-      onmessage: jest.Mock<any, any, any>;
-    };
-
-    constructor() {
-      this.port = {
-        postMessage: jest.fn(),
-        onmessage: jest.fn(),
-      };
-    }
-  };
-  // @ts-ignore
-  global.registerProcessor = jest.fn(); // Mock registerProcessor
-}
 
 type Worklet = {
   process: (
@@ -110,7 +100,3 @@ function runProcessChannels(
   worklet.process([input], outputs, params);
   return outputs[0];
 }
-
-// This file declares helpers at the top level: make it a module so they don't
-// collide with the identically named helpers in sibling packages.
-export {};
