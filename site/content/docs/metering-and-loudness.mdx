@@ -56,7 +56,7 @@ Two correctness reasons, before any convenience one:
 | Quantity                  | Answers                              | Cost                              |
 | ------------------------- | ------------------------------------ | --------------------------------- |
 | `peak`                    | did a _sample_ exceed full scale     | free, always on                   |
-| `truePeak`                | will the _waveform_ clip a converter | ~10.6× everything else            |
+| `truePeak`                | will the _waveform_ clip a converter | the expensive one; opt in         |
 | `rms`                     | how much energy, unweighted          | free, always on                   |
 | `momentary` / `shortTerm` | how loud it sounds, now              | cheap; opt in                     |
 | `integrated`              | how loud the whole programme is      | offline; needs a start and an end |
@@ -72,10 +72,19 @@ a sample meter can still clip a converter or a lossy encoder.
 const meter = LevelMeter.tap(master, { truePeak: true, loudness: true });
 ```
 
-Both are off by default. True peak costs about **10.6×** everything else in the
-meter put together — 48 multiply-accumulates per sample per channel — so it is
-asked for rather than assumed. Loudness is much cheaper; it is opt-in because a
-number nobody reads is still waste.
+Both are off by default, for opposite reasons. True peak is 48
+multiply-accumulates per sample per channel, and it costs more than everything
+else in the meter put together by better than an order of magnitude. Measured as
+CPU time over five minutes of 48 kHz stereo, roughly:
+
+| Measuring             | CPU per 5 min |
+| --------------------- | ------------- |
+| peak, hold, clip, RMS | 74 ms         |
+| ... plus loudness     | 181 ms        |
+| ... plus true peak    | 3.3 s         |
+
+So true peak is asked for rather than assumed. Loudness is much cheaper; it is
+opt-in only because a number nobody reads is still waste.
 
 The meter's true-peak detector **is** the
 [lookahead limiter's](/docs/lookahead-limiter). One implementation, so the two

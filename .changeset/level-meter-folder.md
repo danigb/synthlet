@@ -46,7 +46,9 @@ isolated page.
 - **Nothing needs COOP or COEP headers.** If you set them for this package, you
   can stop.
 
-`truePeak` and `loudness` are opt-in, in that order of cost: true peak is about
-10.6× everything else in the meter put together, loudness is cheap. Both read
-`NaN` until you ask for them, because "not measured" and "silent" are different
-answers.
+`truePeak` and `loudness` are opt-in, in that order of cost. True peak costs more
+than everything else in the meter put together by better than an order of
+magnitude — roughly 3.3 s of CPU per 5 minutes of 48 kHz stereo, against 181 ms
+with loudness on and 74 ms for peak, hold, clip and RMS alone. Loudness is cheap.
+Both read `NaN` until you ask for them, because "not measured" and "silent" are
+different answers.

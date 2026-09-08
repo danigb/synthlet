@@ -32,8 +32,9 @@ The ballistics run on a fixed 128-sample frame — the render quantum — and
 audio cannot move a reading**. Offline and realtime therefore leave the layout
 buffer in byte-identical states over the same samples, which is asserted rather
 than assumed. `analyze()` yields to the host between chunks, because true peak
-costs 11× the loudness path and a five-minute track run in one go is a frozen
-tab. Input that is not `Float32Array` — a `Float64Array` from a decoder, a plain
+costs seconds where the rest of the meter costs milliseconds — roughly 3.3 s of
+CPU for a five-minute track against 181 ms with loudness on — and a run of that
+length in one go is a frozen tab. Input that is not `Float32Array` — a `Float64Array` from a decoder, a plain
 `number[]` — is rounded to Float32 first, so the answer is the one the realtime
 path would have given rather than a slightly better one.
 `analyzeAudioBuffer(buffer)` is the adapter, and it lives in the offline entry

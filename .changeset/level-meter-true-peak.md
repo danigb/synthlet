@@ -35,9 +35,14 @@ against and it should not be hardcoded in every UI.
   truePeak: true    2188 ms   19.45 us/block     137x realtime
 ```
 
-**10.6×** — it costs more than everything else in the meter put together, and
-more than the entire loudness path. With `truePeak: false` nothing new runs:
-no detector is allocated and the reserved slot is not written.
+**It costs more than everything else in the meter put together, by better than an
+order of magnitude**, and more than the entire loudness path. Any single ratio
+depends on what goes in the denominator — the run above has 207 ms in it, a later
+CPU-time measurement of the same code has 74 ms for peak, hold, clip and RMS and
+181 ms with loudness added, against roughly 3.3 s with true peak on. The absolute
+figure is the stable one; the shape it implies does not change either way. With
+`truePeak: false` nothing new runs: no detector is allocated and the reserved
+slot is not written.
 
 **The two meter-specific optimisations were measured and neither was taken.**
 Best of five over 60 s of 48 kHz stereo, per detector call:
