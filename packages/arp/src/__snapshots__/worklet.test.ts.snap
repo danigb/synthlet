@@ -12,7 +12,7 @@ exports[`ArpProcessor has parameter descriptors 1`] = `
   {
     "automationRate": "k-rate",
     "defaultValue": 0,
-    "maxValue": 4,
+    "maxValue": 5,
     "minValue": 0,
     "name": "mode",
   },

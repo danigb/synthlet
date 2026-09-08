@@ -29,10 +29,15 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // it and the traversal becomes a sequence, which is an arpeggiator whose
     // own direction is arpeggiated. Nothing in the survey behind this module
     // can do that, because in every one of them the mode is a menu.
+    //
+    // The two random values are not interchangeable and the names do not say
+    // how: `Random` wanders - uniform, but never the note just played - and
+    // `RandomOther` covers, playing every note of the set once per pass in a
+    // fresh order each pass.
     name: "mode",
     defaultValue: 0, // ArpMode.Up
     minValue: 0,
-    maxValue: 4, // Up, Down, UpDownExclusive, UpDownInclusive, Random
+    maxValue: 5, // Up, Down, UpDownExclusive, UpDownInclusive, Random, RandomOther
     automationRate: "k-rate",
   },
   // The other three describe the *set of notes* this walks. All three are

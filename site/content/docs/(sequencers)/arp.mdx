@@ -55,17 +55,22 @@ const mono = MonoSynth(audioContext, {
 
 Over a four-note set, where the numbers are positions in it:
 
-| `ArpMode`         | plays                             |
-| ----------------- | --------------------------------- |
-| `Up`              | 1 2 3 4 · 1 2 3 4                 |
-| `Down`            | 4 3 2 1 · 4 3 2 1                 |
-| `UpDownExclusive` | 1 2 3 4 3 2 1 · 2 3 4 3 2 1       |
-| `UpDownInclusive` | 1 2 3 4 4 3 2 1 · 1 2 3 4 4 3 2 1 |
-| `Random`          | any note of the set, uniformly    |
+| `ArpMode`         | plays                                          |
+| ----------------- | ---------------------------------------------- |
+| `Up`              | 1 2 3 4 · 1 2 3 4                              |
+| `Down`            | 4 3 2 1 · 4 3 2 1                              |
+| `UpDownExclusive` | 1 2 3 4 3 2 1 · 2 3 4 3 2 1                    |
+| `UpDownInclusive` | 1 2 3 4 4 3 2 1 · 1 2 3 4 4 3 2 1              |
+| `Random`          | any note but the one just played               |
+| `RandomOther`     | every note once per pass, reshuffled each pass |
 
 The two `UpDown` modes differ in whether the turnaround notes play once or
 twice, which is why both are spelled out. Over more than one octave they turn at
 the ends of the whole range rather than at each octave.
+
+`Random` wanders and `RandomOther` covers: `Random` can dwell on a region of the
+set, `RandomOther` plays every note of it once per pass. Neither ever repeats
+the note it just played.
 
 ## Scales
 

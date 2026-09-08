@@ -58,12 +58,18 @@ export enum ArpMode {
   /** 1,2,3,4,4,3,2,1 · 1,2,3,4,4,3,2,1 …  the turnaround notes play twice */
   UpDownInclusive = 3,
   /**
-   * Uniform and memoryless, which is what this module did before it had an
-   * order: it repeats the note it just played 1/n of the time, and twelve
-   * triggers over a seven-note scale sound all seven in fewer than a quarter
-   * of runs. Ticket 04 of the arp folder gives it a memory.
+   * Uniform over the set, but never the note just played. It wanders, and it
+   * can dwell on a region of the set - which is what people reach for when
+   * they want an arpeggiator to sound unpredictable.
    */
   Random = 4,
+  /**
+   * Every note of the set once per pass, in a fresh order each pass. It
+   * covers: a pass is always a complete statement of the chord, which is much
+   * closer to "an arpeggio" and much less likely to sound aimless over a long
+   * pattern. Ableton ships both for this reason.
+   */
+  RandomOther = 5,
 }
 
 /**
@@ -105,6 +111,15 @@ export function createArpeggiator(random: () => number = Math.random) {
   let direction = 1;
   let seeded = false;
 
+  /**
+   * `RandomOther`'s shuffle bag, preallocated at the largest sequence the
+   * parameters can declare - twelve pitch classes over ten octaves - so a
+   * refill writes in place and nothing allocates on a trigger.
+   */
+  const bag = new Int32Array(120);
+  /** How far the bag has been drained. `>= size` means "refill before drawing". */
+  let bagIndex = 0;
+
   const detectGate = createGateDetector();
   // Resolved on the first call to the note the sequence is sitting on. It used
   // to be seeded with `$note`, which is the literal 60 at construction time
@@ -143,6 +158,11 @@ export function createArpeggiator(random: () => number = Math.random) {
       scaleNotes = getPitchClasses(scale);
       len = scaleNotes.length;
       size = len * octaveCount;
+      // The bag is a permutation of the old sequence, so a set change
+      // invalidates it. Marked drained here, next to the index clamp, rather
+      // than rebuilt eagerly: the refill costs a shuffle and this branch can
+      // fire on a mode nobody is using.
+      bagIndex = size;
       // Clamp *here*, where `size` is recomputed, and not on the next gate
       // edge. `euclid` has a measured `NaN` from doing it the other way round:
       // it rebuilds its pattern when `steps` changes but only wraps its cursor
@@ -168,6 +188,15 @@ export function createArpeggiator(random: () => number = Math.random) {
       if (mode === ArpMode.Down) {
         flat = size - 1;
         direction = -1;
+      } else if (mode === ArpMode.RandomOther) {
+        // Enter the bag rather than stepping into it: the engine emits the
+        // note it is sitting on and *then* advances, so without this the
+        // starting index would sound once before the first pass and once
+        // inside it, and the first pass would not be a permutation.
+        // `-1` because nothing has been played yet, so the boundary swap has
+        // nothing to avoid.
+        refill(-1);
+        flat = bag[bagIndex++];
       }
     }
 
@@ -212,6 +241,40 @@ export function createArpeggiator(random: () => number = Math.random) {
     return note;
   }
 
+  /**
+   * One position drawn uniformly. The octave first and the note second, which
+   * is the order the memoryless pick drew them in before the sequence had an
+   * order; `flat` packs the two, so drawing the pair and drawing the index are
+   * the same draw.
+   */
+  function drawFlat() {
+    return Math.floor(random() * $octaves) * len + Math.floor(random() * len);
+  }
+
+  /**
+   * Fisher-Yates over the whole sequence, written into the preallocated bag.
+   * `avoid` is the position just played, or -1 if nothing has been.
+   */
+  function refill(avoid: number) {
+    for (let i = 0; i < size; i++) bag[i] = i;
+    for (let i = size - 1; i > 0; i--) {
+      const j = Math.floor(random() * (i + 1));
+      const t = bag[i];
+      bag[i] = bag[j];
+      bag[j] = t;
+    }
+    // Without this the boundary between two passes can repeat a note, which is
+    // the one thing this mode promises cannot happen. A plain Fisher-Yates
+    // gets it wrong once every `size` passes.
+    if (size > 1 && bag[0] === avoid) {
+      const j = 1 + Math.floor(random() * (size - 1));
+      const t = bag[0];
+      bag[0] = bag[j];
+      bag[j] = t;
+    }
+    bagIndex = 0;
+  }
+
   /** One step along the sequence, in whatever direction the mode implies. */
   function advance() {
     // Required, not defensive. Without it `UpDownExclusive` on a one-note set
@@ -227,10 +290,20 @@ export function createArpeggiator(random: () => number = Math.random) {
     }
 
     if ($mode === ArpMode.Random) {
-      // The octave drawn first and the note second, which is the order the
-      // memoryless pick drew them in before the sequence had an order - so a
-      // seeded stream still produces the same notes.
-      flat = Math.floor(random() * $octaves) * len + Math.floor(random() * len);
+      // Draw until it differs, which is what Plaits does. Bounded by the guard
+      // above: with more than one entry in the sequence there is always
+      // something else to draw, and the expected number of draws is
+      // `size / (size - 1)` - 2.0 on a two-note set, 1.17 on a seven-note one.
+      // It runs on triggers, not on samples.
+      let next = drawFlat();
+      while (next === flat) next = drawFlat();
+      flat = next;
+      return;
+    }
+
+    if ($mode === ArpMode.RandomOther) {
+      if (bagIndex >= size) refill(flat);
+      flat = bag[bagIndex++];
       return;
     }
 

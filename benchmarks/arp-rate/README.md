@@ -59,13 +59,26 @@ The four columns are four shapes the `trigger` parameter arrives in:
 - **a-rate ×64** — a trigger every other sample, so 64 steps in one block. Not a
   patch anybody writes; it is the ceiling, and it is still 0.1 % of budget.
 
-**Re-run after ticket 03**, which replaced the memoryless pick with a flat-index
-traversal and added five pieces of state: 0.98-5.1 µs across runs on a machine
-that was also running a full test suite. The reason to read that as noise rather
-than as a regression is the **a-rate idle** column, which never calls the
-advance at all - it moved by the same factor, run for run. The traversal runs on
-triggers, not on samples, so the only thing this ticket added to the per-sample
-path is the argument it passes.
+**Re-run after tickets 03 and 04**, which replaced the memoryless pick with a
+flat-index traversal, five pieces of state, a retry loop and a shuffle bag:
+
+| scale      | k-rate | a-rate idle | a-rate | a-rate ×64 |
+| ---------- | -----: | ----------: | -----: | ---------: |
+| TriadMajor |  0.022 |       0.781 |  0.856 |      2.408 |
+| Major      |  0.025 |       0.872 |  0.932 |      2.344 |
+| Chromatic  |  0.021 |       0.808 |  0.896 |      2.658 |
+
+Unchanged, which is the expected answer: the advance runs on triggers and not on
+samples, so what tickets 03-05 add lands on a path taken a few hundred times a
+second rather than 48 000. The `a-rate ×64` column - 64 steps in one block, the
+ceiling nobody patches - is _down_ against ticket 01, which is a measure of how
+much noise there is at this scale rather than of anything the code did.
+
+Mid-way through those two tickets the same script read 0.98-5.1 µs on a machine
+that was simultaneously running a full test suite with a full disk. What said
+"machine" rather than "regression" at the time was the **a-rate idle** column,
+which never calls the advance at all and moved by the same factor, run for run.
+The quiet-machine numbers above are the confirmation.
 
 **Re-run after ticket 02**, which added a `Math.floor`/`Math.max` on `octaves`
 to every call and therefore to every sample of the a-rate path: 0.9-1.8 µs on a

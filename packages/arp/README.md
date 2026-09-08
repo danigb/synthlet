@@ -72,6 +72,13 @@ which you got, and Arturia, u-he and PolyBrute all ship the two: the difference
 is whether the turnaround notes play once or twice. The sequences above are the
 KeyStep Pro manual's, and the tests assert them verbatim.
 
+**`Random` wanders and `RandomOther` covers.** `Random` draws uniformly and
+never repeats the note it just played, so it can dwell on a region of the set —
+reach for it when you want the pattern to sound unpredictable. `RandomOther` is
+a shuffle bag: every note of the set plays exactly once per pass, in a fresh
+order each pass, so a pass is always a complete statement of the chord. Neither
+ever plays the same note twice in a row.
+
 The octave is **inside** the traversal, not outside it: over two octaves the
 `UpDown` modes turn at the ends of the whole range, not at each octave.
 

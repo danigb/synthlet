@@ -108,66 +108,156 @@ describe("the injected random source", () => {
     // Pinned, so that changing the generator is a deliberate act rather than
     // a silent reshuffle of every seeded expectation in the package.
     //
-    // Shifted by one against the array this test was written with, and the
-    // shift is the whole of the change: the engine emits the note it is
-    // sitting on and *then* draws, so the first trigger sounds the root and
-    // the first draw lands on the second trigger. The draws themselves are
-    // identical - the octave first, the note second, the same order the
-    // memoryless pick used - which is why every statistic below still reads
-    // what it read before there was an order.
-    expect(a.slice(0, 8)).toEqual([60, 60, 72, 72, 60, 67, 76, 72]);
+    // Re-pinned twice. Ticket 03 shifted it by one, because the engine emits
+    // the note it is sitting on and *then* draws, so the first trigger sounds
+    // the root and the first draw lands on the second one. Ticket 04 moved it
+    // again, because `Random` now draws until the position differs and a
+    // rejected draw consumes the stream. Neither is a change of distribution;
+    // both are what this test is for.
+    expect(a.slice(0, 8)).toEqual([60, 72, 60, 67, 76, 72, 67, 79]);
   });
 });
 
-// A BASELINE, NOT A CONTRACT.
-//
-// Uniform selection with no memory repeats the previous note 1/n of the time
-// and does not cover its own set. These numbers are here so ticket 04 - which
-// replaces the strategy with a no-immediate-repeat draw and a shuffle bag -
-// has to change them deliberately and can show what it moved. Every one of
-// them should read 0% after that ticket.
-describe("baseline: what a memoryless random pick costs", () => {
-  function repeatRate(scale: ArpScale, triggers: number) {
-    const notes = play(createArpeggiator(), triggers, {
-      scale,
-      mode: ArpMode.Random,
-    });
-    let repeats = 0;
+// Ticket 01 recorded what a memoryless pick cost, as a baseline to be broken:
+// 33% of steps on a major triad repeated the previous note, 20% on a pentatonic
+// minor, 14% on a major scale - uniform 1/n exactly - and twelve triggers over a
+// seven-note scale failed to sound all seven in 77% of runs. Ticket 04 broke it.
+// What follows is those same measurements, asserting zero.
+describe("randomness with a memory", () => {
+  const RANDOM_MODES = [ArpMode.Random, ArpMode.RandomOther];
+
+  function repeats(notes: number[]) {
+    let count = 0;
     for (let i = 1; i < notes.length; i++) {
-      if (notes[i] === notes[i - 1]) repeats++;
+      if (notes[i] === notes[i - 1]) count++;
     }
-    return repeats / (notes.length - 1);
+    return count;
   }
 
-  // A triad is the input an arpeggiator is *for*, and it is the worst case:
-  // one step in three is a repeat, which under a fixed envelope is a step
-  // that did not happen.
-  it("repeats the previous note about 1/n of the time", () => {
-    // 200 000 triggers rather than the 60 000 these were measured over:
-    // `toBeCloseTo(x, 2)` allows 0.005, which at 60 000 draws is only two and a
-    // half standard deviations of the proportion - i.e. a test that fails on
-    // about one run in a hundred for no reason. At 200 000 it is five.
-    expect(repeatRate(ArpScale.TriadMajor, 200_000)).toBeCloseTo(1 / 3, 2);
-    expect(repeatRate(ArpScale.PentatonicMinor, 200_000)).toBeCloseTo(1 / 5, 2);
-    expect(repeatRate(ArpScale.Major, 200_000)).toBeCloseTo(1 / 7, 2);
+  it("never repeats the note it just played", () => {
+    // Exhaustive over the sets a user can name, because zero repeats is a
+    // property of the construction and not a statistic: a violation is a bug,
+    // not an unlucky sample, so 2000 triggers finds it as surely as 60 000.
+    const scales = Object.values(ArpScale).filter(
+      (v) => typeof v === "number",
+    ) as number[];
+
+    for (const mode of RANDOM_MODES) {
+      for (const scale of scales) {
+        for (let octaves = 1; octaves <= 4; octaves++) {
+          const notes = play(
+            createArpeggiator(xorshift32(scale + octaves)),
+            2_000,
+            {
+              scale,
+              octaves,
+              mode,
+            },
+          );
+          expect({ mode, scale, octaves, repeats: repeats(notes) }).toEqual({
+            mode,
+            scale,
+            octaves,
+            repeats: 0,
+          });
+        }
+      }
+    }
   });
 
-  it("usually fails to sound all seven notes of a major scale in twelve triggers", () => {
-    const RUNS = 5_000;
-    let incomplete = 0;
-    for (let run = 0; run < RUNS; run++) {
-      const played = new Set(
-        play(createArpeggiator(), 12, {
-          scale: ArpScale.Major,
-          mode: ArpMode.Random,
-        }),
-      );
-      if (played.size < 7) incomplete++;
+  it("still repeats when there is only one note to play", () => {
+    // The one exception, and the reason `Random`'s retry loop terminates: a
+    // one-entry sequence has nothing else to draw.
+    for (const mode of RANDOM_MODES) {
+      let steps = 0;
+      const arp = createArpeggiator(xorshift32(9));
+      const notes: number[] = [];
+      while (steps++ < 32) {
+        notes.push(freqToMidi(arp(1, 60, 1, 1, mode)));
+        arp(0, 60, 1, 1, mode);
+      }
+      expect(new Set(notes)).toEqual(new Set([60]));
     }
-    // 77.3% measured over 60k runs; the tolerance is three points because
-    // this is a proportion of 5000 Bernoulli trials, not a constant.
-    expect(incomplete / RUNS).toBeGreaterThan(0.74);
-    expect(incomplete / RUNS).toBeLessThan(0.81);
+  });
+
+  it("covers the whole set once per pass, in RandomOther", () => {
+    // 77% of twelve-trigger runs used to miss a note of a major scale. A bag
+    // cannot: seven triggers are the seven notes, and fourteen are each of
+    // them twice.
+    for (let run = 0; run < 200; run++) {
+      const arp = createArpeggiator(xorshift32(run + 1));
+      const notes = play(arp, 14, {
+        scale: ArpScale.Major,
+        mode: ArpMode.RandomOther,
+      });
+      expect(new Set(notes.slice(0, 7)).size).toBe(7);
+      const counts = new Map<number, number>();
+      for (const note of notes) counts.set(note, (counts.get(note) ?? 0) + 1);
+      expect([...counts.values()]).toEqual(new Array(7).fill(2));
+    }
+  });
+
+  it("covers every octave too, not only every note", () => {
+    // The bag is over the whole sequence - `len * octaves` - so a pass spans
+    // the octaves as well.
+    const arp = createArpeggiator(xorshift32(4));
+    const notes = play(arp, 9, {
+      scale: ArpScale.TriadMajor,
+      octaves: 3,
+      mode: ArpMode.RandomOther,
+    });
+    expect([...notes].sort((a, b) => a - b)).toEqual([
+      60, 64, 67, 72, 76, 79, 84, 88, 91,
+    ]);
+  });
+
+  it("does not repeat across the boundary between two passes", () => {
+    // The case a plain Fisher-Yates gets wrong once every `size` passes, and
+    // the reason `refill` swaps its first entry. 10 000 refills over a
+    // three-note set is 30 000 triggers and 10 000 chances to fail.
+    const arp = createArpeggiator(xorshift32(17));
+    const notes = play(arp, 30_000, {
+      scale: ArpScale.TriadMinor,
+      mode: ArpMode.RandomOther,
+    });
+    expect(repeats(notes)).toBe(0);
+  });
+
+  it("wanders in Random and covers in RandomOther", () => {
+    // The measurement that says the two are not substitutes. Twelve triggers
+    // over a seven-note scale: a bag always sounds all seven, and a
+    // no-immediate-repeat draw still misses about two runs in three - better
+    // than the 77% it replaced, and nowhere near a permutation.
+    const missed = (mode: ArpMode) => {
+      const RUNS = 2_000;
+      let incomplete = 0;
+      for (let run = 0; run < RUNS; run++) {
+        const played = new Set(
+          play(createArpeggiator(xorshift32(run + 1)), 12, {
+            scale: ArpScale.Major,
+            mode,
+          }),
+        );
+        if (played.size < 7) incomplete++;
+      }
+      return incomplete / RUNS;
+    };
+
+    expect(missed(ArpMode.RandomOther)).toBe(0);
+    expect(missed(ArpMode.Random)).toBeGreaterThan(0.55);
+    expect(missed(ArpMode.Random)).toBeLessThan(0.75);
+  });
+
+  it("is exactly reproducible from a seed, in both modes", () => {
+    for (const mode of RANDOM_MODES) {
+      const of = () =>
+        play(createArpeggiator(xorshift32(5)), 32, {
+          scale: ArpScale.PentatonicMinor,
+          octaves: 2,
+          mode,
+        });
+      expect(of()).toEqual(of());
+    }
   });
 });
 
@@ -262,7 +352,7 @@ describe("the note range", () => {
       octaves: 2,
       mode: ArpMode.Random,
     });
-    expect(notes).toEqual([60, 60, 72, 72, 60, 67, 76, 72]);
+    expect(notes).toEqual([60, 72, 60, 67, 76, 72, 67, 79]);
   });
 });
 
