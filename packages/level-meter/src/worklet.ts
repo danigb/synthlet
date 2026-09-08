@@ -68,7 +68,6 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
   ms: Float64Array; // per channel, the smoothed mean square
   ra: number; // rms one-pole coefficient, per sample
   rb: number; // the same coefficient over a whole block
-  n: number; // channel capacity of the buffer
   cc: number; // channels most recently seen on the input
   d: number; // release, as a per-block multiplier
   hb: number; // holdMs, in blocks
@@ -83,7 +82,6 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
     this.r = true;
     const o = options.processorOptions ?? {};
     const n = o.maxChannels ?? DEFAULT_MAX_CHANNELS;
-    this.n = n;
     this.cc = 0;
 
     // Shared when the main thread could allocate a SharedArrayBuffer; otherwise
