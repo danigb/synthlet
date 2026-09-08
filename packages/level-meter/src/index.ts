@@ -6,6 +6,12 @@ import {
   ParamDescriptor,
 } from "./_worklet";
 import { currentFrame, onAnimationFrame } from "./driver";
+import {
+  createScriptProcessorDriver,
+  resolveBufferSize,
+  ScriptProcessorDriver,
+} from "./script-processor";
+import type { LevelAnalyzer, LevelAnalyzerOptions } from "./dsp";
 export { LevelMeterUI } from "./meter-ui";
 // The dB-to-pixel arithmetic, from the file that needs it most. Every hand-built
 // UI clamps a bar length and the canvas renderer clamps a gradient stop; they
@@ -146,12 +152,18 @@ export type LevelsListener = (levels: Levels) => void;
 /**
  * Which driver is producing the readings.
  *
- * `"worklet"` is the `AudioWorkletNode`. `AudioWorklet` is `[SecureContext]`,
- * so on a plain-http page there is no worklet to run at all; ticket 14 adds a
- * `ScriptProcessorNode` driver over the same core, and this is where it says
- * which one is running.
+ * `"worklet"` is the `AudioWorkletNode`, and what you get on any secure page.
+ *
+ * `"script-processor"` is the main-thread driver over the same core, for pages
+ * the worklet cannot reach: `AudioWorklet` is `[SecureContext]`, so on plain
+ * http `ac.audioWorklet` is simply `undefined`. It is also what a registration
+ * that *rejects* falls back to - a CSP that blocks `blob:` scripts, say.
+ *
+ * The readings are the same either way; the engine is diagnostics, and the one
+ * thing that differs is that a `ScriptProcessorNode`'s channel count is fixed
+ * when it is built.
  */
-export type LevelMeterEngine = "worklet";
+export type LevelMeterEngine = "worklet" | "script-processor";
 
 /** What both forms of the meter expose. */
 export type LevelMeterApi = {
@@ -314,6 +326,26 @@ export type LevelMeterOptions = {
    * who would rather poll than take a callback.
    */
   onError?: (event: Event) => void;
+  /**
+   * Force an engine instead of detecting one.
+   *
+   * `"script-processor"` on a secure page is how the http driver gets
+   * exercised in every browser without leaving https - and how a consumer who
+   * wants one deterministic behaviour everywhere gets it.
+   */
+  engine?: LevelMeterEngine;
+  /**
+   * Frames per `onaudioprocess` on the `"script-processor"` engine. One of
+   * 256, 512, 1024, 2048, 4096, 8192, 16384; default 1024, which is 21 ms at
+   * 48 kHz. Ignored by the worklet, which always sees a render quantum.
+   */
+  bufferSize?: number;
+  /**
+   * Input channels for the `"script-processor"` engine, fixed at construction
+   * because a `ScriptProcessorNode`'s are. Defaults to the source's
+   * `channelCount`. Ignored by the worklet, which follows its input.
+   */
+  inputChannels?: number;
 };
 
 // The readings and everything derived from them, with no reference to the node.
@@ -322,6 +354,25 @@ export type LevelMeterOptions = {
 // starts zero-filled, so `channelCount` reads 0 and every level reads
 // `-Infinity` until `attach` wires a node in - which is exactly what a meter
 // that is not measuring yet should say.
+// The port protocol, applied directly. `worklet.ts` has the same switch on the
+// other side of a `postMessage`; on the main thread there is no message to send.
+function applyCommand(analyzer: LevelAnalyzer, type: string) {
+  switch (type) {
+    case "CLEAR_CLIP":
+      analyzer.clearClip();
+      break;
+    case "START_INTEGRATION":
+      analyzer.loudness?.startIntegration();
+      break;
+    case "STOP_INTEGRATION":
+      analyzer.loudness?.stopIntegration();
+      break;
+    case "RESET_INTEGRATION":
+      analyzer.loudness?.resetIntegration();
+      break;
+  }
+}
+
 function createLevelsCore(options: LevelMeterOptions) {
   const maxChannels = resolveMaxChannels(options.maxChannels);
   const length = levelsLength(maxChannels);
@@ -432,9 +483,33 @@ function createLevelsCore(options: LevelMeterOptions) {
     postIntervalMs: options.postIntervalMs ?? DEFAULT_POST_INTERVAL_MS,
   };
 
-  // Null until `ready` has built one. Only `clearClip` needs it before then,
-  // and there is nothing on the audio thread to clear yet.
+  // The same settings the processor is built from, minus the two that only
+  // mean something across a thread boundary. One core, two drivers, and the
+  // readings agree because there is nothing else they could do.
+  const {
+    levelsBuffer: _b,
+    postIntervalMs: _p,
+    ...analyzerOptions
+  } = processorOptions;
+
+  // Whichever engine ended up running, or neither while `ready` is pending. A
+  // command has to reach the one that exists.
   let node: AudioWorkletNode | null = null;
+  let analyzer: LevelAnalyzer | null = null;
+
+  /**
+   * Send a command to whichever engine is running, or hold it until one is.
+   *
+   * `clearClip` could drop one - there is nothing to clear yet - but a session
+   * command cannot: `startIntegration()` in the line after
+   * `LevelMeter.tap(source)` has to mean the same thing as one a second later,
+   * or the programme boundary depends on how fast registration went.
+   */
+  const command = (type: string) => {
+    if (node) node.port.postMessage({ type });
+    else if (analyzer) applyCommand(analyzer, type);
+    else queued.push(type);
+  };
   // Session commands sent before the node existed. Readings can wait for the
   // next block; a programme boundary cannot be moved by how long registration
   // took.
@@ -470,9 +545,9 @@ function createLevelsCore(options: LevelMeterOptions) {
     truePeak: (channel) => (truePeakOn ? toDb(view[slot(channel) + 3]) : NaN),
     clipped: (channel) => ((view[2] >>> channel) & 1) === 1,
     clearClip() {
-      node?.port.postMessage({ type: "CLEAR_CLIP" });
-      // The processor clears its own copy too; this is so a reader looking
-      // before the next frame arrives sees the click it just made.
+      command("CLEAR_CLIP");
+      // The engine clears its own copy too; this is so a reader looking before
+      // the next frame arrives sees the click it just made.
       view[2] = 0;
     },
     snapshot() {
@@ -514,19 +589,7 @@ function createLevelsCore(options: LevelMeterOptions) {
       return view[tail + 2];
     },
 
-    /**
-     * Send a port message, now or as soon as there is a port.
-     *
-     * `clearClip` can drop one - there is nothing on the audio thread to clear
-     * yet - but a session command cannot: `startIntegration()` in the line
-     * after `LevelMeter.tap(source)` has to mean the same thing as one a second
-     * later, or the programme boundary depends on how fast the worklet
-     * registered.
-     */
-    command(type: string) {
-      if (node) node.port.postMessage({ type });
-      else queued.push(type);
-    },
+    command,
 
     subscribe(listener: LevelsListener) {
       listeners.add(listener);
@@ -553,6 +616,32 @@ function createLevelsCore(options: LevelMeterOptions) {
           stopTicking = null;
         }
       };
+    },
+
+    /** The levels view, for the script-processor driver to write into. */
+    view,
+
+    /** What to build that driver's core with. */
+    analyzerOptions: analyzerOptions as LevelAnalyzerOptions,
+
+    /**
+     * The view has been written in place - by the main-thread driver, which
+     * needs no transport at all. Same two steps the message handler takes
+     * after a posted frame lands.
+     */
+    written() {
+      readView();
+      notify();
+    },
+
+    /**
+     * Wire in the main-thread core instead of a worklet node. Commands go to
+     * it directly: there is no port, and no thread to cross.
+     */
+    attachAnalyzer(built: LevelAnalyzer) {
+      analyzer = built;
+      for (const type of queued) applyCommand(built, type);
+      queued.length = 0;
     },
 
     /** Wire in the worklet node, once `ready` has built one. */
@@ -583,6 +672,11 @@ function createLevelsCore(options: LevelMeterOptions) {
       stopTicking = null;
     },
   };
+}
+
+// `[SecureContext]`, so on plain http this is `undefined` rather than false.
+function hasAudioWorklet(context: BaseAudioContext): boolean {
+  return typeof context.audioWorklet?.addModule === "function";
 }
 
 function assertTappable(source: AudioNode, output: number) {
@@ -619,13 +713,50 @@ function createTap(
   const core = createLevelsCore(options);
 
   let node: Disposable<AudioWorkletNode> | null = null;
+  let driver: ScriptProcessorDriver | null = null;
   let disposed = false;
 
+  // Validated here rather than inside `ready`, so a typo is a throw at the call
+  // site instead of a rejection nobody awaited.
+  if (options.bufferSize !== undefined) resolveBufferSize(options.bufferSize);
+
+  // Known synchronously in both deterministic cases: the caller forced one, or
+  // there is no `audioWorklet` on this page to try. Only a registration that
+  // *rejects* can move it later.
+  let engine: LevelMeterEngine =
+    options.engine ??
+    (hasAudioWorklet(context) ? "worklet" : "script-processor");
+
+  const startScriptProcessor = () => {
+    engine = "script-processor";
+    driver = createScriptProcessorDriver(source, output, core, {
+      bufferSize: options.bufferSize,
+      inputChannels: options.inputChannels,
+    });
+    core.attachAnalyzer(driver.analyzer);
+  };
+
   const ready = (async () => {
-    // Through the registrar, so two meters on one context register once - and,
-    // since ticket 15's other half, so a registration that failed is retried
-    // rather than cached forever.
-    await registerLevelMeterWorklet(context);
+    if (engine === "script-processor") {
+      if (disposed) return;
+      startScriptProcessor();
+      return;
+    }
+
+    try {
+      // Through the registrar, so two meters on one context register once -
+      // and, since ticket 15's other half, so a registration that failed is
+      // retried rather than cached forever.
+      await registerLevelMeterWorklet(context);
+    } catch {
+      // A CSP that blocks `blob:` scripts, a closed context, a dev-server
+      // hiccup. Different cause from plain http, same result - no worklet - and
+      // the same answer. The registrar itself is untouched: it is the shared
+      // module contract and 23 other packages depend on it throwing.
+      if (disposed) return;
+      startScriptProcessor();
+      return;
+    }
     // `dispose()` may have run while that was in flight. Everything below is
     // synchronous, so this is the only place the two can cross.
     if (disposed) return;
@@ -643,20 +774,17 @@ function createTap(
     node = disposable(built, [() => source.disconnect(built, output)]);
   })();
 
-  // SEAM (ticket 14). `AudioWorklet` is `[SecureContext]`, so on a plain-http
-  // page `context.audioWorklet` is `undefined` and the registrar throws before
-  // anything is built. That is where the `ScriptProcessorNode` driver over the
-  // same pure core takes over and `engine` starts saying `"script-processor"`.
-  // Until it exists there is no second engine, so the failure is the caller's,
-  // through `ready`.
-  //
-  // The no-op handler is what keeps an unawaited `ready` from being reported as
-  // an unhandled rejection; `ready` itself still rejects for anyone who awaits.
+  // `ready` now rejects only when *no* engine can run - if building the script
+  // processor itself throws. The no-op handler keeps an unawaited `ready` from
+  // being reported as an unhandled rejection; `ready` still rejects for anyone
+  // who awaits it.
   ready.catch(() => {});
 
   return {
     ready,
-    engine: "worklet",
+    get engine() {
+      return engine;
+    },
     transport: core.transport,
     getLevels: core.getLevels,
     getPeaks: core.getPeaks,
@@ -675,6 +803,7 @@ function createTap(
       disposed = true;
       core.release();
       node?.dispose();
+      driver?.dispose();
     },
   };
 }
@@ -698,9 +827,12 @@ export const LevelMeter = Object.assign(
     const tap = createTap(gain, options, 0);
     // Assigned before `disposable`, which composes with the `dispose` it finds
     // rather than replacing it.
+    Object.defineProperty(gain, "engine", {
+      get: () => tap.engine,
+      enumerable: true,
+    });
     Object.assign(gain, {
       ready: tap.ready,
-      engine: tap.engine,
       transport: tap.transport,
       getLevels: tap.getLevels,
       getPeaks: tap.getPeaks,

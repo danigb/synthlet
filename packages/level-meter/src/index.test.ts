@@ -23,6 +23,18 @@ class GainNodeStub extends AudioNodeStub {
   gain = { value: 1 };
 }
 
+class ScriptProcessorNodeStub extends AudioNodeStub {
+  onaudioprocess: ((event: any) => void) | null = null;
+  constructor(
+    context: unknown,
+    readonly bufferSize: number,
+    readonly inputChannels: number,
+    readonly outputChannels: number,
+  ) {
+    super(context);
+  }
+}
+
 // Every worklet node the factory builds, in order. A tap builds exactly one,
 // and it builds it inside `ready` - so this is how a test reaches the node that
 // is no longer the thing the factory returns.
@@ -46,11 +58,30 @@ class AudioWorkletNodeStub extends AudioNodeStub {
 // to start from nothing.
 function createContext(): AudioContext {
   const ac: any = {
+    sampleRate: 48000,
     audioWorklet: { addModule: jest.fn().mockResolvedValue(undefined) },
     createGain: () => new GainNodeStub(ac),
+    createScriptProcessor: (
+      bufferSize: number,
+      inputChannels: number,
+      outputChannels: number,
+    ) => {
+      const node = new ScriptProcessorNodeStub(
+        ac,
+        bufferSize,
+        inputChannels,
+        outputChannels,
+      );
+      scriptProcessors.push(node);
+      return node;
+    },
   };
+  ac.destination = new AudioNodeStub(ac);
   return ac as AudioContext;
 }
+
+/** Every `ScriptProcessorNode` the factory built, in order. */
+const scriptProcessors: ScriptProcessorNodeStub[] = [];
 
 let context: AudioContext;
 
@@ -173,6 +204,7 @@ describe("LevelMeter", () => {
     framesRequested = 0;
     context = createContext();
     built.length = 0;
+    scriptProcessors.length = 0;
   });
 
   afterEach(() => {
@@ -884,16 +916,172 @@ describe("LevelMeter", () => {
       expect(isDriverRunning()).toBe(false);
     });
 
-    it("rejects when the worklet cannot be registered", async () => {
+    // Ticket 14 changed this: a registration that rejects is no longer the end
+    // of the meter, it is the other engine's cue.
+    it("falls back rather than rejecting when registration fails", async () => {
       addModuleOf().mockRejectedValueOnce(new Error("blocked by CSP"));
       const meter = LevelMeter.tap(
         new AudioNodeStub(context) as unknown as AudioNode,
       );
 
-      await expect(meter.ready).rejects.toThrow("blocked by CSP");
-      // Still readable, still silent - a failed meter is not a broken object.
-      expect(meter.getLevels().channelCount).toBe(0);
+      await expect(meter.ready).resolves.toBeUndefined();
+      expect(meter.engine).toBe("script-processor");
       expect(built).toHaveLength(0);
+      expect(scriptProcessors).toHaveLength(1);
+    });
+  });
+
+  // Ticket 14. `AudioWorklet` is `[SecureContext]`, so on a plain-http page -
+  // a phone on the LAN, an intranet tool, an https page in an http iframe -
+  // `ac.audioWorklet` is simply undefined and every ticket before this one ran
+  // behind the throw that produces.
+  describe("engine", () => {
+    const tapOn = (ac: AudioContext, options = {}) =>
+      LevelMeter.tap(new AudioNodeStub(ac) as unknown as AudioNode, options);
+
+    it("is the worklet on a secure page", async () => {
+      const { meter } = await tapMeter();
+      expect(meter.engine).toBe("worklet");
+      expect(scriptProcessors).toHaveLength(0);
+    });
+
+    it("is the script processor where there is no audioWorklet", async () => {
+      delete (context as any).audioWorklet;
+      const meter = tapOn(context);
+
+      // Known synchronously: there was never a worklet to try.
+      expect(meter.engine).toBe("script-processor");
+      await expect(meter.ready).resolves.toBeUndefined();
+      expect(built).toHaveLength(0);
+      expect(scriptProcessors).toHaveLength(1);
+    });
+
+    // The registrar is untouched - it is the shared module contract, and 23
+    // other packages depend on it throwing. The meter is what catches.
+    it("does not ask the registrar to cope with http", () => {
+      delete (context as any).audioWorklet;
+      expect(() => registerLevelMeterWorklet(context)).toThrow(/AudioWorklet/);
+      expect(() => tapOn(context)).not.toThrow();
+    });
+
+    it("can be forced on a secure page, so the fallback is testable", async () => {
+      const meter = tapOn(context, { engine: "script-processor" });
+
+      expect(meter.engine).toBe("script-processor");
+      await meter.ready;
+      expect(addModuleOf()).not.toHaveBeenCalled();
+      expect(scriptProcessors).toHaveLength(1);
+    });
+
+    it("meters through the fallback, into the same accessor", async () => {
+      delete (context as any).audioWorklet;
+      const meter = tapOn(context);
+      await meter.ready;
+
+      const node = scriptProcessors[0];
+      node.onaudioprocess!({
+        inputBuffer: {
+          length: 1024,
+          numberOfChannels: 2,
+          getChannelData: () => new Float32Array(1024).fill(0.5),
+        },
+      });
+
+      const levels = meter.getLevels();
+      expect(levels.channelCount).toBe(2);
+      expect(levels.peak(0)).toBeCloseTo(20 * Math.log10(0.5), 4);
+    });
+
+    it("fires subscribers once per buffer", async () => {
+      delete (context as any).audioWorklet;
+      const meter = tapOn(context);
+      await meter.ready;
+      const listener = jest.fn();
+      const off = meter.subscribe(listener);
+
+      const node = scriptProcessors[0];
+      const event = (value: number) => ({
+        inputBuffer: {
+          length: 1024,
+          numberOfChannels: 2,
+          getChannelData: () => new Float32Array(1024).fill(value),
+        },
+      });
+
+      node.onaudioprocess!(event(0.5));
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      // Still at most one per animation frame, as on every other path.
+      node.onaudioprocess!(event(0.9));
+      expect(listener).toHaveBeenCalledTimes(1);
+      runFrame();
+      expect(listener).toHaveBeenCalledTimes(2);
+
+      off();
+    });
+
+    it("routes clearClip to the core rather than a port it does not have", async () => {
+      delete (context as any).audioWorklet;
+      const meter = tapOn(context, { clipThreshold: 0.4 });
+      await meter.ready;
+
+      const node = scriptProcessors[0];
+      node.onaudioprocess!({
+        inputBuffer: {
+          length: 1024,
+          numberOfChannels: 1,
+          getChannelData: () => new Float32Array(1024).fill(0.9),
+        },
+      });
+      expect(meter.getLevels().clipped(0)).toBe(true);
+
+      expect(() => meter.getLevels().clearClip()).not.toThrow();
+      node.onaudioprocess!({
+        inputBuffer: {
+          length: 1024,
+          numberOfChannels: 1,
+          getChannelData: () => new Float32Array(1024),
+        },
+      });
+      expect(meter.getLevels().clipped(0)).toBe(false);
+    });
+
+    it("takes the driver down on dispose", async () => {
+      delete (context as any).audioWorklet;
+      const meter = tapOn(context);
+      await meter.ready;
+
+      meter.dispose();
+      expect(scriptProcessors[0].onaudioprocess).toBeNull();
+      expect(scriptProcessors[0].disconnect).toHaveBeenCalled();
+    });
+
+    // Unlike the worklet path there is nothing to await, so the driver starts
+    // during the `tap` call and the meter is live on the next line. `dispose()`
+    // still takes it down.
+    it("starts without waiting, and disposes cleanly all the same", async () => {
+      delete (context as any).audioWorklet;
+      const meter = tapOn(context);
+
+      expect(scriptProcessors).toHaveLength(1);
+
+      meter.dispose();
+      await meter.ready;
+      expect(scriptProcessors[0].onaudioprocess).toBeNull();
+      expect(scriptProcessors[0].disconnect).toHaveBeenCalled();
+      expect(isDriverRunning()).toBe(false);
+    });
+
+    it("refuses a bufferSize a ScriptProcessorNode would not take", () => {
+      expect(() => tapOn(context, { bufferSize: 1000 })).toThrow(RangeError);
+      expect(() => tapOn(context, { bufferSize: 2048 })).not.toThrow();
+    });
+
+    it("pass-through reports its engine too", async () => {
+      delete (context as any).audioWorklet;
+      const meter = LevelMeter(context);
+      await meter.ready;
+      expect(meter.engine).toBe("script-processor");
     });
   });
 
