@@ -1,11 +1,20 @@
 import { PROCESSOR } from "./processor";
-import { createRegistrar, disposable, ParamDescriptor } from "./_worklet";
+import {
+  createRegistrar,
+  disposable,
+  Disposable,
+  ParamDescriptor,
+} from "./_worklet";
 import { currentFrame, onAnimationFrame } from "./driver";
 export { LevelMeterUI } from "./meter-ui";
 // The dB-to-pixel arithmetic, from the file that needs it most. Every hand-built
 // UI clamps a bar length and the canvas renderer clamps a gradient stop; they
 // are the same function, and §C7 is what happens when it exists twice.
 export { dbToUnit, formatDb } from "./meter-ui";
+// The EBU R 128 delivery ceiling, from the core that measures against it: the
+// number anyone reading `levels.truePeak()` is checking, and one every renderer
+// would otherwise hardcode.
+export { TRUE_PEAK_CEILING_DBTP } from "./dsp";
 export type {
   LevelMeterUICanvas,
   LevelMeterUIColors,
@@ -133,11 +142,34 @@ export interface Levels {
 /** Called with the live accessor when the readings change. */
 export type LevelsListener = (levels: Levels) => void;
 
-export type LevelMeterWorkletNode = AudioWorkletNode & {
-  dispose(): void;
+/**
+ * Which driver is producing the readings.
+ *
+ * `"worklet"` is the `AudioWorkletNode`. `AudioWorklet` is `[SecureContext]`,
+ * so on a plain-http page there is no worklet to run at all; ticket 14 adds a
+ * `ScriptProcessorNode` driver over the same core, and this is where it says
+ * which one is running.
+ */
+export type LevelMeterEngine = "worklet";
+
+/** What both forms of the meter expose. */
+export type LevelMeterApi = {
+  /**
+   * Resolves once the meter is measuring: the worklet registered, the node
+   * built, the edge connected.
+   *
+   * Awaiting it is optional. Until it resolves the meter reads silence -
+   * `channelCount` 0 and `-Infinity` everywhere - and never throws, so a UI can
+   * be wired up in the same breath as the meter. It rejects only when no engine
+   * can run at all.
+   */
+  readonly ready: Promise<void>;
+  /** Which driver is running. Definitive once `ready` has resolved. */
+  readonly engine: LevelMeterEngine;
+  readonly transport: LevelMeterTransport;
+  getLevels(): Levels;
   /** @deprecated Use `getLevels()`, which knows the channel count. */
   getPeaks(): Float32Array;
-  getLevels(): Levels;
   /**
    * Call `listener` when the readings change; returns the unsubscribe.
    *
@@ -154,8 +186,27 @@ export type LevelMeterWorkletNode = AudioWorkletNode & {
    * straight to `useSyncExternalStore` without a `useCallback` around it.
    */
   subscribe(listener: LevelsListener): () => void;
-  readonly transport: LevelMeterTransport;
+  dispose(): void;
 };
+
+/**
+ * What `LevelMeter.tap()` returns. A meter, not a node: it has no output, and
+ * it exists before the worklet it will eventually drive.
+ */
+export type LevelMeterTap = LevelMeterApi;
+
+/**
+ * What `LevelMeter()` returns: a native `GainNode` that passes audio through,
+ * with a tap beside it. No worklet in the signal path, so a dead processor
+ * cannot silence the audio it was inserted to observe.
+ */
+export type LevelMeterNode = Disposable<GainNode> & LevelMeterApi;
+
+/**
+ * @deprecated Use `LevelMeterNode`. Pass-through is a `GainNode` with a tap
+ * beside it now, not a worklet in the signal path.
+ */
+export type LevelMeterWorkletNode = LevelMeterNode;
 
 // `Math.log10(0)` is already `-Infinity`, which is the whole point: a UI should
 // not have to special-case a floor that should not exist.
@@ -195,6 +246,28 @@ export type LevelMeterOptions = {
    */
   rmsMs?: number;
   /**
+   * Measure true peak, with `lookahead-limiter`'s own BS.1770-style 4x
+   * interpolator. **Off by default**: measured at 10.6x the cost of everything
+   * else in the meter put together, which makes it the one thing here
+   * expensive enough to need asking for. Turns on `levels.truePeak`, which
+   * reads `NaN` until it does.
+   */
+  truePeak?: boolean;
+  /**
+   * Measure loudness to ITU-R BS.1770-5. **Off by default**; cheap, but a
+   * number nobody reads is still waste. Turns on `levels.momentary` and
+   * `levels.shortTerm`, which read `NaN` until it does.
+   */
+  loudness?: boolean;
+  /**
+   * Per-channel weights for the loudness path. Defaults to 1.0 everywhere.
+   * BS.1770 weights by channel *position* and Web Audio does not say what
+   * channel 4 is, so nothing here infers a layout from a channel count - pass
+   * `BS1770_51_CHANNEL_WEIGHTS` from `@synthlet/level-meter/dsp` for a
+   * surround bus.
+   */
+  channelWeights?: ArrayLike<number>;
+  /**
    * How often the processor posts its readings when the transport is
    * `"message"`, in ms. Default 16, i.e. about one animation frame. Ignored
    * when the transport is `"shared"`.
@@ -211,20 +284,19 @@ export type LevelMeterOptions = {
   onError?: (event: Event) => void;
 };
 
-// Both forms are the same meter; they differ only in whether the node has an
-// output. Written once here, and wrapped in `disposable()` by each entry point
-// - `tap` has an incoming edge to take down as well, and `disposable` composes
-// with the `dispose` this function leaves on the node.
+// The readings and everything derived from them, with no reference to the node.
 //
-// `BaseAudioContext` because a tap reads its context from the node it is
-// tapping, and that node may belong to an `OfflineAudioContext`.
-function createMeter(
-  context: BaseAudioContext,
-  options: LevelMeterOptions,
-  outputs: 0 | 1,
-): LevelMeterWorkletNode {
+// That separation is what lets a tap exist before its worklet does: the view
+// starts zero-filled, so `channelCount` reads 0 and every level reads
+// `-Infinity` until `attach` wires a node in - which is exactly what a meter
+// that is not measuring yet should say.
+function createLevelsCore(options: LevelMeterOptions) {
   const maxChannels = resolveMaxChannels(options.maxChannels);
   const length = levelsLength(maxChannels);
+  const loudness = options.loudness === true;
+  // The loudness tail sits after every channel's slots, so its index moves with
+  // `maxChannels` and is resolved once here rather than per read.
+  const tail = HEADER + maxChannels * STRIDE;
 
   const shared = sharedBufferAvailable();
   const levelsBuffer = shared
@@ -275,6 +347,10 @@ function createMeter(
 
   const slot = (channel: number) => HEADER + channel * STRIDE;
 
+  // "Not measured" and "silent" are different answers, and the reserved slot
+  // reads as digital silence while nothing is writing it.
+  const truePeakOn = options.truePeak === true;
+
   const listeners = new Set<LevelsListener>();
   let stopTicking: (() => void) | null = null;
   // The version and the frame of the most recent delivery. Together they are
@@ -305,42 +381,28 @@ function createMeter(
   // parameters by design. What it does need is a `processorOptions` payload,
   // which the helper does not carry. Not an oversight - there is nothing here
   // for it to do.
-  const node = new AudioWorkletNode(context, "LevelMeterProcessor", {
-    numberOfInputs: 1,
-    numberOfOutputs: outputs,
-    processorOptions: {
-      levelsBuffer,
-      maxChannels,
-      releaseDbPerSecond: options.releaseDbPerSecond,
-      holdMs: options.holdMs,
-      clipHoldMs: options.clipHoldMs,
-      clipThreshold: options.clipThreshold,
-      rmsMs: options.rmsMs,
-      postIntervalMs: options.postIntervalMs ?? DEFAULT_POST_INTERVAL_MS,
-    },
-  }) as LevelMeterWorkletNode;
-
-  if (!shared) {
-    node.port.onmessage = (event: MessageEvent) => {
-      view.set(event.data as Float32Array);
-      readView();
-      notify();
-    };
-  }
-
-  // Today a dead processor is indistinguishable from a silent signal: the
-  // browser stops calling `process()` for good and the readings simply stop
-  // moving. Worth surfacing in both forms, and worth it even if tap mode had
-  // turned out to be impossible.
-  node.onprocessorerror = (event: Event) => {
-    error = true;
-    options.onError?.(event);
+  const processorOptions = {
+    levelsBuffer,
+    maxChannels,
+    releaseDbPerSecond: options.releaseDbPerSecond,
+    holdMs: options.holdMs,
+    clipHoldMs: options.clipHoldMs,
+    clipThreshold: options.clipThreshold,
+    rmsMs: options.rmsMs,
+    truePeak: options.truePeak,
+    loudness: options.loudness,
+    // A plain array: `processorOptions` is structured-cloned, and an
+    // `ArrayLike` that is not one of the cloneable types would not survive
+    // the trip.
+    channelWeights: options.channelWeights
+      ? Array.from(options.channelWeights)
+      : undefined,
+    postIntervalMs: options.postIntervalMs ?? DEFAULT_POST_INTERVAL_MS,
   };
 
-  Object.defineProperty(node, "transport", {
-    value: shared ? "shared" : "message",
-    enumerable: true,
-  });
+  // Null until `ready` has built one. Only `clearClip` needs it before then,
+  // and there is nothing on the audio thread to clear yet.
+  let node: AudioWorkletNode | null = null;
 
   // One object, reused. `truePeak`, `momentary` and `shortTerm` read NaN
   // rather than -Infinity while their measurement is off: "not measured" and
@@ -352,11 +414,16 @@ function createMeter(
     get version() {
       return version;
     },
+    // `NaN` when the measurement is off, `-Infinity` when it is on and the
+    // signal is silent - which is why the buffer is not the thing that carries
+    // the distinction. A `NaN` in the view would differ from itself, so
+    // `readView`'s change check would fire on every block and every subscriber
+    // would be woken 60 times a second by a reading that never moved.
     get momentary() {
-      return NaN;
+      return loudness ? view[tail] : NaN;
     },
     get shortTerm() {
-      return NaN;
+      return loudness ? view[tail + 1] : NaN;
     },
     get error() {
       return error;
@@ -364,10 +431,10 @@ function createMeter(
     peak: (channel) => toDb(view[slot(channel)]),
     hold: (channel) => toDb(view[slot(channel) + 1]),
     rms: (channel) => toDb(view[slot(channel) + 2]),
-    truePeak: () => NaN,
+    truePeak: (channel) => (truePeakOn ? toDb(view[slot(channel) + 3]) : NaN),
     clipped: (channel) => ((view[2] >>> channel) & 1) === 1,
     clearClip() {
-      node.port.postMessage({ type: "CLEAR_CLIP" });
+      node?.port.postMessage({ type: "CLEAR_CLIP" });
       // The processor clears its own copy too; this is so a reader looking
       // before the next frame arrives sees the click it just made.
       view[2] = 0;
@@ -390,63 +457,195 @@ function createMeter(
     },
   };
 
-  node.getLevels = () => {
-    if (shared) readView();
-    return levels;
-  };
+  return {
+    levels,
+    transport: (shared ? "shared" : "message") as LevelMeterTransport,
+    processorOptions,
 
-  node.getPeaks = () => {
-    if (shared) readView();
-    return peaks;
-  };
+    getLevels() {
+      if (shared) readView();
+      return levels;
+    },
 
-  node.subscribe = (listener: LevelsListener) => {
-    listeners.add(listener);
-    if (listeners.size === 1) {
-      // From here, not from zero: a new subscriber is told about the next
-      // change, not about the one before it arrived.
-      notifiedVersion = version;
-      notifiedFrame = -1;
-      // The renderer's driver, shared. Under `"shared"` the tick is the only
-      // trigger there is - memory has no events - and under `"message"` it is
-      // what delivers anything a message had to coalesce.
-      stopTicking = onAnimationFrame(() => {
-        if (shared) readView();
-        notify();
-      });
-    }
-    let live = true;
-    return () => {
-      if (!live) return;
-      live = false;
-      listeners.delete(listener);
-      if (listeners.size === 0) {
-        stopTicking?.();
-        stopTicking = null;
+    getPeaks() {
+      if (shared) readView();
+      return peaks;
+    },
+
+    subscribe(listener: LevelsListener) {
+      listeners.add(listener);
+      if (listeners.size === 1) {
+        // From here, not from zero: a new subscriber is told about the next
+        // change, not about the one before it arrived.
+        notifiedVersion = version;
+        notifiedFrame = -1;
+        // The renderer's driver, shared. Under `"shared"` the tick is the only
+        // trigger there is - memory has no events - and under `"message"` it is
+        // what delivers anything a message had to coalesce.
+        stopTicking = onAnimationFrame(() => {
+          if (shared) readView();
+          notify();
+        });
       }
-    };
-  };
+      let live = true;
+      return () => {
+        if (!live) return;
+        live = false;
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          stopTicking?.();
+          stopTicking = null;
+        }
+      };
+    },
 
-  // Set before `disposable`, which composes with whatever `dispose` it finds
-  // rather than replacing it. A disposed meter with a forgotten subscriber
-  // would otherwise keep an animation frame alive for the life of the page.
-  node.dispose = () => {
-    listeners.clear();
-    stopTicking?.();
-    stopTicking = null;
-  };
+    /** Wire in the worklet node, once `ready` has built one. */
+    attach(built: AudioWorkletNode) {
+      node = built;
+      if (!shared) {
+        built.port.onmessage = (event: MessageEvent) => {
+          view.set(event.data as Float32Array);
+          readView();
+          notify();
+        };
+      }
+      // A dead processor is otherwise indistinguishable from a silent signal:
+      // the browser stops calling `process()` for good and the readings simply
+      // stop moving.
+      built.onprocessorerror = (event: Event) => {
+        error = true;
+        options.onError?.(event);
+      };
+    },
 
-  return node;
+    /** Drop the subscribers and, with the last of them, the animation frame. */
+    release() {
+      listeners.clear();
+      stopTicking?.();
+      stopTicking = null;
+    },
+  };
+}
+
+function assertTappable(source: AudioNode, output: number) {
+  const name = source.constructor?.name ?? "node";
+  if (source.numberOfOutputs === 0) {
+    throw Error(
+      `LevelMeter.tap: a ${name} has no outputs to tap. Tap what feeds it instead - for a destination, the node you connect to it.`,
+    );
+  }
+  if (
+    !Number.isInteger(output) ||
+    output < 0 ||
+    output >= source.numberOfOutputs
+  ) {
+    throw RangeError(
+      `LevelMeter.tap: a ${name} has ${source.numberOfOutputs} output(s), so there is no output ${output} to tap.`,
+    );
+  }
+}
+
+// The tap, and the whole of the meter: `LevelMeter()` is this with a `GainNode`
+// in front of it.
+//
+// Synchronous, because a tap has no output - there is nothing downstream that
+// could notice it is not connected yet, which is what makes the facade honest
+// rather than a promise dressed as a node.
+function createTap(
+  source: AudioNode,
+  options: LevelMeterOptions,
+  output: number,
+): LevelMeterTap {
+  assertTappable(source, output);
+  const context = source.context;
+  const core = createLevelsCore(options);
+
+  let node: Disposable<AudioWorkletNode> | null = null;
+  let disposed = false;
+
+  const ready = (async () => {
+    // Through the registrar, so two meters on one context register once - and,
+    // since ticket 15's other half, so a registration that failed is retried
+    // rather than cached forever.
+    await registerLevelMeterWorklet(context);
+    // `dispose()` may have run while that was in flight. Everything below is
+    // synchronous, so this is the only place the two can cross.
+    if (disposed) return;
+
+    const built = new AudioWorkletNode(context, "LevelMeterProcessor", {
+      numberOfInputs: 1,
+      // Always. The processor has no output in either form: pass-through is a
+      // `GainNode` beside it, not a worklet in the path.
+      numberOfOutputs: 0,
+      processorOptions: core.processorOptions,
+    });
+    core.attach(built);
+    source.connect(built, output);
+    // The cascade every other module uses, plus the edge that made it a tap.
+    node = disposable(built, [() => source.disconnect(built, output)]);
+  })();
+
+  // SEAM (ticket 14). `AudioWorklet` is `[SecureContext]`, so on a plain-http
+  // page `context.audioWorklet` is `undefined` and the registrar throws before
+  // anything is built. That is where the `ScriptProcessorNode` driver over the
+  // same pure core takes over and `engine` starts saying `"script-processor"`.
+  // Until it exists there is no second engine, so the failure is the caller's,
+  // through `ready`.
+  //
+  // The no-op handler is what keeps an unawaited `ready` from being reported as
+  // an unhandled rejection; `ready` itself still rejects for anyone who awaits.
+  ready.catch(() => {});
+
+  return {
+    ready,
+    engine: "worklet",
+    transport: core.transport,
+    getLevels: core.getLevels,
+    getPeaks: core.getPeaks,
+    subscribe: core.subscribe,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      core.release();
+      node?.dispose();
+    },
+  };
 }
 
 export const LevelMeter = Object.assign(
+  /**
+   * A pass-through meter: audio in, the same audio out, metered on the way.
+   *
+   * It is a native `GainNode` with a tap beside it, so the audio never waits
+   * for the worklet to register and a processor that throws cannot silence
+   * what it was inserted to observe.
+   *
+   * Prefer `LevelMeter.tap(source)` unless you actually want the meter in the
+   * signal path: metering a connection should not mean breaking it.
+   */
   (
-    context: AudioContext,
+    context: BaseAudioContext,
     options: LevelMeterOptions = {},
-  ): LevelMeterWorkletNode => disposable(createMeter(context, options, 1)),
+  ): LevelMeterNode => {
+    const gain = context.createGain();
+    const tap = createTap(gain, options, 0);
+    // Assigned before `disposable`, which composes with the `dispose` it finds
+    // rather than replacing it.
+    Object.assign(gain, {
+      ready: tap.ready,
+      engine: tap.engine,
+      transport: tap.transport,
+      getLevels: tap.getLevels,
+      getPeaks: tap.getPeaks,
+      subscribe: tap.subscribe,
+      dispose: () => tap.dispose(),
+    });
+    return disposable(gain) as LevelMeterNode;
+  },
   {
     /**
-     * Meter `source` without going in front of it.
+     * Meter `source` without going in front of it. One line, no context, no
+     * registration call, no `await`.
      *
      * ```ts
      * const meter = LevelMeter.tap(source); // adds an edge; changes nothing else
@@ -454,28 +653,23 @@ export const LevelMeter = Object.assign(
      * ```
      *
      * A second outgoing edge is additive and reversible: whatever `source` was
-     * already connected to stays connected, and there is nothing downstream of
-     * the meter that a thrown processor could silence. Pass-through
-     * (`LevelMeter(ac)`) means owning the edge you are metering, knowing what
-     * it was connected to, taking it apart and putting it back on `dispose()`
-     * - reach for it only when you actually want the meter in the path.
+     * already connected to stays connected, you do not have to know what that
+     * was, and there is nothing downstream of the meter that a thrown processor
+     * could silence.
+     *
+     * Returns synchronously and reads silence until `ready` resolves, so a UI
+     * can be attached in the next line. The context comes from `source`, which
+     * is why a `Compound` can be tapped without knowing which node it ends in.
      *
      * The node has `numberOfOutputs: 0`. Chrome renders such a node at the full
      * block rate whether or not `source` reaches the destination; Firefox and
      * Safari are unverified.
-     *
-     * The context comes from `source`, so there is nothing to pass. Registering
-     * the worklet first is still the caller's job in this release.
      */
     tap(
       source: AudioNode,
-      options: LevelMeterOptions = {},
-    ): LevelMeterWorkletNode {
-      const node = createMeter(source.context, options, 0);
-      source.connect(node);
-      // Composed with the cascade, not replacing it: `disposable` takes the
-      // node down and this takes down the edge that made it a tap.
-      return disposable(node, [() => source.disconnect(node)]);
+      options: LevelMeterOptions & { output?: number } = {},
+    ): LevelMeterTap {
+      return createTap(source, options, options.output ?? 0);
     },
     // No parameters: the meter is configured by options, not AudioParams.
     descriptors: [] as readonly ParamDescriptor[],
