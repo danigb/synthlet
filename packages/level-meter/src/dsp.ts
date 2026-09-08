@@ -201,8 +201,11 @@ export interface LevelAnalyzerOptions {
    */
   rmsMs?: number;
   /**
-   * Measure true peak. **Off by default**, because it costs 11x the entire
-   * loudness path - 48 multiply-accumulates per sample per channel.
+   * Measure true peak. **Off by default**: 48 multiply-accumulates per sample
+   * per channel, which costs more than everything else in the meter put
+   * together by better than an order of magnitude - roughly 3.3 s of CPU per
+   * 5 minutes of 48 kHz stereo, against 181 ms with loudness on and 74 ms for
+   * peak, hold, clip and RMS alone.
    */
   truePeak?: boolean;
   /**
@@ -337,8 +340,9 @@ export function createLevelAnalyzer(
 
   // True peak: the limiter's own detector, one per channel, so the meter and
   // the limiter agree by construction. Off by default - 48 multiply-
-  // accumulates per sample per channel is 11x the entire loudness path, and it
-  // is the only thing in the package expensive enough to need an opt-in.
+  // accumulates per sample per channel costs more than everything else in the
+  // meter put together by better than an order of magnitude, which makes it the
+  // only thing in the package expensive enough to need an opt-in.
   //
   // The two meter-specific optimisations the plan offered were measured and
   // both declined; see the `truePeak` option for the numbers.

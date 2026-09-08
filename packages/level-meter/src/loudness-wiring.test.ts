@@ -11,10 +11,13 @@
 import {
   ANALYSIS_FRAME,
   BS1770_50_CHANNEL_WEIGHTS,
+  createLevelAnalyzer,
   gainToTarget,
   levelsLength,
   levelsTailIndex,
   TAIL_INTEGRATED,
+  TAIL_MOMENTARY,
+  TAIL_SHORT_TERM,
 } from "./dsp";
 import { analyze } from "./offline";
 import { createWorkletTestContext } from "./test-utils";
@@ -79,6 +82,38 @@ describe("loudness offline", () => {
     const tail = analysis.levels.slice(levelsTailIndex(2));
     expect(tail.length).toBeGreaterThan(0);
     expect(tail.every((slot) => slot === 0)).toBe(true);
+  });
+
+  /**
+   * The same freeze, through the driver that meets it: an unconnected worklet
+   * input reaches `createLevelAnalyzer.process` as an empty `channels` with an
+   * explicit length, and the loudness core has to treat that as silence rather
+   * than as nothing at all.
+   */
+  it("falls to -Infinity when the input stops arriving", () => {
+    const analyzer = createLevelAnalyzer(SAMPLE_RATE, {
+      maxChannels: 2,
+      loudness: true,
+    });
+    const signal = ebuTone(20, -23);
+    analyzer.process(signal, 0, signal[0].length);
+
+    const tail = levelsTailIndex(analyzer.maxChannels);
+    let levels = analyzer.results();
+    expectLufs(levels[tail + TAIL_MOMENTARY], -23);
+    expectLufs(levels[tail + TAIL_SHORT_TERM], -23);
+
+    // Four seconds of blocks with no input in them, the way Chrome delivers an
+    // input nothing is connected to.
+    for (let i = 0; i < (4 * SAMPLE_RATE) / ANALYSIS_FRAME; i++) {
+      analyzer.process([], 0, ANALYSIS_FRAME);
+    }
+
+    levels = analyzer.results();
+    expect(levels[tail + TAIL_MOMENTARY]).toBe(-Infinity);
+    expect(levels[tail + TAIL_SHORT_TERM]).toBe(-Infinity);
+    // The peak was already falling through this; now the loudness does too.
+    expectLufs(levels[tail + TAIL_INTEGRATED], -23);
   });
 
   it("reads -Infinity for silence, not a floor", async () => {

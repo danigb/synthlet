@@ -619,6 +619,46 @@ describe("silence", () => {
     expectWithin(analyzer.integrated(), -23.0, EBU_TOLERANCE_LU);
   });
 
+  /**
+   * The freeze ticket 04 removed from the peak, in the loudness windows.
+   *
+   * Chrome hands a worklet whose input is unconnected an empty `inputs[0]`, and
+   * the driver passes it straight through with an explicit length. "No channels
+   * this block" is not "no time passed": if the windows stop advancing they
+   * hold the last tone forever, which is the one reading a meter must never
+   * give.
+   */
+  it("keeps falling when the input goes away entirely", () => {
+    const analyzer = createLoudnessAnalyzer(SR);
+    feed(analyzer, sineProgramme(SR, [tone(20, -23)]));
+    expectWithin(analyzer.momentary(), -23.0, EBU_TOLERANCE_LU);
+    const integrated = analyzer.integrated();
+    expectWithin(integrated, -23.0, EBU_TOLERANCE_LU);
+
+    // Four seconds of nothing arriving at all - longer than the 3 s window.
+    for (let at = 0; at < 4 * SR; at += RENDER_QUANTUM) {
+      analyzer.process([], 0, RENDER_QUANTUM);
+    }
+
+    expect(analyzer.momentary()).toBe(-Infinity);
+    expect(analyzer.shortTerm()).toBe(-Infinity);
+
+    // The gating hop ticked through it too. The three 400 ms blocks that
+    // straddle the end of the tone still hold signal, so they enter the
+    // histogram and move the reading a little - as they would at any level
+    // change...
+    const settled = analyzer.integrated();
+    expectWithin(settled, integrated, 0.05);
+
+    // ...and then it stops moving, however long the silence runs: a gating
+    // block of nothing has zero energy, so its loudness is -Infinity, which is
+    // not above the -70 LUFS absolute gate of BS.1770-5 eq (6).
+    for (let at = 0; at < 60 * SR; at += RENDER_QUANTUM) {
+      analyzer.process([], 0, RENDER_QUANTUM);
+    }
+    expect(analyzer.integrated()).toBe(settled);
+  });
+
   it("counts a silent channel as silent, not as absent", () => {
     // One channel at -23 dBFS, one at digital zero. Only half the energy of the
     // stereo case, so 3.01 LU quieter - the silent channel is summed, not

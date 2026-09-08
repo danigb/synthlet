@@ -4,8 +4,9 @@
  *
  * "Tell me the peak of this file" is at least as common an ask as "put a bar on
  * my graph", and both are the same arithmetic. Chunked and yielding, because
- * true peak costs 11x the loudness path and a five-minute track is seconds of
- * work - which is a frozen tab if it runs in one go.
+ * true peak costs seconds where the rest of the meter costs milliseconds -
+ * roughly 3.3 s of CPU for a five-minute track against 181 ms with loudness on
+ * - and a run that long in one go is a frozen tab.
  *
  * `OfflineAudioContext` is deliberately not used: it needs a context, a worklet
  * registration and a browser, and gives nothing a pure function does not.

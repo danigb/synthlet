@@ -397,8 +397,14 @@ export interface LoudnessAnalyzer {
 
   /**
    * Consume `length` samples from each channel starting at `offset`.
+   *
    * Allocates nothing. Channels past `maxChannels` are ignored, and the channel
    * count is expected to be stable across calls.
+   *
+   * Pass an empty `channels` with an explicit `length` to advance time with no
+   * input - which is what an unconnected worklet input is, and the readings
+   * have to keep falling through it rather than freezing at the last thing
+   * they saw.
    */
   process(
     channels: ArrayLike<ArrayLike<number>>,
@@ -679,9 +685,22 @@ export function createLoudnessAnalyzer(
 
     process(channels, offset = 0, length?: number) {
       const n = Math.min(channels.length, maxChannels);
-      if (n === 0) return;
       if (n > channelCount) channelCount = n;
-      const count = length ?? channels[0].length - offset;
+
+      // An empty `channels` with an explicit `length` is "nothing arrived this
+      // block", not "no time passed" - which is exactly what Chrome hands a
+      // worklet whose input is unconnected. Time still has to advance, or the
+      // windows freeze at the last thing they saw: the same freeze ticket 04
+      // removed from the peak. With no channel fed, `blockHasSignal` stays 0
+      // everywhere, so `finishSubBlock` writes zeros into the ring and flushes
+      // the filter state for every channel seen so far, and the readings fall
+      // to -Infinity over the window rather than sticking.
+      //
+      // The gating hop keeps ticking through it and adds nothing: a window of
+      // silence has zero energy, so its loudness is -Infinity, which is not
+      // above the -70 LUFS absolute gate of BS.1770-5 eq (6).
+      const count = length ?? (n > 0 ? channels[0].length - offset : 0);
+      if (count <= 0) return;
 
       let done = 0;
       while (done < count) {
