@@ -33,8 +33,19 @@ export const PARAMS: readonly ParamDescriptor[] = [
     // How many steps the cycle has. Structural: the pattern is generated when
     // this changes and cached, so a per-sample value would rebuild the pattern
     // 128 times a block for a sequence that has not advanced.
+    //
+    // Defaults to 8, with `beats` at 3, because `Euclid(ac, { clock })` has to
+    // make a sound. 0 is the natural default for a count and it was the wrong
+    // one: `euclid(0, 0)` is the empty pattern, `pattern[0] * gate` is
+    // `undefined * 1`, and the README's own usage block emitted `NaN` on every
+    // sample from block 0 - which in Chrome silences that branch of the graph
+    // for the lifetime of the context. `E(3,8)` is the tresillo, the rhythm
+    // this module is named for and the README's own worked example.
+    //
+    // 0 is still a legal setting and now means silence, which is the honest
+    // reading of "a pattern with no steps". `dsp.ts` guards it in three places.
     name: "steps",
-    defaultValue: 0,
+    defaultValue: 8,
     minValue: 0,
     maxValue: 100,
     automationRate: "k-rate",
@@ -42,8 +53,11 @@ export const PARAMS: readonly ParamDescriptor[] = [
   {
     // How many of those steps are hits. Structural, and cached alongside
     // `steps` for the same reason - the two are one Euclidean pattern.
+    //
+    // 3 of `steps`' 8: the pair is chosen together, and it is the tresillo.
+    // See `steps` for why neither default is 0 any more.
     name: "beats",
-    defaultValue: 0,
+    defaultValue: 3,
     minValue: 0,
     maxValue: 100,
     automationRate: "k-rate",

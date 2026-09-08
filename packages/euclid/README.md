@@ -37,6 +37,7 @@ const rhythm = Euclid(ac, {
   beats: 3, // the tresillo
   rotation: 0,
 });
+// `steps: 8, beats: 3` are the defaults, so `Euclid(ac, { clock })` is this.
 
 const kick = KickDrum(ac, { trigger: rhythm });
 kick.connect(ac.destination);
@@ -47,8 +48,8 @@ kick.connect(ac.destination);
 | Param         | Default | Range   | Rate   | Meaning                                                  |
 | ------------- | ------- | ------- | ------ | -------------------------------------------------------- |
 | `clock`       | 0       | 0 … 1   | a-rate | A phase ramp. Its wrap is the step boundary              |
-| `steps`       | 0       | 0 … 100 | k-rate | Length of the cycle                                      |
-| `beats`       | 0       | 0 … 100 | k-rate | How many of those steps are hits                         |
+| `steps`       | 8       | 0 … 100 | k-rate | Length of the cycle                                      |
+| `beats`       | 3       | 0 … 100 | k-rate | How many of those steps are hits                         |
 | `subdivision` | 1       | 1 … 20  | k-rate | Pattern cycles per clock cycle — a multiplier on `clock` |
 | `rotation`    | 0       | 0 … 100 | k-rate | How far the pattern is rotated                           |
 | `pulseWidth`  | 0.5     | 0 … 1   | k-rate | How much of each step a hit is high for¹                 |
@@ -59,7 +60,13 @@ the top of the next render quantum.
 
 The other five are structural: `steps`, `beats` and `rotation` are one
 Euclidean pattern, generated and cached when any of them changes — rotating a
-pattern is choosing a different pattern, not interpolating toward one.
+pattern is choosing a different pattern, not interpolating toward one. All three
+are counts, so all three are floored: they arrive from an `AudioParam` as
+floats, and half a step is not a step.
+
+**`steps` and `beats` default to the tresillo**, `E(3, 8)`, so
+`Euclid(ac, { clock })` with nothing else patched plays a rhythm. **`steps: 0`
+is legal and means silence** — the honest reading of "a pattern with no steps".
 
 **A hit is a pulse, not a held level.** Held levels merge adjacent hits — no
 falling edge between them means no rising edge for the second — so a `(4, 4)`

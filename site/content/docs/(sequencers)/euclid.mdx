@@ -27,9 +27,15 @@ clock.bpm.value = 150;
 
 #### Pattern
 
-- `steps`: the number of steps in the sequence
-- `beats`: the number of beats in the sequence
+- `steps`: the number of steps in the sequence. Default `8`. `0` is legal and
+  means silence — a pattern with no steps has nothing to play.
+- `beats`: the number of beats in the sequence. Default `3`, so `steps` and
+  `beats` together default to the tresillo, `E(3, 8)`: `Euclid(ac, { clock })`
+  with nothing else patched plays a rhythm.
 - `rotation`: the rotation of the sequence
+
+All three are counts and all three are floored — they arrive from an
+`AudioParam` as floats, and half a step is not a step.
 
 #### Clock
 

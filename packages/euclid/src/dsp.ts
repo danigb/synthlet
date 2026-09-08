@@ -54,9 +54,12 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
    * the off-by-one that makes a reset land on the wrong step. `prevClock = 1`
    * makes the very next sample read as a boundary - every phase is below 1 -
    * so the reset takes effect on its own sample.
+   *
+   * `pattern.length - 1` is `-1` on the empty pattern, and `pattern[-1] * gate`
+   * is `NaN`. `steps: 0` is a declared value: it means silence, not a dead node.
    */
   function reset() {
-    current = pattern.length - 1;
+    current = pattern.length ? pattern.length - 1 : 0;
     prevClock = 1;
   }
 
@@ -76,9 +79,18 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
     while (currentClock > 1) currentClock -= 1;
     const gate = currentClock < prevClock;
     prevClock = currentClock;
-    // Advance the pattern
-    if (gate) current = (current + 1) % pattern.length;
-    return pattern[current] * gatePulse(currentClock, pulseWidth);
+    // Advance the pattern. `% 0` on the empty pattern is `NaN`, and a `NaN`
+    // counter never recovers - so it does not advance at all when there is
+    // nothing to advance through.
+    if (gate && pattern.length) current = (current + 1) % pattern.length;
+    // The floor. `current` is in range by construction - `update` clamps it on
+    // every rebuild and the line above reduces it on every boundary - so this
+    // guards the one case that is not an index at all: the empty pattern, where
+    // `pattern[current]` is `undefined` and `undefined * 1` is `NaN`. Narrow on
+    // purpose. `pattern[current] || 0` would be cheaper and would also swallow
+    // an out-of-range index, which is a bug that should stay loud.
+    const hit = pattern.length ? pattern[current] : 0;
+    return hit * gatePulse(currentClock, pulseWidth);
   }
 
   function generate(
@@ -108,11 +120,27 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
   }
 
   function update(steps: number, beats: number, rotation: number) {
+    // All three arrive from an `AudioParam` and are therefore floats, and all
+    // three are counts. Uncoerced, `steps: 8.5` falls out of `i < steps` as a
+    // nine-step pattern, `beats: 3.5` divides as 3.5 and puts four onsets in
+    // what should be `E(3,8)`, and `rotation: 2.5` returns a seven-step pattern
+    // from an eight-step one, because `rotate`'s two `slice` calls truncate
+    // their arguments independently and the halves stop adding up to the whole.
+    // Floored before the guard compares, so 8.0 -> 8.4 is not a rebuild either.
+    steps = Math.floor(steps);
+    beats = Math.floor(beats);
+    rotation = Math.floor(rotation);
     if ($steps !== steps || $beats !== beats || $rotation !== rotation) {
       $steps = steps;
       $beats = beats;
       $rotation = rotation;
       pattern = rotate(euclid($steps, $beats), $rotation);
+      // The only place `pattern.length` can change, so the only place `current`
+      // can be left pointing past the end - `step()` reduces it `% length`, but
+      // only on a boundary. Turning a `steps` knob from 16 down to 8 while
+      // `current` is 13 emitted `NaN` until the next boundary: 5 of 16 step
+      // offsets, worst case 121.9 ms.
+      current = pattern.length ? current % pattern.length : 0;
     }
   }
 
