@@ -1,10 +1,13 @@
 {
   "name": "@synthlet/instrument",
   "version": "0.0.0",
-  "description": "A voice definition in, a playable instrument out",
+  "description": "A polyphonic instrument from a voice definition: a pool, an allocator and presets",
   "keywords": [
     "instrument",
+    "polyphonic",
     "polyphony",
+    "synth",
+    "presets",
     "voice",
     "modular",
     "synthesis",

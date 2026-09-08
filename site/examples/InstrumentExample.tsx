@@ -111,7 +111,8 @@ function Example() {
       />
       <p className="text-xs mt-1 opacity-70">
         Click the keys, or play the <code>z</code> and <code>q</code> rows of
-        your computer keyboard.
+        your computer keyboard. There is no arpeggiator over the held notes yet
+        - see what is deferred, and why, in the package README.
       </p>
 
       <div className="grid grid-cols-4 gap-2 items-center mt-4">
@@ -134,6 +135,9 @@ function Example() {
           param={voiceCount}
         />
         <Slider
+          // `Bass` carries `glide: 0.04` - a reserved preset key sets the
+          // instrument option, so the slider has to re-read after a load.
+          key={`${preset}-glide`}
           label="Glide"
           labelClassName="text-right"
           inputClassName="col-span-2"
@@ -183,7 +187,10 @@ function Example() {
           labelClassName="text-right"
           inputClassName="col-span-2"
           min={specs.attack.min}
-          max={specs.attack.max}
+          // The parameter goes to 10 s, which is a drone rather than an
+          // attack: a slider whose default sits at 0.1 % of its travel is not
+          // a control. The range a knob gets is the UI's decision.
+          max={Math.min(specs.attack.max, 2)}
           units="s"
           param={synth.params.attack}
         />
