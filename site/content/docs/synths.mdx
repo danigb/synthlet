@@ -9,6 +9,11 @@ import NoiseExample from "../../examples/NoiseExample";
 
 Some synthesizers are provided for convenience. They are implemented by connecting different modules together.
 
+Each of them is **a voice**: one note at a time, one `gate`. To play chords, hand a voice
+definition to [`Instrument`](/docs/instrument) - it builds a pool of them, allocates notes
+across it and gives you presets. `MonoSynth` is already wrapped as one, `monoVoice`, so
+`Instrument(ac, monoVoice, { voices: 8 })` is the polyphonic version of the synth below.
+
 ## Mono synthesizer
 
 A monophonic synthesizer with a single PolyBLEP oscillator and an ADSR envelope on the filter and amplifier.

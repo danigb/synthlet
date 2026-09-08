@@ -1,0 +1,156 @@
+---
+package: instrument
+title: Instrument
+description: A polyphonic instrument from a voice definition
+---
+
+import InstrumentExample from "../../../examples/InstrumentExample";
+
+A voice definition in, a finished synth out. `Instrument` takes a function that builds one
+voice, the list of parameters a preset addresses, and the worklets it needs, and returns a
+polyphonic instrument: a pool of voices, a note allocator, one automatable knob per parameter,
+and named sounds.
+
+It contains **no DSP**. Every sound it makes comes from the definition; the module is an
+allocator, a pool of voice graphs, fan-out nodes and `setValueAtTime`.
+
+<InstrumentExample />
+
+```ts
+import { Instrument, monoVoice, registerMonoSynth } from "synthlet";
+
+const ac = await registerMonoSynth(new AudioContext());
+const synth = Instrument(ac, monoVoice, { voices: 8 });
+synth.connect(ac.destination);
+
+await synth.ready;
+synth.start({ note: "C4", velocity: 96, duration: 0.5 });
+synth.start({ note: 64 });
+synth.stop(64);
+```
+
+Construction is synchronous and the instrument _is_ an `AudioNode`, so it can be connected and
+wrapped in effects before `ready` resolves. Notes started before it resolves are queued and
+scheduled when it does; a note whose time has already passed is dropped.
+
+## The surface, next to smplr's
+
+If you know [smplr](https://github.com/danigb/smplr), you already know this one: `await
+synth.ready`, `start({ note, velocity, time, duration })` returning a stop function,
+`stop(note)`, `dispose()`, velocity 0-127 with 100 as the default, and `note` as a MIDI number
+or a name (`"C4"`, `"F#3"`, `"Bb2"`).
+
+Two things differ, and they are the same difference. The instrument **is** a node rather than
+a wrapper around one, so `volume` is an `AudioParam` on its output gain instead of a 0-127
+setter, and there is no `addEffect` or `destination` option: `synth.connect(reverb)` is the
+send, and nothing auto-connects to `ctx.destination` - the host owns the graph.
+
+The row-by-row table, with the reason for each difference, is in the
+[package README](https://github.com/danigb/synthlet/tree/main/packages/instrument).
+
+## Two kinds of parameter
+
+**Per-note** parameters - gate, pitch, velocity - are written by the allocator into one voice.
+You never touch them: `start` and `stop` are their interface.
+
+**Per-instrument** parameters - cutoff, envelope times, detune - are one fan-out node each,
+connected to every voice. That makes every knob an `AudioParam` on `synth.params`, so it
+automates and schedules like any other:
+
+```ts
+synth.params.cutoff.setValueAtTime(400, ac.currentTime);
+synth.params.cutoff.linearRampToValueAtTime(6000, ac.currentTime + 2);
+```
+
+Values are in the parameter's own units - Hz, seconds, cents - and there is no scaling layer.
+
+A third kind belongs to the module rather than to the voice: `glide`, `hold`, note priority
+and legato are **instrument options**. The allocator applies them, so the definition never
+sees them, and they are settable live:
+
+```ts
+const lead = Instrument(ac, monoVoice, {
+  voices: 1,
+  glide: 0.08,
+  legato: true,
+});
+lead.glide = 0.2; // portamento, in seconds
+lead.hold = true; // the sustain pedal: releases are remembered until it lifts
+```
+
+`voices: 1` is a monosynth rather than a pool of one: notes go through a note stack, so
+releasing the top key returns to the one underneath, and `priority` picks which held note
+sounds.
+
+## Presets
+
+A preset is a name and a flat object of values, and loading one is a single write per
+parameter - which means it can be scheduled:
+
+```ts
+synth.presets; // ["Init", "Bass", "Pad"]
+synth.setPreset("Pad", { time: ac.currentTime + 2 }); // the pad, at bar 9
+const saved = synth.getPreset("My sound"); // complete, and JSON
+```
+
+A preset is **complete, not a diff**: every declared parameter is written on every load, the
+ones the preset names with its values and the rest with their declared defaults. Loading
+`"Pad"` after `"Bass"` cannot inherit the bass's cutoff.
+
+The definition's parameter keys are its schema. An unknown key throws and names itself; a
+value outside the parameter's range is clamped silently, because a saved 1.2 on a 0-1
+parameter is a stale file rather than a mistake. `glide`, `legato` and `priority` are reserved
+keys a preset may carry: a lead sound _is_ its glide.
+
+## A voice definition
+
+```ts
+const monoVoice = {
+  params: {
+    cutoff: { default: 2000, min: 20, max: 12000, unit: "Hz" },
+    resonance: fromDescriptor(Svf, "Q"),
+    // …
+  },
+  create: (ctx, inlets) => MonoSynth(ctx, { filter: { Q: inlets.resonance } }),
+  register: registerMonoSynth,
+  presets: { Init: {}, Bass: { cutoff: 300 }, Pad: { attack: 1.2 } },
+};
+```
+
+- **`params`** - the parameters a preset addresses, each with a default and a range. Written
+  down rather than discovered, because a schema should be readable; `fromDescriptor(Module,
+"name")` fills one in from a worklet's own descriptors.
+- **`create(ctx, inlets)`** - builds one voice, wiring the fan-out `inlets` into it. Called
+  once per voice with the _same_ `inlets` object. It must return a node with `gate` and
+  `frequency` `AudioParam`s, and optionally `velocity`.
+- **`register(ctx)`** - registers the voice's worklets. `ready` resolves after it.
+- **`presets`** - the bank, typed against the definition's own keys, so a typo in a factory
+  preset is a build error.
+- **`sameNoteReuse`** and **`velocityToGain`** - a repeated note reuses its voice unless the
+  definition says a plucked string, and velocity is `(v / 127)²` unless it says otherwise.
+
+## What it costs
+
+A `MonoSynth` voice is seven worklet nodes, so eight of them are 56, plus one fan-out node per
+declared parameter and one gain per voice - all built once, at `ready`. The
+[automation-rate benchmark](https://github.com/danigb/synthlet/tree/main/benchmarks/automation-rate)
+measured that pool at ~180 µs per render block, **6.8 % of one core**, before any DSP runs.
+
+That is the honest cost of a design where every voice is a patchable graph, and it is why a
+native single-worklet synth is still on the roadmap. It would take this same definition, with
+the same `params` and the same presets; only `create` changes.
+
+## What it does not do
+
+- **No internal clock or rate.** Nothing schedules itself; the host does. That is the
+  transport this library declines to own.
+- **No auto-connect.** `synth.connect(destination)`, always.
+- **No `addEffect`.** The instrument is a node; effects are `connect()`.
+- **No `onStart` / `onEnded` yet.** They wait on `onended` for the envelope modules.
+- **No arpeggiator over the held notes yet.**
+- **Allocation happens at call time**, not at the note's time: schedule two notes out of
+  order into the future and the allocator's least-recently-used state follows the order of the
+  calls. A host that schedules in order inside a lookahead window never sees it.
+
+The [package README](https://github.com/danigb/synthlet/tree/main/packages/instrument) has the
+full list of what is deferred and why.
