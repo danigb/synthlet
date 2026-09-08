@@ -71,6 +71,7 @@ export type {
 
 export * from "./synths/drums";
 export * from "./synths/mono";
+export * from "./synths/mono-voice";
 export { registerDrums, registerMonoSynth } from "./synths/registrars";
 export * from "./waa";
 

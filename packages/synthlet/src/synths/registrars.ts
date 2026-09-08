@@ -24,6 +24,11 @@ import { registerSvfWorklet } from "@synthlet/state-variable-filter";
  * Register the worklets `MonoSynth` builds: the oscillator, the vibrato LFO,
  * the filter and amplifier envelopes, the filter, and the Param nodes behind
  * its `gate` and `volume` inlets.
+ *
+ * It is also `monoVoice.register`, so an `Instrument` built from that
+ * definition registers exactly these five and nothing else - the definition
+ * wraps the same compound, and a pool of eight of it needs no more worklets
+ * than one of it does.
  */
 export function registerMonoSynth<C extends BaseAudioContext>(
   context: C,

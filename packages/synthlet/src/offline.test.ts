@@ -81,7 +81,12 @@ async function renderNote(): Promise<Float32Array> {
   amp.connect(context.destination);
 
   const buffer = await context.startRendering();
-  return buffer.getChannelData(0);
+  // **Copied, not viewed.** `getChannelData` hands back a view of the render
+  // thread's own buffer and the next context reuses that memory, so a
+  // `Float32Array` held across a second `startRendering` reads garbage - which
+  // is the determinism assertion below failing for the harness's reason rather
+  // than for the library's.
+  return Float32Array.from(buffer.getChannelData(0));
 }
 
 // Compile-time only, never called: the widening must not cost a caller the type
@@ -198,7 +203,7 @@ describe("a compound renders offline", () => {
     synth.gate.setValueAtTime(0, GATE_OFF);
 
     const buffer = await context.startRendering();
-    samples = buffer.getChannelData(0);
+    samples = Float32Array.from(buffer.getChannelData(0));
   });
 
   it("is silent before the gate and audible after it", () => {
