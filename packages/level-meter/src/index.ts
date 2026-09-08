@@ -12,6 +12,20 @@ import {
   ScriptProcessorDriver,
 } from "./script-processor";
 import type { LevelAnalyzer, LevelAnalyzerOptions } from "./dsp";
+import {
+  LEVELS_LAYOUT_VERSION,
+  LEVEL_HOLD,
+  LEVEL_PEAK,
+  LEVEL_RMS,
+  LEVEL_TRUE_PEAK,
+  levelIndex,
+  levelsLength,
+  levelsTailIndex,
+  TAIL_INTEGRATED,
+  TAIL_MOMENTARY,
+  TAIL_SHORT_TERM,
+  toDb,
+} from "./dsp";
 export { LevelMeterUI } from "./meter-ui";
 // The dB-to-pixel arithmetic, from the file that needs it most. Every hand-built
 // UI clamps a bar length and the canvas renderer clamps a gradient stop; they
@@ -21,6 +35,10 @@ export { dbToUnit, formatDb } from "./meter-ui";
 // number anyone reading `levels.truePeak()` is checking, and one every renderer
 // would otherwise hardcode.
 export { TRUE_PEAK_CEILING_DBTP } from "./dsp";
+// The layout is `dsp.ts`'s, and the version with it: the pure core is what the
+// worklet, the offline driver and the script-processor driver all write, so it
+// is the one place the slot map can live without a second copy to keep in step.
+export { LEVELS_LAYOUT_VERSION } from "./dsp";
 export type {
   LevelMeterUICanvas,
   LevelMeterUIColors,
@@ -34,27 +52,6 @@ export const registerLevelMeterWorklet = createRegistrar(
 );
 
 export type LevelMeterInputs = {};
-
-// The buffer layout, shared by both transports. Duplicated in `worklet.ts`,
-// which is bundled on its own; ticket 09's `dsp.ts` is where the two meet.
-//
-//   [0]                       layout version
-//   [1]                       channel count
-//   [2]                       flags: clip latch, bit c for channel c
-//   [HEADER + c*STRIDE + 0]   peak      (linear)
-//   [HEADER + c*STRIDE + 1]   peak hold (linear)
-//   [HEADER + c*STRIDE + 2]   rms       (linear)
-//   [HEADER + c*STRIDE + 3]   true peak (linear)
-//   [HEADER + n*STRIDE + 0]   LUFS momentary  (dB)
-//   [HEADER + n*STRIDE + 1]   LUFS short-term (dB)
-//   [HEADER + n*STRIDE + 2]   LUFS integrated (dB)
-export const LEVELS_LAYOUT_VERSION = 1;
-const HEADER = 3;
-const STRIDE = 4;
-const TAIL = 3;
-
-const levelsLength = (maxChannels: number) =>
-  HEADER + maxChannels * STRIDE + TAIL;
 
 const DEFAULT_MAX_CHANNELS = 16;
 // The flags word is one Float32, one bit per channel, and a Float32 holds
@@ -252,10 +249,6 @@ export type LevelMeterNode = Disposable<GainNode> & LevelMeterApi;
  */
 export type LevelMeterWorkletNode = LevelMeterNode;
 
-// `Math.log10(0)` is already `-Infinity`, which is the whole point: a UI should
-// not have to special-case a floor that should not exist.
-const toDb = (magnitude: number) => 20 * Math.log10(magnitude);
-
 // Ballistics are construction options, not `AudioParam`s. They are properties of
 // the instrument, fixed for its life - the same reasoning `lookahead-limiter`
 // gives for `lookaheadMs`. Making the package's first parameter out of a number
@@ -369,7 +362,7 @@ function createLevelsCore(options: LevelMeterOptions) {
   const loudness = options.loudness === true;
   // The loudness tail sits after every channel's slots, so its index moves with
   // `maxChannels` and is resolved once here rather than per read.
-  const tail = HEADER + maxChannels * STRIDE;
+  const tail = levelsTailIndex(maxChannels);
 
   // The transport, from `scripts/_levels.ts` - the same one the limiter's gain
   // reduction travels over, which is what lets one renderer draw both.
@@ -390,10 +383,9 @@ function createLevelsCore(options: LevelMeterOptions) {
   // left here is the deprecated flat mirror it knows nothing about.
   const readView = () => {
     if (!levels_.read()) return;
-    for (let c = 0; c < maxChannels; c++) peaks[c] = view[HEADER + c * STRIDE];
+    for (let c = 0; c < maxChannels; c++)
+      peaks[c] = view[levelIndex(c, LEVEL_PEAK)];
   };
-
-  const slot = (channel: number) => HEADER + channel * STRIDE;
 
   // "Not measured" and "silent" are different answers, and the reserved slot
   // reads as digital silence while nothing is writing it.
@@ -471,18 +463,19 @@ function createLevelsCore(options: LevelMeterOptions) {
     // `readView`'s change check would fire on every block and every subscriber
     // would be woken 60 times a second by a reading that never moved.
     get momentary() {
-      return loudness ? view[tail] : NaN;
+      return loudness ? view[tail + TAIL_MOMENTARY] : NaN;
     },
     get shortTerm() {
-      return loudness ? view[tail + 1] : NaN;
+      return loudness ? view[tail + TAIL_SHORT_TERM] : NaN;
     },
     get error() {
       return error;
     },
-    peak: (channel) => toDb(view[slot(channel)]),
-    hold: (channel) => toDb(view[slot(channel) + 1]),
-    rms: (channel) => toDb(view[slot(channel) + 2]),
-    truePeak: (channel) => (truePeakOn ? toDb(view[slot(channel) + 3]) : NaN),
+    peak: (channel) => toDb(view[levelIndex(channel, LEVEL_PEAK)]),
+    hold: (channel) => toDb(view[levelIndex(channel, LEVEL_HOLD)]),
+    rms: (channel) => toDb(view[levelIndex(channel, LEVEL_RMS)]),
+    truePeak: (channel) =>
+      truePeakOn ? toDb(view[levelIndex(channel, LEVEL_TRUE_PEAK)]) : NaN,
     clipped: (channel) => ((view[2] >>> channel) & 1) === 1,
     clearClip() {
       command("CLEAR_CLIP");
@@ -526,7 +519,7 @@ function createLevelsCore(options: LevelMeterOptions) {
     integrated() {
       if (!loudness) return NaN;
       if (shared) readView();
-      return view[tail + 2];
+      return view[tail + TAIL_INTEGRATED];
     },
 
     command,
@@ -553,7 +546,7 @@ function createLevelsCore(options: LevelMeterOptions) {
       levels_.written();
       // `written` moved `version` itself; this is the deprecated mirror.
       for (let c = 0; c < maxChannels; c++)
-        peaks[c] = view[HEADER + c * STRIDE];
+        peaks[c] = view[levelIndex(c, LEVEL_PEAK)];
     },
 
     /**
@@ -575,7 +568,7 @@ function createLevelsCore(options: LevelMeterOptions) {
         built.port.onmessage = (event: MessageEvent) => {
           levels_.receive(event.data as Float32Array);
           for (let c = 0; c < maxChannels; c++)
-            peaks[c] = view[HEADER + c * STRIDE];
+            peaks[c] = view[levelIndex(c, LEVEL_PEAK)];
         };
       }
       // A dead processor is otherwise indistinguishable from a silent signal:

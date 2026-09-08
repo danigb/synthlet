@@ -7,6 +7,12 @@ import {
   Levels,
   registerLevelMeterWorklet,
 } from "./index";
+import {
+  LEVELS_HEADER as HEADER,
+  LEVELS_LAYOUT_VERSION as LAYOUT_VERSION,
+  LEVELS_STRIDE as STRIDE,
+  levelsLength,
+} from "./dsp";
 import { Compound } from "./_worklet";
 
 // The factory's own surface, not the processor's: what it validates, what it
@@ -95,13 +101,9 @@ function lastWorklet(): AudioWorkletNodeStub {
   return node;
 }
 
-// The layout, from the reader's side.
-const LAYOUT_VERSION = 1;
-const HEADER = 3;
-const STRIDE = 4;
-const TAIL = 3;
-const levelsLength = (maxChannels: number) =>
-  HEADER + maxChannels * STRIDE + TAIL;
+// The layout, from the reader's side - and from `dsp.ts`, which is the only
+// place it is declared. A test that redeclared it would still pass the day the
+// two disagreed, which is the one thing a layout test must not do.
 
 function processorOptions(node: AudioWorkletNodeStub) {
   return node.options.processorOptions;

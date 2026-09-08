@@ -212,10 +212,14 @@ describe("LookaheadLimiter", () => {
       expect(created(limiter).port.onmessage).toBeUndefined();
     });
 
-    it("says which transport is carrying it", () => {
+    it("says which transport is carrying it, and nothing when none is", () => {
       expect(LookaheadLimiter(context, { meter: true }).transport).toBe(
         "message",
       );
+      // Not "message": with the meter off there is no reading and nothing
+      // carrying it, and saying "message" would be describing a transport that
+      // does not exist.
+      expect(LookaheadLimiter(context).transport).toBeUndefined();
     });
   });
 });

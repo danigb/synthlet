@@ -82,8 +82,14 @@ export type LookaheadLimiterWorkletNode = AudioWorkletNode & {
    * once per animation frame, and never while `meter` is off.
    */
   subscribe(listener: (levels: LimiterLevels) => void): () => void;
-  /** Which way the reading reaches the main thread. Diagnostics only. */
-  readonly transport: "shared" | "message";
+  /**
+   * Which way the reading reaches the main thread - shared memory where the
+   * page is cross-origin isolated, a posted copy where it is not. Diagnostics
+   * only; the number is the same either way.
+   *
+   * `undefined` while `meter` is off, because then nothing is transported.
+   */
+  readonly transport: "shared" | "message" | undefined;
   dispose(): void;
 };
 
@@ -181,7 +187,7 @@ export const LookaheadLimiter = Object.assign(
     return Object.assign(node, {
       latencySamples: samples,
       latencyTime: samples / context.sampleRate,
-      transport: (reader?.transport ?? "message") as "shared" | "message",
+      transport: reader?.transport,
       getLevels: () => levels,
       subscribe: (listener: (levels: LimiterLevels) => void) =>
         reader ? reader.subscribe(() => listener(levels)) : () => {},

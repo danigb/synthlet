@@ -1,4 +1,11 @@
 import {
+  LEVELS_HEADER as HEADER,
+  LEVELS_LAYOUT_VERSION as LAYOUT_VERSION,
+  LEVELS_STRIDE as STRIDE,
+  LEVELS_TAIL as TAIL,
+  levelsLength as meterViewLength,
+} from "./dsp";
+import {
   channels,
   constant,
   createWorkletTestContext,
@@ -469,16 +476,8 @@ function ramp(channel: number): Float32Array {
   );
 }
 
-// The one place in the tests that knows the buffer layout. Both transports
-// carry it, so both read through here.
-const LAYOUT_VERSION = 1;
-const HEADER = 3;
-const STRIDE = 4;
-const TAIL = 3;
-
-function meterViewLength(maxChannels: number) {
-  return HEADER + maxChannels * STRIDE + TAIL;
-}
+// The layout comes from `dsp.ts`, which is the only place it is declared: the
+// worklet writes it through the same constants these assertions read.
 
 /**
  * A processor with a buffer around it.
