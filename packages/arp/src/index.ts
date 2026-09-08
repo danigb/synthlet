@@ -6,13 +6,14 @@ import {
 import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
-export { ArpMode, ArpScale } from "./dsp";
+export { ArpMode, ArpOctaveMode, ArpScale } from "./dsp";
 
 export const registerArpWorklet = createRegistrar("ARP", PROCESSOR);
 
 export type ArpInputs = {
   trigger?: ParamInput;
   mode?: ParamInput;
+  octaveMode?: ParamInput;
   baseNote?: ParamInput;
   scale?: ParamInput;
   octaves?: ParamInput;
@@ -21,6 +22,7 @@ export type ArpInputs = {
 export type ArpWorkletNode = AudioWorkletNode & {
   trigger: AudioParam;
   mode: AudioParam;
+  octaveMode: AudioParam;
   baseNote: AudioParam;
   scale: AudioParam;
   octaves: AudioParam;

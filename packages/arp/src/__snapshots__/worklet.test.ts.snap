@@ -18,6 +18,13 @@ exports[`ArpProcessor has parameter descriptors 1`] = `
   },
   {
     "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "octaveMode",
+  },
+  {
+    "automationRate": "k-rate",
     "defaultValue": 60,
     "maxValue": 127,
     "minValue": 0,

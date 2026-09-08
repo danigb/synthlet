@@ -3,7 +3,7 @@ import type { ParamDescriptor } from "./_worklet";
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 //
-// Five parameters, one of them a-rate.
+// Six parameters, one of them a-rate.
 // `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
 // every `k-rate` below is an explicit opt-out and carries a reason for being
 // one. `scripts/_worklet.ts`, next to `ParamDescriptor`, has the two grounds.
@@ -38,6 +38,21 @@ export const PARAMS: readonly ParamDescriptor[] = [
     defaultValue: 0, // ArpMode.Up
     minValue: 0,
     maxValue: 5, // Up, Down, UpDownExclusive, UpDownInclusive, Random, RandomOther
+    automationRate: "k-rate",
+  },
+  {
+    // Structural, and the same bank-index argument as `mode`: it selects which
+    // of two mappings turns a position in the sequence into a note and an
+    // octave. `Serial` plays the whole set and then moves up an octave;
+    // `Repeat` plays each note in every octave before moving to the next note,
+    // which from one chord and one direction is a completely different figure.
+    //
+    // **Inert when `octaves` is 1**, where both mappings agree - which is the
+    // first thing a reader will wonder.
+    name: "octaveMode",
+    defaultValue: 0, // ArpOctaveMode.Serial - unchanged behaviour
+    minValue: 0,
+    maxValue: 1,
     automationRate: "k-rate",
   },
   // The other three describe the *set of notes* this walks. All three are

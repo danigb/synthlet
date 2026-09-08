@@ -90,6 +90,7 @@ describe("ArpProcessor", () => {
     return {
       trigger,
       mode: [0], // ArpMode.Up
+      octaveMode: [0], // ArpOctaveMode.Serial
       baseNote: [60],
       scale: [CHROMATIC],
       octaves: [4],

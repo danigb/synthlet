@@ -74,6 +74,10 @@ second rather than 48 000. The `a-rate ×64` column - 64 steps in one block, the
 ceiling nobody patches - is _down_ against ticket 01, which is a measure of how
 much noise there is at this scale rather than of anything the code did.
 
+Ticket 05 adds one branch per trigger and was measured at 1.3-1.9 µs on a
+machine that had just finished a test run, with `a-rate idle` at 1.4-3.1 - the
+same signature as the noisy readings below, and for the same reason.
+
 Mid-way through those two tickets the same script read 0.98-5.1 µs on a machine
 that was simultaneously running a full test suite with a full disk. What said
 "machine" rather than "regression" at the time was the **a-rate idle** column,

@@ -85,6 +85,20 @@ The octave is **inside** the traversal, not outside it: over two octaves the
 `mode` is an `AudioParam` like everything else, so a slow `Lfo` patched into it
 gives an arpeggiator whose direction is itself sequenced.
 
+## Octaves
+
+`octaveMode` says what a position in the sequence _means_. A minor triad over
+three octaves, `mode: Up`:
+
+| `ArpOctaveMode` | plays                          |
+| --------------- | ------------------------------ |
+| `Serial`        | 60 63 67 · 72 75 79 · 84 87 91 |
+| `Repeat`        | 60 72 84 · 63 75 87 · 67 79 91 |
+
+Same chord, same direction, same `octaves: 3`, a completely different figure:
+three stacked arpeggios, or a rising sequence of octave leaps on each chord
+tone. It is inert at `octaves: 1`, where the two agree.
+
 `trigger` is `a-rate`, so the note changes on the trigger's own sample rather
 than at the top of the next render quantum, and two triggers inside one block
 advance the arpeggiator twice.

@@ -73,6 +73,31 @@ export enum ArpMode {
 }
 
 /**
+ * How a position in the sequence becomes a note and an octave. Two mappings
+ * over the same `len * octaves` rectangle, and they are transposes of each
+ * other - which is why both visit every (note, octave) pair exactly once per
+ * cycle, and why the traversal does not know this parameter exists.
+ *
+ * A minor triad over three octaves, `Up`:
+ *
+ * ```
+ * Serial   60 63 67 · 72 75 79 · 84 87 91
+ * Repeat   60 72 84 · 63 75 87 · 67 79 91
+ * ```
+ *
+ * The second is a completely different figure - octave leaps on each chord
+ * tone rather than three stacked arpeggios - from an identical chord and an
+ * identical direction. u-he's Hive is the only surveyed product that separates
+ * the two; everything else, Mutable included, hardcodes `Serial`.
+ */
+export enum ArpOctaveMode {
+  /** The whole set, then up an octave and the whole set again. Note-fast. */
+  Serial = 0,
+  /** Each note in every octave, then the next note. Octave-fast. */
+  Repeat = 1,
+}
+
+/**
  * The engine: one note per rising edge of `trigger`, held on the output as a
  * frequency in Hz until the next one.
  *
@@ -100,6 +125,7 @@ export function createArpeggiator(random: () => number = Math.random) {
   // 0 rather than 1, so the first call always takes the rebuild branch below.
   let $octaves = 0;
   let $mode: ArpMode = ArpMode.Up;
+  let $octaveMode: ArpOctaveMode = ArpOctaveMode.Serial;
 
   let scaleNotes = [0];
   let len = 1;
@@ -141,10 +167,15 @@ export function createArpeggiator(random: () => number = Math.random) {
     scale: number,
     octaves: number,
     // Optional so the whole of this file's contract is still four arguments
-    // and a traversal; `worklet.ts` always passes it.
+    // and a traversal; `worklet.ts` always passes both.
     mode: ArpMode = ArpMode.Up,
+    octaveMode: ArpOctaveMode = ArpOctaveMode.Serial,
   ): number {
     $note = baseNote;
+    // Structural, but it does not change `size` - it only changes which pair a
+    // position names - so it is read here rather than in the rebuild branch,
+    // and it cannot invalidate the shuffle bag.
+    $octaveMode = octaveMode;
     // A count, and floored once per call rather than per use: an `AudioParam`
     // hands over a fractional value from any ramp or from any node patched
     // into it, and `octaves: 2.5` used to span three. `Math.max` because the
@@ -218,13 +249,17 @@ export function createArpeggiator(random: () => number = Math.random) {
     return $frequency;
   };
 
-  /**
-   * The position, read as a note. Serial octave traversal: the whole set, then
-   * up an octave and the whole set again.
-   */
+  /** The position, read as a note. */
   function readNote() {
-    const noteIndex = flat % len;
-    const octaveIndex = Math.floor(flat / len) % $octaves;
+    let noteIndex: number;
+    let octaveIndex: number;
+    if ($octaveMode === ArpOctaveMode.Repeat) {
+      noteIndex = Math.floor(flat / $octaves) % len;
+      octaveIndex = flat % $octaves;
+    } else {
+      noteIndex = flat % len;
+      octaveIndex = Math.floor(flat / len) % $octaves;
+    }
     let note = $note + scaleNotes[noteIndex] + octaveIndex * 12;
     // Fold, don't clamp. `baseNote` and `octaves` are declared 0...127 and
     // 1...10, and at both maxima this sum reaches MIDI 246 - 12.1 MHz - which
@@ -245,7 +280,9 @@ export function createArpeggiator(random: () => number = Math.random) {
    * One position drawn uniformly. The octave first and the note second, which
    * is the order the memoryless pick drew them in before the sequence had an
    * order; `flat` packs the two, so drawing the pair and drawing the index are
-   * the same draw.
+   * the same draw. Under `ArpOctaveMode.Repeat` the packing names a different
+   * pair, which changes nothing: it is still uniform over the whole sequence,
+   * which is all either random mode promises.
    */
   function drawFlat() {
     return Math.floor(random() * $octaves) * len + Math.floor(random() * len);

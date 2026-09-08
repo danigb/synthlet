@@ -1,4 +1,10 @@
-import { ArpMode, ArpScale, createArpeggiator, getPitchClasses } from "./dsp";
+import {
+  ArpMode,
+  ArpOctaveMode,
+  ArpScale,
+  createArpeggiator,
+  getPitchClasses,
+} from "./dsp";
 import { PARAMS } from "./params";
 import { xorshift32 } from "./test-random";
 
@@ -562,5 +568,200 @@ describe("the order", () => {
       mode: defaults.mode,
     });
     expect(notes).toEqual([60, 63, 67, 60]);
+  });
+});
+
+// Ticket 05: the second axis of order. `mode` says which way the sequence is
+// walked; `octaveMode` says what a position in it means.
+describe("the octave mapping", () => {
+  function notes(
+    count: number,
+    {
+      baseNote = 60,
+      scale = ArpScale.TriadMinor,
+      octaves = 3,
+      mode = ArpMode.Up,
+      octaveMode = ArpOctaveMode.Serial,
+    } = {},
+  ) {
+    const arp = createArpeggiator(xorshift32(2));
+    const played: number[] = [];
+    for (let i = 0; i < count; i++) {
+      played.push(
+        freqToMidi(arp(1, baseNote, scale, octaves, mode, octaveMode)),
+      );
+      arp(0, baseNote, scale, octaves, mode, octaveMode);
+    }
+    return played;
+  }
+
+  it("reproduces the minor triad over three octaves, both ways", () => {
+    // The whole feature in two rows: an identical chord, an identical `Up` and
+    // an identical `octaves: 3` give three stacked arpeggios one way and a
+    // rising sequence of octave leaps on each chord tone the other.
+    expect(notes(9)).toEqual([60, 63, 67, 72, 75, 79, 84, 87, 91]);
+    expect(notes(9, { octaveMode: ArpOctaveMode.Repeat })).toEqual([
+      60, 72, 84, 63, 75, 87, 67, 79, 91,
+    ]);
+  });
+
+  it("reverses Repeat under Down", () => {
+    expect(
+      notes(9, { mode: ArpMode.Down, octaveMode: ArpOctaveMode.Repeat }),
+    ).toEqual([91, 79, 67, 87, 75, 63, 84, 72, 60]);
+  });
+
+  it("enumerates every note of every octave, both ways", () => {
+    // The property that lets `Repeat` share `advance()` with `Serial`: they are
+    // transposes of the same rectangle, so a full cycle of either visits every
+    // (note, octave) pair exactly once. Worth asserting rather than assuming.
+    for (let len = 1; len <= 12; len++) {
+      const scale = (1 << len) - 1;
+      for (let octaves = 1; octaves <= 10; octaves++) {
+        for (const octaveMode of [ArpOctaveMode.Serial, ArpOctaveMode.Repeat]) {
+          // From MIDI 0, so that nothing folds: twelve pitch classes over ten
+          // octaves reaches 119, and a folded note would collide with the one
+          // an octave below it and make a complete cycle look incomplete.
+          const cycle = notes(len * octaves, {
+            baseNote: 0,
+            scale,
+            octaves,
+            octaveMode,
+          });
+          expect({
+            len,
+            octaves,
+            octaveMode,
+            size: new Set(cycle).size,
+          }).toEqual({ len, octaves, octaveMode, size: len * octaves });
+        }
+      }
+    }
+  });
+
+  it("is inert at octaves: 1", () => {
+    // A user who never raises `octaves` should not be able to tell the
+    // parameter exists.
+    const scales = [
+      ArpScale.TriadMinor,
+      ArpScale.Major,
+      ArpScale.PentatonicMinor,
+      ArpScale.Chromatic,
+      1,
+    ];
+    for (const scale of scales) {
+      for (const mode of [
+        ArpMode.Up,
+        ArpMode.Down,
+        ArpMode.UpDownExclusive,
+        ArpMode.UpDownInclusive,
+        ArpMode.Random,
+        ArpMode.RandomOther,
+      ]) {
+        expect(
+          notes(32, {
+            scale,
+            octaves: 1,
+            mode,
+            octaveMode: ArpOctaveMode.Serial,
+          }),
+        ).toEqual(
+          notes(32, {
+            scale,
+            octaves: 1,
+            mode,
+            octaveMode: ArpOctaveMode.Repeat,
+          }),
+        );
+      }
+    }
+  });
+
+  it("leaves Serial exactly as it was", () => {
+    // The default changes nothing, and the argument default is Serial too: a
+    // five-argument call and a six-argument call asking for Serial are the
+    // same run, over every mode, four scales and ten octave counts.
+    const scales = [
+      ArpScale.TriadMinor,
+      ArpScale.Major6th,
+      ArpScale.PentatonicMajor,
+      ArpScale.Chromatic,
+    ];
+    for (const scale of scales) {
+      for (let octaves = 1; octaves <= 10; octaves++) {
+        for (const mode of [
+          ArpMode.Up,
+          ArpMode.Down,
+          ArpMode.UpDownExclusive,
+          ArpMode.UpDownInclusive,
+          ArpMode.Random,
+          ArpMode.RandomOther,
+        ]) {
+          const withArgument = notes(40, {
+            scale,
+            octaves,
+            mode,
+            octaveMode: ArpOctaveMode.Serial,
+          });
+          const arp = createArpeggiator(xorshift32(2));
+          const without: number[] = [];
+          for (let i = 0; i < 40; i++) {
+            without.push(freqToMidi(arp(1, 60, scale, octaves, mode)));
+            arp(0, 60, scale, octaves, mode);
+          }
+          expect(withArgument).toEqual(without);
+        }
+      }
+    }
+  });
+
+  it("never hangs and never reads out of range, either way", () => {
+    // Ticket 03's exhaustive sweep, re-run with both mappings: 5 modes x 12
+    // set sizes x 10 octave counts x 2 mappings.
+    for (const octaveMode of [ArpOctaveMode.Serial, ArpOctaveMode.Repeat]) {
+      for (const mode of [
+        ArpMode.Up,
+        ArpMode.Down,
+        ArpMode.UpDownExclusive,
+        ArpMode.UpDownInclusive,
+        ArpMode.Random,
+        ArpMode.RandomOther,
+      ]) {
+        for (let len = 1; len <= 12; len++) {
+          const scale = (1 << len) - 1;
+          for (let octaves = 1; octaves <= 10; octaves++) {
+            const arp = createArpeggiator(xorshift32(len * 7 + octaves));
+            for (let step = 0; step < 200; step++) {
+              const hz = arp(1, 24, scale, octaves, mode, octaveMode);
+              arp(0, 24, scale, octaves, mode, octaveMode);
+              expect(Number.isFinite(hz)).toBe(true);
+              const offset = freqToMidi(hz) - 24;
+              expect(offset).toBeGreaterThanOrEqual(0);
+              expect(offset).toBeLessThan(len + 12 * octaves);
+            }
+          }
+        }
+      }
+    }
+  });
+
+  it("reinterprets the position rather than restarting it", () => {
+    // `flat` is untouched by a change of mapping; only what it names moves.
+    const arp = createArpeggiator();
+    const step = (octaveMode: ArpOctaveMode) => {
+      const note = freqToMidi(
+        arp(1, 60, ArpScale.TriadMinor, 3, ArpMode.Up, octaveMode),
+      );
+      arp(0, 60, ArpScale.TriadMinor, 3, ArpMode.Up, octaveMode);
+      return note;
+    };
+
+    expect([
+      step(ArpOctaveMode.Serial),
+      step(ArpOctaveMode.Serial),
+      step(ArpOctaveMode.Serial),
+    ]).toEqual([60, 63, 67]);
+    // Position 3, which is 72 under Serial and 63 under Repeat.
+    expect(step(ArpOctaveMode.Repeat)).toBe(63);
   });
 });

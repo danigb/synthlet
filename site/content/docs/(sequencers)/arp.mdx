@@ -47,6 +47,7 @@ const mono = MonoSynth(audioContext, {
 
 - `trigger`: Advances the arpeggiator on its rising edge - when it goes from 0 (or below) to a positive value. See [Gates and triggers](/docs/gates-and-triggers).
 - `mode`: The traversal. Default is `ArpMode.Up`. See below.
+- `octaveMode`: How the octave travels. Default is `ArpOctaveMode.Serial`. See below.
 - `baseNote`: The base midi note of the arpeggiator. Default is `60`. Fractional values are fine tuning: `60.5` is a quarter tone.
 - `scale`: The scale bitmask. Default is `137` (`ArpScale.TriadMinor`). See below.
 - `octaves`: The number of octaves to span. Default is `1`.
@@ -71,6 +72,20 @@ the ends of the whole range rather than at each octave.
 `Random` wanders and `RandomOther` covers: `Random` can dwell on a region of the
 set, `RandomOther` plays every note of it once per pass. Neither ever repeats
 the note it just played.
+
+## Octaves
+
+`octaveMode` says what a position in the sequence _means_. A minor triad over
+three octaves, `mode: Up`:
+
+| `ArpOctaveMode` | plays                          |
+| --------------- | ------------------------------ |
+| `Serial`        | 60 63 67 · 72 75 79 · 84 87 91 |
+| `Repeat`        | 60 72 84 · 63 75 87 · 67 79 91 |
+
+Same chord, same direction, same `octaves: 3`, a completely different figure:
+three stacked arpeggios, or a rising sequence of octave leaps on each chord
+tone. It is inert at `octaves: 1`, where the two agree.
 
 ## Scales
 
