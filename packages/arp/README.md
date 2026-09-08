@@ -55,6 +55,17 @@ osc.connect(ac.destination);
 than at the top of the next render quantum, and two triggers inside one block
 advance the arpeggiator twice.
 
+`baseNote` is **continuous**, not an integer: `baseNote: 60.5` is a quarter
+tone, and the whole set moves with it. Before the first trigger arrives the
+output holds the root, so patching it into a running oscillator gives the right
+pitch immediately.
+
+`octaves` is a count and is floored — `octaves: 2.5` spans exactly two — and the
+note is **folded back down** under MIDI 127 rather than clamped there:
+`baseNote: 127` with `octaves: 10` would otherwise reach MIDI 246, which is
+12.1 MHz. Folding by twelve keeps the pitch class, so a folded note is still a
+member of the set; clamping would not be.
+
 The other three describe the _set_ being picked from and are read when a step
 fires. `scale` is a bitmask, not an index: bit `i` set means pitch class `i`
 (semitones above the root) belongs to the scale, so the major scale

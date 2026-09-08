@@ -58,7 +58,11 @@ export function createArpeggiator(random: () => number = Math.random) {
   let scaleNotes = [0];
   let len = 1;
   const detectGate = createGateDetector();
-  let current = $note;
+  // Resolved to the root on the first call. It used to be seeded with `$note`
+  // here, which is the literal 60 at construction time whatever `baseNote`
+  // turns out to be - so `Arp(ac, { baseNote: 48 })` held 261.63 Hz, neither
+  // the root nor a member of the set, until its first trigger.
+  let current = NaN;
 
   // The note-to-frequency conversion is memoised on the MIDI note because
   // `trigger` is a-rate: the worklet calls this once per sample, and the note
@@ -74,7 +78,13 @@ export function createArpeggiator(random: () => number = Math.random) {
     octaves: number,
   ): number {
     $note = baseNote;
-    $octaves = octaves;
+    // A count, and floored once per call rather than per use:
+    // `Math.floor(random() * 2.5)` yields 0, 1 *and* 2 - three octaves for a
+    // request of two and a half - and an `AudioParam` hands over a fractional
+    // value from any ramp or from any node patched into it. `Math.max` because
+    // the parameter's `minValue` is enforced by the graph, not by this
+    // function, which the tests call directly.
+    $octaves = Math.max(1, Math.floor(octaves));
 
     if ($scale !== scale) {
       $scale = scale;
@@ -83,6 +93,7 @@ export function createArpeggiator(random: () => number = Math.random) {
     }
 
     if (detectGate(trigger) === true) current = nextRandom();
+    else if (Number.isNaN(current)) current = $note;
 
     if (current !== $current) {
       $current = current;
@@ -95,7 +106,21 @@ export function createArpeggiator(random: () => number = Math.random) {
   function nextRandom() {
     const octave = Math.floor(random() * $octaves);
     const randomFromScale = scaleNotes[Math.floor(random() * len)];
-    return $note + randomFromScale + octave * 12;
+    let note = $note + randomFromScale + octave * 12;
+    // Fold, don't clamp. `baseNote` and `octaves` are declared 0...127 and
+    // 1...10, and at both maxima this sum reaches MIDI 246 - 12.1 MHz - which
+    // no consumer can play: `polyblep-oscillator` caps `frequency` at 20000
+    // and a native `OscillatorNode` clamps to Nyquist, so every note past the
+    // top collapses onto one pitch and the arpeggiator silently stops moving.
+    //
+    // Folding is the only option that keeps the pitch class, which is the
+    // thing the set actually chose: clamping to 127 gives a note outside the
+    // set, and skipping the note changes the pattern's length. Yarns folds
+    // exactly this way (`while (note > 127) note -= 12`) and rune06 folds at
+    // 96, modelling the Juno's keyboard. `while` and not `%` because at most a
+    // handful of iterations are possible and the intent is legible.
+    while (note > 127) note -= 12;
+    return note;
   }
 }
 

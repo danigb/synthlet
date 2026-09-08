@@ -1,4 +1,4 @@
-import { ArpScale, createArpeggiator } from "./dsp";
+import { ArpScale, createArpeggiator, getPitchClasses } from "./dsp";
 import { xorshift32 } from "./test-random";
 
 // The arpeggiator advances on the rising edge of its trigger. It picks a
@@ -147,50 +147,95 @@ describe("baseline: what a memoryless random pick costs", () => {
   });
 });
 
-// Both of these are ticket 02's, recorded here as measurements of the defect.
-describe("baseline: the note range at the declared maxima", () => {
+// Ticket 02: three defects, all reachable from the declared parameter ranges.
+describe("the note range", () => {
   const NYQUIST = 22050;
-  const toHz = (note: number) => 440 * Math.pow(2, (note - 69) / 12);
+  const MAX_HZ = 440 * Math.pow(2, (127 - 69) / 12); // MIDI 127 = 12543.85 Hz
 
-  it.failing("never emits a note above MIDI 127", () => {
-    // Fails on purpose: `nextRandom` adds `baseNote + pitchClass + 12*octave`
-    // with no ceiling, so both declared maxima together reach MIDI 246 -
-    // 12.1 MHz. Ticket 02 folds octaves back down under 127 and deletes the
-    // `.failing`.
-    const notes = play(createArpeggiator(), 20_000, {
-      baseNote: 127,
-      octaves: 10,
-    });
-    expect(Math.max(...notes)).toBeLessThanOrEqual(127);
+  // Numeric enums carry reverse mappings; keep the name -> value entries.
+  const SCALES = Object.values(ArpScale).filter(
+    (v) => typeof v === "number",
+  ) as number[];
+
+  it("never emits a note above MIDI 127", () => {
+    // The sweep is exhaustive in *combinations* - all 128 baseNotes x 10
+    // octaves x 28 scales - and short in triggers, because the failure mode is
+    // a combination and not a rare draw: `nextRandom` added
+    // `baseNote + pitchClass + 12 * octave` with no ceiling, so at both
+    // declared maxima it reached MIDI 246, which is 12.1 MHz.
+    let worst = 0;
+    for (let baseNote = 0; baseNote <= 127; baseNote++) {
+      for (let octaves = 1; octaves <= 10; octaves++) {
+        for (const scale of SCALES) {
+          const arp = createArpeggiator(xorshift32(baseNote * 31 + octaves));
+          for (let i = 0; i < 60; i++) {
+            const hz = arp(1, baseNote, scale, octaves);
+            arp(0, baseNote, scale, octaves);
+            if (hz > worst) worst = hz;
+          }
+        }
+      }
+    }
+    expect(worst).toBeLessThanOrEqual(MAX_HZ);
+    // Asserted in Hz as well as in notes, because Hz is what the module emits
+    // and the defect was found in Hz.
+    expect(worst).toBeLessThan(NYQUIST);
   });
 
-  it("puts most of its steps above Nyquist at baseNote 127, octaves 10", () => {
-    // The measurement behind the ticket: 91.6% of steps are inaudible, and
-    // every one of them collapses onto the same pitch, because
-    // `polyblep-oscillator` caps `frequency` at 20000 and a native
-    // `OscillatorNode` clamps to Nyquist. Delete this test in ticket 02; it
-    // asserts the wrong behaviour on purpose.
-    const notes = play(createArpeggiator(), 20_000, {
-      baseNote: 127,
-      octaves: 10,
-    });
-    const above = notes.filter((n) => toHz(n) > NYQUIST).length;
-    // 91.6% measured; asserted as a band because it is a proportion of 20 000
-    // draws and a tighter one flakes.
-    expect(above / notes.length).toBeGreaterThan(0.905);
-    expect(above / notes.length).toBeLessThan(0.93);
+  it("keeps the pitch class when it folds", () => {
+    // The reason the fix is a fold and not a clamp: a clamped note is not a
+    // member of the set the user chose. Read at the settings where the fold
+    // actually fires, which is where a clamp would be indistinguishable.
+    for (const scale of SCALES) {
+      const pitchClasses = getPitchClasses(scale);
+      for (const baseNote of [120, 124, 127]) {
+        const arp = createArpeggiator(xorshift32(scale + baseNote));
+        for (let i = 0; i < 200; i++) {
+          const note = freqToMidi(arp(1, baseNote, scale, 10));
+          arp(0, baseNote, scale, 10);
+          expect(note).toBeLessThanOrEqual(127);
+          expect(pitchClasses).toContain((((note - baseNote) % 12) + 12) % 12);
+        }
+      }
+    }
   });
 
-  it("puts one step in seven above Nyquist at a musically plausible setting", () => {
-    // C7 with a four-octave range is a setting somebody would dial, not an
-    // abuse of the range: 14.7%.
-    const notes = play(createArpeggiator(), 20_000, {
-      baseNote: 96,
-      octaves: 4,
+  it("spans exactly as many octaves as the floor of the count", () => {
+    // `octaves` is a count, and `Math.floor(random() * 2.5)` yielded 0, 1 and
+    // 2 - three octaves for a request of two and a half.
+    const spanOf = (octaves: number) => {
+      const notes = play(createArpeggiator(xorshift32(3)), 4_000, {
+        scale: ArpScale.TriadMajor,
+        octaves,
+      });
+      return Math.floor((Math.max(...notes) - 60) / 12) + 1;
+    };
+    expect(spanOf(2.5)).toBe(2);
+    expect(spanOf(1.9)).toBe(1);
+    expect(spanOf(3)).toBe(3);
+  });
+
+  it("holds the root before its first trigger, for every baseNote", () => {
+    for (let baseNote = 0; baseNote <= 127; baseNote++) {
+      const arp = createArpeggiator();
+      const hz = arp(0, baseNote, ArpScale.Major, 4);
+      expect(hz).toBeCloseTo(440 * Math.pow(2, (baseNote - 69) / 12), 6);
+    }
+    // 130.81 Hz is the number in the ticket: `Arp(ac, { baseNote: 48 })` used
+    // to hold 261.63 Hz - MIDI 60 - because the closure was seeded with a
+    // literal.
+    const arp = createArpeggiator();
+    expect(arp(0, 48, ArpScale.Major, 4)).toBeCloseTo(130.81, 2);
+  });
+
+  it("leaves the distribution alone where nothing can overflow", () => {
+    // The fold must be inert where it is not needed. This is the same seeded
+    // sequence pinned above, asserted again from the other side: if the fold
+    // fired at `baseNote: 60, octaves: 2` it would not reproduce.
+    const notes = play(createArpeggiator(xorshift32(1)), 8, {
+      scale: ArpScale.TriadMajor,
+      octaves: 2,
     });
-    const above = notes.filter((n) => toHz(n) > NYQUIST).length;
-    // 14.7% measured, same band reasoning as above.
-    expect(above / notes.length).toBeGreaterThan(0.135);
-    expect(above / notes.length).toBeLessThan(0.16);
+    expect(notes).toEqual([60, 72, 72, 60, 67, 76, 72, 67]);
   });
 });
