@@ -188,3 +188,27 @@ describe.each(spectrumPackages)("%s", (pkg) => {
     ).toBe(spectrumSource);
   });
 });
+
+// And the voice allocator and note stack, under the same rule: the packages
+// that have to decide which voice plays a note. `instrument` is the only one
+// today, and the file is written for a second - a native poly worklet would
+// run it on the audio thread, which is why it is pure, allocates nothing in
+// its hot path, and lives in `scripts/` rather than inside the package.
+const voicesSource = readFileSync(join(root, "scripts/_voices.ts"), "utf8");
+const voicesPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_voices.ts")),
+);
+
+describe("the voice allocator", () => {
+  it("is shared by every package that hands notes to voices", () => {
+    expect(voicesPackages).toEqual(["instrument"]);
+  });
+});
+
+describe.each(voicesPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_voices.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_voices.ts"), "utf8"),
+    ).toBe(voicesSource);
+  });
+});

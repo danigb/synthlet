@@ -226,6 +226,53 @@ properties. The choice is measured, not stylistic: at 2-point order stmlib's
 integrated kernel scores 3–7 dB better than the cubic B-spline, and at 4-point
 order the B-spline beats both by a further 10–20 dB.
 
+### @synthlet/instrument
+
+The package contains no DSP. What it derives is the **algorithm** in
+`src/_voices.ts` — which voice plays a note, and which note a monophonic
+instrument sounds — from three sources with three different obligations.
+
+**Notice required.** The voice allocator and the note stack follow
+[stmlib / eurorack](https://github.com/pichenettes/eurorack) by Mutable
+Instruments — `algorithms/voice_allocator.h` and `algorithms/note_stack.h`,
+© 2012 Emilie Gillet, under the MIT licence. See
+[stmlib / eurorack (MIT)](#stmlib--eurorack-mit) below.
+
+What was taken is the algorithm, and it is stated in prose in that file's
+header:
+
+- `NoteOn`'s three ordered rules — reuse the voice already sounding this note,
+  else the least recently *touched* released voice, else steal — and `NoteOff`
+  clearing the active bit and *touching* the slot, which is what makes "least
+  recently touched" mean "released longest ago";
+- the decision **not** to ask whether a voice is silent, which is what makes
+  the algorithm portable to Web Audio at all: no envelope here reports its end;
+- the note stack's two simultaneous orderings, press order and pitch order, and
+  eviction of the least recently played note on overflow.
+
+**The data structure was not copied.** stmlib's LRU permutation array, its
+intrusive linked list with base-1 indices and its dummy node at slot 0 are all
+absent: `_voices.ts` keeps a touch counter and four flat typed arrays, because
+the shuffling loop and the pointer chasing exist to avoid comparisons and
+allocations that JavaScript gives away free at a capacity of 16. Both files are
+read from a gitignored `refs/eurorack` checkout; no stmlib source is present in
+this repository, vendored or bundled.
+
+**Described from documentation, not from source.** `StealMode.Protect` is
+JUCE's `Synthesiser::findVoiceToSteal` rule — the lowest and the highest
+sounding note are protected unless already releasing, and the oldest of the
+rest is taken. JUCE is **not** MIT-licensed, its source was **not** read, and
+nothing here is derived from it: the rule is described in JUCE's published API
+documentation, and one sentence of behaviour is not a work. The implementation
+is this repository's own.
+
+**Cited, not derived.** The four note priorities — last, low, high, first — and
+the claim that they are not reducible to each other come from Gordon Reid,
+*Synth Secrets* Part 18, "Priorities & Triggers", *Sound On Sound*, October
+2000. `src/_voices.test.ts` transcribes the article's three example lines as
+its reference. A taxonomy is not code; the citation is intellectual credit, and
+Yarns, Surge and rune06 independently agree on the same four names.
+
 ### @synthlet/adsr
 
 The envelope is based on Nigel Redmon's ADSR code
@@ -346,10 +393,12 @@ measured by `dsp.test.ts` rather than asserted.
 open-source synthesis projects — Surge, VCV Rack, the Synthesis ToolKit, stmlib,
 `timowest/analogue` and others. **With one exception, recorded above**, those
 are reading and inspiration only, and no code in this repository derives from
-them. The exception is stmlib: `@synthlet/polyblep-oscillator` takes the
-scheduling structure of `stages/oscillator.h` and is listed under
-[Derivations](#synthletpolyblep-oscillator) with the MIT notice that
-requires.
+them. The exception is stmlib, in two places, both listed under Derivations
+with the MIT notice that requires:
+[`@synthlet/polyblep-oscillator`](#synthletpolyblep-oscillator) takes the
+scheduling structure of `stages/oscillator.h`, and
+[`@synthlet/instrument`](#synthletinstrument) follows the algorithm of
+`algorithms/voice_allocator.h` and `algorithms/note_stack.h`.
 Nothing derives from Surge, VCV Rack or the Synthesis ToolKit. This matters most
 for [`timowest/analogue`](https://github.com/timowest/analogue), which carries
 no licence at all: nothing was taken from it.
@@ -419,8 +468,11 @@ SOFTWARE.
 ### stmlib / eurorack (MIT)
 
 Applies to `polyblep-oscillator`, whose discontinuity scheduler derives from
-`stages/oscillator.h`. Copyright 2017 Emilie Gillet
-(emilie.o.gillet@gmail.com).
+`stages/oscillator.h`, copyright 2017 Emilie Gillet
+(emilie.o.gillet@gmail.com); and to `instrument`, whose `scripts/_voices.ts`
+follows the algorithm of `algorithms/voice_allocator.h` and
+`algorithms/note_stack.h`, copyright 2012 Emilie Gillet, without copying
+either data structure.
 
 **It does not apply to `scripts/_delay.ts`**, the circular buffer shared by
 `analog-delay`, `digital-delay` and `granite`, and that distinction is worth
