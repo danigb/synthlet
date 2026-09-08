@@ -38,7 +38,7 @@ class LevelMeterProcessor extends AudioWorkletProcessor {
       this.peaks[channel] = this.peaks[channel] * 0.9 + peak * 0.1;
       chOut.set(chIn);
     }
-    return true;
+    return this.r;
   }
 
   static get parameterDescriptors() {
