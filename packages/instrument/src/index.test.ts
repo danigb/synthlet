@@ -11,7 +11,9 @@ import { disposable } from "./_worklet";
 import {
   Instrument,
   InstrumentNode,
+  NotePriority,
   StealMode,
+  toFrequency,
   Voice,
   VoiceDefinition,
 } from "./index";
@@ -594,5 +596,315 @@ describe("the play adapter", () => {
 
     instrument.dispose();
     expect(nodes.filter((n) => n.disconnectCount === 0)).toEqual([]);
+  });
+});
+
+describe("voices: 1", () => {
+  // A pool of one is not a monosynth: `mono.test.ts` asserts the algorithm on
+  // data, and this asserts that the instrument writes it into the one voice.
+  const gateWrites = (synth: InstrumentNode<"cutoff", StubVoice>) =>
+    writes(synth.voices[0].gate);
+  const pitches = (synth: InstrumentNode<"cutoff", StubVoice>) =>
+    events(synth.voices[0].frequency);
+
+  it("returns to the note underneath when the top key is released", async () => {
+    const { synth } = await built({ voices: 1 });
+
+    synth.start({ note: 60, velocity: 40, time: 1 });
+    synth.start({ note: 64, velocity: 110, time: 2 });
+    synth.stop({ note: 64, time: 3 });
+
+    expect(pitches(synth).map((e) => e.value)).toEqual([
+      toFrequency(60),
+      toFrequency(64),
+      toFrequency(60),
+    ]);
+    // With 60's own velocity: a quiet low note stays quiet.
+    const gain = asNode(synth.voices[0]).connections[0] as GainNodeMock;
+    expect(gain.gain.events.map((e) => e.value)).toEqual([
+      (40 / 127) ** 2,
+      (110 / 127) ** 2,
+      (40 / 127) ** 2,
+    ]);
+    // The note is not left silent: the gate ends high.
+    expect(gateWrites(synth).at(-1)).toEqual({
+      method: "setValueAtTime",
+      value: 1,
+      time: 3,
+    });
+  });
+
+  it("closes the gate exactly once when the last key comes up", async () => {
+    const { synth } = await built({ voices: 1 });
+
+    synth.start({ note: 60, time: 1 });
+    synth.start({ note: 64, time: 2 });
+    synth.stop({ note: 64, time: 3 });
+    synth.stop({ note: 60, time: 4 });
+
+    expect(
+      gateWrites(synth).filter((e) => e.value === 0 && e.time === 4),
+    ).toEqual([{ method: "setValueAtTime", value: 0, time: 4 }]);
+    expect(gateWrites(synth).at(-1)!.value).toBe(0);
+  });
+
+  it("dips the gate by one sample on a note change, by default", async () => {
+    const { context, synth } = await built({ voices: 1 });
+
+    synth.start({ note: 60, time: 1 });
+    synth.start({ note: 64, time: 2 });
+
+    expect(gateWrites(synth)).toEqual([
+      { method: "setValueAtTime", value: 1, time: 1 },
+      { method: "setValueAtTime", value: 0, time: 2 - 1 / context.sampleRate },
+      { method: "setValueAtTime", value: 1, time: 2 },
+    ]);
+  });
+
+  it("never writes the gate under legato while a key is held", async () => {
+    const { synth } = await built({ voices: 1, legato: true });
+
+    synth.start({ note: 60, time: 1 });
+    synth.start({ note: 64, time: 2 });
+    synth.stop({ note: 64, time: 3 });
+
+    expect(gateWrites(synth)).toEqual([
+      { method: "setValueAtTime", value: 1, time: 1 },
+    ]);
+    // But the pitch still moves, twice.
+    expect(pitches(synth).length).toBe(3);
+  });
+
+  it("takes its priority from the options", async () => {
+    const { synth } = await built({ voices: 1, priority: NotePriority.Low });
+
+    synth.start({ note: 60, time: 1 });
+    synth.start({ note: 72, time: 2 }); // higher, so it never speaks
+
+    expect(pitches(synth).map((e) => e.value)).toEqual([toFrequency(60)]);
+  });
+
+  it("cuts everything on the all-notes form", async () => {
+    const { synth } = await built({ voices: 1 });
+    synth.start({ note: 60, time: 1 });
+    synth.start({ note: 64, time: 2 });
+
+    synth.stop({ time: 5 });
+
+    expect(events(synth.voices[0].gate).at(-1)).toEqual({
+      method: "setValueAtTime",
+      value: 0,
+      time: 5,
+    });
+    // And a key that was still down is forgotten, so the next note attacks.
+    synth.start({ note: 67, time: 6 });
+    expect(gateWrites(synth).at(-1)).toEqual({
+      method: "setValueAtTime",
+      value: 1,
+      time: 6,
+    });
+  });
+});
+
+describe("glide", () => {
+  const ramps = (voice: StubVoice) =>
+    events(voice.frequency).filter(
+      (e) => e.method === "exponentialRampToValueAtTime",
+    );
+
+  it("steps the first note and ramps the next", async () => {
+    const { synth } = await built({ voices: 1, glide: 0.1 });
+
+    synth.start({ note: 60, time: 1 });
+    synth.start({ note: 64, time: 2 });
+
+    expect(events(synth.voices[0].frequency)).toEqual([
+      // Nothing to glide from yet.
+      { method: "setValueAtTime", value: toFrequency(60), time: 1 },
+      // The ramp needs a start point at the note's own time.
+      { method: "setValueAtTime", value: toFrequency(60), time: 2 },
+      {
+        method: "exponentialRampToValueAtTime",
+        value: toFrequency(64),
+        time: 2.1,
+      },
+    ]);
+  });
+
+  it("is byte-identical to no glide at all when it is zero", async () => {
+    const withZero = await built({ voices: 1, glide: 0 });
+    const without = await built({ voices: 1 });
+
+    for (const synth of [withZero.synth, without.synth]) {
+      synth.start({ note: 60, time: 1 });
+      synth.start({ note: 64, time: 2 });
+      synth.stop({ note: 64, time: 3 });
+    }
+
+    expect(events(withZero.synth.voices[0].frequency)).toEqual(
+      events(without.synth.voices[0].frequency),
+    );
+    expect(events(withZero.synth.voices[0].gate)).toEqual(
+      events(without.synth.voices[0].gate),
+    );
+  });
+
+  it("is live-settable", async () => {
+    const { synth } = await built({ voices: 1 });
+
+    synth.start({ note: 60, time: 1 });
+    expect(synth.glide).toBe(0);
+    synth.glide = 0.25;
+    synth.start({ note: 64, time: 2 });
+
+    expect(ramps(synth.voices[0])).toEqual([
+      {
+        method: "exponentialRampToValueAtTime",
+        value: toFrequency(64),
+        time: 2.25,
+      },
+    ]);
+  });
+
+  it("is per voice on a poly pool, each from its own last note", async () => {
+    const { synth } = await built({ voices: 8, glide: 0.1 });
+
+    // Eight voices, eight different notes, then all released so the pool is
+    // free again.
+    for (let i = 0; i < 8; i++) synth.start({ note: 40 + i, time: 1 });
+    synth.stop({ time: 2 });
+    // A second round: every voice now has a previous note of its own.
+    for (let i = 0; i < 8; i++) synth.start({ note: 80 + i, time: 3 });
+
+    const froms = synth.voices.map(
+      (voice) =>
+        events(voice.frequency).filter(
+          (e) => e.method === "setValueAtTime" && e.time === 3,
+        )[0].value,
+    );
+    expect(froms.slice().sort((a, b) => a! - b!)).toEqual(
+      [40, 41, 42, 43, 44, 45, 46, 47].map(toFrequency),
+    );
+    for (const voice of synth.voices) {
+      expect(ramps(voice).length).toBe(1);
+      expect(ramps(voice)[0].time).toBe(3.1);
+    }
+  });
+
+  it("steps a voice that has never sounded", async () => {
+    const { synth } = await built({ voices: 4, glide: 0.1 });
+
+    synth.start({ note: 60, time: 1 });
+
+    expect(events(synth.voices[0].frequency)).toEqual([
+      { method: "setValueAtTime", value: toFrequency(60), time: 1 },
+    ]);
+  });
+});
+
+describe("hold", () => {
+  it("swallows a note-off and applies it when the pedal lifts", async () => {
+    const { context, synth } = await built({ voices: 4 });
+    const voice = synth.start({ note: 60, time: 1 }).voice!;
+
+    synth.hold = true;
+    synth.stop(60);
+    expect(writes(voice.gate)).toEqual([
+      { method: "setValueAtTime", value: 1, time: 1 },
+    ]);
+
+    (context as any).currentTime = 4;
+    synth.hold = false;
+
+    expect(writes(voice.gate).at(-1)).toEqual({
+      method: "setValueAtTime",
+      value: 0,
+      time: 4,
+    });
+    expect(synth.hold).toBe(false);
+  });
+
+  it("cancels the deferral when the key goes down again", async () => {
+    const { context, synth } = await built({ voices: 4 });
+    const voice = synth.start({ note: 60, time: 1 }).voice!;
+
+    synth.hold = true;
+    synth.stop(60);
+    synth.start({ note: 60, time: 2 });
+    (context as any).currentTime = 4;
+    synth.hold = false;
+
+    // The key is down: releasing the pedal must not stop it.
+    expect(writes(voice.gate).at(-1)).toEqual({
+      method: "setValueAtTime",
+      value: 1,
+      time: 2,
+    });
+  });
+
+  it("works on the mono path too", async () => {
+    const { context, synth } = await built({ voices: 1 });
+    synth.start({ note: 60, time: 1 });
+
+    synth.hold = true;
+    synth.stop(60);
+    expect(writes(synth.voices[0].gate).at(-1)!.value).toBe(1);
+
+    (context as any).currentTime = 4;
+    synth.hold = false;
+
+    expect(writes(synth.voices[0].gate).at(-1)).toEqual({
+      method: "setValueAtTime",
+      value: 0,
+      time: 4,
+    });
+  });
+
+  it("is ignored by the all-notes form, which empties the deferred set", async () => {
+    const { context, synth } = await built({ voices: 4 });
+    const voice = synth.start({ note: 60, time: 1 }).voice!;
+
+    synth.hold = true;
+    synth.stop(60);
+    synth.stop({ time: 3 });
+
+    expect(events(voice.gate).at(-1)).toEqual({
+      method: "setValueAtTime",
+      value: 0,
+      time: 3,
+    });
+
+    // Nothing is left to apply, so lifting the pedal writes nothing more.
+    const before = events(voice.gate).length;
+    (context as any).currentTime = 5;
+    synth.hold = false;
+    expect(events(voice.gate).length).toBe(before);
+  });
+});
+
+describe("the mono options at voices > 1", () => {
+  it("leave a poly instrument exactly as it was", async () => {
+    // Priority and legato are a monosynth's, not a pool's: a pool picks a
+    // voice, not a note.
+    const plain = await built({ voices: 4 });
+    const decorated = await built({
+      voices: 4,
+      priority: NotePriority.Low,
+      legato: true,
+    });
+
+    for (const synth of [plain.synth, decorated.synth]) {
+      synth.start({ note: 60, time: 1 });
+      synth.start({ note: 72, time: 2 });
+      synth.stop({ note: 72, time: 3 });
+      synth.stop({ note: 60, time: 4 });
+    }
+
+    const log = (synth: InstrumentNode<"cutoff", StubVoice>) =>
+      synth.voices.map((voice) => [
+        events(voice.gate),
+        events(voice.frequency),
+      ]);
+    expect(log(decorated.synth)).toEqual(log(plain.synth));
   });
 });

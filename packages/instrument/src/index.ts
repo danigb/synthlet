@@ -1,6 +1,18 @@
-import { Allocation, createVoiceAllocator, StealMode } from "./_voices";
+import {
+  Allocation,
+  createVoiceAllocator,
+  NotePriority,
+  StealMode,
+} from "./_voices";
 import { ConnectedUnit, Disposable, disposable } from "./_worklet";
 import { createFanouts, ParamSpec } from "./fanout";
+import {
+  createMonoState,
+  MonoWrite,
+  monoStart,
+  monoStop,
+  monoStopAll,
+} from "./mono";
 import { toFrequency, toMidi } from "./notes";
 
 export {
@@ -18,6 +30,8 @@ export type {
 } from "./_voices";
 export { createFanouts } from "./fanout";
 export type { Fanouts, ParamSpec } from "./fanout";
+export { createMonoState, monoStart, monoStop, monoStopAll } from "./mono";
+export type { MonoOptions, MonoState, MonoWrite } from "./mono";
 export { toFrequency, toMidi } from "./notes";
 
 /**
@@ -87,6 +101,24 @@ export type InstrumentOptions = {
   steal?: StealMode;
   /** Seconds. Default 0.005. */
   stealFade?: number;
+  /**
+   * Which held note sounds. `voices: 1` only - a pool picks a voice, not a
+   * note. Default `NotePriority.Last`, the only one that always speaks on the
+   * beat.
+   */
+  priority?: NotePriority;
+  /**
+   * `voices: 1` only. `false` (the default) retriggers the envelopes on every
+   * note change - multi triggering, the ARP way. `true` leaves the gate high
+   * while any key is held - single triggering, the Minimoog way.
+   */
+  legato?: boolean;
+  /**
+   * Portamento, in seconds. Default 0. An exponential ramp in Hz, which is a
+   * linear ramp in pitch. Applies at any voice count, and is live-settable as
+   * `synth.glide`.
+   */
+  glide?: number;
 };
 
 export type InstrumentNode<
@@ -101,6 +133,15 @@ export type InstrumentNode<
   params: Record<P, AudioParam>;
   /** The pool. Empty until `ready`. */
   voices: readonly V[];
+  /**
+   * The sustain pedal. While `true`, a key release is remembered rather than
+   * written; setting it back to `false` applies every one it swallowed. A name
+   * rather than smplr's `setCC(64, on)`: the controller number is the MIDI
+   * adapter's business.
+   */
+  hold: boolean;
+  /** Portamento in seconds. The next note uses whatever it says. */
+  glide: number;
   start(event: NoteEvent): StopFn & { voice: V | null };
   stop(
     what?: number | string | { note?: number | string; time?: number },
@@ -150,6 +191,14 @@ export function Instrument<P extends string, V extends Voice = Voice>(
   const stealFade = options.stealFade ?? 0.005;
   const velocityToGain = definition.velocityToGain ?? midiVelocityToGain;
 
+  // rune06 prefers, among idle voices, one whose portamento tail has finished
+  // over one still gliding (`synth.rs:391-414`). Deliberately not adopted:
+  // `_voices.ts` never asks what time it is, so it cannot know whether a ramp
+  // has ended, and teaching it would mean passing a clock into `noteOn` and
+  // giving up the property that makes the file copyable into a worklet. The
+  // audible case it fixes - a released voice reused mid-glide - is already
+  // covered here, because a steal fades the voice's gain before it is rewritten
+  // and a plain reuse writes a new ramp start point at the note's own time.
   const allocator = createVoiceAllocator(size, {
     steal: options.steal ?? StealMode.Protect,
     sameNoteReuse: definition.sameNoteReuse ?? true,
@@ -166,13 +215,86 @@ export function Instrument<P extends string, V extends Voice = Voice>(
   const gains: GainNode[] = [];
   let params = {} as Record<P, AudioParam>;
   let disposed = false;
+  let glide = options.glide ?? 0;
+  let holding = false;
+
+  /**
+   * `voices: 1` is a monosynth, not a pool of one: it routes through the note
+   * stack, so releasing the top key returns to the one underneath.
+   */
+  const mono = size === 1 ? createMonoState() : null;
+  const monoOptions = {
+    priority: options.priority ?? NotePriority.Last,
+    legato: options.legato ?? false,
+  };
+
+  /** Note-offs swallowed by the sustain pedal, applied when it lifts. */
+  const deferred = new Set<number>();
+
+  /** The last note each voice sounded, or -1. What glide ramps from. */
+  const previous: number[] = [];
 
   /** Events that arrived before `ready`. `null` once the pool exists. */
   let queued:
     (NoteEvent & { note: number; velocity: number; time: number })[] | null =
     [];
 
+  /**
+   * Pitch into one voice, glided from wherever that voice left off.
+   *
+   * Per voice rather than per instrument, which is what every hardware poly
+   * with a portamento knob does: a stolen voice glides from the note it was
+   * stolen from, and that smear is correct. `mayGlide` is false for a note
+   * with nothing to glide from - a fresh voice, or a monosynth whose gate had
+   * closed - and then the write is a step.
+   *
+   * An exponential ramp in Hz *is* a linear ramp in pitch, so portamento needs
+   * no DSP at all. It is constant-*time*: a semitone and two octaves both take
+   * `glide` seconds, which is the Minimoog's behaviour and what the ramp gives
+   * for free. Constant-rate would be `glide * |semitones|`.
+   */
+  function writeFrequency(
+    index: number,
+    midi: number,
+    time: number,
+    mayGlide: boolean,
+  ) {
+    const frequency = voices[index].frequency;
+    const from = previous[index];
+    if (glide > 0 && mayGlide && from >= 0) {
+      // The ramp needs a start point at `time`, or it interpolates from
+      // whatever the last scheduled event was, however long ago.
+      frequency.setValueAtTime(toFrequency(from), time);
+      frequency.exponentialRampToValueAtTime(toFrequency(midi), time + glide);
+    } else {
+      frequency.setValueAtTime(toFrequency(midi), time);
+    }
+    previous[index] = midi;
+  }
+
+  /** Turn `mono.ts`'s answer into automation on the single voice. */
+  function applyMono(writes: MonoWrite[]) {
+    const voice = voices[0];
+    for (const write of writes) {
+      if (write.param === "frequency") {
+        writeFrequency(0, write.note, write.time, write.glide);
+      } else if (write.param === "velocity") {
+        voice.velocity?.setValueAtTime(write.velocity / 127, write.time);
+        gains[0].gain.setValueAtTime(velocityToGain(write.velocity), write.time);
+      } else {
+        const at = write.justBefore
+          ? write.time - 1 / context.sampleRate
+          : write.time;
+        voice.gate.setValueAtTime(write.value, at);
+      }
+    }
+  }
+
   function noteOff(midi: number, time: number) {
+    if (mono) {
+      applyMono(monoStop(mono, monoOptions, { note: midi, time }));
+      return;
+    }
     const index = allocator.noteOff(midi);
     if (index === -1) return;
     // Cancel first: a note whose off is scheduled here may also have a
@@ -182,6 +304,17 @@ export function Instrument<P extends string, V extends Voice = Voice>(
   }
 
   function stopAll(time: number) {
+    // A panic is a panic: the pedal does not defer it, and it takes the
+    // deferred notes with it.
+    deferred.clear();
+    if (mono) {
+      applyMono(monoStopAll(mono, time));
+      voices[0].gate.cancelScheduledValues(time);
+      voices[0].gate.setValueAtTime(0, time);
+      voices[0].frequency.cancelScheduledValues(time);
+      gains[0].gain.cancelScheduledValues(time);
+      return;
+    }
     for (let i = 0; i < voices.length; i++) {
       voices[i].gate.cancelScheduledValues(time);
       voices[i].gate.setValueAtTime(0, time);
@@ -229,7 +362,7 @@ export function Instrument<P extends string, V extends Voice = Voice>(
     }
 
     // Pitch and level before the gate, so both are in place when it rises.
-    voice.frequency.setValueAtTime(toFrequency(midi), at);
+    writeFrequency(allocation.index, midi, at, true);
     voice.velocity?.setValueAtTime(velocity / 127, at);
     gain.gain.setValueAtTime(velocityToGain(velocity), at);
     voice.gate.setValueAtTime(1, at);
@@ -252,6 +385,26 @@ export function Instrument<P extends string, V extends Voice = Voice>(
       return Object.assign(
         ((when?: number) => stop({ note: midi, time: when })) as StopFn,
         { voice: null },
+      );
+    }
+    // The key is down again, so a swallowed release for it is void.
+    deferred.delete(midi);
+
+    if (mono) {
+      applyMono(monoStart(mono, monoOptions, { note: midi, velocity, time }));
+      if (event.duration !== undefined) {
+        // A duration is the note's own length, not a key release, so the
+        // sustain pedal does not defer it.
+        applyMono(
+          monoStop(mono, monoOptions, {
+            note: midi,
+            time: time + event.duration,
+          }),
+        );
+      }
+      return Object.assign(
+        ((when?: number) => stop({ note: midi, time: when })) as StopFn,
+        { voice: voices[0] },
       );
     }
     return schedule(midi, velocity, time, event.duration);
@@ -279,8 +432,18 @@ export function Instrument<P extends string, V extends Voice = Voice>(
       );
       return;
     }
-    if (midi === undefined) stopAll(at);
-    else noteOff(midi, at);
+    if (midi === undefined) {
+      stopAll(at);
+      return;
+    }
+    if (holding) {
+      // The pedal is down: remember the release rather than writing it.
+      // rune06's `set_hold` and Mutable's `ignore_note_off_messages_` are the
+      // same one line, and it is what ticket 05's latch will reuse.
+      deferred.add(midi);
+      return;
+    }
+    noteOff(midi, at);
   }
 
   const node = disposable(out, owned) as InstrumentNode<P, V>;
@@ -300,6 +463,8 @@ export function Instrument<P extends string, V extends Voice = Voice>(
       voice.connect(gain).connect(out);
       voices.push(voice);
       gains.push(gain);
+      // Nothing to glide from until this voice has sounded once.
+      previous.push(-1);
       owned.push(voice, gain);
     }
 
@@ -321,7 +486,7 @@ export function Instrument<P extends string, V extends Voice = Voice>(
   })();
 
   const cascade = node.dispose;
-  return Object.assign(node, {
+  Object.assign(node, {
     ready,
     volume: out.gain,
     params,
@@ -333,4 +498,30 @@ export function Instrument<P extends string, V extends Voice = Voice>(
       cascade.call(node);
     },
   });
+
+  Object.defineProperties(node, {
+    hold: {
+      enumerable: true,
+      get: () => holding,
+      set(value: boolean) {
+        holding = value;
+        if (value) return;
+        // The pedal lifts: every key that came up while it was down comes up
+        // now. `currentTime`, not the time each release was asked for - that
+        // moment has passed.
+        const at = context.currentTime;
+        for (const midi of deferred) noteOff(midi, at);
+        deferred.clear();
+      },
+    },
+    glide: {
+      enumerable: true,
+      get: () => glide,
+      set(value: number) {
+        glide = value;
+      },
+    },
+  });
+
+  return node;
 }
