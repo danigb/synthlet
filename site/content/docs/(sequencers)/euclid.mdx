@@ -13,6 +13,7 @@ import {
   registerAllWorklets,
   Clock,
   Euclid,
+  EuclidRhythm,
   KickDrum,
   HiHatDrum,
 } from "synthlet";
@@ -21,7 +22,7 @@ const ac = new AudioContext();
 await registerAllWorklets(ac);
 
 const clock = Clock(ac, { bpm: 60 });
-const rhythm = Euclid(ac, { steps: 8, beats: 3, clock });
+const rhythm = Euclid(ac, { clock, ...EuclidRhythm.BossaNova });
 
 // One pattern, two voices: the kick on the hits, the hat on the steps they
 // leave empty.
@@ -83,6 +84,28 @@ pattern — onsets move rather than accumulate.
 - `rotation`: the rotation of the sequence. The generated pattern is Bjorklund's
   rhythm up to rotation, and a necklace has no canonical starting point — this
   is how you choose one, counted in steps.
+
+**`rotation: 0` is not the named rhythm, and no rule says which rotation is.**
+Of the 22 rhythms
+[Toussaint](https://archive.bridgesmathart.org/2005/bridges2005-47.pdf) §4
+publishes, 13 come out right at `rotation: 0` and 9 do not, and no stated
+rotation rule reproduces more than 13. Where a tradition enters the cycle is
+ethnomusicology, not arithmetic — so the sixteen rhythms that have names come
+with their rotation, and the pattern is a value you can look at:
+
+```ts
+import { Euclid, EuclidRhythm } from "synthlet";
+
+Euclid.pattern(8, 5, 6); // [1,0,1,1,0,1,1,0] — the cinquillo
+Euclid(ac, { clock, ...EuclidRhythm.Cinquillo });
+```
+
+`Euclid.pattern(steps, beats, rotation)` is the same expression the engine
+rebuilds its pattern from, so it is what the node plays rather than a
+reconstruction of it — and it needs no `AudioContext`, so it will draw you a
+ring of LEDs. The sixteen named rhythms, their rotations and their attributions
+are in the
+[package README](https://github.com/danigb/synthlet/tree/main/packages/euclid#named-rhythms).
 
 All three are counts and all three are floored — they arrive from an
 `AudioParam` as floats, and half a step is not a step.

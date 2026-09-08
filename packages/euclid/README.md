@@ -6,8 +6,8 @@ Part of [Synthlet](https://github.com/danigb/synthlet).
 
 Distribute `beats` hits as evenly as possible over `steps` steps and you get
 most of the world's rhythms — `(3, 8)` is the tresillo, `(5, 8)` the cinquillo,
-`(7, 16)` a bossa. This is that pattern, driven by a clock and emitted as
-gate pulses ready for a drum voice or an envelope.
+`(5, 16)` the bossa-nova necklace. This is that pattern, driven by a clock and
+emitted as gate pulses ready for a drum voice or an envelope.
 
 It has no tempo of its own. Timing comes in on `clock` as a **phase ramp**, not
 a gate: the step boundary is the ramp's wrap, which is what `@synthlet/clock`
@@ -46,6 +46,21 @@ hat.connect(ac.destination);
 
 rhythm.dispose(); // disposes the rests gain with it
 ```
+
+The pattern is also a value. `Euclid.pattern(steps, beats, rotation)` returns
+the array the node is playing, with no `AudioContext` and nothing registered —
+which is how you find out that the cinquillo is `rotation: 6`, because no rule
+will tell you. `EuclidRhythm` is the table of the ones that have names:
+
+```ts
+import { Euclid, EuclidRhythm } from "@synthlet/euclid";
+
+Euclid.pattern(8, 3); // [1,0,0,1,0,0,1,0] — the tresillo
+Euclid.pattern(8, 5, 6); // [1,0,1,1,0,1,1,0] — the cinquillo
+Euclid(ac, { clock, ...EuclidRhythm.Cinquillo }); // the same three numbers, named
+```
+
+See [Named rhythms](#named-rhythms).
 
 ## Two outputs
 
@@ -178,12 +193,96 @@ it, and no rotation rule tested against them reproduces more than 13 of his 22
 — which is what this generator already gets. `rotation` is how you choose a
 starting point, and it is step-indexed.
 
+## Named rhythms
+
+```ts
+import { Euclid, EuclidRhythm } from "@synthlet/euclid";
+
+Euclid.pattern(8, 5, 6); // [1,0,1,1,0,1,1,0] — the cinquillo
+Euclid(ac, { clock, ...EuclidRhythm.Cinquillo });
+Euclid(ac, { clock, subdivision: 4, ...EuclidRhythm.BossaNova });
+```
+
+**`rotation: 0` is not the named rhythm, and no rule says which rotation is.**
+Of the 22 rhythms Toussaint 2005 §4 publishes, 13 come out right at
+`rotation: 0` and 9 do not — and no stated rotation rule reproduces more than
+13 (lexicographically-largest gets 5, lex-smallest-starting-on-an-onset gets 13,
+biggest-gap-last gets 6, and this generator already gets 13). A necklace
+_"disregards the starting point in the cycle"_; where a tradition enters it is
+ethnomusicology, not arithmetic. So the values below were looked up, not
+derived, and this is the table.
+
+Every row is asserted against the paper's own box notation in
+`src/dsp.test.ts`, three ways: against §5's interval vector, against a reference
+Bjorklund, and against what `Euclid.pattern` returns. **If the table and the
+paper disagree, the paper wins.** A test also parses this markdown, so the table
+you are reading and the object that ships cannot drift.
+
+`Euclid.pattern(steps, beats, rotation)` is the same expression the engine
+rebuilds its pattern from, so it is the pattern the node plays and not a
+reconstruction of it. It is pure and control-thread — no `AudioContext`, no
+worklet, callable in node — so it also draws: a ring of LEDs is
+`Euclid.pattern(...).map(...)`.
+
+| Name                     | E(k,n)   | rotation | pattern                    | Where it comes from                                                       |
+| ------------------------ | -------- | -------: | -------------------------- | ------------------------------------------------------------------------- |
+| `Tresillo`               | E(3,8)   |        0 | `x..x..x.`                 | Cuban tresillo, and the habanera                                          |
+| `Cinquillo`              | E(5,8)   |        6 | `x.xx.xx.`                 | Cuban cinquillo                                                           |
+| `BossaNova`              | E(5,16)  |       12 | `x..x..x..x..x...`         | Bossa-Nova necklace, Brazil                                               |
+| `Samba`                  | E(7,16)  |        0 | `x..x.x.x..x.x.x.`         | Samba necklace, Brazil                                                    |
+| `AshantiMpre`            | E(7,12)  |        8 | `x.xx.x.xx.x.`             | West African bell pattern; the Mpre rhythm of the Ashanti people of Ghana |
+| `CentralAfricanRepublic` | E(9,16)  |       10 | `x.xx.x.x.xx.x.x.`         | A rhythm necklace of the Central African Republic                         |
+| `AkaPygmy`               | E(11,24) |        0 | `x..x.x.x.x.x..x.x.x.x.x.` | A rhythm necklace of the Aka Pygmies of Central Africa                    |
+| `Venda`                  | E(5,12)  |        0 | `x..x.x..x.x.`             | Venda clapping pattern, a South African children's song                   |
+| `KhafifERamal`           | E(2,5)   |        2 | `x.x..`                    | Khafif-e-ramal, a 13th century Persian rhythm; Tchaikovsky's Sixth, II    |
+| `Ruchenitza`             | E(3,7)   |        4 | `x.x.x..`                  | Ruchenitza, a Bulgarian folk-dance; Pink Floyd's _Money_                  |
+| `Aksak`                  | E(4,9)   |        6 | `x.x.x.x..`                | The Aksak rhythm of Turkey; Brubeck's _Rondo a la Turk_                   |
+| `Moussorgsky`            | E(5,11)  |        8 | `x.x.x.x.x..`              | The metre of _Pictures at an Exhibition_                                  |
+| `Cumbia`                 | E(3,4)   |        0 | `x.xx`                     | Cumbia, Colombia; a Calypso rhythm from Trinidad                          |
+| `Tuareg`                 | E(7,8)   |        0 | `x.xxxxxx`                 | Played on the Bendir by the Tuareg people of Libya                        |
+| `AkaPygmyUpperSangha`    | E(13,24) |       14 | `x.xx.x.x.x.x.xx.x.x.x.x.` | A rhythm necklace of the Aka Pygmies of the upper Sangha                  |
+| `Zappa`                  | E(4,11)  |        0 | `x..x..x..x.`              | The metre of Frank Zappa's _Outside Now_                                  |
+
+### The rhythm as played
+
+**These are necklaces.** For five of them Toussaint distinguishes the necklace
+from the rhythm as it is actually played — _"the actual Bossa-Nova rhythm
+usually starts on the third onset"_, _"started on the fifth onset it is a
+clapping pattern from Ghana"_ — and there are several played variants per
+necklace. The presets above take one entry point each, the published E(k,n); the
+rest are here, and they are exactly the material a fan of rotations would be
+built from.
+
+| The paper says                                                                                    | rotation | pattern                    |
+| ------------------------------------------------------------------------------------------------- | -------: | -------------------------- |
+| E(5,16) "the actual Bossa-Nova rhythm usually starts on the third onset"                          |        6 | `x..x..x...x..x..`         |
+| E(5,16) "other starting places as well, as for example"                                           |        9 | `x..x..x..x...x..`         |
+| E(7,16) "the actual Samba rhythm... starting E(7,16) on the last onset"                           |        2 | `x.x..x.x.x..x.x.`         |
+| E(7,16) "started on the fifth onset it is a clapping pattern from Ghana"                          |        6 | `x.x.x.x..x.x.x..`         |
+| E(9,16) "started on the fourth onset... West and Central Africa, and the Brazilian samba cowbell" |        5 | `x.x.xx.x.x.x.xx.`         |
+| E(9,16) "started on the penultimate onset... the Ngbaka-Maibo bell"                               |       14 | `x.x.x.xx.x.x.xx.`         |
+| E(11,24) "usually started on the seventh onset"                                                   |       10 | `x.x.x.x.x.x..x.x.x.x.x..` |
+| E(13,24) "usually started on the fourth onset"                                                    |        9 | `x.x.x.x.xx.x.x.x.x.x.xx.` |
+| E(5,8) "started on the second onset... the Spanish Tango"                                         |        4 | `xx.xx.x.`                 |
+| E(2,5) "started on the second onset... _Take Five_, and _Mars_"                                   |        0 | `x..x.`                    |
+
+Note the last row: E(2,5) started on its second onset is what this module
+already plays at `rotation: 0`. That is the clearest illustration in the file
+that the generator's origin is _an_ entry point and not _the_ entry point — the
+rhythm you get for free is the one Brubeck counted, and the one the paper names
+is two steps away.
+
+Toussaint counts **onsets** and `rotation` counts **steps**; the two tables
+above are that translation, done once.
+
 ## References
 
 - G. T. Toussaint,
   [_The Euclidean Algorithm Generates Traditional Musical Rhythms_](https://archive.bridgesmathart.org/2005/bridges2005-47.pdf),
   Bridges 2005 — the survey that named these rhythms, Bjorklund's algorithm, and
-  the necklace framing that says a rhythm has no canonical origin
+  the necklace framing that says a rhythm has no canonical origin. §4 is the
+  source of every string in the tables above and §5's interval vectors are what
+  check them; the tests hold all 22 of its rhythms, not only the 16 that ship
 - T. Morrill,
   [_On The Euclidean Algorithm: Rhythm Without Recursion_](https://arxiv.org/abs/2206.12421),
   arXiv:2206.12421, 2022 — §4 is the generator in this package, Lemma 2 and

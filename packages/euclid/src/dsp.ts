@@ -175,6 +175,13 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
     // from an eight-step one, because `rotate`'s two `slice` calls truncate
     // their arguments independently and the halves stop adding up to the whole.
     // Floored before the guard compares, so 8.0 -> 8.4 is not a rebuild either.
+    //
+    // `euclidPattern` floors all three again at its own boundary, because it is
+    // public and `euclid()` floors nothing. On this path those three calls are
+    // no-ops on already-integral values; the rebuild is k-rate and only happens
+    // when a setting moved, so they cost nothing measurable. What they buy is
+    // that `Euclid.pattern` and the engine are one expression rather than two
+    // copies of it, and so cannot drift.
     steps = Math.floor(steps);
     beats = Math.floor(beats);
     rotation = Math.floor(rotation);
@@ -182,7 +189,7 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
       $steps = steps;
       $beats = beats;
       $rotation = rotation;
-      pattern = rotate(euclid($steps, $beats), $rotation);
+      pattern = euclidPattern($steps, $beats, $rotation);
       // The only place `pattern.length` can change, so the only place `current`
       // can be left pointing past the end - `step()` reduces it `% length`, but
       // only on a boundary. Turning a `steps` knob from 16 down to 8 while
@@ -304,10 +311,121 @@ export function euclid(steps: number, beats: number) {
   return pattern;
 }
 
+/**
+ * Rotate a pattern right by `n` steps, wrapping. `n` may be negative or larger
+ * than the pattern.
+ *
+ * **`n % len` is reduced before the zero short-circuit, and that order is the
+ * whole of it.** Reduced after, `rotate(a, len)` fell through the `n === 0`
+ * guard with `n` still `len`, and `array.slice(-0)` is `slice(0)` - the whole
+ * array - so it returned `a.concat(a)`: a pattern of twice the length. It hit
+ * every rotation that is a non-zero multiple of `len`, which is 482 of the
+ * 10100 `(steps, rotation)` pairs reachable from the declared ranges.
+ *
+ * It was inaudible through the worklet, which is how it survived: a doubled
+ * pattern is the same rhythm played twice over twice as many steps, and
+ * `update()` clamps `current` into it. It is not inaudible through
+ * `Euclid.pattern`, which is a public array whose whole purpose is to be the
+ * thing people check a rotation against, and `Euclid.pattern(8, 3, 8)` handing
+ * back sixteen elements is wrong on its face. Ticket 06's `spread` would have
+ * met it constantly - `rotation + i * spread` walks straight through the
+ * multiples.
+ *
+ * The fix is exactly behaviour-preserving on every input the old form answered
+ * correctly: over `steps 1…64 × beats 0…steps × rotation 0…100` the two differ
+ * on 5775 settings and all 5775 are cases where the old result was not `steps`
+ * long. Zero well-formed answers changed.
+ */
 export function rotate(array: number[], n: number) {
   const len = array.length;
-  if (len === 0 || n === 0) return array;
+  if (len === 0) return array;
   n = n % len;
+  if (n === 0) return array;
   if (n < 0) n = len + n;
   return array.slice(-n).concat(array.slice(0, len - n));
 }
+
+/**
+ * The pattern `Euclid` plays at these settings: `beats` onsets distributed over
+ * `steps` steps, rotated right by `rotation`. 1 is a hit, 0 a rest.
+ *
+ * The public form of the two lines `update()` runs, and `update()` runs *this* -
+ * so the exported answer and the played pattern are the same expression and
+ * cannot drift. That is the whole point of the export: a user's only way to
+ * find out which rotation is the cinquillo is to look, so what they look at
+ * has to be the thing that plays.
+ *
+ * All three are floored here rather than trusted. `update()` floors before its
+ * change-guard so the engine's contract holds inside the module; this is a
+ * public boundary and `euclid()` deliberately floors nothing of its own.
+ * Nothing else is validated: out-of-range arguments do exactly what the worklet
+ * does with them - `steps: 0` and a non-finite `steps` are both the empty
+ * pattern, `beats` at or above `steps` is every step, and a negative or
+ * oversized `rotation` wraps, because `rotate()` reduces `n % len`.
+ *
+ * Named `euclidPattern` and not `pattern` because `createEuclid()`'s closure
+ * declares `let pattern`, which would shadow a module-level `pattern` inside
+ * `update()` - the one function that has to call this. It is exposed as
+ * `Euclid.pattern`, namespaced by the factory the way `Euclid.descriptors` is.
+ */
+export function euclidPattern(steps: number, beats: number, rotation = 0) {
+  return rotate(
+    euclid(Math.floor(steps), Math.floor(beats)),
+    Math.floor(rotation),
+  );
+}
+
+/** One named rhythm: the three settings that make `Euclid` play it. */
+export type EuclidRhythmPreset = {
+  steps: number;
+  beats: number;
+  rotation: number;
+};
+
+/**
+ * The named rhythms of Toussaint 2005 §4, as settings you can spread.
+ *
+ * ```ts
+ * Euclid(ac, { clock, ...EuclidRhythm.Cinquillo });
+ * ```
+ *
+ * **These `rotation` values cannot be derived, only looked up.** A necklace
+ * "disregards the starting point in the cycle" (Toussaint, §3), and where a
+ * tradition enters the cycle is ethnomusicology rather than arithmetic: 13 of
+ * the paper's 22 published rhythms come out right at `rotation: 0` and 9 do
+ * not, and no stated rotation rule reproduces more than 13 either
+ * (lexicographically-largest gets 5, lex-smallest-starting-on-an-onset gets 13,
+ * biggest-gap-last gets 6). So this table is the answer to "which rotation is
+ * the cinquillo", and `packages/euclid/src/dsp.test.ts` asserts every row of it
+ * against the paper's own box notation.
+ *
+ * **These are necklaces.** Where Toussaint distinguishes the necklace from the
+ * rhythm as played - E(5,16), E(7,16), E(9,16), E(11,24), E(13,24), which he
+ * describes as "usually started on the third onset", the fifth, the penultimate
+ * - the value here is E(k,n) itself, which is one unambiguous string per name.
+ * The played variants are several per necklace; `packages/euclid/README.md`
+ * carries them with their rotations.
+ *
+ * Not an enum, unlike `ArpScale`: an entry is three numbers, not one, and the
+ * point of it is that it spreads into `EuclidInputs`.
+ */
+export const EuclidRhythm = {
+  Tresillo: { steps: 8, beats: 3, rotation: 0 },
+  Cinquillo: { steps: 8, beats: 5, rotation: 6 },
+  BossaNova: { steps: 16, beats: 5, rotation: 12 },
+  Samba: { steps: 16, beats: 7, rotation: 0 },
+  AshantiMpre: { steps: 12, beats: 7, rotation: 8 },
+  CentralAfricanRepublic: { steps: 16, beats: 9, rotation: 10 },
+  AkaPygmy: { steps: 24, beats: 11, rotation: 0 },
+  Venda: { steps: 12, beats: 5, rotation: 0 },
+  KhafifERamal: { steps: 5, beats: 2, rotation: 2 },
+  Ruchenitza: { steps: 7, beats: 3, rotation: 4 },
+  Aksak: { steps: 9, beats: 4, rotation: 6 },
+  Moussorgsky: { steps: 11, beats: 5, rotation: 8 },
+  Cumbia: { steps: 4, beats: 3, rotation: 0 },
+  Tuareg: { steps: 8, beats: 7, rotation: 0 },
+  AkaPygmyUpperSangha: { steps: 24, beats: 13, rotation: 14 },
+  Zappa: { steps: 11, beats: 4, rotation: 0 },
+} as const satisfies Record<string, EuclidRhythmPreset>;
+
+export type EuclidRhythmName = keyof typeof EuclidRhythm;

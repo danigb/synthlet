@@ -4,6 +4,7 @@ import {
   Clock,
   Compound,
   Euclid,
+  EuclidRhythm,
   Gain,
   HiHatDrum,
   KickDrum,
@@ -22,11 +23,16 @@ const RhythmBox = (ac: AudioContext) => {
   // kick on the hits and the hat on the steps they leave empty. Two `Euclid`
   // nodes could not do this - the complement of E(5,16) is E(11,16) rotated by
   // 3, and there is no rotation you would find by ear.
+  //
+  // The three pattern numbers come from `EuclidRhythm` rather than being
+  // written here, because the rotation cannot be guessed: this was
+  // `steps: 16, beats: 5` at the default `rotation: 0`, which plays
+  // `x...x..x..x..x..` where the bossa-nova necklace is `x..x..x..x..x...`.
+  // The demo was off by a rotation and nothing said so.
   const rhythm = Euclid(ac, {
     clock,
-    steps: 16,
-    beats: 5,
     subdivision: 4,
+    ...EuclidRhythm.BossaNova,
   });
   const kick = KickDrum(ac, { trigger: rhythm, volume });
   const hat = HiHatDrum(ac, { trigger: rhythm.rests, volume });

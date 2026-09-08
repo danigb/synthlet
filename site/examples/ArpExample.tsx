@@ -8,6 +8,7 @@ import {
   DattorroReverb,
   Compound,
   Euclid,
+  EuclidRhythm,
   MonoSynth,
   NoiseType,
 } from "synthlet";
@@ -18,11 +19,11 @@ import { useSynth } from "./useSynth";
 function ArpSynth(context: AudioContext) {
   const clock = Clock(context, { bpm: 120 });
 
-  const euclid = Euclid(context, {
-    clock,
-    beats: 5,
-    steps: 16,
-  });
+  // The bossa-nova, from the table: at the default `rotation: 0` these same
+  // 16 steps and 5 beats play a rotation of the necklace that is not the
+  // bossa-nova, which is what this used to do. The `Beats` slider below then
+  // moves `beats` away from 5, so you hear the family around the named rhythm.
+  const euclid = Euclid(context, { clock, ...EuclidRhythm.BossaNova });
   const arp = Arp(context, {
     trigger: euclid,
     scale: ArpScale.Major,

@@ -5,6 +5,7 @@ import {
   createWorkletConstructor,
   ParamInput,
 } from "./_worklet";
+import { euclidPattern } from "./dsp";
 import { PARAMS } from "./params";
 import { PROCESSOR } from "./processor";
 
@@ -83,8 +84,33 @@ export const Euclid = Object.assign(
     node.connect(rests, 1);
     return Compound({ output: node, owns: [rests], exposes: { rests } });
   },
-  { descriptors: PARAMS },
+  {
+    descriptors: PARAMS,
+    // The pattern this node is playing, as an array of 1s and 0s - the same
+    // expression `dsp.ts`'s `update()` rebuilds from, so it cannot be a
+    // different answer. A necklace has no canonical origin, so `rotation: 0`
+    // is not the named rhythm in 9 of the 22 cases Toussaint publishes and
+    // there is no rule that says which: the only way to find out which
+    // rotation is the cinquillo is to look, and this is looking.
+    //
+    //   Euclid.pattern(8, 5, 6)  // [1,0,1,1,0,1,1,0]  the cinquillo
+    //   EuclidRhythm.Cinquillo   // the same three numbers, named
+    //
+    // Pure and control-thread: no `AudioContext`, no worklet, callable in node.
+    // It also draws: a UI ring of LEDs is `Euclid.pattern(...).map(...)`.
+    pattern: euclidPattern,
+  },
 );
+
+// The table of named rhythms, and only that. `euclidPattern`, `euclid` and
+// `rotate` stay unexported from here: `packages/synthlet/src/index.ts` does
+// `export * from "@synthlet/euclid"`, so every name in this file becomes a
+// top-level `synthlet` export, and `pattern`, `euclid` and `rotate` are all
+// words another module could plausibly want. `EuclidRhythm*` is prefixed and
+// safe, and the function is namespaced by its factory as `Euclid.pattern` -
+// exactly as `Euclid.descriptors` is.
+export { EuclidRhythm } from "./dsp";
+export type { EuclidRhythmName, EuclidRhythmPreset } from "./dsp";
 
 export { Compound, disposable } from "./_worklet";
 export type {

@@ -1,4 +1,15 @@
-import { createEuclid, euclid, GenerateFn, wrapPhase } from "./dsp";
+import { readFileSync } from "fs";
+import { join } from "path";
+
+import {
+  createEuclid,
+  euclid,
+  EuclidRhythm,
+  EuclidRhythmName,
+  euclidPattern,
+  GenerateFn,
+  wrapPhase,
+} from "./dsp";
 import { PARAMS } from "./params";
 
 /**
@@ -24,6 +35,12 @@ import { PARAMS } from "./params";
  * The third block is `wrapPhase` held against the subtraction loop it replaced,
  * across the whole declared range of `clock` and `subdivision`, plus the one
  * input where the two deliberately disagree.
+ *
+ * The last block is the named-rhythm table, and it is an oracle rather than a
+ * regression net: every row is Toussaint 2005's own box notation as a literal,
+ * cross-checked against §5's interval vector and against a reference
+ * Bjorklund, and `EuclidRhythm`'s rotations are checked against *that*. If the
+ * table and the paper disagree, the paper wins.
  */
 
 /** One render quantum - the block size the processor is called with. */
@@ -134,6 +151,13 @@ describe("euclid", () => {
     // set - the smallest `steps` the float rounding ever reached is 44 - and
     // that is worth asserting rather than assuming, because ticket 04 builds a
     // named-rhythm table on exactly these values.
+    //
+    // These twelve are now a subset of `TOUSSAINT` below, read at
+    // `rotation: 0`. This stays because it is a different assertion: it is the
+    // ticket-03 regression net, pinning what the *generator* emits at its own
+    // origin, where the table below pins what the *named rhythms* are. Nine of
+    // the paper's rhythms - the cinquillo in this very list - are not their
+    // named rhythm at `rotation: 0`, which is what the table exists to say.
     const named: [number, number, string][] = [
       [3, 8, "10010010"], // tresillo
       [5, 8, "10101101"], // cinquillo
@@ -526,6 +550,287 @@ describe("wrapPhase", () => {
 });
 
 /**
+ * Toussaint 2005 §4's named rhythms, transcribed from
+ * `docs/papers-md/rhythm/toussaint-2005-euclidean-algorithm-musical-rhythms-banff.md`
+ * (line numbers in the comments), with §5's interval vector where §5 gives one.
+ *
+ * All 22 of them, not the 16 that ship as presets. The extra six are what makes
+ * the README's "13 of his 22" an assertion rather than a memory, and they hold
+ * the generator to the paper's whole section rather than to a curated
+ * three-quarters of it.
+ *
+ * `rotation` is the value that makes `euclidPattern` reproduce `paper`. It is a
+ * fact about the module, not about the paper, and it is what `EuclidRhythm`
+ * ships.
+ */
+const TOUSSAINT: {
+  beats: number;
+  steps: number;
+  /** The paper's box notation, `x` for an onset. */
+  paper: string;
+  /** §5's inter-onset interval vector, where the paper prints one. */
+  intervals?: string;
+  /** The rotation at which the module plays `paper`. */
+  rotation: number;
+}[] = [
+  { beats: 2, steps: 3, paper: "x.x", intervals: "21", rotation: 0 }, // :324
+  { beats: 2, steps: 5, paper: "x.x..", intervals: "23", rotation: 2 }, // :318
+  { beats: 3, steps: 4, paper: "x.xx", intervals: "211", rotation: 0 }, // :325
+  { beats: 3, steps: 5, paper: "x.x.x", intervals: "221", rotation: 0 }, // :326
+  { beats: 3, steps: 7, paper: "x.x.x..", intervals: "223", rotation: 4 }, // :319
+  { beats: 3, steps: 8, paper: "x..x..x.", intervals: "332", rotation: 0 }, // :204
+  { beats: 4, steps: 7, paper: "x.x.x.x", intervals: "2221", rotation: 0 }, // :327
+  { beats: 4, steps: 9, paper: "x.x.x.x..", intervals: "2223", rotation: 6 }, // :320
+  { beats: 4, steps: 11, paper: "x..x..x..x.", intervals: "3332", rotation: 0 }, // :214
+  { beats: 5, steps: 6, paper: "x.xxxx", intervals: "21111", rotation: 0 }, // :328
+  { beats: 5, steps: 7, paper: "x.xx.xx", intervals: "21211", rotation: 0 }, // :329
+  { beats: 5, steps: 8, paper: "x.xx.xx.", intervals: "21212", rotation: 6 }, // :222
+  { beats: 5, steps: 9, paper: "x.x.x.x.x", intervals: "22221", rotation: 0 }, // :230
+  {
+    beats: 5,
+    steps: 11,
+    paper: "x.x.x.x.x..",
+    intervals: "22223",
+    rotation: 8,
+  }, // :321
+  {
+    beats: 5,
+    steps: 12,
+    paper: "x..x.x..x.x.",
+    intervals: "32322",
+    rotation: 0,
+  }, // :235
+  {
+    beats: 5,
+    steps: 16,
+    // The paper prints *seventeen* boxes here, at `:236` and again at `:322`:
+    // `[x . . x . . x . . x . . x . . . .]`. It is a typo, and the 16-box
+    // reading below is confirmed three ways - by §5's own interval vector for
+    // the same rhythm, `(33334)`, which sums to 16; by Bjorklund; and by the
+    // paper's own 16-box "actual Bossa-Nova" string at `:237` being a rotation
+    // of it. All three checks below run on this row like any other.
+    paper: "x..x..x..x..x...",
+    intervals: "33334",
+    rotation: 12,
+  }, // :236
+  { beats: 7, steps: 8, paper: "x.xxxxxx", intervals: "2111111", rotation: 0 }, // :240
+  {
+    beats: 7,
+    steps: 12,
+    paper: "x.xx.x.xx.x.",
+    intervals: "2122122",
+    rotation: 8,
+  }, // :247
+  {
+    beats: 7,
+    steps: 16,
+    paper: "x..x.x.x..x.x.x.",
+    intervals: "3223222",
+    rotation: 0,
+  }, // :250
+  {
+    beats: 9,
+    steps: 16,
+    paper: "x.xx.x.x.xx.x.x.",
+    intervals: "212221222",
+    rotation: 10,
+  }, // :256
+  {
+    beats: 11,
+    steps: 24,
+    paper: "x..x.x.x.x.x..x.x.x.x.x.",
+    intervals: "32222322222",
+    rotation: 0,
+  }, // :262
+  {
+    beats: 13,
+    steps: 24,
+    paper: "x.xx.x.x.x.x.xx.x.x.x.x.",
+    intervals: "2122222122222",
+    rotation: 14,
+  }, // :266
+];
+
+describe("the named rhythms", () => {
+  it("transcribes the paper consistently with the paper's own interval vectors", () => {
+    // §4 prints box notation and §5 prints interval vectors for the same
+    // rhythms, so the paper checks its own transcription - which is what
+    // catches a slip made here, and what pins the E(5,16) 17-box typo.
+    for (const { beats, steps, paper, intervals } of TOUSSAINT) {
+      if (!intervals) continue;
+      expect(`E(${beats},${steps}) ${fromIntervals(intervals)}`).toBe(
+        `E(${beats},${steps}) ${paper}`,
+      );
+      expect(paper).toHaveLength(steps);
+    }
+  });
+
+  it("transcribes rhythms that are Euclidean, by Bjorklund", () => {
+    // Second independent check, and it would catch a transcription error that
+    // §4 and §5 happened to share: every paper string must be a rotation of
+    // the reference Bjorklund, which shares no line with `euclid`.
+    const notEuclidean: string[] = [];
+    for (const { beats, steps, paper } of TOUSSAINT)
+      if (!isRotationOf(unbox(paper), bjorklund(steps, beats)))
+        notEuclidean.push(`E(${beats},${steps})`);
+    expect(notEuclidean).toEqual([]);
+  });
+
+  it("plays each named rhythm at the rotation the table gives it", () => {
+    // Criterion 1, and the whole value of the ticket: the expected value is
+    // the *paper's* string, so if the table and the paper disagree the paper
+    // wins.
+    for (const [name, preset] of Object.entries(EuclidRhythm)) {
+      const row = TOUSSAINT.find(
+        (r) => r.beats === preset.beats && r.steps === preset.steps,
+      )!;
+      expect(
+        `${name} ${box(euclidPattern(preset.steps, preset.beats, preset.rotation))}`,
+      ).toBe(`${name} ${row.paper}`);
+      expect(preset.rotation).toBe(row.rotation);
+    }
+  });
+
+  it("ships sixteen presets, every one of them from the paper", () => {
+    // A preset cannot be added without a paper string to check it against.
+    expect(Object.keys(EuclidRhythm)).toHaveLength(16);
+    const missing = Object.entries(EuclidRhythm).filter(
+      ([, p]) =>
+        !TOUSSAINT.some((r) => r.beats === p.beats && r.steps === p.steps),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it("gets 13 of the paper's 22 right at `rotation: 0`", () => {
+    // The number the README and the ticket both quote, asserted rather than
+    // remembered - and the reason this table exists at all. No stated rotation
+    // rule beats it: lexicographically-largest gets 5, lex-smallest starting on
+    // an onset gets 13, biggest-gap-last gets 6. A necklace has no canonical
+    // origin, so the nine were looked up.
+    const atZero = TOUSSAINT.filter(
+      (r) => box(euclidPattern(r.steps, r.beats)) === r.paper,
+    );
+    expect(TOUSSAINT).toHaveLength(22);
+    expect(atZero).toHaveLength(13);
+    // And the nine that need one are exactly these, in the paper's order.
+    expect(
+      TOUSSAINT.filter((r) => r.rotation !== 0).map(
+        (r) => `E(${r.beats},${r.steps})+${r.rotation}`,
+      ),
+    ).toEqual([
+      "E(2,5)+2",
+      "E(3,7)+4",
+      "E(4,9)+6",
+      "E(5,8)+6",
+      "E(5,11)+8",
+      "E(5,16)+12",
+      "E(7,12)+8",
+      "E(9,16)+10",
+      "E(13,24)+14",
+    ]);
+  });
+
+  it("documents the table it ships", () => {
+    // Two hand-written copies of sixteen triples is how the `pulseWidth` bug
+    // happened. The README table is the user-facing one and the object is the
+    // one that runs; this is what keeps them the same table. Change a digit in
+    // the README and this fails naming it.
+    //
+    // Whitespace-tolerant because prettier reformats markdown table padding,
+    // and keyed on a backticked identifier in column 1 so the README's second
+    // table - the played variants, which have prose names - is not matched.
+    const readme = readFileSync(join(__dirname, "..", "README.md"), "utf8");
+    const rows = [
+      ...readme.matchAll(
+        /^\|\s*`(\w+)`\s*\|\s*E\((\d+),(\d+)\)\s*\|\s*(\d+)\s*\|\s*`([x.]+)`\s*\|/gm,
+      ),
+    ].map(([, name, beats, steps, rotation, pattern]) => ({
+      name,
+      beats: +beats,
+      steps: +steps,
+      rotation: +rotation,
+      pattern,
+    }));
+
+    expect(rows.map((r) => r.name)).toEqual(Object.keys(EuclidRhythm));
+    for (const row of rows) {
+      const preset = EuclidRhythm[row.name as EuclidRhythmName];
+      expect({
+        steps: row.steps,
+        beats: row.beats,
+        rotation: row.rotation,
+      }).toEqual(preset);
+      expect(
+        box(euclidPattern(preset.steps, preset.beats, preset.rotation)),
+      ).toBe(row.pattern);
+    }
+  });
+
+  it("floors its own arguments and never throws", () => {
+    // `euclid()` floors nothing - `update()` upholds the integer contract inside
+    // the module, and this is the other side of that boundary.
+    const exact = euclidPattern(8, 3, 2);
+    expect(euclidPattern(8.9, 3.9, 2.9)).toEqual(exact);
+    expect(euclidPattern(8.1, 3.1, 2.1)).toEqual(exact);
+    // And every out-of-range shape does what the worklet does with it.
+    expect(euclidPattern(0, 0)).toEqual([]);
+    expect(euclidPattern(-3, 2)).toEqual([]);
+    expect(euclidPattern(NaN, NaN, NaN)).toEqual([]);
+    expect(euclidPattern(8, 9)).toEqual([1, 1, 1, 1, 1, 1, 1, 1]);
+    expect(euclidPattern(8, 3, 100)).toEqual(euclidPattern(8, 3, 100 % 8));
+    expect(euclidPattern(8, 3, -2)).toEqual(euclidPattern(8, 3, 6));
+  });
+
+  it("returns exactly `steps` steps at every rotation", () => {
+    // `rotate()` used to reduce `n % len` *after* its `n === 0` short-circuit,
+    // so `rotation` at a non-zero multiple of `steps` fell through with `n`
+    // still `len`, and `array.slice(-0)` is the whole array: it returned the
+    // pattern concatenated with itself. 482 of the 10100 `(steps, rotation)`
+    // pairs reachable from the declared ranges came back at twice the length.
+    //
+    // Inaudible through the worklet - a doubled pattern is the same rhythm over
+    // twice the steps - and not inaudible at all through `Euclid.pattern`,
+    // which is a public array people read rotations off. Ticket 06's `spread`
+    // walks `rotation + i * spread` straight through the multiples.
+    const wrong: string[] = [];
+    for (let steps = 1; steps <= 32; steps++)
+      for (let rotation = -100; rotation <= 100; rotation++) {
+        const pattern = euclidPattern(steps, 3, rotation);
+        if (pattern.length !== steps)
+          wrong.push(`E(3,${steps})+${rotation} -> ${pattern.length}`);
+      }
+    expect(wrong).toEqual([]);
+
+    // The exact cases that used to break, named: a full cycle is the identity
+    // rotation, not a doubling, and so is two full cycles and a negative one.
+    for (const [steps, beats] of [
+      [8, 3],
+      [16, 5],
+      [5, 2],
+      [24, 13],
+    ]) {
+      const home = euclidPattern(steps, beats, 0);
+      expect(euclidPattern(steps, beats, steps)).toEqual(home);
+      expect(euclidPattern(steps, beats, 2 * steps)).toEqual(home);
+      expect(euclidPattern(steps, beats, -steps)).toEqual(home);
+    }
+    // The one that reads worst in a bug report.
+    expect(euclidPattern(8, 3, 8)).toHaveLength(8);
+  });
+
+  it("returns a fresh array every call", () => {
+    // `rotate()` returns its argument by identity at `n === 0`, so "fresh" is a
+    // property of the composition rather than of `rotate`. A caller drawing a
+    // ring of LEDs will mutate what it is handed.
+    const a = euclidPattern(8, 3, 0);
+    const b = euclidPattern(8, 3, 0);
+    expect(a).not.toBe(b);
+    a[0] = 9;
+    expect(euclidPattern(8, 3, 0)[0]).toBe(1);
+  });
+});
+
+/**
  * A per-sample phase ramp, a block at a time, keeping its phase across calls -
  * so a test can render up to an instant, change a parameter and carry on
  * without the ramp jumping back to 0.
@@ -691,6 +996,28 @@ function intervals(pattern: number[]) {
       ? onsets[i + 1] - at
       : pattern.length - at + onsets[0],
   );
+}
+
+/** A pattern as the paper writes it: `x` for an onset, `.` for a rest. */
+function box(pattern: number[]) {
+  return pattern.map((v) => (v ? "x" : ".")).join("");
+}
+
+/** The inverse of `box`. */
+function unbox(pattern: string) {
+  return pattern.split("").map((c) => (c === "x" ? 1 : 0));
+}
+
+/**
+ * An inter-onset interval vector as box notation: Toussaint 2005 §5's `(33334)`
+ * is `x..x..x..x..x...`. Each digit is the distance from one onset to the next,
+ * wrapping round the cycle, so the digits sum to the number of steps.
+ */
+function fromIntervals(intervals: string) {
+  return intervals
+    .split("")
+    .map((n) => "x" + ".".repeat(Number(n) - 1))
+    .join("");
 }
 
 function same(a: number[], b: number[]) {

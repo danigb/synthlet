@@ -1,3 +1,4 @@
+import { euclidPattern } from "./dsp";
 import { Euclid } from "./index";
 import { PARAMS } from "./params";
 
@@ -96,6 +97,13 @@ describe("Euclid", () => {
     // vanish: the factory is no longer `createWorkletConstructor`'s own return
     // value, which is what carried them.
     expect(Euclid.descriptors).toBe(PARAMS);
+  });
+
+  it("still carries `pattern` after the Compound wrap", () => {
+    // Same hazard as `descriptors` above, and the same guard: `Euclid.pattern`
+    // is a property of the factory, so a rewrap that forgot it would leave the
+    // node working and the export gone.
+    expect(Euclid.pattern).toBe(euclidPattern);
   });
 
   it("disposes the rests gain with the node", () => {

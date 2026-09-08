@@ -1,3 +1,11 @@
+// `index.ts` and `dsp.ts` imported at the top of the file, *above* the
+// `beforeAll` that installs the `AudioWorkletProcessor` stub. That ordering is
+// the point rather than an accident: it is criterion 2 of euclid ticket 04 at
+// the node level - `Euclid.pattern` is reachable from a bare node module scope
+// with no worklet globals, no `AudioContext` and nothing stubbed.
+import { euclidPattern, EuclidRhythm } from "./dsp";
+import { Euclid } from "./index";
+
 // Euclid reads the clock's phase as a k-rate param, one value per block, so
 // these drive it with a phase ramp directly. 64 blocks per clock cycle, in
 // powers of two so nothing drifts.
@@ -124,6 +132,40 @@ describe("EuclidProcessor", () => {
       // boundary. `+13` puts the first wrap at 499, which is the whole point.
       expect(edges.slice(1).every((i) => i % BLOCK !== 0)).toBe(true);
     });
+  });
+
+  it("plays exactly what `Euclid.pattern` says it plays", () => {
+    // Criterion 3. The export's whole value is that it tells the truth about
+    // the module, so this renders the shipped processor and reads the pattern
+    // back out of the audio: one sample per block, `BLOCKS_PER_CYCLE` blocks a
+    // step, so out index `s * BLOCKS_PER_CYCLE` is step `s`. The counter starts
+    // at 0 and block 0 sees no wrap, so step 0 is at index 0.
+    //
+    // The two cannot actually drift - `update()` calls `euclidPattern` too, so
+    // there is one expression and not two - and this is the other claim: that
+    // the engine reads that array in step order and at the step it says.
+    for (const { steps, beats, rotation } of [
+      ...Object.values(EuclidRhythm),
+      { steps: 16, beats: 5, rotation: 0 }, // the bossa the demo used to play
+      { steps: 5, beats: 5, rotation: 3 },
+      { steps: 8, beats: 0, rotation: 0 },
+      { steps: 7, beats: 9, rotation: 40 }, // beats > steps, rotation > steps
+    ]) {
+      const out = run(new Worklet(), steps, { steps, beats, rotation });
+      const played = Array.from({ length: steps }, (_, s) =>
+        out[s * BLOCKS_PER_CYCLE] > 0 ? 1 : 0,
+      );
+      expect(`E(${beats},${steps})+${rotation} ${played.join("")}`).toBe(
+        `E(${beats},${steps})+${rotation} ${Euclid.pattern(steps, beats, rotation).join("")}`,
+      );
+    }
+  });
+
+  it("exposes that same function on the factory", () => {
+    // Not a copy of it, and not a re-implementation: the identity is what makes
+    // the test above a statement about the module rather than about two
+    // functions that agree today.
+    expect(Euclid.pattern).toBe(euclidPattern);
   });
 
   it("still steps once per clock cycle, and `subdivision` times faster", () => {
