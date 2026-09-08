@@ -49,6 +49,22 @@ describe("analyze", () => {
     expect(analysis.levels).toHaveLength(levelsLength(16));
   });
 
+  it("measures true peak when it is asked to", async () => {
+    // A quarter-Nyquist sine sampled at its zero crossings: every sample sits
+    // at +/-0.707 while the waveform between them reaches 1.
+    const length = ANALYSIS_FRAME * 40;
+    const step = (2 * Math.PI * (SAMPLE_RATE / 4)) / SAMPLE_RATE;
+    const channel = Float32Array.from({ length }, (_, i) =>
+      Math.sin(i * step + Math.PI / 4),
+    );
+
+    const analysis = await analyze([channel], SAMPLE_RATE, { truePeak: true });
+
+    expect(analysis.peak[0]).toBeCloseTo(-3.01, 1);
+    expect(analysis.truePeak[0]).toBeGreaterThan(analysis.peak[0] + 2);
+    expect(analysis.truePeak[0]).toBeLessThan(0.4);
+  });
+
   it("reads NaN for what it is not measuring", async () => {
     const analysis = await analyze([tone(ANALYSIS_FRAME)], SAMPLE_RATE);
     expect(analysis.truePeak[0]).toBeNaN();
@@ -166,35 +182,43 @@ describe("offline against realtime", () => {
     Processor = (await import("./worklet")).LevelMeterProcessor;
   });
 
-  it("leaves the layout in exactly the same state", async () => {
-    const frames = 300;
-    const length = ANALYSIS_FRAME * frames;
-    const channels = [tone(length), tone(length, 7, 0.35)];
-    const maxChannels = 4;
+  it.each([false, true])(
+    "leaves the layout in exactly the same state (truePeak: %p)",
+    async (truePeak) => {
+      const frames = 300;
+      const length = ANALYSIS_FRAME * frames;
+      const channels = [tone(length), tone(length, 7, 0.35)];
+      const maxChannels = 4;
 
-    // Realtime: one render quantum at a time, through the processor.
-    const realtime = new Float32Array(levelsLength(maxChannels));
-    const processor = new Processor({
-      processorOptions: { maxChannels, levelsBuffer: realtime.buffer },
-    });
-    for (let frame = 0; frame < frames; frame++) {
-      const offset = frame * ANALYSIS_FRAME;
-      const block = channels.map((c) =>
-        c.subarray(offset, offset + ANALYSIS_FRAME),
-      );
-      processor.process(
-        [block],
-        [block.map(() => new Float32Array(ANALYSIS_FRAME))],
-        {},
-      );
-    }
+      // Realtime: one render quantum at a time, through the processor.
+      const realtime = new Float32Array(levelsLength(maxChannels));
+      const processor = new Processor({
+        processorOptions: {
+          maxChannels,
+          truePeak,
+          levelsBuffer: realtime.buffer,
+        },
+      });
+      for (let frame = 0; frame < frames; frame++) {
+        const offset = frame * ANALYSIS_FRAME;
+        const block = channels.map((c) =>
+          c.subarray(offset, offset + ANALYSIS_FRAME),
+        );
+        processor.process(
+          [block],
+          [block.map(() => new Float32Array(ANALYSIS_FRAME))],
+          {},
+        );
+      }
 
-    // Offline: the whole thing, in chunks that are not frames.
-    const offline = await analyze(channels, SAMPLE_RATE, {
-      maxChannels,
-      chunkSize: 5000,
-    });
+      // Offline: the whole thing, in chunks that are not frames.
+      const offline = await analyze(channels, SAMPLE_RATE, {
+        maxChannels,
+        truePeak,
+        chunkSize: 5000,
+      });
 
-    expect(Array.from(offline.levels)).toEqual(Array.from(realtime));
-  });
+      expect(Array.from(offline.levels)).toEqual(Array.from(realtime));
+    },
+  );
 });

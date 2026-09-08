@@ -1,3 +1,5 @@
+import { createTruePeakDetector } from "@synthlet/lookahead-limiter/dsp";
+
 /**
  * The meter, as pure arithmetic.
  *
@@ -12,6 +14,18 @@
  * `worklet.ts` is a driver over this that calls it once per render quantum.
  * `offline.ts` is a driver over this that calls it over chunks.
  */
+
+import { createLoudnessAnalyzer } from "./loudness";
+
+/**
+ * The loudness core, published at `./dsp` alongside the meter.
+ *
+ * `kWeightingCoefficients`, `createLoudnessAnalyzer`, `gainToTarget` and the
+ * constants of BS.1770-5 are useful on their own - "what gain moves this file
+ * to -14 LUFS" is not a metering question - and they are already pure, so the
+ * subpath that exists to keep Web Audio out is where they belong.
+ */
+export * from "./loudness";
 
 /**
  * The accumulation frame, in samples.
@@ -45,6 +59,23 @@ export const DEFAULT_MAX_CHANNELS = 16;
  * 1.00x in the state-variable-filter audit.
  */
 export const SILENCE = 1e-10;
+
+/**
+ * The EBU R 128 delivery ceiling, and the number most people looking at a
+ * true-peak meter are checking against. Exported so a renderer can draw the
+ * line rather than each one hardcoding it.
+ */
+export const TRUE_PEAK_CEILING_DBTP = -1;
+
+/**
+ * Samples of zeros needed to flush the true-peak detector's ring.
+ *
+ * `TP_HISTORY` in `lookahead-limiter/src/dsp.ts`, which does not export it. A
+ * channel that stops arriving is drained rather than left holding its last
+ * window, so if it comes back it fades in from silence instead of reporting a
+ * peak from before it went away.
+ */
+const TRUE_PEAK_HISTORY = 12;
 
 // ---------------------------------------------------------------------------
 // The buffer layout
@@ -105,9 +136,10 @@ export const toDb = (magnitude: number): number => 20 * Math.log10(magnitude);
 /**
  * The loudness core, as this file needs it.
  *
- * Declared structurally rather than imported so `dsp.ts` stays free of
- * `loudness.ts` until there is something to wire: `createLoudnessAnalyzer` in
- * `./loudness` already satisfies this shape.
+ * Structural rather than an alias for `LoudnessAnalyzer`, so this file states
+ * what it uses and the compiler checks that `createLoudnessAnalyzer` still
+ * supplies it. Everything the core exports reaches callers through the
+ * `export *` above; this is the meter's own view of it.
  */
 export interface LoudnessCore {
   process(
@@ -121,19 +153,22 @@ export interface LoudnessCore {
 }
 
 /**
- * Where the loudness core gets wired in.
+ * The loudness core, wired.
  *
- * `createLoudnessAnalyzer(sampleRate, { maxChannels, channelWeights,
- * integrate: false })` from `./loudness` already satisfies `LoudnessCore`, and
- * every call site in `createLevelAnalyzer` below is wired for either answer -
- * so turning loudness on is this function body and nothing else.
+ * `integrate: false`: Momentary and Short-term are ungated sliding windows with
+ * no notion of a programme, so nothing here needs the gating histogram. Ticket
+ * 12's `integrate` option is what turns it on.
  */
 function createLoudnessCore(
-  _sampleRate: number,
-  _maxChannels: number,
-  _channelWeights: ArrayLike<number> | undefined,
-): LoudnessCore | undefined {
-  return undefined;
+  sampleRate: number,
+  maxChannels: number,
+  channelWeights: ArrayLike<number> | undefined,
+): LoudnessCore {
+  return createLoudnessAnalyzer(sampleRate, {
+    maxChannels,
+    channelWeights,
+    integrate: false,
+  });
 }
 
 export interface LevelAnalyzerOptions {
@@ -275,6 +310,26 @@ export function createLevelAnalyzer(
   const framePeak = new Float32Array(maxChannels);
   const meanSquare = new Float64Array(maxChannels);
 
+  // True peak: the limiter's own detector, one per channel, so the meter and
+  // the limiter agree by construction. Off by default - 48 multiply-
+  // accumulates per sample per channel is 11x the entire loudness path, and it
+  // is the only thing in the package expensive enough to need an opt-in.
+  //
+  // The two meter-specific optimisations the plan offered were measured and
+  // both declined; see the `truePeak` option for the numbers.
+  const truePeakEnabled = options.truePeak === true;
+  const detectors = truePeakEnabled
+    ? Array.from({ length: maxChannels }, () => {
+        const detector = createTruePeakDetector();
+        detector.channels(1);
+        return detector;
+      })
+    : [];
+  const truePeak = new Float32Array(maxChannels);
+  const truePeakMax = new Float32Array(maxChannels);
+  const frameTruePeak = new Float32Array(maxChannels);
+  const drain = new Int32Array(maxChannels);
+
   const loudness = options.loudness
     ? createLoudnessCore(sampleRate, maxChannels, options.channelWeights)
     : undefined;
@@ -304,6 +359,35 @@ export function createLevelAnalyzer(
       }
       framePeak[c] = blockPeak;
       meanSquare[c] = square;
+
+      if (truePeakEnabled) {
+        const detector = detectors[c];
+        let highest = frameTruePeak[c];
+        for (let i = offset; i < end; i++) {
+          detector.advance();
+          detector.write(0, channel[i]);
+          const reconstructed = detector.peak(1);
+          if (reconstructed > highest) highest = reconstructed;
+        }
+        frameTruePeak[c] = highest;
+        drain[c] = TRUE_PEAK_HISTORY;
+      }
+    }
+
+    // A channel that has stopped arriving gets zeros until its ring is empty,
+    // and then costs nothing at all - which is what keeps 14 unused slots of a
+    // 16-channel buffer from paying for a detector nobody is reading.
+    if (truePeakEnabled) {
+      for (let c = measured; c < maxChannels; c++) {
+        if (drain[c] <= 0) continue;
+        const detector = detectors[c];
+        const steps = Math.min(drain[c], length);
+        for (let i = 0; i < steps; i++) {
+          detector.advance();
+          detector.write(0, 0);
+        }
+        drain[c] -= steps;
+      }
     }
 
     // Channels the input does not carry are silent, not frozen.
@@ -357,6 +441,20 @@ export function createLevelAnalyzer(
       }
       rms[c] = Math.sqrt(square);
 
+      // True peak gets the peak's ballistics and its own state: instant
+      // attack, the same release, and a hold counter that is not the sample
+      // peak's. The layout has one slot for it, so there is no separate
+      // true-peak hold marker - adding one would move the stride.
+      if (truePeakEnabled) {
+        const frame = frameTruePeak[c];
+        let t = truePeak[c] * decay;
+        if (frame > t) t = frame;
+        if (t < SILENCE) t = 0;
+        truePeak[c] = t;
+        if (t > truePeakMax[c]) truePeakMax[c] = t;
+        frameTruePeak[c] = 0;
+      }
+
       // `blockPeak` is already the largest |x| in the frame, so one compare
       // says whether any sample in it reached the threshold.
       if (blockPeak >= clipThreshold) {
@@ -375,7 +473,7 @@ export function createLevelAnalyzer(
     sampleRate,
     maxChannels,
     frameSize: ANALYSIS_FRAME,
-    truePeakEnabled: false,
+    truePeakEnabled,
     loudness,
 
     get channelCount() {
@@ -418,8 +516,9 @@ export function createLevelAnalyzer(
         view[slot + LEVEL_PEAK] = peak[c];
         view[slot + LEVEL_HOLD] = hold[c];
         view[slot + LEVEL_RMS] = rms[c];
-        // LEVEL_TRUE_PEAK is left alone while true peak is off, so an unwritten
-        // slot stays unwritten rather than reading as digital silence.
+        // Left alone while true peak is off, so an unwritten slot stays
+        // unwritten rather than reading as digital silence.
+        if (truePeakEnabled) view[slot + LEVEL_TRUE_PEAK] = truePeak[c];
       }
       if (loudness) {
         const tail = levelsTailIndex(maxChannels);
@@ -430,7 +529,7 @@ export function createLevelAnalyzer(
     },
 
     maxPeak: (channel) => peakMax[channel],
-    maxTruePeak: () => 0,
+    maxTruePeak: (channel) => truePeakMax[channel],
     everClipped: (channel) => everClip[channel] === 1,
 
     clearClip() {
@@ -448,6 +547,10 @@ export function createLevelAnalyzer(
       everClip.fill(0);
       framePeak.fill(0);
       meanSquare.fill(0);
+      truePeak.fill(0);
+      truePeakMax.fill(0);
+      frameTruePeak.fill(0);
+      drain.fill(0);
       channelCount = 0;
       pending = 0;
       flags = 0;
