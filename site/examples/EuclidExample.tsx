@@ -1,11 +1,11 @@
 "use client";
 
 import {
-  ClaveDrum,
   Clock,
   Compound,
   Euclid,
   Gain,
+  HiHatDrum,
   KickDrum,
   Param,
 } from "synthlet";
@@ -18,33 +18,25 @@ const RhythmBox = (ac: AudioContext) => {
   const volume = Param.db(ac, -12);
   const clock = Clock(ac, { bpm });
 
-  // One clock, two euclidean patterns, two drums mixed into the output.
-  const clave = ClaveDrum(ac, {
-    trigger: Euclid(ac, {
-      clock,
-      steps: 16,
-      beats: 7,
-      subdivision: 4,
-      rotation: 3,
-    }),
-    volume,
+  // One clock, *one* euclidean pattern, two drums mixed into the output: the
+  // kick on the hits and the hat on the steps they leave empty. Two `Euclid`
+  // nodes could not do this - the complement of E(5,16) is E(11,16) rotated by
+  // 3, and there is no rotation you would find by ear.
+  const rhythm = Euclid(ac, {
+    clock,
+    steps: 16,
+    beats: 5,
+    subdivision: 4,
   });
-  const kick = KickDrum(ac, {
-    trigger: Euclid(ac, {
-      clock,
-      steps: 16,
-      beats: 5,
-      subdivision: 4,
-    }),
-    volume,
-  });
+  const kick = KickDrum(ac, { trigger: rhythm, volume });
+  const hat = HiHatDrum(ac, { trigger: rhythm.rests, volume });
   const out = Gain(ac);
 
-  [clave, kick].forEach((drum) => drum.connect(out));
+  [kick, hat].forEach((drum) => drum.connect(out));
 
   return Compound({
     output: out,
-    owns: [clave, kick, clock, bpm, volume],
+    owns: [kick, hat, rhythm, clock, bpm, volume],
     exposes: {
       bpm: bpm.input,
       volume: volume.input,

@@ -188,6 +188,12 @@ describe("no way to emit NaN", () => {
             update(steps, beats, rotation);
             const out = render(generate, ramp(), 200, { subdivision });
             checked += out.length;
+            // Both outputs: `render` fills the rests buffer too, so the sweep
+            // protects the whole surface rather than half of it.
+            if (!out.rests.every(Number.isFinite))
+              broken.push(
+                `E(${beats},${steps}) rot ${rotation} /${subdivision} rests`,
+              );
             if (!out.every(Number.isFinite))
               broken.push(
                 `E(${beats},${steps}) rot ${rotation} /${subdivision}`,
@@ -212,6 +218,7 @@ describe("no way to emit NaN", () => {
           update(steps, beats, rotation);
           const out = render(generate, ramp(), 20, { reset: resetting });
           expect(out.every(Number.isFinite)).toBe(true);
+          expect(out.rests.every(Number.isFinite)).toBe(true);
         }
   });
 
@@ -278,7 +285,7 @@ describe("no way to emit NaN", () => {
     kUpdate(0, 0, 0);
     const out = new Float32Array(BLOCK);
     for (let b = 0; b < 8; b++) {
-      kGenerate(out, Float32Array.of((b % 4) / 4), 1, 0.5, NO_RESET);
+      kGenerate([[out]], Float32Array.of((b % 4) / 4), 1, 0.5, NO_RESET);
       expect(Array.from(out).every((v) => v === 0)).toBe(true);
     }
   });
@@ -295,6 +302,175 @@ describe("no way to emit NaN", () => {
       const [generate, update] = createEuclid();
       update(steps, beats, rotation);
       return render(generate, ramp(), 8 * 4);
+    }
+  });
+});
+
+describe("the rests", () => {
+  // Criterion 1, exhaustively and purely: the two outputs partition the cycle.
+  it("partitions every step between the two outputs", () => {
+    const wrong: string[] = [];
+    for (let steps = 1; steps <= MAX; steps++)
+      for (let beats = 0; beats <= steps; beats++) {
+        const p = euclid(steps, beats);
+        const hits = p.filter((v) => v === 1).length;
+        const rests = p.filter((v) => v === 0).length;
+        // Boolean, `beats` of them, and the rest are the rest. Lemma 2 on one
+        // side and the partition on the other, in one assertion per pair.
+        if (
+          p.length !== steps ||
+          !p.every((v) => v === 0 || v === 1) ||
+          hits !== beats ||
+          rests !== steps - beats
+        )
+          wrong.push(`E(${beats},${steps})`);
+      }
+    expect(wrong).toEqual([]);
+  });
+
+  // Criterion 2 - Lemma 3, asserted rather than trusted. The float generator
+  // this module shipped before 0.3.0 failed this on E(14,44), E(30,44),
+  // E(20,46), E(26,46), E(22,52) and E(30,52). If those six are ever the only
+  // failures, the bug is in `euclid()`, not in the complement.
+  it("plays a Euclidean rhythm: the complement is a rotation of E(steps - beats, steps)", () => {
+    const notARotation: string[] = [];
+    let pairs = 0;
+    for (let steps = 2; steps <= 64; steps++)
+      for (let beats = 1; beats < steps; beats++) {
+        pairs++;
+        const complement = euclid(steps, beats).map((v) => 1 - v);
+        if (rotationBetween(complement, euclid(steps, steps - beats)) < 0)
+          notARotation.push(`E(${beats},${steps})`);
+      }
+    expect(notARotation).toEqual([]);
+    // A sweep that sweeps nothing passes the above.
+    expect(pairs).toBe(2016);
+  });
+
+  // And the reason this module exists: it is *never* the pattern you would get
+  // by patching a second node at `beats: steps - beats, rotation: 0`.
+  it("is never reachable from a second node at rotation 0", () => {
+    const identical: string[] = [];
+    for (let steps = 2; steps <= 64; steps++)
+      for (let beats = 1; beats < steps; beats++) {
+        const complement = euclid(steps, beats).map((v) => 1 - v);
+        if (rotationBetween(complement, euclid(steps, steps - beats)) === 0)
+          identical.push(`E(${beats},${steps})`);
+      }
+    expect(identical).toEqual([]);
+  });
+
+  // Criteria 1 and 3 as rendered signals: the rising edges of the two outputs
+  // are disjoint, and their union is every step boundary, to the sample.
+  it("pulses on the step boundaries the hits do not, and never at the same time", () => {
+    const settings: [number, number, number][] = [
+      [8, 3, 0],
+      [8, 3, 5],
+      [16, 5, 0],
+      [16, 11, 3],
+      [5, 2, 1],
+    ];
+    for (const [steps, beats, rotation] of settings) {
+      const out = renderPattern(steps, beats, rotation);
+      const hitEdges = risingEdges(out.hits);
+      const restEdges = risingEdges(out.rests);
+      // Disjoint...
+      expect(hitEdges.filter((e) => restEdges.includes(e))).toEqual([]);
+      // ...and together, every step boundary in the render.
+      expect([...hitEdges, ...restEdges].sort((a, b) => a - b)).toEqual(
+        Array.from({ length: steps }, (_, i) => i * CYCLE),
+      );
+      // Same width, so the same clamp reached both.
+      expect(
+        highRunLengths(out.hits).concat(highRunLengths(out.rests)),
+      ).toEqual(expect.arrayContaining([CYCLE / 2]));
+      expect(out.rests.every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  // Criterion 4.
+  it("re-aligns both outputs on the same sample", () => {
+    const resetting = new Float32Array(BLOCK);
+    resetting.fill(1, 40, 80);
+    const [generate, update] = createEuclid();
+    update(8, 3, 0);
+    const clock = ramp();
+    // A whole cycle first, so the reset arrives while the engine is on step 1
+    // - a rest - and re-aligning it is visible rather than a no-op.
+    render(generate, clock, 4);
+    // One block carrying the reset, then the rest of the render clean. The
+    // gate detector fires on the rising edge inside *each* block it is handed,
+    // so passing `resetting` to every block would be a reset every 128 samples
+    // rather than the one this is about.
+    const first = render(generate, clock, 1, { reset: resetting });
+    const rest = render(generate, clock, 8 * 4);
+    const hits = first.hits.concat(rest.hits);
+    const rests = first.rests.concat(rest.rests);
+
+    // Sample 40 is the reset's own sample, and `reset()` arms that very read as
+    // a boundary, so step 0 of the pattern starts there. Step 0 of E(3,8) is a
+    // hit, so output 0 is the one that goes high - and the rests go low on the
+    // same sample, not one later.
+    expect(hits[40]).toBe(1);
+    expect(rests[40]).toBe(0);
+    // Asserted as a value rather than a rising edge on purpose: the reset can
+    // land mid-pulse, in which case output 0 was already high and there is no
+    // new edge to find. What has to be true is that both outputs describe the
+    // same step on the same sample.
+    //
+    // And every later step is still shared: exactly one output is high 40
+    // samples into each of them, which is inside the pulse window at this
+    // width.
+    for (let step = 1; step < 8; step++) {
+      const i = 40 + step * CYCLE;
+      expect(hits[i] > 0 !== rests[i] > 0).toBe(true);
+    }
+  });
+
+  // Criterion 5 - the degenerate ends.
+  it("inverts at the degenerate ends, without NaN", () => {
+    const none = renderPattern(8, 0);
+    expect(none.hits.every((v) => v === 0)).toBe(true);
+    expect(risingEdges(none.rests)).toEqual(
+      Array.from({ length: 8 }, (_, i) => i * CYCLE),
+    );
+
+    const all = renderPattern(8, 8);
+    expect(all.rests.every((v) => v === 0)).toBe(true);
+    expect(risingEdges(all.hits)).toHaveLength(8);
+
+    for (const out of [none, all])
+      expect(out.hits.concat(out.rests).every(Number.isFinite)).toBe(true);
+  });
+
+  // `steps: 0` is silence on *both* outputs. Without the `pattern.length` guard
+  // in `step()`, `1 - 0` would make the rests fire on every sample here.
+  it("is silent on both outputs at `steps: 0`", () => {
+    const out = renderPattern(0, 0);
+    expect(out.hits.every((v) => v === 0)).toBe(true);
+    expect(out.rests.every((v) => v === 0)).toBe(true);
+  });
+
+  // Criterion 6.
+  it("leaves output 0 identical whether or not the rests are connected", () => {
+    const settings: [number, number, number][] = [
+      [8, 3, 0],
+      [16, 5, 3],
+      [5, 5, 0],
+      [8, 0, 0],
+      [0, 0, 0],
+    ];
+    for (const [steps, beats, rotation] of settings) {
+      const both = createEuclid();
+      both[1](steps, beats, rotation);
+      const one = createEuclid();
+      one[1](steps, beats, rotation);
+      // `Array.from` on both sides: `render` returns the hits *with* the
+      // rests attached as a property, and the whole point of this test is that
+      // the two runs differ in exactly that property.
+      expect(Array.from(render(both[0], ramp(), 8 * 4).hits)).toEqual(
+        Array.from(render(one[0], ramp(), 8 * 4, { restsConnected: false })),
+      );
     }
   });
 });
@@ -344,7 +520,7 @@ describe("wrapPhase", () => {
     const [generate, update] = createEuclid();
     update(1, 1, 0);
     const output = new Float32Array(BLOCK);
-    generate(output, Float32Array.of(1), 1, 0.5, NO_RESET);
+    generate([[output]], Float32Array.of(1), 1, 0.5, NO_RESET);
     expect(Array.from(output).every((v) => v === 1)).toBe(true);
   });
 });
@@ -367,6 +543,19 @@ function ramp(samplesPerCycle = CYCLE) {
   };
 }
 
+/**
+ * Renders `blocks` blocks and returns output 0's samples - with output 1's
+ * attached as `.rests`, and output 0's again as `.hits`.
+ *
+ * The array-with-properties return is so that every assertion written against
+ * the one-output engine (`render(...).every(...)`, `risingEdges(render(...))`)
+ * keeps working unchanged while the rests tests read `.hits` and `.rests`.
+ *
+ * `restsConnected: false` hands `generate` a one-output `outputs` array, which
+ * is the shape a caller who never touches `.rests` would have if the node did
+ * not create its gain eagerly - and is what pins output 0 as independent of
+ * whether the second buffer is there at all.
+ */
 function render(
   generate: GenerateFn,
   nextClock: () => Float32Array,
@@ -375,25 +564,76 @@ function render(
     subdivision?: number;
     pulseWidth?: number;
     reset?: Float32Array;
+    restsConnected?: boolean;
   } = {},
 ) {
-  const out: number[] = [];
+  const hits: number[] = [];
+  const rests: number[] = [];
   const output = new Float32Array(BLOCK);
+  const restsOut = new Float32Array(BLOCK);
+  const outputs =
+    params.restsConnected === false ? [[output]] : [[output], [restsOut]];
   for (let b = 0; b < blocks; b++) {
     generate(
-      output,
+      outputs,
       nextClock(),
       params.subdivision ?? 1,
       params.pulseWidth ?? 0.5,
       params.reset ?? NO_RESET,
     );
-    out.push(...output);
+    hits.push(...output);
+    rests.push(...restsOut);
   }
-  return out;
+  return Object.assign(hits, { hits, rests });
+}
+
+/** Build, `update`, and render one whole cycle of the pattern four times over. */
+function renderPattern(steps: number, beats: number, rotation = 0) {
+  const [generate, update] = createEuclid();
+  update(steps, beats, rotation);
+  return render(generate, ramp(), Math.max(steps, 1) * 4);
 }
 
 function risingEdges(values: number[]) {
   return values.flatMap((v, i) => (v > 0 && !(values[i - 1] > 0) ? [i] : []));
+}
+
+/**
+ * How far `b` has to be rotated right to equal `a`, or -1 if it cannot be.
+ *
+ * Index arithmetic rather than `slice`/`concat`: the Lemma 3 sweep is 2016
+ * pairs times up to 64 candidate rotations, and the array-building form
+ * allocates 129k arrays to answer the same question.
+ */
+function rotationBetween(a: number[], b: number[]) {
+  const n = a.length;
+  if (n !== b.length) return -1;
+  for (let r = 0; r < n; r++) {
+    let ok = true;
+    // `rotate(b, r)[i]` is `b[(i - r + n) % n]`.
+    for (let i = 0; i < n; i++)
+      if (a[i] !== b[(i - r + n + n) % n]) {
+        ok = false;
+        break;
+      }
+    if (ok) return r;
+  }
+  return -1;
+}
+
+/** The lengths of the runs of positive samples, in order. */
+function highRunLengths(values: number[]) {
+  const runs: number[] = [];
+  let run = 0;
+  for (const v of values) {
+    if (v > 0) run++;
+    else if (run) {
+      runs.push(run);
+      run = 0;
+    }
+  }
+  if (run) runs.push(run);
+  return runs;
 }
 
 /**

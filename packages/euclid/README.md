@@ -39,9 +39,54 @@ const rhythm = Euclid(ac, {
 });
 // `steps: 8, beats: 3` are the defaults, so `Euclid(ac, { clock })` is this.
 
-const kick = KickDrum(ac, { trigger: rhythm });
+const kick = KickDrum(ac, { trigger: rhythm }); // x . . x . . x .
+const hat = HiHatDrum(ac, { trigger: rhythm.rests }); // . x x . x x . x
 kick.connect(ac.destination);
+hat.connect(ac.destination);
+
+rhythm.dispose(); // disposes the rests gain with it
 ```
+
+## Two outputs
+
+| Output          | What it is                                                                |
+| --------------- | ------------------------------------------------------------------------- |
+| the node itself | the pattern's hits — a pulse over the first `pulseWidth` of each hit step |
+| `.rests`        | the steps the hits leave empty — same width, same samples                 |
+
+**The complement of a Euclidean rhythm is a Euclidean rhythm.** That is
+Morrill's Lemma 3 — _"Euclidean rhythms distribute their rests in the same
+manner as their notes"_ — so `.rests` is `E(steps - beats, steps)` at some
+rotation, verified over all 2016 pairs with `1 ≤ beats < steps ≤ 64`. It is a
+rhythm, not a leftover.
+
+**It is an output rather than a second node because that rotation is never 0.**
+In the same 2016 pairs, not once is the complement `E(steps - beats, steps)` as
+generated — every one of them is rotated:
+
+| pattern   | complement         | is `E(n−k, n)` rotated by |
+| --------- | ------------------ | ------------------------- |
+| `E(3,8)`  | `.xx.xx.x`         | 5                         |
+| `E(5,16)` | `.xxx.xx.xx.xx.xx` | 3                         |
+| `E(7,12)` | `.x.x.x..x.x.`     | 5                         |
+
+So a second `Euclid` at `beats: steps - beats` plays the right necklace from
+the wrong place — it collides with the first instead of interlocking — and
+there is no rotation value to work out by ear.
+
+Both outputs are **one step read twice**: one pattern, one step counter, one
+clamped `pulseWidth`, one `reset`. They partition every step — never both,
+never neither — and they cannot skew or drift. `steps: 0` is silence on both.
+
+**The complement is dense, and that is correct.** `E(3,8)`'s rests are five
+hits in eight, `E(5,16)`'s are eleven in sixteen: sparse kick, busy hat. It is
+_not_ a second layer of the same pattern — onsets move rather than accumulate —
+and the pairing it is for is exactly the one above.
+
+`.rests` adds **no parameters**. Every parameter below applies to both outputs.
+The gain node behind it is created with the node whether or not you connect to
+it, the way `Clock`'s three are, so it is one idle `GainNode` per `Euclid`
+rather than nothing.
 
 ## Parameters
 
@@ -141,8 +186,9 @@ starting point, and it is step-indexed.
   the necklace framing that says a rhythm has no canonical origin
 - T. Morrill,
   [_On The Euclidean Algorithm: Rhythm Without Recursion_](https://arxiv.org/abs/2206.12421),
-  arXiv:2206.12421, 2022 — §4 is the generator in this package, and Lemma 2 and
-  Corollary 2 are what its tests assert
+  arXiv:2206.12421, 2022 — §4 is the generator in this package, Lemma 2 and
+  Corollary 2 are what its tests assert, and Lemma 3 is why `.rests` is a
+  rhythm
 
 ## License
 

@@ -24,7 +24,7 @@ export class EuclidProcessor extends AudioWorkletProcessor {
   process(inputs: Float32Array[][], outputs: Float32Array[][], params: any) {
     this.u(params.steps[0], params.beats[0], params.rotation[0]);
     this.g(
-      outputs[0][0],
+      outputs,
       params.clock,
       params.subdivision[0],
       params.pulseWidth[0],

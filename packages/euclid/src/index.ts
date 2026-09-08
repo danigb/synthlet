@@ -1,4 +1,6 @@
 import {
+  Compound,
+  CompoundNode,
   createRegistrar,
   createWorkletConstructor,
   ParamInput,
@@ -26,18 +28,62 @@ export type EuclidWorkletNode = AudioWorkletNode & {
   rotation: AudioParam;
   pulseWidth: AudioParam;
   reset: AudioParam;
-  dispose(): void;
 };
 
-export const Euclid = createWorkletConstructor<EuclidWorkletNode, EuclidInputs>(
-  {
-    processorName: "EuclidProcessor",
-    descriptors: PARAMS,
-    workletOptions: () => ({
-      numberOfInputs: 0,
-      numberOfOutputs: 1,
-    }),
+/**
+ * A Euclidean rhythm node: the pattern's hits on its own output, and the steps
+ * the hits leave empty on `.rests`.
+ *
+ * The complement of a Euclidean rhythm is a Euclidean rhythm - Morrill 2022's
+ * Lemma 3, "Euclidean rhythms distribute their rests in the same manner as
+ * their notes" - so `.rests` is E(steps - beats, steps) at some rotation, and
+ * it is a rhythm rather than a leftover.
+ *
+ * It is an output rather than a second node because that rotation is never 0:
+ * over all 2016 pairs with 1 <= beats < steps <= 64, the complement of
+ * E(k,n) is never E(n-k,n) at `rotation: 0`. A second `Euclid` at
+ * `beats: steps - beats` plays the right necklace from the wrong place and
+ * collides with the first instead of interlocking, and there is no rotation
+ * value to compute by ear. Both outputs also share one step counter, one
+ * pattern, one clamped `pulseWidth` and one `reset`, so they cannot skew.
+ *
+ * ```ts
+ * const rhythm = Euclid(ac, { clock, steps: 8, beats: 3 });
+ * KickDrum(ac, { trigger: rhythm });        // x . . x . . x .
+ * HiHatDrum(ac, { trigger: rhythm.rests }); // . x x . x x . x
+ * ```
+ */
+export type EuclidNode = CompoundNode<EuclidWorkletNode, { rests: GainNode }>;
+
+const createEuclidNode = createWorkletConstructor<
+  EuclidWorkletNode,
+  EuclidInputs
+>({
+  processorName: "EuclidProcessor",
+  descriptors: PARAMS,
+  workletOptions: () => ({
+    numberOfInputs: 0,
+    numberOfOutputs: 2,
+    // Declared explicitly rather than left to the spec's default, matching
+    // `Clock`: both outputs are one-channel gates and cannot be widened by a
+    // channel-count negotiation.
+    outputChannelCount: [1, 1],
+  }),
+});
+
+export const Euclid = Object.assign(
+  (context: AudioContext, inputs: EuclidInputs = {}): EuclidNode => {
+    const node = createEuclidNode(context, inputs);
+    // A second output needs to be a node a caller can connect *from*, so it
+    // gets a gain to hang off - `Clock.gate` exactly. One idle gain per node
+    // whether or not anyone reads `.rests`; see `packages/clock/src/index.ts`
+    // for why that is deliberate, and euclid ticket 06 - which takes this
+    // module to five outputs - for when to revisit it.
+    const rests = new GainNode(context);
+    node.connect(rests, 1);
+    return Compound({ output: node, owns: [rests], exposes: { rests } });
   },
+  { descriptors: PARAMS },
 );
 
 export { Compound, disposable } from "./_worklet";
@@ -68,6 +114,15 @@ export type {
 // `keyof EuclidWorkletNode` carries everything `AudioWorkletNode` inherits, so
 // a parameter named `port` would pass the second assertion falsely; the first
 // has no such hole.
+//
+// The second assertion stays pointed at `EuclidWorkletNode` and not at
+// `EuclidNode`, even though `Euclid()` now returns the latter. `EuclidNode` is
+// `EuclidWorkletNode` plus `.rests` plus `dispose`, so asserting against it
+// would still hold - but it would be asserting that the *compound* carries the
+// parameters, which is true only because the worklet node underneath does.
+// The hand-written copy this guards is `EuclidWorkletNode`'s field list, so
+// that is what it names. A parameter dropped from it is still a build failure
+// naming the parameter, which is the guard working.
 type ParamName = (typeof PARAMS)[number]["name"];
 type Assert<T extends true> = T;
 type Undeclared<Declared> = [Exclude<ParamName, Declared>] extends [never]
