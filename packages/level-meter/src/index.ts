@@ -41,10 +41,11 @@ export type LevelMeterInputs = {};
 //   [HEADER + c*STRIDE + 3]   true peak (linear)
 //   [HEADER + n*STRIDE + 0]   LUFS momentary  (dB)
 //   [HEADER + n*STRIDE + 1]   LUFS short-term (dB)
+//   [HEADER + n*STRIDE + 2]   LUFS integrated (dB)
 export const LEVELS_LAYOUT_VERSION = 1;
 const HEADER = 3;
 const STRIDE = 4;
-const TAIL = 2;
+const TAIL = 3;
 
 const levelsLength = (maxChannels: number) =>
   HEADER + maxChannels * STRIDE + TAIL;
@@ -186,6 +187,37 @@ export type LevelMeterApi = {
    * straight to `useSyncExternalStore` without a `useCallback` around it.
    */
   subscribe(listener: LevelsListener): () => void;
+
+  /**
+   * LUFS integrated over the current session, or `NaN` while loudness is off.
+   *
+   * `-Infinity` until `startIntegration()` has been called and 400 ms of audio
+   * above the -70 LUFS absolute gate has gone by: a live meter has no
+   * programme of its own, which is the whole reason this is a session rather
+   * than a reading.
+   *
+   * Deliberately not on `Levels` and not in the default UI. A number that only
+   * means something relative to a boundary somebody set invites being read as
+   * though it always did, and a renderer handed `Levels` cannot draw what it
+   * cannot see.
+   *
+   * There is no live LRA. EBU Tech 3342 describes a whole programme; use
+   * `analyze()` for it.
+   */
+  readonly integrated: number;
+  /**
+   * Start - or restart - the integrated-loudness session: this is where the
+   * programme begins. Discards whatever was integrated before it.
+   *
+   * EBU Tech 3341 §2.2 requires an 'EBU Mode' meter to be able to start, pause
+   * and continue the measurement, and to reset it from either state.
+   */
+  startIntegration(): void;
+  /** Pause it. Tech 3341 §2.2's 'stand-by'; the reading stands where it was. */
+  stopIntegration(): void;
+  /** Discard it, running or paused. Momentary and Short-term are untouched. */
+  resetIntegration(): void;
+
   dispose(): void;
 };
 
@@ -403,6 +435,10 @@ function createLevelsCore(options: LevelMeterOptions) {
   // Null until `ready` has built one. Only `clearClip` needs it before then,
   // and there is nothing on the audio thread to clear yet.
   let node: AudioWorkletNode | null = null;
+  // Session commands sent before the node existed. Readings can wait for the
+  // next block; a programme boundary cannot be moved by how long registration
+  // took.
+  const queued: string[] = [];
 
   // One object, reused. `truePeak`, `momentary` and `shortTerm` read NaN
   // rather than -Infinity while their measurement is off: "not measured" and
@@ -472,6 +508,26 @@ function createLevelsCore(options: LevelMeterOptions) {
       return peaks;
     },
 
+    integrated() {
+      if (!loudness) return NaN;
+      if (shared) readView();
+      return view[tail + 2];
+    },
+
+    /**
+     * Send a port message, now or as soon as there is a port.
+     *
+     * `clearClip` can drop one - there is nothing on the audio thread to clear
+     * yet - but a session command cannot: `startIntegration()` in the line
+     * after `LevelMeter.tap(source)` has to mean the same thing as one a second
+     * later, or the programme boundary depends on how fast the worklet
+     * registered.
+     */
+    command(type: string) {
+      if (node) node.port.postMessage({ type });
+      else queued.push(type);
+    },
+
     subscribe(listener: LevelsListener) {
       listeners.add(listener);
       if (listeners.size === 1) {
@@ -502,6 +558,8 @@ function createLevelsCore(options: LevelMeterOptions) {
     /** Wire in the worklet node, once `ready` has built one. */
     attach(built: AudioWorkletNode) {
       node = built;
+      for (const type of queued) built.port.postMessage({ type });
+      queued.length = 0;
       if (!shared) {
         built.port.onmessage = (event: MessageEvent) => {
           view.set(event.data as Float32Array);
@@ -603,6 +661,15 @@ function createTap(
     getLevels: core.getLevels,
     getPeaks: core.getPeaks,
     subscribe: core.subscribe,
+    get integrated() {
+      return core.integrated();
+    },
+    // Posted rather than shared: the session is a command, and the buffer only
+    // carries readings. They queue behind `ready` the same way the audio does -
+    // a message sent before the node exists is delivered when it does.
+    startIntegration: () => core.command("START_INTEGRATION"),
+    stopIntegration: () => core.command("STOP_INTEGRATION"),
+    resetIntegration: () => core.command("RESET_INTEGRATION"),
     dispose() {
       if (disposed) return;
       disposed = true;
@@ -638,7 +705,15 @@ export const LevelMeter = Object.assign(
       getLevels: tap.getLevels,
       getPeaks: tap.getPeaks,
       subscribe: tap.subscribe,
+      startIntegration: () => tap.startIntegration(),
+      stopIntegration: () => tap.stopIntegration(),
+      resetIntegration: () => tap.resetIntegration(),
       dispose: () => tap.dispose(),
+    });
+    // A getter, not a copied value: the reading moves.
+    Object.defineProperty(gain, "integrated", {
+      get: () => tap.integrated,
+      enumerable: true,
     });
     return disposable(gain) as LevelMeterNode;
   },

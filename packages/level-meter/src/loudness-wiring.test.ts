@@ -11,8 +11,10 @@
 import {
   ANALYSIS_FRAME,
   BS1770_50_CHANNEL_WEIGHTS,
+  gainToTarget,
   levelsLength,
   levelsTailIndex,
+  TAIL_INTEGRATED,
 } from "./dsp";
 import { analyze } from "./offline";
 import { createWorkletTestContext } from "./test-utils";
@@ -30,6 +32,13 @@ function ebuTone(seconds: number, dbfs: number, channelCount = 2) {
     (_, i) => amplitude * Math.sin(omega * i),
   );
   return Array.from({ length: channelCount }, () => channel);
+}
+
+function concat(a: Float32Array, b: Float32Array) {
+  const out = new Float32Array(a.length + b.length);
+  out.set(a);
+  out.set(b, a.length);
+  return out;
 }
 
 /** Levels are within EBU Tech 3341 Table 1's +/-0.1 LU. */
@@ -147,11 +156,121 @@ describe("loudness offline against realtime", () => {
     const offline = await analyze(
       channels.map((c) => c.subarray(0, frames * ANALYSIS_FRAME)),
       SAMPLE_RATE,
-      { maxChannels, loudness: true, chunkSize: 5000 },
+      // `integrate: false` to match the worklet, which does not start a
+      // session until it is told to. The gated reading gets its own test
+      // below; this one is about the ungated arithmetic being identical.
+      { maxChannels, loudness: true, integrate: false, chunkSize: 5000 },
     );
 
     expect(Array.from(offline.levels)).toEqual(Array.from(realtime));
     expectLufs(offline.momentary, -23);
+  });
+
+  // Ticket 12's success criterion 6, and the reason the session is a message
+  // rather than a second implementation: told where the programme starts, the
+  // audio thread gates exactly as the offline call does.
+  it("integrates to the same LUFS once the session is declared", async () => {
+    const maxChannels = 2;
+    // Loud, then 20 dB down: the quiet half is above the -70 LUFS absolute gate
+    // and below the -10 LU relative one, so a reading that matches is a reading
+    // that gated.
+    const channels = [
+      concat(ebuTone(6, -23)[0], ebuTone(6, -43)[0]),
+      concat(ebuTone(6, -23)[0], ebuTone(6, -43)[0]),
+    ];
+    const frames = Math.floor(channels[0].length / ANALYSIS_FRAME);
+
+    const realtime = new Float32Array(levelsLength(maxChannels));
+    const processor = new Processor({
+      processorOptions: {
+        maxChannels,
+        loudness: true,
+        levelsBuffer: realtime.buffer,
+      },
+    });
+
+    const tail = levelsTailIndex(maxChannels) + TAIL_INTEGRATED;
+
+    // Nothing integrated until the caller says where the programme begins - a
+    // separate processor, because the session has to start on the same sample
+    // the offline call does for the two readings to be comparable at all.
+    const idle = new Processor({
+      processorOptions: { maxChannels, loudness: true },
+    });
+    idle.process(
+      [channels.map((c) => c.subarray(0, ANALYSIS_FRAME))],
+      [[new Float32Array(ANALYSIS_FRAME), new Float32Array(ANALYSIS_FRAME)]],
+      {},
+    );
+    expect(idle.v[tail]).toBe(-Infinity);
+
+    processor.port.onmessage({ data: { type: "START_INTEGRATION" } });
+    for (let frame = 0; frame < frames; frame++) {
+      const offset = frame * ANALYSIS_FRAME;
+      const block = channels.map((c) =>
+        c.subarray(offset, offset + ANALYSIS_FRAME),
+      );
+      processor.process(
+        [block],
+        [block.map(() => new Float32Array(ANALYSIS_FRAME))],
+        {},
+      );
+    }
+
+    const offline = await analyze(channels, SAMPLE_RATE, {
+      maxChannels,
+      loudness: true,
+    });
+
+    // Float32 in the layout against the core's f64, so a rounding of the same
+    // number rather than the same number.
+    expect(realtime[tail]).toBeCloseTo(offline.integrated, 4);
+
+    // And the gate did its work: the answer is the loud half's -23, not the
+    // -26 mean of the two halves. The 0.1 LU below -23 is the three 400 ms
+    // gating blocks that straddle the level change and survive the relative
+    // gate - a bigger share of the total on a 6 s half than on a 60 s one.
+    expect(offline.integrated).toBeLessThan(-23);
+    expect(offline.integrated).toBeGreaterThan(-23.2);
+  });
+});
+
+describe("integrated and LRA offline", () => {
+  it("reports both when asked, NaN when not", async () => {
+    const channels = ebuTone(5, -23);
+
+    const off = await analyze(channels, SAMPLE_RATE, { maxChannels: 2 });
+    expect(off.integrated).toBeNaN();
+    expect(off.lra).toBeNaN();
+
+    const on = await analyze(channels, SAMPLE_RATE, {
+      maxChannels: 2,
+      loudness: true,
+    });
+    expectLufs(on.integrated, -23);
+  });
+
+  /**
+   * EBU Tech 3342 Table 1 case 1: 20 s at -20 dBFS followed by 20 s at -30,
+   * LRA = 10 +/-1 LU. The core's own suite covers all four cases; this one is
+   * here because LRA reaches a caller only through `analyze`, and that hop has
+   * its own way of being wrong.
+   */
+  it("reports LRA on a Tech 3342 signal", async () => {
+    const channels = [
+      concat(ebuTone(20, -20)[0], ebuTone(20, -30)[0]),
+      concat(ebuTone(20, -20)[0], ebuTone(20, -30)[0]),
+    ];
+    const analysis = await analyze(channels, SAMPLE_RATE, {
+      maxChannels: 2,
+      loudness: true,
+    });
+    expect(analysis.lra).toBeGreaterThanOrEqual(9);
+    expect(analysis.lra).toBeLessThanOrEqual(11);
+  });
+
+  it("exports gainToTarget from ./dsp", () => {
+    expect(gainToTarget(-23, -14)).toBe(9);
   });
 });
 
@@ -253,5 +372,86 @@ describe("the factory's loudness options", () => {
     // for.
     post(on.node, [-Infinity, -Infinity]);
     expect(on.meter.getLevels().momentary).toBe(-Infinity);
+  });
+});
+
+describe("the realtime integration session", () => {
+  let LevelMeter: typeof import("./index").LevelMeter;
+  const constructed: AudioWorkletNodeStub[] = [];
+
+  beforeAll(async () => {
+    (global as any).AudioNode = AudioNodeStub;
+    (global as any).AudioWorkletNode = class extends AudioWorkletNodeStub {
+      constructor(c: unknown, name: string, o: AudioWorkletNodeOptions) {
+        super(c, name, o);
+        constructed.push(this);
+      }
+    };
+    LevelMeter = (await import("./index")).LevelMeter;
+  });
+
+  function tap(options: Parameters<typeof LevelMeter.tap>[1] = {}) {
+    const context = {
+      audioWorklet: { addModule: async () => {} },
+    } as unknown as AudioContext;
+    const source = new AudioNodeStub(context) as unknown as AudioNode;
+    return LevelMeter.tap(source, options);
+  }
+
+  const posted = (node: AudioWorkletNodeStub) =>
+    node.port.postMessage.mock.calls.map((call: any[]) => call[0].type);
+
+  it("sends the session commands the worklet answers", async () => {
+    const meter = tap({ maxChannels: 2, loudness: true });
+    await meter.ready;
+    const node = constructed[constructed.length - 1];
+
+    meter.startIntegration();
+    meter.stopIntegration();
+    meter.resetIntegration();
+
+    expect(posted(node)).toEqual([
+      "START_INTEGRATION",
+      "STOP_INTEGRATION",
+      "RESET_INTEGRATION",
+    ]);
+  });
+
+  /**
+   * A tap returns before its worklet exists, so `startIntegration()` on the
+   * next line has to mean the same thing as one a second later - otherwise the
+   * programme boundary depends on how fast registration happened, which is the
+   * one thing a programme boundary must not depend on.
+   */
+  it("holds a command sent before the node exists", async () => {
+    const meter = tap({ maxChannels: 2, loudness: true });
+    meter.startIntegration();
+    await meter.ready;
+    const node = constructed[constructed.length - 1];
+
+    expect(posted(node)).toEqual(["START_INTEGRATION"]);
+  });
+
+  it("reads NaN for integrated while loudness is off", async () => {
+    const meter = tap({ maxChannels: 2 });
+    await meter.ready;
+    expect(meter.integrated).toBeNaN();
+  });
+
+  it("reads -Infinity until a session has anything in it", async () => {
+    const meter = tap({ maxChannels: 2, loudness: true });
+    await meter.ready;
+    const node = constructed[constructed.length - 1];
+
+    const view = new Float32Array(levelsLength(2));
+    view[0] = 1;
+    view[1] = 2;
+    view[HEADER + 2 * STRIDE + TAIL_INTEGRATED] = -Infinity;
+    node.port.onmessage!({ data: view } as MessageEvent);
+    expect(meter.integrated).toBe(-Infinity);
+
+    view[HEADER + 2 * STRIDE + TAIL_INTEGRATED] = -23;
+    node.port.onmessage!({ data: view } as MessageEvent);
+    expect(meter.integrated).toBe(-23);
   });
 });

@@ -44,6 +44,10 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
       truePeak: o.truePeak,
       loudness: o.loudness,
       channelWeights: o.channelWeights,
+      // A live meter has no programme until the caller declares one, so the
+      // gated histograms start empty and stay empty until START_INTEGRATION.
+      // Offline is the other answer: there the buffer *is* the programme.
+      integrate: false,
     });
 
     // Posted from a block counter rather than a timer: the audio thread has no
@@ -67,30 +71,39 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
           // next block lands sees the click it just made.
           this.v[2] = 0;
           break;
+        // EBU Tech 3341 §2.2: an 'EBU Mode' meter must let the user start,
+        // pause and continue the Integrated and Loudness Range measurement,
+        // and reset it from either state. §2.4: the two always reset together,
+        // which the core does for itself.
+        case "START_INTEGRATION":
+          this.a.loudness?.startIntegration();
+          break;
+        case "STOP_INTEGRATION":
+          this.a.loudness?.stopIntegration();
+          break;
+        case "RESET_INTEGRATION":
+          this.a.loudness?.resetIntegration();
+          break;
       }
     };
   }
 
+  // The node is a tap: `numberOfOutputs: 0`, so `outputs` is empty and there is
+  // nothing to write. Pass-through is a native `GainNode` with one of these
+  // beside it, which is what deleted the `chOut.set(chIn)` memcpy of every
+  // sample - metering reads those samples anyway - and with it the last way a
+  // thrown processor could silence the audio it was watching.
   process(
     inputs: Float32Array[][],
-    outputs: Float32Array[][],
+    _outputs: Float32Array[][],
     _parameters: Record<string, Float32Array>,
   ): boolean {
     const input = inputs[0];
-    const output = outputs[0];
-
-    // Copy every channel the browser hands over. The node is a pass-through and
-    // has no business dropping audio; how many channels are *measured* is a
-    // different number, and the core bounds that by what the buffer holds.
-    const copied = Math.min(input.length, output.length);
-    for (let channel = 0; channel < copied; channel++) {
-      output[channel].set(input[channel]);
-    }
 
     // The length is passed explicitly so an unconnected input - which arrives
     // as an empty `inputs[0]` - still advances time and keeps the reading
     // falling instead of freezing it.
-    const length = input[0]?.length ?? output[0]?.length ?? ANALYSIS_FRAME;
+    const length = input[0]?.length ?? ANALYSIS_FRAME;
     this.a.process(input, 0, length);
     this.a.results(this.v);
 

@@ -120,6 +120,8 @@ Ballistics are properties of the instrument, so they are construction options:
 | `clipHoldMs`         | 1500    | How long the clip latch stays lit              |
 | `clipThreshold`      | 1       | Linear magnitude that counts as a clip         |
 | `rmsMs`              | 600     | RMS time to 99 % of a step — K-Meter's average |
+| `loudness`           | `false` | Measure BS.1770-5 loudness — see below         |
+| `channelWeights`     | all 1.0 | Per-channel `G_i`, for a surround bus          |
 | `postIntervalMs`     | 16      | Post cadence when the transport is `"message"` |
 
 Attack is instantaneous, release is exponential at `releaseDbPerSecond`, and
@@ -147,6 +149,83 @@ answers.
 
 `getPeaks()` is **deprecated** and still returns what it always did — one linear
 peak per slot, the same `Float32Array` every call.
+
+### Loudness
+
+Peak asks how much headroom is left. Loudness asks how loud it sounds, and it
+is the quantity every delivery spec is written in. Pass `loudness: true` and the
+meter measures it to
+[ITU-R BS.1770-5](https://www.itu.int/rec/R-REC-BS.1770/en), in the EBU R 128
+shape:
+
+```ts
+const meter = LevelMeter.tap(source, { loudness: true });
+meter.getLevels().momentary; // LUFS over the last 400 ms
+meter.getLevels().shortTerm; // LUFS over the last 3 s
+```
+
+Both are ungated sliding windows, so they are readings like any other — no
+history, no session. **Integrated** loudness is not: it is defined over a
+programme, and a synth that has been running since page load has none. So the
+caller declares one:
+
+```ts
+meter.startIntegration(); // the programme starts here
+meter.integrated; // LUFS since then; -Infinity until there is something
+meter.stopIntegration(); // pause; the reading stands
+meter.resetIntegration(); // discard it
+```
+
+Offline there is nothing to declare — the buffer _is_ the programme:
+
+```ts
+import { analyze, gainToTarget } from "@synthlet/level-meter/dsp";
+
+const { integrated, lra, momentary, shortTerm } = await analyze(
+  channels,
+  sampleRate,
+  { loudness: true },
+);
+gainToTarget(integrated, -14); // dB to apply; you apply it
+```
+
+**Loudness Range (`lra`) is offline only.** EBU Tech 3342 describes a whole
+programme — the 95th percentile of the short-term distribution minus the 10th,
+after a −20 LU relative gate — and Tech 3342 itself asks a meter to warn that
+the value is not stable for the first 60 s. As a live readout it is close to
+meaningless, so there is no realtime slot for it.
+
+`channelWeights` is BS.1770-5 Annex 1 Table 3's `G_i`, and it defaults to 1.0
+everywhere. Nothing here infers a surround layout from a channel count: Web
+Audio does not say what channel 4 is, and guessing wrong moves the reading by
+1.5 dB in silence. For a 5.1 bus, say so:
+
+```ts
+import { BS1770_51_CHANNEL_WEIGHTS } from "@synthlet/level-meter/dsp";
+LevelMeter.tap(bus, {
+  loudness: true,
+  channelWeights: BS1770_51_CHANNEL_WEIGHTS,
+});
+```
+
+#### Delivery targets
+
+What the number is usually being checked against. Broadcast figures are
+normative and cited; the streaming ones are platform policy, they drift, and
+the platform's own page is the only current source.
+
+| Target                | Programme loudness | True-peak ceiling | Source                                                  |
+| --------------------- | ------------------ | ----------------- | ------------------------------------------------------- |
+| EBU R 128 (broadcast) | −23.0 LUFS         | −1 dBTP           | [EBU R 128](https://tech.ebu.ch/docs/r/r128.pdf) §h, §m |
+| ATSC A/85 (US TV)     | −24 LKFS           | —                 | ATSC A/85, via ITU-R BS.1770-5                          |
+| Streaming             | ≈ −14 LUFS         | −1 dBTP           | Each platform's own documentation                       |
+
+Checked 2026-09-08. `−23.0 LUFS` and `−1 dBTP` are quoted from EBU R 128 (2023),
+recommendations h and m, which is in this repository's reading list. The
+streaming row is an approximation and is **not** verified against any platform's
+documentation here — individual services differ from it, and change. **Do not
+hardcode any of these**: read the target from the platform you are delivering
+to, and pass it to `gainToTarget`.
 
 ### Being told, instead of asking
 

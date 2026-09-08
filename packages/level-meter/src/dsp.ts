@@ -92,8 +92,9 @@ const TRUE_PEAK_HISTORY = 12;
  *   [HEADER + c*STRIDE + LEVEL_HOLD]       peak hold  (linear)
  *   [HEADER + c*STRIDE + LEVEL_RMS]        rms        (linear)
  *   [HEADER + c*STRIDE + LEVEL_TRUE_PEAK]  true peak  (linear)
- *   [HEADER + n*STRIDE + 0]                LUFS momentary  (dB)
- *   [HEADER + n*STRIDE + 1]                LUFS short-term (dB)
+ *   [HEADER + n*STRIDE + TAIL_MOMENTARY]   LUFS momentary   (dB)
+ *   [HEADER + n*STRIDE + TAIL_SHORT_TERM]  LUFS short-term  (dB)
+ *   [HEADER + n*STRIDE + TAIL_INTEGRATED]  LUFS integrated  (dB)
  * ```
  *
  * Per-channel slots are linear magnitudes, 0 for silence; the tail is in the dB
@@ -104,7 +105,20 @@ const TRUE_PEAK_HISTORY = 12;
 export const LEVELS_LAYOUT_VERSION = 1;
 export const LEVELS_HEADER = 3;
 export const LEVELS_STRIDE = 4;
-export const LEVELS_TAIL = 2;
+export const LEVELS_TAIL = 3;
+
+/** Slots in the loudness tail. */
+export const TAIL_MOMENTARY = 0;
+export const TAIL_SHORT_TERM = 1;
+/**
+ * Integrated loudness over the current session. Grown into the tail rather
+ * than posted on its own channel, so the gated reading arrives with the
+ * ungated ones and under `"shared"` there is still nothing to post at all.
+ *
+ * There is no LRA slot: Tech 3342 is a statistical descriptor of a whole
+ * programme and close to meaningless as a live readout, so it is offline only.
+ */
+export const TAIL_INTEGRATED = 2;
 
 export const LEVEL_PEAK = 0;
 export const LEVEL_HOLD = 1;
@@ -149,25 +163,24 @@ export interface LoudnessCore {
   ): void;
   momentary(): number;
   shortTerm(): number;
+  integrated(): number;
+  lra(): number;
+  startIntegration(): void;
+  stopIntegration(): void;
+  resetIntegration(): void;
   reset(): void;
 }
 
-/**
- * The loudness core, wired.
- *
- * `integrate: false`: Momentary and Short-term are ungated sliding windows with
- * no notion of a programme, so nothing here needs the gating histogram. Ticket
- * 12's `integrate` option is what turns it on.
- */
 function createLoudnessCore(
   sampleRate: number,
   maxChannels: number,
   channelWeights: ArrayLike<number> | undefined,
+  integrate: boolean,
 ): LoudnessCore {
   return createLoudnessAnalyzer(sampleRate, {
     maxChannels,
     channelWeights,
-    integrate: false,
+    integrate,
   });
 }
 
@@ -203,6 +216,18 @@ export interface LevelAnalyzerOptions {
    * channel 4 is, so nothing here infers a layout from a channel count.
    */
   channelWeights?: ArrayLike<number>;
+  /**
+   * Accumulate the gated Integrated / LRA histograms from construction.
+   * Default `true`, which is the offline answer: an `analyze()` call has a
+   * programme by definition - the buffer you passed it - so there is no
+   * session to declare.
+   *
+   * The worklet passes `false`. A synth that has been running since page load
+   * has no programme, and a number that only means something relative to a
+   * boundary nobody set invites being read as though it did; `startIntegration()`
+   * is where a live caller declares one.
+   */
+  integrate?: boolean;
 }
 
 export interface LevelAnalyzer {
@@ -331,7 +356,12 @@ export function createLevelAnalyzer(
   const drain = new Int32Array(maxChannels);
 
   const loudness = options.loudness
-    ? createLoudnessCore(sampleRate, maxChannels, options.channelWeights)
+    ? createLoudnessCore(
+        sampleRate,
+        maxChannels,
+        options.channelWeights,
+        options.integrate ?? true,
+      )
     : undefined;
 
   let channelCount = 0;
@@ -522,8 +552,9 @@ export function createLevelAnalyzer(
       }
       if (loudness) {
         const tail = levelsTailIndex(maxChannels);
-        view[tail] = loudness.momentary();
-        view[tail + 1] = loudness.shortTerm();
+        view[tail + TAIL_MOMENTARY] = loudness.momentary();
+        view[tail + TAIL_SHORT_TERM] = loudness.shortTerm();
+        view[tail + TAIL_INTEGRATED] = loudness.integrated();
       }
       return view;
     },

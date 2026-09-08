@@ -20,6 +20,8 @@ import {
   LevelAnalyzerOptions,
   levelsLength,
   levelsTailIndex,
+  TAIL_MOMENTARY,
+  TAIL_SHORT_TERM,
   toDb,
 } from "./dsp";
 
@@ -63,6 +65,25 @@ export interface LevelAnalysis {
   momentary: number;
   /** LUFS short-term at the end of the buffer; `NaN` while loudness is off. */
   shortTerm: number;
+  /**
+   * LUFS integrated over the whole buffer, gated per BS.1770-5 eq (6)-(7);
+   * `NaN` while loudness is off.
+   *
+   * The objection that kept Integrated out of this package was that "integrated
+   * loudness is defined over a programme, and a synthesiser that has been
+   * running since page load has no programme". An offline call has one by
+   * definition: the buffer you passed it.
+   */
+  integrated: number;
+  /**
+   * Loudness Range in LU, per EBU Tech 3342; `NaN` while loudness is off.
+   *
+   * Offline only. LRA is a statistical descriptor of a whole programme - the
+   * 95th percentile of the short-term distribution minus the 10th, after a
+   * -20 LU relative gate - and Tech 3342 asks a meter to warn that the value is
+   * not stable for the first 60 s. There is no realtime slot for it.
+   */
+  lra: number;
   /**
    * The layout view as the realtime meter would have left it after the same
    * samples - byte for byte, which is what makes offline and realtime one
@@ -160,8 +181,12 @@ export async function analyze(
     hold: per((c) => toDb(levels[levelIndex(c, LEVEL_HOLD)])),
     rms: per((c) => toDb(levels[levelIndex(c, LEVEL_RMS)])),
     clipped: per((c) => analyzer.everClipped(c)),
-    momentary: analyzer.loudness ? levels[tail] : NaN,
-    shortTerm: analyzer.loudness ? levels[tail + 1] : NaN,
+    momentary: analyzer.loudness ? levels[tail + TAIL_MOMENTARY] : NaN,
+    shortTerm: analyzer.loudness ? levels[tail + TAIL_SHORT_TERM] : NaN,
+    // Read from the core, not from the tail: the layout slot is Float32 and an
+    // integrated reading is the number a delivery spec is written in.
+    integrated: analyzer.loudness ? analyzer.loudness.integrated() : NaN,
+    lra: analyzer.loudness ? analyzer.loudness.lra() : NaN,
     levels,
   };
 }

@@ -46,47 +46,9 @@ describe("LevelMeterProcessor", () => {
     );
   });
 
-  describe("pass-through", () => {
-    it.each([1, 2, 6])(
-      "passes %i channels through sample for sample",
-      (count) => {
-        const meter = createMeter(Processor, { maxChannels: 16 });
-        const input = channels(count, ramp);
-        const output = runProcess(meter.processor, input);
-
-        for (let c = 0; c < count; c++) {
-          expect(Array.from(output[c])).toEqual(Array.from(input[c]));
-        }
-      },
-    );
-
-    // `chOut.set(chIn)` used to live inside a loop capped at `this.max = 8`, so
-    // channels 9 and up came out silent from a node the README says passes
-    // audio through untouched.
-    it.each([9, 16])(
-      "passes %i channels through sample for sample",
-      (count) => {
-        const meter = createMeter(Processor, { maxChannels: 16 });
-        const input = channels(count, ramp);
-        const output = runProcess(meter.processor, input);
-
-        for (let c = 0; c < count; c++) {
-          expect(Array.from(output[c])).toEqual(Array.from(input[c]));
-        }
-      },
-    );
-
-    it("copies no further than the output the browser handed it", () => {
-      const meter = createMeter(Processor, { maxChannels: 16 });
-      const input = channels(4, ramp);
-      const output = runProcess(meter.processor, input, 1, {
-        outputChannels: 2,
-      });
-
-      expect(output).toHaveLength(2);
-      expect(Array.from(output[1])).toEqual(Array.from(input[1]));
-    });
-  });
+  // The pass-through group that used to live here is gone with the copy loop:
+  // pass-through is a native `GainNode` now, and a `GainNode` passing audio
+  // through is the browser's job rather than this package's.
 
   describe("attack", () => {
     it.each([0, 77, BLOCK - 1])(
@@ -262,16 +224,6 @@ describe("LevelMeterProcessor", () => {
     // How many channels to copy, how many to measure and how often to decay are
     // three different numbers, and one loop used to conflate them. Copy is all
     // of them; measure is what the buffer holds.
-    it("passes every channel through even when the buffer holds fewer", () => {
-      const meter = createMeter(Processor, { maxChannels: 2 });
-      const input = channels(9, ramp);
-      const output = runProcess(meter.processor, input);
-
-      for (let c = 0; c < 9; c++) {
-        expect(Array.from(output[c])).toEqual(Array.from(input[c]));
-      }
-    });
-
     it("meters exactly as many channels as the buffer holds", () => {
       const meter = createMeter(Processor, { maxChannels: 2 });
       const input = channels(6, (c) => constant((c + 1) / 10));
@@ -327,7 +279,9 @@ describe("LevelMeterProcessor", () => {
         expect(meter.view[HEADER + c * STRIDE + 3]).toBe(0);
       }
       const tail = HEADER + 2 * STRIDE;
-      expect(Array.from(meter.view.slice(tail, tail + TAIL))).toEqual([0, 0]);
+      expect(Array.from(meter.view.slice(tail, tail + TAIL))).toEqual([
+        0, 0, 0,
+      ]);
     });
   });
 
@@ -520,7 +474,7 @@ function ramp(channel: number): Float32Array {
 const LAYOUT_VERSION = 1;
 const HEADER = 3;
 const STRIDE = 4;
-const TAIL = 2;
+const TAIL = 3;
 
 function meterViewLength(maxChannels: number) {
   return HEADER + maxChannels * STRIDE + TAIL;
