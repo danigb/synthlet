@@ -6,13 +6,15 @@ package: arp
 
 import ArpExample from "../../../examples/ArpExample";
 
-Generates a note sequence from a given scale, in an order you choose.
+One trigger in, one frequency out, in an order you choose. On every rising edge
+of `trigger` it takes the next note of a scale built on `baseNote`, spread over
+`octaves`, in the order `mode` asks for, and holds it until the next trigger.
 
-<Callout title="No rate of its own" type="info">
-  `Arp` has an order but no clock: every step comes from a rising edge on
-  `trigger`. Rate, gate length and rhythm live in [Clock](/docs/clock) and
-  [Euclid](/docs/euclid).
-</Callout>
+**`baseNote` is a MIDI note number and the output is a frequency in hertz.**
+That asymmetry is the point: the output is a signal, so it goes straight into an
+oscillator's `frequency` and needs nothing to interpret it. Every arpeggiator
+you have used emits note events for something else to turn into pitch; this one
+does not, which is what lets a patch play itself with nothing scheduling it.
 
 ```ts
 import {
@@ -45,12 +47,27 @@ const mono = MonoSynth(audioContext, {
 
 ## Parameters
 
-- `trigger`: Advances the arpeggiator on its rising edge - when it goes from 0 (or below) to a positive value. See [Gates and triggers](/docs/gates-and-triggers).
-- `mode`: The traversal. Default is `ArpMode.Up`. See below.
-- `octaveMode`: How the octave travels. Default is `ArpOctaveMode.Serial`. See below.
-- `baseNote`: The base midi note of the arpeggiator. Default is `60`. Fractional values are fine tuning: `60.5` is a quarter tone.
-- `scale`: The scale bitmask. Default is `137` (`ArpScale.TriadMinor`). See below.
-- `octaves`: The number of octaves to span. Default is `1`.
+| Param        | Default | Range    | Rate   | Meaning                                      |
+| ------------ | ------- | -------- | ------ | -------------------------------------------- |
+| `trigger`    | 0       | 0 … 1    | a-rate | Rising edge takes the next note              |
+| `mode`       | 0       | 0 … 5    | k-rate | The traversal — see `ArpMode`                |
+| `octaveMode` | 0       | 0 … 1    | k-rate | How the octave travels — see `ArpOctaveMode` |
+| `baseNote`   | 60      | 0 … 127  | k-rate | MIDI note number the scale is built on       |
+| `scale`      | 137     | 1 … 4095 | k-rate | 12-bit pitch-class mask — see `ArpScale`     |
+| `octaves`    | 1       | 1 … 10   | k-rate | How many octaves the sequence spans          |
+
+`trigger` advances the arpeggiator on its rising edge - when it goes from 0 (or
+below) to a positive value. See [Gates and triggers](/docs/gates-and-triggers).
+It is `a-rate`, so the note changes on the trigger's own sample rather than at
+the top of the next render quantum. Everything else is read when a step fires.
+
+`baseNote` is continuous: `60.5` is a quarter tone, and the whole set moves with
+it. It transposes a running pattern without restarting it, and before the first
+trigger the output already holds the note it is about to play.
+
+`octaves` is a count, so it is floored - `octaves: 2.5` spans exactly two - and
+notes are folded back down under MIDI 127 rather than running off the top of the
+range.
 
 ## Modes
 
@@ -72,6 +89,10 @@ the ends of the whole range rather than at each octave.
 `Random` wanders and `RandomOther` covers: `Random` can dwell on a region of the
 set, `RandomOther` plays every note of it once per pass. Neither ever repeats
 the note it just played.
+
+Every one of these is an `AudioParam`, `mode` included - so a slow
+[LFO](/docs/lfo) patched into it is an arpeggiator whose direction is itself
+sequenced.
 
 ## Octaves
 
@@ -98,3 +119,24 @@ common ones, or pass any number between 1 and 4095 and have fun:
 - `ArpScale.PentatonicMajor`, `ArpScale.PentatonicMinor`, `ArpScale.Blues`
 - `ArpScale.WholeTone`, `ArpScale.Chromatic`, `ArpScale.Augmented`, `ArpScale.WholeHalfDiminished`, `ArpScale.HalfWholeDiminished`
 - Chords: `ArpScale.TriadMajor`, `ArpScale.TriadMinor`, `ArpScale.TriadDiminished`, `ArpScale.TriadAugmented`, `ArpScale.Sus2`, `ArpScale.Sus4`, `ArpScale.Major6th`, `ArpScale.Major7th`, `ArpScale.Dominant7th`, `ArpScale.Minor7th`, `ArpScale.MinorMajor7th`
+
+A chord is a short scale, and `scale` is a `Param`, so **a chord progression is
+automation**: step the mask through i - VI - III - VII and the melody follows
+the changes. The example above does exactly that.
+
+## What it does not do
+
+**`Arp` has no rate of its own**, which is the design rather than a gap: an
+arpeggiator is three independent choices - which notes, what order, when - and
+only the first two are here.
+
+- Rate, gate length, swing and downbeats are [Clock](/docs/clock). Patch
+  `clock.gate` into `trigger`.
+- Rhythm patterns, rests and per-step density are [Euclid](/docs/euclid),
+  clocked by `Clock`.
+- A ratchet is a faster `Clock` gated by the step - a patch, not a parameter.
+
+**It does not take notes you hold.** `Arp` walks a pitch-class set you declare,
+so as-played order, latch and velocity are not available here and cannot be: a
+worklet cannot receive `noteOn`. Those belong to the arpeggiator mode of the
+polyphonic voice module, where the note stack and the velocity already exist.
