@@ -31,11 +31,22 @@ clock.bpm.value = 150;
   means silence — a pattern with no steps has nothing to play.
 - `beats`: the number of beats in the sequence. Default `3`, so `steps` and
   `beats` together default to the tresillo, `E(3, 8)`: `Euclid(ac, { clock })`
-  with nothing else patched plays a rhythm.
-- `rotation`: the rotation of the sequence
+  with nothing else patched plays a rhythm. `0` is legal and means silence, the
+  same way `steps: 0` does — a rhythm with no beats has nothing to play.
+  `beats` at or above `steps` is every step.
+- `rotation`: the rotation of the sequence. The generated pattern is Bjorklund's
+  rhythm up to rotation, and a necklace has no canonical starting point — this
+  is how you choose one, counted in steps.
 
 All three are counts and all three are floored — they arrive from an
 `AudioParam` as floats, and half a step is not a step.
+
+The pattern itself is
+[Morrill's construction](https://arxiv.org/abs/2206.12421) (2022, §4): step _i_
+is a hit when `(i * beats) % steps < beats`, one integer comparison per step.
+Stating it in integers rather than in accumulated float is what makes it exactly
+Euclidean — 39 settings inside the declared range used to round an onset onto
+the wrong step.
 
 #### Clock
 

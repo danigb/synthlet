@@ -183,15 +183,48 @@ function clampWidth(pulseWidth: number, increment: number) {
   return maxWidth > 0 && pulseWidth > maxWidth ? maxWidth : pulseWidth;
 }
 
+/**
+ * The Euclidean rhythm of `beats` onsets distributed over `steps` steps.
+ *
+ * Morrill 2022, section 4. The rhythm is the *descents of the residue row*
+ * `n_i = (beats * i) mod steps`: step `i` is an onset when `n_(i-1) > n_i`,
+ * that is, when adding `beats` wrapped past `steps`. And `n_(i-1) > n_i` is
+ * exactly `n_i < beats` - if `n_i >= beats` the previous residue is
+ * `n_i - beats`, below it; if `n_i < beats` it is `n_i - beats + steps`, above
+ * it. So the whole construction is the one comparison below.
+ *
+ * This is the construction the module has always used - a Bresenham line walked
+ * over the step grid - evaluated in modular integers instead of accumulated
+ * float. `Math.floor(i * (beats / steps))` accumulates the rounding error of a
+ * binary division, and near a step boundary that error was enough to move an
+ * onset: 39 settings inside the declared range produced a pattern that was not
+ * a Euclidean rhythm at all. `E(18,66)` is the clearest, where Corollary 2
+ * ("gcd(k, N) is equal to the number of occurrences of the minimal period")
+ * requires six repetitions of an 11-pulse cell: the float form gave four clean
+ * ones and then a cell that does not match, so the pattern has no repeating
+ * period at all. `i * beats` peaks at 10000 over the declared range, far inside exact
+ * float64, so nothing here can round.
+ *
+ * Two edges, decided rather than inherited:
+ *
+ * - **`beats: 0` is silence.** `0 < 0` is false, so every step is a rest. That
+ *   is Morrill's Lemma 2, "contains exactly k notes". The float form seeded its
+ *   accumulator at -1, so step 0 always compared unequal and always became an
+ *   onset - `euclid(8, 0)` was `[1,0,0,0,0,0,0,0]`.
+ * - **`beats > steps` is every step.** `(i * beats) % steps` is below `steps`,
+ *   which is below `beats`, so every step is a hit. The papers restrict the
+ *   construction to `0 <= beats <= steps` and say nothing past it; "more hits
+ *   than places" is the reading taken here, and it is what shipped. `beats ===
+ *   steps` is the same answer for the same reason, and is the paper's own
+ *   definition of `E(N, N)`.
+ *
+ * `steps` and `beats` are integers by contract: `update()` floors all three of
+ * its arguments before it compares them, so nothing non-integral reaches here.
+ */
 export function euclid(steps: number, beats: number) {
   const pattern: number[] = [];
-  let d = -1;
-
-  for (let i = 0; i < steps; i++) {
-    const v = Math.floor(i * (beats / steps));
-    pattern[i] = v !== d ? 1 : 0;
-    d = v;
-  }
+  for (let i = 0; i < steps; i++)
+    pattern[i] = (i * beats) % steps < beats ? 1 : 0;
   return pattern;
 }
 

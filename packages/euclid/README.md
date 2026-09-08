@@ -66,7 +66,10 @@ floats, and half a step is not a step.
 
 **`steps` and `beats` default to the tresillo**, `E(3, 8)`, so
 `Euclid(ac, { clock })` with nothing else patched plays a rhythm. **`steps: 0`
-is legal and means silence** — the honest reading of "a pattern with no steps".
+is legal and means silence** — the honest reading of "a pattern with no steps" —
+and so is **`beats: 0`**, for the same reason: a rhythm with no beats has
+nothing to play. (`beats: 0` used to emit one hit on step 0 of every cycle.)
+`beats` at or above `steps` is every step.
 
 **A hit is a pulse, not a held level.** Held levels merge adjacent hits — no
 falling edge between them means no rising edge for the second — so a `(4, 4)`
@@ -97,6 +100,44 @@ is what a consumer reading its trigger once per block needs in order to see the
 falling edge. The cap is derived from the incoming clock's own rate and the
 `subdivision` applied to it, so it tracks the tempo, and it is inert at any
 width you would ordinarily set.
+
+## The generator
+
+The pattern is **Morrill's construction** (2022, §4), which builds the rhythm
+from the descents of the residue row `n_i = (beats · i) mod steps`: step _i_ is
+a hit when adding `beats` wrapped past `steps`. That is one comparison per step,
+in integers — the whole generator is
+
+```ts
+pattern[i] = (i * beats) % steps < beats ? 1 : 0;
+```
+
+and Morrill's Lemma 2 ("exactly _k_ notes") and Corollary 2 ("gcd(_k_, _N_) is
+the number of occurrences of the minimal period") are asserted over every
+declared setting, `0 ≤ beats ≤ steps ≤ 100`. It is the same construction as
+Bjorklund's recursive algorithm — the two are checked against each other over
+all 528 rhythms with `steps ≤ 32` — and, before 0.3.0, the same construction
+this module always used, evaluated in accumulated float instead of integers.
+That cost exactness at 39 settings inside the declared range, all of them at
+`steps ≥ 44`.
+
+**Where a Euclidean rhythm starts is not arithmetic.** The generated pattern is
+Bjorklund's up to rotation, and a necklace has no canonical starting point:
+Toussaint's published rhythms enter the cycle wherever their traditions enter
+it, and no rotation rule tested against them reproduces more than 13 of his 22
+— which is what this generator already gets. `rotation` is how you choose a
+starting point, and it is step-indexed.
+
+## References
+
+- G. T. Toussaint,
+  [_The Euclidean Algorithm Generates Traditional Musical Rhythms_](https://archive.bridgesmathart.org/2005/bridges2005-47.pdf),
+  Bridges 2005 — the survey that named these rhythms, Bjorklund's algorithm, and
+  the necklace framing that says a rhythm has no canonical origin
+- T. Morrill,
+  [_On The Euclidean Algorithm: Rhythm Without Recursion_](https://arxiv.org/abs/2206.12421),
+  arXiv:2206.12421, 2022 — §4 is the generator in this package, and Lemma 2 and
+  Corollary 2 are what its tests assert
 
 ## License
 
