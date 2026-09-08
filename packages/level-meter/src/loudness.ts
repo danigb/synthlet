@@ -13,14 +13,14 @@
  *   1  K-weighting      two biquads, derived here from the analog design
  *   2  mean square      per channel, over the measurement interval
  *   3  channel sum      L_K = -0.691 + 10*log10(sum_i G_i * z_i)   eq (2)
- *
- * Stage 4, the gating of eq (3)-(7), is ticket 12 and lands on top of the same
- * accumulator.
+ *   4  gating           400 ms blocks at 75% overlap, two thresholds
  *
  * Everything is built on one grid: **100 ms blocks**. A block's per-channel
  * mean square goes into a 30-slot ring, and every window in the standard is a
  * run of slots off that ring - Momentary is the last 4 (400 ms), Short-term
- * the last 30 (3 s). One accumulator, four numbers.
+ * the last 30 (3 s), and the gating block of eq (3) is the same last-4 window
+ * emitted once per block, which is exactly the 400 ms block at a 100 ms hop
+ * that 75% overlap means. One accumulator, four numbers.
  *
  * The grid is also the update rate, 10 Hz, which meets Tech 3341 §2.2 (>=10 Hz
  * for Short-term, >=1 Hz for Integrated; no rate is stated for Momentary). Its
@@ -29,7 +29,8 @@
  * `loudness.test.ts` derives that bound and asserts it against Tech 3341
  * cases 13 and 14 rather than leaving it implicit.
  *
- *
+ * Integrated and LRA are histograms, so their memory does not depend on how
+ * long the programme is. See `HISTOGRAM_BINS`.
  */
 
 // ---------------------------------------------------------------------------
@@ -137,6 +138,52 @@ export const MOMENTARY_BLOCKS = 4;
 export const SHORT_TERM_BLOCKS = 30;
 
 /**
+ * The absolute 'silence' gate. BS.1770-5 Annex 1 eq (6), `Gamma_a = -70 LKFS`;
+ * EBU Tech 3341 §2.3 item 1 and Tech 3342 §5 `ABS_THRES`. Shared by Integrated
+ * and LRA.
+ */
+export const ABSOLUTE_GATE_LUFS = -70;
+
+/**
+ * The relative gate for **Integrated** loudness: 10 LU below the absolute-gated
+ * level. BS.1770-5 Annex 1 eq (6) (`- 10 LKFS`), EBU Tech 3341 §2.3 item 2.
+ *
+ * It is not the same number as `LRA_RELATIVE_GATE_LU`, and mixing the two is
+ * silent - both produce a plausible reading.
+ */
+export const INTEGRATED_RELATIVE_GATE_LU = -10;
+
+/**
+ * The relative gate for **Loudness Range**: 20 LU below the absolute-gated
+ * level of the short-term distribution. EBU Tech 3342 §3.1 ("The relative
+ * threshold is set to a level of -20 LU relative to the absolute-gated loudness
+ * level") and §5 `REL_THRES`.
+ */
+export const LRA_RELATIVE_GATE_LU = -20;
+
+/** LRA's lower percentile. EBU Tech 3342 §3.1 and §5 `PRC_LOW`. */
+export const LRA_LOW_PERCENTILE = 10;
+
+/** LRA's upper percentile. EBU Tech 3342 §3.1 and §5 `PRC_HIGH`. */
+export const LRA_HIGH_PERCENTILE = 95;
+
+/**
+ * Bins in each gating histogram: 1000 at 0.1 LU, the lowest edge at the
+ * absolute gate. 1000 x 0.1 LU spans -70 to +30 LUFS, which is every value a
+ * digital signal can produce with room to spare.
+ *
+ * The histogram is why memory is O(1) in programme length: both gates become a
+ * re-scan of 1000 bins at query time instead of a list of every block seen.
+ */
+export const HISTOGRAM_BINS = 1000;
+
+/** Width of a histogram bin, in LU. */
+export const HISTOGRAM_BIN_LU = 0.1;
+
+/** Loudness at the bottom edge of bin 0 - the absolute gate. */
+export const HISTOGRAM_MIN_LUFS = ABSOLUTE_GATE_LUFS;
+
+/**
  * The BS.1770-5 Annex 1 Table 3 channel weights, by channel *position*.
  *
  * Exported to be passed deliberately, not applied automatically:
@@ -198,6 +245,83 @@ export function loudnessFromEnergy(energy: number): number {
     : -Infinity;
 }
 
+/**
+ * The gain, in dB, that moves a measured loudness onto a delivery target.
+ *
+ * `gainToTarget(-23, -14)` is `9`. Returns dB and leaves applying it to the
+ * caller: normalising a buffer has to think about the true-peak ceiling, and
+ * that is a different job.
+ */
+export function gainToTarget(lufs: number, targetLufs: number): number {
+  return targetLufs - lufs;
+}
+
+// ---------------------------------------------------------------------------
+// The gating histogram
+// ---------------------------------------------------------------------------
+
+/**
+ * A histogram of gating-block loudness, plus the per-bin energy sum.
+ *
+ * The counts alone would answer both gates, which is all libebur128's histogram
+ * mode keeps - but then the final mean is built from bin centres and carries up
+ * to 0.05 LU of quantisation, against an EBU tolerance of +/-0.1 LU. Holding the
+ * exact energy per bin costs another 8 KB, still O(1) in programme length, and
+ * makes the gated mean exact: the only quantised quantity left is *which* bin
+ * the threshold falls in, and a block within 0.1 LU of the threshold changes
+ * the mean by nothing that survives rounding.
+ *
+ * Percentiles (LRA) are the one thing that genuinely needs the distribution,
+ * and there 0.1 LU sits inside Tech 3342's +/-1 LU.
+ */
+interface GatingHistogram {
+  readonly counts: Uint32Array;
+  readonly energies: Float64Array;
+  /** Blocks above the absolute gate - stage 1 of the two-stage gate, O(1). */
+  count: number;
+  /** Their summed energy. */
+  energy: number;
+}
+
+function createGatingHistogram(): GatingHistogram {
+  return {
+    counts: new Uint32Array(HISTOGRAM_BINS),
+    energies: new Float64Array(HISTOGRAM_BINS),
+    count: 0,
+    energy: 0,
+  };
+}
+
+function resetHistogram(h: GatingHistogram): void {
+  h.counts.fill(0);
+  h.energies.fill(0);
+  h.count = 0;
+  h.energy = 0;
+}
+
+/** Record a block. The caller has already applied the absolute gate. */
+function addBlock(h: GatingHistogram, loudness: number, energy: number): void {
+  let bin = Math.floor((loudness - HISTOGRAM_MIN_LUFS) / HISTOGRAM_BIN_LU);
+  if (bin < 0) bin = 0;
+  else if (bin >= HISTOGRAM_BINS) bin = HISTOGRAM_BINS - 1;
+  h.counts[bin]++;
+  h.energies[bin] += energy;
+  h.count++;
+  h.energy += energy;
+}
+
+/**
+ * The first bin at or above the relative threshold, or `HISTOGRAM_BINS` when
+ * nothing survives. Stage 2 of the two-stage gate: the threshold is itself a
+ * loudness measurement, taken over the absolute-gated blocks.
+ */
+function relativeGateBin(h: GatingHistogram, gateLu: number): number {
+  if (h.count === 0) return HISTOGRAM_BINS;
+  const threshold = loudnessFromEnergy(h.energy / h.count) + gateLu;
+  const bin = Math.ceil((threshold - HISTOGRAM_MIN_LUFS) / HISTOGRAM_BIN_LU);
+  return bin < 0 ? 0 : bin;
+}
+
 // ---------------------------------------------------------------------------
 // The analyzer
 // ---------------------------------------------------------------------------
@@ -214,14 +338,26 @@ export interface LoudnessAnalyzerOptions {
    * Defaults to `channelWeights.length`, or 16.
    */
   maxChannels?: number;
+  /**
+   * Whether to accumulate the Integrated/LRA histograms from construction.
+   * Default `true`, so an offline call - where the programme *is* the buffer -
+   * needs no session ceremony. A live meter can start `false` and call
+   * `startIntegration()` when the caller declares a programme.
+   */
+  integrate?: boolean;
 }
 
 /**
- * The two ungated EBU R 128 quantities, in LUFS. `-Infinity` means "no signal".
+ * The four EBU R 128 quantities. LUFS, except `lra` which is LU.
+ *
+ * `-Infinity` means "no signal": silence, or a window/gate that admitted
+ * nothing. `lra` is `0` when fewer than two short-term values survive gating.
  */
 export interface LoudnessReadings {
   momentary: number;
   shortTerm: number;
+  integrated: number;
+  lra: number;
 }
 
 export interface LoudnessAnalyzer {
@@ -252,10 +388,25 @@ export interface LoudnessAnalyzer {
   momentary(): number;
   /** Short-term loudness, LUFS: the last 3 s. Ungated. */
   shortTerm(): number;
-  /** Both, into a reused object. Allocates nothing; do not retain it. */
+  /** Integrated loudness, LUFS, over the current integration session. */
+  integrated(): number;
+  /** Loudness Range, LU, over the current integration session. */
+  lra(): number;
+  /** All four, into a reused object. Allocates nothing; do not retain it. */
   results(): LoudnessReadings;
 
-  /** Everything: filter state and block ring. */
+  /** Enable integration and discard the histograms - a new programme starts here. */
+  startIntegration(): void;
+  /** Tech 3341 §2.2's 'stand-by': stop accumulating, keep what is there. */
+  stopIntegration(): void;
+  /**
+   * Discard the Integrated and LRA histograms, leaving the M/S windows and the
+   * filter state running. Tech 3341 §2.4: "The LRA computation is reset when
+   * the Integrated Loudness measurement is reset" - so the two always go
+   * together.
+   */
+  resetIntegration(): void;
+  /** Everything: filter state, block ring, histograms. */
   reset(): void;
 }
 
@@ -299,9 +450,14 @@ export function createLoudnessAnalyzer(
   // The ring: 30 slots (Short-term) x maxChannels of block mean square.
   const ring = new Float64Array(SHORT_TERM_BLOCKS * maxChannels);
 
+  const integratedHistogram = createGatingHistogram();
+  const lraHistogram = createGatingHistogram();
+
   const readings: LoudnessReadings = {
     momentary: -Infinity,
     shortTerm: -Infinity,
+    integrated: -Infinity,
+    lra: 0,
   };
 
   const bytes =
@@ -309,12 +465,16 @@ export function createLoudnessAnalyzer(
     state.byteLength +
     blockSum.byteLength +
     blockHasSignal.byteLength +
-    ring.byteLength;
+    ring.byteLength +
+    2 *
+      (integratedHistogram.counts.byteLength +
+        integratedHistogram.energies.byteLength);
 
   let channelCount = 0;
   let blockFill = 0;
   let writeIndex = 0;
   let blocksSeen = 0;
+  let integrating = options.integrate ?? true;
 
   /**
    * `sum_i G_i * z_i` over the last `blocks` slots of the ring, where `z_i` is
@@ -387,7 +547,7 @@ export function createLoudnessAnalyzer(
   }
 
   /**
-   * Close a 100 ms block: write the ring and flush.
+   * Close a 100 ms block: write the ring, flush, and emit to the histograms.
    *
    * The flush is the reason a silent channel reads `-Infinity` rather than
    * "very quiet". Two biquads in series ring for a long time in f64, and a
@@ -415,6 +575,74 @@ export function createLoudnessAnalyzer(
     }
     writeIndex = (writeIndex + 1) % SHORT_TERM_BLOCKS;
     blocksSeen++;
+
+    if (!integrating) return;
+
+    // The gating block of BS.1770-5 eq (3): 400 ms, 75% overlap, emitted once
+    // the first complete one exists. "Incomplete gating blocks at the end of
+    // the measurement interval are not used" - and there is no end here, so a
+    // trailing partial 100 ms block simply never closes.
+    if (blocksSeen >= MOMENTARY_BLOCKS) {
+      const z = windowEnergy(MOMENTARY_BLOCKS);
+      const l = loudnessFromEnergy(z);
+      // eq (6): `J_g = {j : l_j > Gamma_a}`, strictly greater.
+      if (l > ABSOLUTE_GATE_LUFS) addBlock(integratedHistogram, l, z);
+    }
+    if (blocksSeen >= SHORT_TERM_BLOCKS) {
+      const z = windowEnergy(SHORT_TERM_BLOCKS);
+      const l = loudnessFromEnergy(z);
+      // Tech 3342 §5 gates with `>=`; the difference from eq (6) is a set of
+      // measure zero, but it is the document's own comparison.
+      if (l >= ABSOLUTE_GATE_LUFS) addBlock(lraHistogram, l, z);
+    }
+  }
+
+  function integrated(): number {
+    const start = relativeGateBin(
+      integratedHistogram,
+      INTEGRATED_RELATIVE_GATE_LU,
+    );
+    let count = 0;
+    let energy = 0;
+    for (let bin = start; bin < HISTOGRAM_BINS; bin++) {
+      count += integratedHistogram.counts[bin];
+      energy += integratedHistogram.energies[bin];
+    }
+    return count === 0 ? -Infinity : loudnessFromEnergy(energy / count);
+  }
+
+  function lra(): number {
+    const start = relativeGateBin(lraHistogram, LRA_RELATIVE_GATE_LU);
+    let n = 0;
+    for (let bin = start; bin < HISTOGRAM_BINS; bin++) {
+      n += lraHistogram.counts[bin];
+    }
+    if (n === 0) return 0;
+
+    // Tech 3342 §5 indexes a sorted vector at `round((n-1)*p/100 + 1)`, which
+    // is this rank 0-based. The histogram is that vector already sorted.
+    const lowRank = Math.round(((n - 1) * LRA_LOW_PERCENTILE) / 100);
+    const highRank = Math.round(((n - 1) * LRA_HIGH_PERCENTILE) / 100);
+    let seen = 0;
+    let low = -Infinity;
+    let high = -Infinity;
+    for (let bin = start; bin < HISTOGRAM_BINS; bin++) {
+      const c = lraHistogram.counts[bin];
+      if (c === 0) continue;
+      seen += c;
+      const centre = HISTOGRAM_MIN_LUFS + (bin + 0.5) * HISTOGRAM_BIN_LU;
+      if (low === -Infinity && seen > lowRank) low = centre;
+      if (seen > highRank) {
+        high = centre;
+        break;
+      }
+    }
+    return high - low;
+  }
+
+  function resetIntegration(): void {
+    resetHistogram(integratedHistogram);
+    resetHistogram(lraHistogram);
   }
 
   return {
@@ -446,18 +674,32 @@ export function createLoudnessAnalyzer(
 
     momentary: () => loudnessFromEnergy(windowEnergy(MOMENTARY_BLOCKS)),
     shortTerm: () => loudnessFromEnergy(windowEnergy(SHORT_TERM_BLOCKS)),
+    integrated,
+    lra,
 
     results() {
       readings.momentary = loudnessFromEnergy(windowEnergy(MOMENTARY_BLOCKS));
       readings.shortTerm = loudnessFromEnergy(windowEnergy(SHORT_TERM_BLOCKS));
+      readings.integrated = integrated();
+      readings.lra = lra();
       return readings;
     },
+
+    startIntegration() {
+      integrating = true;
+      resetIntegration();
+    },
+    stopIntegration() {
+      integrating = false;
+    },
+    resetIntegration,
 
     reset() {
       state.fill(0);
       blockSum.fill(0);
       blockHasSignal.fill(0);
       ring.fill(0);
+      resetIntegration();
       channelCount = 0;
       blockFill = 0;
       writeIndex = 0;

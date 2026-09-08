@@ -10,17 +10,22 @@
  *
  * Cases not covered here, and why:
  *
- *   3341 #3, #4, #5   Integrated only, so they arrive with ticket 12's gates
- *   3341 #7, #8       authentic programme material; not synthesisable
- *   3341 #15-#23      true-peak, which is ticket 10's detector
+ *   3341 #7, #8 and 3342 #5, #6  authentic programme material; not synthesisable
+ *   3341 #15-#23                 true-peak, which is ticket 10's detector
  */
 
 import {
+  ABSOLUTE_GATE_LUFS,
   BiquadCoefficients,
   BS1770_50_CHANNEL_WEIGHTS,
   createLoudnessAnalyzer,
+  gainToTarget,
+  HISTOGRAM_BIN_LU,
+  HISTOGRAM_BINS,
+  INTEGRATED_RELATIVE_GATE_LU,
   kWeightingCoefficients,
   LOUDNESS_OFFSET_LUFS,
+  LRA_RELATIVE_GATE_LU,
   MOMENTARY_BLOCKS,
   SHORT_TERM_BLOCKS,
 } from "./loudness";
@@ -38,6 +43,9 @@ const SR = 48000;
 
 /** EBU Tech 3341 Table 1 states every loudness reading to +/-0.1 LU. */
 const EBU_TOLERANCE_LU = 0.1;
+/** EBU Tech 3342 Table 1 states every LRA reading to +/-1 LU. */
+const LRA_TOLERANCE_LU = 1;
+
 function expectWithin(actual: number, expected: number, tolerance: number) {
   expect(actual).toBeGreaterThanOrEqual(expected - tolerance);
   expect(actual).toBeLessThanOrEqual(expected + tolerance);
@@ -61,6 +69,8 @@ function measure(
   return {
     momentary: analyzer.momentary(),
     shortTerm: analyzer.shortTerm(),
+    integrated: analyzer.integrated(),
+    lra: analyzer.lra(),
   };
 }
 
@@ -249,6 +259,7 @@ describe("calibration", () => {
     const analyzer = createLoudnessAnalyzer(SR, { maxChannels: 1 });
     feed(analyzer, signal);
     expectWithin(analyzer.momentary(), -3.01, EBU_TOLERANCE_LU);
+    expectWithin(analyzer.integrated(), -3.01, EBU_TOLERANCE_LU);
   });
 });
 
@@ -257,26 +268,57 @@ describe("calibration", () => {
 // ---------------------------------------------------------------------------
 
 describe("EBU Tech 3341 Table 1", () => {
-  it("#1 stereo 1 kHz at -23.0 dBFS for 20 s reads M, S = -23.0 LUFS", () => {
-    const { momentary, shortTerm } = measure([tone(20, -23)]);
+  it("#1 stereo 1 kHz at -23.0 dBFS for 20 s reads M, S, I = -23.0 LUFS", () => {
+    const { momentary, shortTerm, integrated } = measure([tone(20, -23)]);
     expectWithin(momentary, -23.0, EBU_TOLERANCE_LU);
     expectWithin(shortTerm, -23.0, EBU_TOLERANCE_LU);
+    expectWithin(integrated, -23.0, EBU_TOLERANCE_LU);
   });
 
-  it("#2 the same at -33.0 dBFS reads M, S = -33.0 LUFS", () => {
-    const { momentary, shortTerm } = measure([tone(20, -33)]);
+  it("#2 the same at -33.0 dBFS reads M, S, I = -33.0 LUFS", () => {
+    const { momentary, shortTerm, integrated } = measure([tone(20, -33)]);
     expectWithin(momentary, -33.0, EBU_TOLERANCE_LU);
     expectWithin(shortTerm, -33.0, EBU_TOLERANCE_LU);
+    expectWithin(integrated, -33.0, EBU_TOLERANCE_LU);
   });
 
-  it("#6 a 5.0 programme with the Table 3 weights reads -23.0 LUFS", () => {
+  it("#3 10 s at -36, 60 s at -23, 10 s at -36 reads I = -23.0 LUFS", () => {
+    const { integrated } = measure([
+      tone(10, -36),
+      tone(60, -23),
+      tone(10, -36),
+    ]);
+    expectWithin(integrated, -23.0, EBU_TOLERANCE_LU);
+  });
+
+  it("#4 the same wrapped in 10 s of -72 dBFS still reads I = -23.0 LUFS", () => {
+    const { integrated } = measure([
+      tone(10, -72),
+      tone(10, -36),
+      tone(60, -23),
+      tone(10, -36),
+      tone(10, -72),
+    ]);
+    expectWithin(integrated, -23.0, EBU_TOLERANCE_LU);
+  });
+
+  it("#5 20 s at -26, 20.1 s at -20, 20 s at -26 reads I = -23.0 LUFS", () => {
+    const { integrated } = measure([
+      tone(20, -26),
+      tone(20.1, -20),
+      tone(20, -26),
+    ]);
+    expectWithin(integrated, -23.0, EBU_TOLERANCE_LU);
+  });
+
+  it("#6 a 5.0 programme with the Table 3 weights reads I = -23.0 LUFS", () => {
     // L, R at -28; C at -24; Ls, Rs at -30 - and Ls/Rs weighted 1.41, which is
     // the only reason the five levels add up to -23.
-    const { momentary } = measure([tone(20, [-28, -28, -24, -30, -30])], {
+    const { integrated } = measure([tone(20, [-28, -28, -24, -30, -30])], {
       channels: 5,
       channelWeights: BS1770_50_CHANNEL_WEIGHTS,
     });
-    expectWithin(momentary, -23.0, EBU_TOLERANCE_LU);
+    expectWithin(integrated, -23.0, EBU_TOLERANCE_LU);
   });
 
   it("#9 alternating 1.34 s at -20 and 1.66 s at -30 holds S = -23.0 LUFS", () => {
@@ -446,6 +488,118 @@ describe("EBU Tech 3341 Table 1", () => {
 });
 
 // ---------------------------------------------------------------------------
+// EBU Tech 3342 - Loudness Range
+// ---------------------------------------------------------------------------
+
+describe("EBU Tech 3342 Table 1", () => {
+  it("#1 20 s at -20 then 20 s at -30 gives LRA = 10 LU", () => {
+    const { lra } = measure([tone(20, -20), tone(20, -30)]);
+    expectWithin(lra, 10, LRA_TOLERANCE_LU);
+  });
+
+  it("#2 -20 then -15 gives LRA = 5 LU", () => {
+    const { lra } = measure([tone(20, -20), tone(20, -15)]);
+    expectWithin(lra, 5, LRA_TOLERANCE_LU);
+  });
+
+  it("#3 -40 then -20 gives LRA = 20 LU", () => {
+    const { lra } = measure([tone(20, -40), tone(20, -20)]);
+    expectWithin(lra, 20, LRA_TOLERANCE_LU);
+  });
+
+  /**
+   * #4 is also the test of the -20 LU gate: the two -50 dBFS segments sit
+   * above the absolute gate and below the relative one, so an implementation
+   * that skipped the relative stage would report 30 LU here, not 15.
+   */
+  it("#4 five segments at -50, -35, -20, -35, -50 gives LRA = 15 LU", () => {
+    const { lra } = measure([
+      tone(20, -50),
+      tone(20, -35),
+      tone(20, -20),
+      tone(20, -35),
+      tone(20, -50),
+    ]);
+    expectWithin(lra, 15, LRA_TOLERANCE_LU);
+    // What it would be with the relative gate disabled - and is not.
+    expect(lra).toBeLessThan(25);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The gates
+// ---------------------------------------------------------------------------
+
+describe("gating", () => {
+  /**
+   * BS.1770-5 eq (6): blocks at or below -70 LKFS are not in `J_g` at all.
+   * Appending five more minutes of them therefore has to change nothing -
+   * exactly, not within a tolerance, because the surviving set is identical.
+   */
+  it("ignores blocks below the absolute gate, however many there are", () => {
+    const short = measure([tone(20, -23), tone(10, -80)]).integrated;
+    const long = measure([tone(20, -23), tone(130, -80)]).integrated;
+    expect(long).toBe(short);
+  });
+
+  /** Tech 3341 #3 and #4 are the standard's own version of the same claim. */
+  it("reads Tech 3341 #4 exactly as #3, the -72 dBFS blocks aside", () => {
+    const withoutSubGate = measure([
+      tone(10, -36),
+      tone(60, -23),
+      tone(10, -36),
+    ]).integrated;
+    const withSubGate = measure([
+      tone(10, -72),
+      tone(10, -36),
+      tone(60, -23),
+      tone(10, -36),
+      tone(10, -72),
+    ]).integrated;
+    expectWithin(withSubGate, withoutSubGate, 0.01);
+  });
+
+  /**
+   * The relative gate has to be shown changing the answer, or the test is a
+   * test of the absolute gate wearing its name.
+   *
+   * 20 s at -23 followed by 20 s at -43: both far above -70, so the absolute
+   * gate admits every block and an absolute-only meter would report their mean
+   * energy, near -26 LUFS. The relative threshold lands at that minus 10, which
+   * is above -43, so the quiet half drops out and the reading is the loud
+   * half's -23.
+   */
+  it("drops blocks below the relative gate, which moves the reading 3 LU", () => {
+    const gated = measure([tone(20, -23), tone(20, -43)]).integrated;
+    const loudOnly = measure([tone(20, -23)]).integrated;
+
+    expectWithin(gated, -23.0, EBU_TOLERANCE_LU);
+    // The residual against the loud half alone is the three 400 ms blocks that
+    // straddle the level change and survive the gate.
+    expectWithin(gated, loudOnly, 0.05);
+
+    // What an absolute-gate-only meter reports: the mean energy of both halves.
+    const ungated =
+      10 * Math.log10((Math.pow(10, -2.3) + Math.pow(10, -4.3)) / 2);
+    expect(ungated).toBeLessThan(-25.9);
+    expect(Math.abs(gated - ungated)).toBeGreaterThan(2.9);
+  });
+
+  it("keeps the two relative gates at their different values", () => {
+    // The single most likely bug in this file, and a silent one.
+    expect(ABSOLUTE_GATE_LUFS).toBe(-70);
+    expect(INTEGRATED_RELATIVE_GATE_LU).toBe(-10);
+    expect(LRA_RELATIVE_GATE_LU).toBe(-20);
+  });
+
+  it("reads -Infinity when every block is below the absolute gate", () => {
+    const { integrated, lra } = measure([tone(10, -90)]);
+    expect(integrated).toBe(-Infinity);
+    expect(lra).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Silence
 // ---------------------------------------------------------------------------
 
@@ -454,9 +608,11 @@ describe("silence", () => {
     const signal = sineProgramme(SR, [silence(1)]);
     const analyzer = createLoudnessAnalyzer(SR);
     feed(analyzer, signal);
-    const { momentary, shortTerm } = analyzer.results();
+    const { momentary, shortTerm, integrated, lra } = analyzer.results();
     expect(momentary).toBe(-Infinity);
     expect(shortTerm).toBe(-Infinity);
+    expect(integrated).toBe(-Infinity);
+    expect(lra).toBe(0);
   });
 
   /**
@@ -470,6 +626,8 @@ describe("silence", () => {
     feed(analyzer, signal);
     expect(analyzer.momentary()).toBe(-Infinity);
     expect(analyzer.shortTerm()).toBe(-Infinity);
+    // ... while the programme it did carry is still integrated.
+    expectWithin(analyzer.integrated(), -23.0, EBU_TOLERANCE_LU);
   });
 
   it("counts a silent channel as silent, not as absent", () => {
@@ -479,7 +637,7 @@ describe("silence", () => {
     const signal = sineProgramme(SR, [tone(5, [-23, -Infinity])]);
     const analyzer = createLoudnessAnalyzer(SR);
     feed(analyzer, signal);
-    expectWithin(analyzer.momentary(), -23.0 - 3.01, EBU_TOLERANCE_LU);
+    expectWithin(analyzer.integrated(), -23.0 - 3.01, EBU_TOLERANCE_LU);
   });
 });
 
@@ -501,11 +659,11 @@ describe("channel weights", () => {
    */
   it("does not infer a surround layout from the channel count", () => {
     const segments = [tone(20, [-28, -28, -24, -30, -30])];
-    const flat = measure(segments, { channels: 5 }).momentary;
+    const flat = measure(segments, { channels: 5 }).integrated;
     const weighted = measure(segments, {
       channels: 5,
       channelWeights: BS1770_50_CHANNEL_WEIGHTS,
-    }).momentary;
+    }).integrated;
 
     expectWithin(weighted, -23.0, EBU_TOLERANCE_LU);
     expect(flat).toBeLessThan(weighted - 0.3);
@@ -516,11 +674,11 @@ describe("channel weights", () => {
     const withLfe = measure(segments, {
       channels: 3,
       channelWeights: [1, 1, 1],
-    }).momentary;
+    }).integrated;
     const withoutLfe = measure(segments, {
       channels: 3,
       channelWeights: [1, 1, 0],
-    }).momentary;
+    }).integrated;
 
     expectWithin(withoutLfe, -23.0, EBU_TOLERANCE_LU);
     expect(withLfe).toBeGreaterThan(withoutLfe + 10);
@@ -535,10 +693,10 @@ describe("incremental processing", () => {
   it("gives the same reading whatever the chunk size", () => {
     const expected = measure([tone(20, -23), tone(10, -30)], {
       chunkSize: 128,
-    }).shortTerm;
+    }).integrated;
     for (const chunkSize of [1, 111, 1024, 48000]) {
       expectWithin(
-        measure([tone(20, -23), tone(10, -30)], { chunkSize }).shortTerm,
+        measure([tone(20, -23), tone(10, -30)], { chunkSize }).integrated,
         expected,
         1e-9,
       );
@@ -550,10 +708,37 @@ describe("incremental processing", () => {
     feed(analyzer, sineProgramme(SR, [tone(5, -10)]));
     analyzer.reset();
     expect(analyzer.momentary()).toBe(-Infinity);
-    expect(analyzer.shortTerm()).toBe(-Infinity);
+    expect(analyzer.integrated()).toBe(-Infinity);
 
     feed(analyzer, sineProgramme(SR, [tone(5, -23)]));
-    expectWithin(analyzer.momentary(), -23.0, EBU_TOLERANCE_LU);
+    expectWithin(analyzer.integrated(), -23.0, EBU_TOLERANCE_LU);
+  });
+
+  /**
+   * Tech 3341 §2.2: an 'EBU Mode' meter must be able to start, pause and
+   * continue the Integrated and LRA measurements, and reset them independently
+   * of that state. §2.4: they always reset together.
+   */
+  it("bounds the programme with startIntegration and resetIntegration", () => {
+    const analyzer = createLoudnessAnalyzer(SR);
+
+    // The gating block is 400 ms wide, so a session started in the middle of a
+    // tone still has three blocks of the previous one in it. Half a second of
+    // silence is what a caller would leave, and what the boundary needs.
+    feed(analyzer, sineProgramme(SR, [tone(5, -10), silence(0.5)]));
+    analyzer.startIntegration();
+    feed(analyzer, sineProgramme(SR, [tone(20, -23)]));
+    expectWithin(analyzer.integrated(), -23.0, EBU_TOLERANCE_LU);
+
+    // Pausing leaves the reading standing; the M/S windows keep running.
+    analyzer.stopIntegration();
+    feed(analyzer, sineProgramme(SR, [tone(5, -5)]));
+    expectWithin(analyzer.integrated(), -23.0, EBU_TOLERANCE_LU);
+    expectWithin(analyzer.momentary(), -5.0, EBU_TOLERANCE_LU);
+
+    analyzer.resetIntegration();
+    expect(analyzer.integrated()).toBe(-Infinity);
+    expect(analyzer.lra()).toBe(0);
   });
 
   it("reuses one results object rather than allocating per call", () => {
@@ -568,6 +753,13 @@ describe("incremental processing", () => {
 // ---------------------------------------------------------------------------
 
 describe("memory", () => {
+  it("holds 1000 histogram bins of 0.1 LU from the absolute gate", () => {
+    expect(HISTOGRAM_BINS).toBe(1000);
+    expect(HISTOGRAM_BIN_LU).toBe(0.1);
+    // 1000 bins x 0.1 LU spans -70 to +30 LUFS.
+    expect(ABSOLUTE_GATE_LUFS + HISTOGRAM_BINS * HISTOGRAM_BIN_LU).toBe(30);
+  });
+
   it("sizes the sliding windows at 400 ms and 3 s of 100 ms blocks", () => {
     expect(MOMENTARY_BLOCKS).toBe(4);
     expect(SHORT_TERM_BLOCKS).toBe(30);
@@ -577,9 +769,9 @@ describe("memory", () => {
 
   /**
    * Success criterion: memory is constant regardless of programme length. The
-   * ring of block powers is what buys it - 30 slots per channel, whatever the
-   * programme - so the assertion is on the analyzer's own footprint, not on a
-   * heap measurement that would mostly report the test signal.
+   * histogram is what buys it - every gating block ever seen is one increment
+   * of one of 1000 bins - so the assertion is on the analyzer's own footprint,
+   * not on a heap measurement that would mostly report the test signal.
    */
   it("holds the same bytes after 1 s and after 5 minutes", () => {
     const short = createLoudnessAnalyzer(SR, { maxChannels: 2 });
@@ -594,6 +786,24 @@ describe("memory", () => {
     expect(long.bytes).toBe(before);
     expect(long.bytes).toBe(short.bytes);
     expect(long.bytes).toBeLessThan(32 * 1024);
-    expectWithin(long.shortTerm(), -23.0, 0.1);
+    expectWithin(long.integrated(), short.integrated(), 0.01);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// gainToTarget
+// ---------------------------------------------------------------------------
+
+describe("gainToTarget", () => {
+  it("returns the dB that moves a reading onto a target", () => {
+    expect(gainToTarget(-23, -14)).toBe(9);
+    expect(gainToTarget(-14, -23)).toBe(-9);
+    expect(gainToTarget(-23, -23)).toBe(0);
+    // ATSC A/85 from EBU R 128, and the streaming target of the moment.
+    expect(gainToTarget(-23, -24)).toBe(-1);
+  });
+
+  it("asks for infinite gain on silence, which is the honest answer", () => {
+    expect(gainToTarget(-Infinity, -14)).toBe(Infinity);
   });
 });
