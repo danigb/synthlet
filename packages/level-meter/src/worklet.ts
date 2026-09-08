@@ -31,7 +31,7 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
   h: Float32Array; // per channel, the hold marker
   ht: Int32Array; // per channel, blocks left before the hold marker falls
   cl: Int32Array; // per channel, blocks left on the clip latch
-  max: number;
+  bp: Float32Array; // per channel, this block's raw maximum
   d: number; // release, as a per-block multiplier
   hb: number; // holdMs, in blocks
   cb: number; // clipHoldMs, in blocks
@@ -43,7 +43,6 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
     this.r = true;
     const o = options.processorOptions ?? {};
     this.peaks = new Float32Array(o.peaksBuffer);
-    this.max = 8;
 
     // Derived from `sampleRate`, once, at construction. A meter's fall rate is a
     // property of the meter, not of the interface it happens to be running on:
@@ -62,6 +61,7 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
     this.h = new Float32Array(n);
     this.ht = new Int32Array(n);
     this.cl = new Int32Array(n);
+    this.bp = new Float32Array(n);
 
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -83,16 +83,41 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
     const input = inputs[0];
     const output = outputs[0];
 
-    let channels = Math.min(input.length, this.max);
+    // How many channels to copy, how many to measure and how often to decay are
+    // three different numbers, and one loop used to conflate all three.
 
-    for (let channel = 0; channel < channels; channel++) {
+    // Copy: all of them. The node is a pass-through and has no business
+    // dropping audio - the loop used to be capped at 8, so a 9-channel signal
+    // came out with channels 8 and up silent.
+    const copied = Math.min(input.length, output.length);
+    for (let channel = 0; channel < copied; channel++) {
+      output[channel].set(input[channel]);
+    }
+
+    // Measure: as many as the buffer holds, which is the number the caller
+    // chose. Anything above that is passed through unmetered rather than
+    // written past the end of the view.
+    const bp = this.bp;
+    const measured = Math.min(input.length, bp.length);
+    for (let channel = 0; channel < measured; channel++) {
       const chIn = input[channel];
-      const chOut = output[channel];
       let blockPeak = 0;
       for (let i = 0; i < chIn.length; i++) {
         const x = chIn[i] < 0 ? -chIn[i] : chIn[i];
         if (x > blockPeak) blockPeak = x;
       }
+      bp[channel] = blockPeak;
+    }
+    for (let channel = measured; channel < bp.length; channel++) {
+      bp[channel] = 0;
+    }
+
+    // Decay: every slot, every block, whatever the channel count is - including
+    // zero, which is what an unconnected input delivers. The decay used to live
+    // inside the measurement loop, so disconnecting the source froze the
+    // reading at its last value for the life of the context.
+    for (let channel = 0; channel < bp.length; channel++) {
+      const blockPeak = bp[channel];
 
       // Instant attack, exponential release. The attack falls out of the
       // comparison and the release is one multiply.
@@ -119,9 +144,8 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
       // says whether any sample in it reached the threshold.
       if (blockPeak >= this.ct) this.cl[channel] = this.cb;
       else if (this.cl[channel] > 0) this.cl[channel]--;
-
-      chOut.set(chIn);
     }
+
     return this.r;
   }
 

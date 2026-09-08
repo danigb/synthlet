@@ -60,21 +60,32 @@ describe("LevelMeterProcessor", () => {
       },
     );
 
-    // Ticket 04: `chOut.set(chIn)` lives inside a loop capped at `this.max = 8`,
-    // so channels 9 and up come out silent from a node the README says passes
+    // `chOut.set(chIn)` used to live inside a loop capped at `this.max = 8`, so
+    // channels 9 and up came out silent from a node the README says passes
     // audio through untouched.
-    it.failing(
-      "passes 9 channels through sample for sample (ticket 04)",
-      () => {
+    it.each([9, 16])(
+      "passes %i channels through sample for sample",
+      (count) => {
         const meter = createMeter(Processor, { maxChannels: 16 });
-        const input = channels(9, ramp);
+        const input = channels(count, ramp);
         const output = runProcess(meter.processor, input);
 
-        for (let c = 0; c < 9; c++) {
+        for (let c = 0; c < count; c++) {
           expect(Array.from(output[c])).toEqual(Array.from(input[c]));
         }
       },
     );
+
+    it("copies no further than the output the browser handed it", () => {
+      const meter = createMeter(Processor, { maxChannels: 16 });
+      const input = channels(4, ramp);
+      const output = runProcess(meter.processor, input, 1, {
+        outputChannels: 2,
+      });
+
+      expect(output).toHaveLength(2);
+      expect(Array.from(output[1])).toEqual(Array.from(input[1]));
+    });
   });
 
   describe("attack", () => {
@@ -225,53 +236,52 @@ describe("LevelMeterProcessor", () => {
   });
 
   describe("silence", () => {
-    // Ticket 04: the decay lives inside the measurement loop, and an
-    // unconnected input arrives as an empty `inputs[0]`, so the loop body never
-    // runs and the reading freezes at its last value forever.
-    it.failing(
-      "keeps decaying while the input is disconnected (ticket 04)",
-      () => {
-        const meter = createMeter(Processor, { maxChannels: 1 });
-        runProcess(meter.processor, [constant(1)]);
-        const start = meter.peakDb(0);
+    // The decay used to live inside the measurement loop, and an unconnected
+    // input arrives as an empty `inputs[0]`, so the loop body never ran and the
+    // reading froze at its last value forever.
+    //
+    // The empty array is a browser fact rather than a spec guarantee, so this
+    // asserts the fix and not the browser. The fix is right either way: an
+    // unconditional decay does the same thing whether the array is empty or
+    // full of zeros.
+    it("keeps decaying while the input is disconnected", () => {
+      const meter = createMeter(Processor, { maxChannels: 1 });
+      runProcess(meter.processor, [constant(1)]);
+      const start = meter.peakDb(0);
 
-        runProcess(meter.processor, [], blocksFor(3, SAMPLE_RATE), {
-          outputChannels: 1,
-          blockSize: BLOCK,
-        });
+      runProcess(meter.processor, [], blocksFor(3, SAMPLE_RATE), {
+        outputChannels: 1,
+        blockSize: BLOCK,
+      });
 
-        expect(meter.peakDb(0)).toBeLessThan(start - 20);
-      },
-    );
+      expect(meter.peakDb(0)).toBeLessThan(start - 20);
+    });
   });
 
   describe("channel bounds", () => {
-    // Ticket 04: how many channels to copy, how many to measure and how often
-    // to decay are three different numbers, and the loop conflates them. Copy
-    // is all of them; measure is what the buffer holds.
-    it.failing(
-      "passes every channel through even when the buffer holds fewer (ticket 04)",
-      () => {
-        const meter = createMeter(Processor, { maxChannels: 2 });
-        const input = channels(9, ramp);
-        const output = runProcess(meter.processor, input);
-
-        for (let c = 0; c < 9; c++) {
-          expect(Array.from(output[c])).toEqual(Array.from(input[c]));
-        }
-      },
-    );
-
-    it("meters no more channels than the buffer holds", () => {
+    // How many channels to copy, how many to measure and how often to decay are
+    // three different numbers, and one loop used to conflate them. Copy is all
+    // of them; measure is what the buffer holds.
+    it("passes every channel through even when the buffer holds fewer", () => {
       const meter = createMeter(Processor, { maxChannels: 2 });
-      const input = channels(6, () => constant(1));
+      const input = channels(9, ramp);
+      const output = runProcess(meter.processor, input);
+
+      for (let c = 0; c < 9; c++) {
+        expect(Array.from(output[c])).toEqual(Array.from(input[c]));
+      }
+    });
+
+    it("meters exactly as many channels as the buffer holds", () => {
+      const meter = createMeter(Processor, { maxChannels: 2 });
+      const input = channels(6, (c) => constant((c + 1) / 10));
       runProcess(meter.processor, input);
 
       // TypedArray writes past the end are silently discarded, so an
       // out-of-bounds write shows up as a view that is still the size it was.
       expect(meter.view.length).toBe(meterViewLength(2));
-      expect(meter.peak(0)).toBeGreaterThan(0);
-      expect(meter.peak(1)).toBeGreaterThan(0);
+      expect(meter.peak(0)).toBeCloseTo(0.1, 6);
+      expect(meter.peak(1)).toBeCloseTo(0.2, 6);
     });
   });
 

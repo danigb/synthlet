@@ -9,6 +9,26 @@ export const registerLevelMeterWorklet = createRegistrar(
 
 export type LevelMeterInputs = {};
 
+const DEFAULT_MAX_CHANNELS = 16;
+// Web Audio's own ceiling on a node's channel count. Nothing in the library
+// reaches it; the point of the limit is that a typo cannot ask for a buffer of
+// four million slots.
+const MAX_MAX_CHANNELS = 32;
+
+// `options.maxChannels || 16` turned `0` into 16 - a bug hiding as a default -
+// and passed everything else straight to the buffer constructor, so a negative
+// number surfaced as `new SharedArrayBuffer(-4)` rather than as anything that
+// named the option.
+function resolveMaxChannels(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_MAX_CHANNELS;
+  if (!Number.isInteger(value) || value < 1 || value > MAX_MAX_CHANNELS) {
+    throw new RangeError(
+      `LevelMeter: maxChannels must be an integer from 1 to ${MAX_MAX_CHANNELS}, got ${value}`,
+    );
+  }
+  return value;
+}
+
 export type LevelMeterWorkletNode = AudioWorkletNode & {
   dispose(): void;
   getPeaks(): Float32Array;
@@ -37,7 +57,7 @@ export const LevelMeter = Object.assign(
     context: AudioContext,
     options: LevelMeterOptions = {},
   ): LevelMeterWorkletNode => {
-    const maxChannels = options.maxChannels || 16;
+    const maxChannels = resolveMaxChannels(options.maxChannels);
     const peaksBuffer = new SharedArrayBuffer(
       maxChannels * Float32Array.BYTES_PER_ELEMENT,
     );
