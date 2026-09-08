@@ -149,7 +149,12 @@ describe("EuclidProcessor", () => {
       { steps: 16, beats: 5, rotation: 0 }, // the bossa the demo used to play
       { steps: 5, beats: 5, rotation: 3 },
       { steps: 8, beats: 0, rotation: 0 },
-      { steps: 7, beats: 9, rotation: 40 }, // beats > steps, rotation > steps
+      // `beats > steps` is every step a hit, so this row covers `beats > steps`
+      // and *nothing about rotation*: no rotation of an all-hits pattern is
+      // observable, so it cannot fail on a rotation bug however wrong the
+      // arithmetic gets. It reads like out-of-range rotation coverage and is
+      // not. `describe("rotation")` below is where that is actually covered.
+      { steps: 7, beats: 9, rotation: 40 }, // beats > steps; rotation inert here
     ]) {
       const out = run(new Worklet(), steps, { steps, beats, rotation });
       const played = Array.from({ length: steps }, (_, s) =>
@@ -223,6 +228,98 @@ describe("EuclidProcessor", () => {
       const fan = run(new Worklet(), steps, { steps, beats, rotation }).fan;
       expect(fan.slice(1)).toEqual([fan[0], fan[0], fan[0]]);
     }
+  });
+
+  describe("rotation", () => {
+    // `rotation` is the parameter this whole folder turned out to hinge on and
+    // the one nothing drove end to end. E(5,16) because gcd(5,16) = 1, so the
+    // sixteen rotations are sixteen *distinct* patterns - which is what catches
+    // an off-by-one that shifts all of them equally and would pass a spot
+    // check on any one of them.
+    const STEPS = 16;
+    const BEATS = 5;
+
+    /**
+     * The `steps` steps this processor plays, as box strings: channel a, and
+     * the four fan channels. `run` drives `BLOCKS_PER_CYCLE` blocks per clock
+     * cycle at `subdivision: 1` and returns one sample per block, so index
+     * `s * BLOCKS_PER_CYCLE` is step `s` - 04's D8, and what makes these short.
+     */
+    function play(params: { rotation: number; spread?: number }) {
+      const out = run(new Worklet(), STEPS, {
+        steps: STEPS,
+        beats: BEATS,
+        ...params,
+      });
+      const box = (channel: number[]) =>
+        Array.from({ length: STEPS }, (_, s) =>
+          channel[s * BLOCKS_PER_CYCLE] > 0 ? "x" : ".",
+        ).join("");
+      return { a: box(out), fan: out.fan.map(box) };
+    }
+
+    const expected = (rotation: number) =>
+      Euclid.pattern(STEPS, BEATS, rotation)
+        .map((hit) => (hit ? "x" : "."))
+        .join("");
+
+    it("plays every rotation of E(5,16)", () => {
+      const wrong: string[] = [];
+      const seen: string[] = [];
+      for (let rotation = 0; rotation < STEPS; rotation++) {
+        const { a } = play({ rotation });
+        seen.push(a);
+        if (a !== expected(rotation))
+          wrong.push(`+${rotation}: ${a} != ${expected(rotation)}`);
+      }
+      expect(wrong).toEqual([]);
+      // gcd(5,16) = 1, so all sixteen are different rhythms. Without this a
+      // sweep that shifted every rotation by the same amount would pass.
+      expect(new Set(seen).size).toBe(STEPS);
+    });
+
+    it("reduces a rotation past `steps` modulo `steps`", () => {
+      // This is the out-of-range coverage `{ steps: 7, beats: 9, rotation: 40 }`
+      // above only appears to give: there every step is a hit, so no rotation
+      // is observable at all. E(5,16) has five hits in sixteen, so 20 landing
+      // where 4 lands is a claim about where the hits are.
+      //
+      // Asserted against `Euclid.pattern` and not against another render, so a
+      // rotation that is uniformly one step out fails - comparing two renders
+      // of this module to each other would shift both and pass.
+      //
+      // A rotation at an exact non-zero *multiple* of `steps` is the path
+      // `rotate()` got wrong before 04, where it returned the pattern
+      // concatenated with itself. That doubling is inaudible through the
+      // processor - the same rhythm over twice the steps - and 04 pins it on
+      // the pure function; what these two rows say is only that the knob is
+      // reduced, which is the claim a `rotation` knob at 16 or 100 makes.
+      expect(play({ rotation: STEPS }).a).toBe(expected(0));
+      expect(play({ rotation: 2 * STEPS }).a).toBe(expected(0));
+      expect(play({ rotation: 20 }).a).toBe(expected(4));
+      // `rotation`'s declared maximum, which a knob can reach.
+      expect(play({ rotation: 100 }).a).toBe(expected(100 % STEPS));
+    });
+
+    it("offsets every fan channel from the rotation, not from zero", () => {
+      // `rotation` and `spread` are one arithmetic - channel `i` is
+      // `rotation + i * spread` - and the fan test above sweeps `spread` at a
+      // few fixed rotations. This sweeps `rotation` under a fixed `spread`,
+      // which is the half that would survive a fan wired to `i * spread`.
+      const wrong: string[] = [];
+      for (const spread of [3, 4]) {
+        for (let rotation = 0; rotation < STEPS; rotation++) {
+          const { fan } = play({ rotation, spread });
+          for (let i = 0; i < 4; i++)
+            if (fan[i] !== expected(rotation + i * spread))
+              wrong.push(
+                `+${rotation} spread ${spread} ch ${"abcd"[i]}: ` +
+                  `${fan[i]} != ${expected(rotation + i * spread)}`,
+              );
+        }
+      }
+      expect(wrong).toEqual([]);
+    });
   });
 
   it("still steps once per clock cycle, and `subdivision` times faster", () => {

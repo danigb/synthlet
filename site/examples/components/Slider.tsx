@@ -12,6 +12,7 @@ export function Slider({
   param,
   units,
   defaultValue,
+  onChange,
 }: {
   label: string;
   min?: number;
@@ -30,6 +31,18 @@ export function Slider({
    * untouched by this.
    */
   defaultValue?: number;
+  /**
+   * Called with the slider's value after the param is written, for an example
+   * that has to render something from it - `EuclidExample` draws the pattern,
+   * which needs `steps`/`beats`/`rotation`/`spread` in React state and not only
+   * on an `AudioParam`. Omit it and nothing changes, which is why every other
+   * example is untouched by this.
+   *
+   * The *slider's* value, not the transformed one: `transform` maps to the
+   * param's units (dB to a gain, say) and a caller drawing from the same
+   * number wants the number on the knob.
+   */
+  onChange?: (value: number) => void;
 }) {
   const [value, setValue] = useState(param.value);
 
@@ -51,6 +64,7 @@ export function Slider({
           const value = e.target.valueAsNumber;
           setValue(value);
           param.value = transform(value);
+          onChange?.(value);
         }}
       />
       <div className={valueClassName}>
@@ -76,6 +90,7 @@ export function Slider({
               onClick={() => {
                 setValue(defaultValue);
                 param.value = transform(defaultValue);
+                onChange?.(defaultValue);
               }}
             >
               ⟲

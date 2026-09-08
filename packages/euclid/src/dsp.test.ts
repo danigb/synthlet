@@ -344,6 +344,131 @@ describe("no way to emit NaN", () => {
   });
 });
 
+describe("rotation", () => {
+  /**
+   * Where the step boundaries are, and what channel a played on each.
+   *
+   * The boundaries are the rising edges of `hits + rests`, and that sum is the
+   * bare `gatePulse` on every sample: the two outputs partition every step, so
+   * `hit + (1 - hit)` is 1 wherever the pulse is high whatever the pattern
+   * says. Counting *boundaries* rather than hits is the point - a step dropped
+   * or played twice at a parameter change is invisible in a spot check of the
+   * pattern, because the pattern is right either side of it, and it is equally
+   * invisible in a count of hits when the lost step was a rest.
+   */
+  function boundaries(out: ReturnType<typeof render>) {
+    const pulse = out.hits.map((hit, i) => hit + out.rests[i]);
+    const at = pulse.flatMap((v, i) =>
+      v > 0 && !(pulse[i - 1] > 0) ? [i] : [],
+    );
+    return { at, played: at.map((i) => (out.hits[i] > 0 ? 1 : 0)) };
+  }
+
+  /** Render two spans on one continuous ramp, changing the setting between. */
+  function acrossAChange(
+    from: [number, number, number],
+    to: [number, number, number],
+    blocksBefore: number,
+    blocksAfter: number,
+  ) {
+    const [generate, update] = createEuclid();
+    const clock = ramp();
+    update(...from);
+    const before = render(generate, clock, blocksBefore);
+    update(...to);
+    const after = render(generate, clock, blocksAfter);
+    const hits = [...before.hits, ...after.hits];
+    const rests = [...before.rests, ...after.rests];
+    return Object.assign(hits, { hits, rests }) as ReturnType<typeof render>;
+  }
+
+  it("changes rotation mid-cycle without dropping or duplicating a step", () => {
+    // Nothing covered a `rotation` that changes while the pattern is playing,
+    // and `update()` rebuilds the array under a live step counter. 10 blocks
+    // is two and a half steps, so the change lands halfway through step 2 and
+    // not on a boundary, where `% pattern.length` would clamp `current` for
+    // free.
+    //
+    // E(5,16) because gcd(5,16) = 1: its sixteen rotations are sixteen
+    // distinct patterns, so "the steps after the change are the new pattern
+    // read from where the counter had got to" is a real claim about the
+    // counter and not just about the array.
+    const out = acrossAChange([16, 5, 0], [16, 5, 12], 10, 64);
+    const { at, played } = boundaries(out);
+
+    // One boundary per clock cycle, exactly `CYCLE` samples apart, with the
+    // first at sample 0 - step 0 plays before the ramp has wrapped once. A
+    // dropped step is a gap of two cycles, a doubled one a gap of zero, and
+    // both fail here whether the step was a hit or a rest.
+    expect(at).toEqual(at.map((_, j) => j * CYCLE));
+    // 74 blocks is 18.5 clock cycles, so 19 boundaries: sample 0 and the
+    // eighteen wraps. Derived rather than written down, so the render length
+    // can change without the assertion quietly becoming a tautology.
+    expect(at).toHaveLength(Math.ceil(out.hits.length / CYCLE));
+
+    // The counter at boundary `j` is `j % steps`, before and after the change.
+    const before = euclidPattern(16, 5, 0);
+    const after = euclidPattern(16, 5, 12);
+    expect(played).toEqual(
+      played.map((_, j) => (j < 3 ? before : after)[j % 16]),
+    );
+    expect(out.hits.every(Number.isFinite)).toBe(true);
+  });
+
+  it("changes `steps` under a live counter without dropping a step either", () => {
+    // The same path with `steps` moving too, which is where 02's `current`
+    // clamp in `update()` is load-bearing. Swept across all sixteen offsets
+    // rather than taken at one, because the clamp only does anything at the
+    // five where `current` is already past the new end - 16 -> 8 with the
+    // counter at 2 is benign, and a test that only ever changes there passes
+    // with the clamp deleted. `+ 2` keeps every change mid-step.
+    //
+    // `dsp.test.ts` already sweeps these offsets for finiteness; this asserts
+    // the step *sequence*, which is what says no step was dropped or repeated
+    // rather than only that nothing became `NaN`.
+    const before = euclidPattern(16, 5, 0);
+    const after = euclidPattern(8, 3, 6);
+    const wrong: string[] = [];
+    for (let offset = 0; offset < 16; offset++) {
+      const changeAt = offset + 1;
+      const out = acrossAChange([16, 5, 0], [8, 3, 6], offset * 4 + 2, 40);
+      const { at, played } = boundaries(out);
+
+      const expected = played.map((_, j) =>
+        j < changeAt ? before[j % 16] : after[j % 8],
+      );
+      if (at.join() !== at.map((_, j) => j * CYCLE).join())
+        wrong.push(`offset ${offset}: boundaries at ${at.join(",")}`);
+      if (played.join("") !== expected.join(""))
+        wrong.push(
+          `offset ${offset}: ${played.join("")} != ${expected.join("")}`,
+        );
+      if (!out.hits.every(Number.isFinite))
+        wrong.push(`offset ${offset}: non-finite`);
+    }
+    expect(wrong).toEqual([]);
+  });
+
+  it("clamps on the node where `Euclid.pattern` wraps, and both are declared", () => {
+    // Two public surfaces and two answers for `rotation: -2`, both deliberate.
+    // The parameter has a declared range, so an `AudioParam` clamps -2 to 0
+    // before the processor sees it; the pure function has none, and `rotate`
+    // wraps. This is what stops the next person "fixing" one to match the
+    // other, and the README's `## Parameters` says so in prose.
+    //
+    // The clamp itself is the platform's, not this module's: what the module
+    // declares is `minValue: 0`, and that is what is asserted here.
+    // `index.test.ts` builds its nodes on a local `ParamMock` with no range,
+    // so a node-level assertion there would be a statement about the mock.
+    expect(PARAMS.find((p) => p.name === "rotation")).toMatchObject({
+      minValue: 0,
+      maxValue: 100,
+    });
+    expect(euclidPattern(8, 3, -2)).toEqual(euclidPattern(8, 3, 6));
+    expect(euclidPattern(16, 5, -1)).toEqual(euclidPattern(16, 5, 15));
+  });
+});
+
 describe("the rests", () => {
   // Criterion 1, exhaustively and purely: the two outputs partition the cycle.
   it("partitions every step between the two outputs", () => {
@@ -1313,6 +1438,56 @@ describe("the named rhythms", () => {
     expect(a).not.toBe(b);
     a[0] = 9;
     expect(euclidPattern(8, 3, 0)[0]).toBe(1);
+  });
+});
+
+describe("the parameter table", () => {
+  it("documents the parameters it registers", () => {
+    // The README's `## Parameters` table is the *third* hand-maintained copy of
+    // `PARAMS`. `pulseWidth` was unreachable from TypeScript for two releases
+    // because the list had a second copy, and 07 added a compile-time guard for
+    // that one - `index.ts`'s two type assertions. Neither of them can see a
+    // markdown table, and a README that quietly disagrees about a default is
+    // the same bug with a slower feedback loop.
+    //
+    // Its own describe rather than the named-rhythms one above: that block is
+    // an oracle against Toussaint's paper, and this is a drift test against a
+    // file in this package.
+    //
+    // Keyed on `| \`name\` | default | min … max | rate |`, which is a shape no
+    // other table in the README has: the rhythm table's second column is
+    // `E(k,n)`, the output table's first column is not a bare word, and the
+    // swing and tiling tables carry prose. Whitespace-tolerant because prettier
+    // owns the column padding. The range separator is a plain U+2026 between
+    // ordinary spaces - checked in the file, not assumed.
+    const readme = readFileSync(join(__dirname, "..", "README.md"), "utf8");
+    const rows = [
+      ...readme.matchAll(
+        /^\|\s*`(\w+)`\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*…\s*([\d.]+)\s*\|\s*([ak]-rate)\s*\|/gm,
+      ),
+    ].map(([, name, defaultValue, minValue, maxValue, automationRate]) => ({
+      name,
+      defaultValue: +defaultValue,
+      minValue: +minValue,
+      maxValue: +maxValue,
+      automationRate,
+    }));
+
+    // Every parameter has a row and every row has a parameter, in `PARAMS`
+    // order - so a parameter added to `params.ts` and not to the README fails
+    // here naming it, which is the direction the bug actually goes.
+    expect(rows.map((r) => r.name)).toEqual(PARAMS.map((p) => p.name));
+    expect(rows).toEqual(
+      PARAMS.map(
+        ({ name, defaultValue, minValue, maxValue, automationRate }) => ({
+          name,
+          defaultValue,
+          minValue,
+          maxValue,
+          automationRate,
+        }),
+      ),
+    );
   });
 });
 
