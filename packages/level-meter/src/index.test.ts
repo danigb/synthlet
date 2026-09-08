@@ -4,15 +4,22 @@ import { dbToUnit, formatDb, LevelMeter, Levels } from "./index";
 // The factory's own surface, not the processor's: what it validates, what it
 // sizes, and what it hands the audio thread. `AudioWorkletNode` is a stub, so
 // nothing here says anything about what a browser does with the node.
-class AudioWorkletNodeStub {
+class AudioNodeStub {
+  connect = jest.fn();
+  disconnect = jest.fn();
+  constructor(readonly context: unknown = {}) {}
+}
+
+class AudioWorkletNodeStub extends AudioNodeStub {
   port = { postMessage: jest.fn(), onmessage: null as any };
+  onprocessorerror: ((event: Event) => void) | null = null;
   constructor(
-    readonly context: unknown,
+    context: unknown,
     readonly processorName: string,
     readonly options: AudioWorkletNodeOptions,
-  ) {}
-  connect() {}
-  disconnect() {}
+  ) {
+    super(context);
+  }
 }
 
 const context = {} as AudioContext;
@@ -92,6 +99,10 @@ describe("LevelMeter", () => {
   beforeAll(() => {
     // @ts-ignore
     global.AudioWorkletNode = AudioWorkletNodeStub;
+    // `disposable` tests its dependencies with `instanceof AudioNode`, which a
+    // tap's teardown callback is the first thing here to reach.
+    // @ts-ignore
+    global.AudioNode = AudioNodeStub;
     installFrameStub();
   });
 
@@ -617,6 +628,119 @@ describe("LevelMeter", () => {
       teardown!();
     });
   });
+
+  describe("tap", () => {
+    const sourceStub = () => new AudioNodeStub(context) as unknown as AudioNode;
+
+    it("has no output at all", () => {
+      const meter = LevelMeter.tap(sourceStub());
+      const options = (meter as unknown as AudioWorkletNodeStub).options;
+
+      expect(options.numberOfOutputs).toBe(0);
+      expect(options.numberOfInputs).toBe(1);
+    });
+
+    // The whole point: metering a connection should not mean breaking it.
+    it("adds an edge and changes nothing else", () => {
+      const source = sourceStub();
+      const meter = LevelMeter.tap(source);
+
+      expect(source.connect).toHaveBeenCalledTimes(1);
+      expect(source.connect).toHaveBeenCalledWith(meter);
+      expect(source.disconnect).not.toHaveBeenCalled();
+    });
+
+    it("takes its context from the node, so there is none to pass", () => {
+      const source = sourceStub();
+      const meter = LevelMeter.tap(source);
+      expect((meter as unknown as AudioWorkletNodeStub).context).toBe(context);
+    });
+
+    it("leaves the graph as it was on dispose", () => {
+      const source = sourceStub();
+      const meter = LevelMeter.tap(source);
+
+      meter.dispose();
+      expect(source.disconnect).toHaveBeenCalledTimes(1);
+      expect(source.disconnect).toHaveBeenCalledWith(meter);
+      // `disposable`'s own cascade still ran.
+      expect(meter.port.postMessage).toHaveBeenCalledWith({ type: "DISPOSE" });
+    });
+
+    it("disposes once, however many times it is asked", () => {
+      const source = sourceStub();
+      const meter = LevelMeter.tap(source);
+
+      meter.dispose();
+      meter.dispose();
+      expect(source.disconnect).toHaveBeenCalledTimes(1);
+    });
+
+    it("takes the same options as the pass-through form", () => {
+      const meter = LevelMeter.tap(sourceStub(), {
+        maxChannels: 4,
+        holdMs: 500,
+      });
+      expect(meter.getPeaks()).toHaveLength(4);
+      expect(processorOptions(meter)).toMatchObject({ holdMs: 500 });
+    });
+
+    it("still gives the pass-through form an output, and connects nothing", () => {
+      const meter = LevelMeter(context);
+      expect(
+        (meter as unknown as AudioWorkletNodeStub).options.numberOfOutputs,
+      ).toBe(1);
+      expect(meter.connect).not.toHaveBeenCalled();
+    });
+  });
+
+  // A dead processor was indistinguishable from a silent signal: the browser
+  // stops calling `process()` for good, and in pass-through mode the node's
+  // output goes silent for the life of the graph, with no diagnostic.
+  describe.each(["pass-through", "tap"] as const)(
+    "onprocessorerror (%s)",
+    (form) => {
+      const build = (options: Parameters<typeof LevelMeter>[1] = {}) =>
+        form === "tap"
+          ? LevelMeter.tap(
+              new AudioNodeStub(context) as unknown as AudioNode,
+              options,
+            )
+          : LevelMeter(context, options);
+
+      it("is observable from the main thread", () => {
+        const meter = build();
+        expect(meter.getLevels().error).toBe(false);
+
+        (meter as unknown as AudioWorkletNodeStub).onprocessorerror!(
+          new Event("processorerror"),
+        );
+
+        expect(meter.getLevels().error).toBe(true);
+      });
+
+      it("calls onError with the event", () => {
+        const onError = jest.fn();
+        const meter = build({ onError });
+        const event = new Event("processorerror");
+
+        (meter as unknown as AudioWorkletNodeStub).onprocessorerror!(event);
+
+        expect(onError).toHaveBeenCalledTimes(1);
+        expect(onError).toHaveBeenCalledWith(event);
+      });
+
+      it("stays flagged - a dead processor does not come back", () => {
+        const meter = build();
+        (meter as unknown as AudioWorkletNodeStub).onprocessorerror!(
+          new Event("processorerror"),
+        );
+
+        deliver(meter, frame(16, [{ peak: 1 }]));
+        expect(meter.getLevels().error).toBe(true);
+      });
+    },
+  );
 
   describe("ballistics", () => {
     it("passes the options through to the processor", () => {

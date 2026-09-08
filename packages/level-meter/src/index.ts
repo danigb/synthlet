@@ -200,222 +200,286 @@ export type LevelMeterOptions = {
    * when the transport is `"shared"`.
    */
   postIntervalMs?: number;
+  /**
+   * Called if the processor throws.
+   *
+   * A dead processor is otherwise indistinguishable from a silent signal: the
+   * browser stops calling `process()` permanently, so the readings simply stop
+   * changing, with no diagnostic. `getLevels().error` says so too, for callers
+   * who would rather poll than take a callback.
+   */
+  onError?: (event: Event) => void;
 };
+
+// Both forms are the same meter; they differ only in whether the node has an
+// output. Written once here, and wrapped in `disposable()` by each entry point
+// - `tap` has an incoming edge to take down as well, and `disposable` composes
+// with the `dispose` this function leaves on the node.
+//
+// `BaseAudioContext` because a tap reads its context from the node it is
+// tapping, and that node may belong to an `OfflineAudioContext`.
+function createMeter(
+  context: BaseAudioContext,
+  options: LevelMeterOptions,
+  outputs: 0 | 1,
+): LevelMeterWorkletNode {
+  const maxChannels = resolveMaxChannels(options.maxChannels);
+  const length = levelsLength(maxChannels);
+
+  const shared = sharedBufferAvailable();
+  const levelsBuffer = shared
+    ? new SharedArrayBuffer(length * Float32Array.BYTES_PER_ELEMENT)
+    : undefined;
+  // One view, whichever transport wrote it: shared memory the audio thread is
+  // updating live, or the destination the posted copy lands in.
+  const view = levelsBuffer
+    ? new Float32Array(levelsBuffer)
+    : new Float32Array(length);
+
+  // The deprecated flat peak view, kept in step with the strided one.
+  const peaks = new Float32Array(maxChannels);
+  // What the view held when `version` was last bumped.
+  const previous = new Float32Array(length);
+
+  let version = 0;
+  let error = false;
+
+  // The one place on the main thread where the view becomes readable. Under
+  // `"message"` it runs when a frame arrives; under `"shared"` the memory is
+  // already live, so it runs when a reader asks. Everything derived from the
+  // view is derived here, so `subscribe` has somewhere to live.
+  const readView = () => {
+    // A page can only end up here with a mismatched bundle by registering two
+    // versions of the processor in one context, where the registrar's cache
+    // means the first one wins. `[0]` exists so that fails loudly instead of
+    // reading a stride that moved. 0 is "no block has run yet".
+    const layout = view[0];
+    if (layout !== 0 && layout !== LEVELS_LAYOUT_VERSION) {
+      throw Error(
+        `LevelMeter: the registered processor writes layout ${layout}, this build reads ${LEVELS_LAYOUT_VERSION}`,
+      );
+    }
+
+    let changed = false;
+    for (let i = 0; i < length; i++) {
+      if (previous[i] !== view[i]) {
+        previous[i] = view[i];
+        changed = true;
+      }
+    }
+    if (!changed) return;
+
+    version++;
+    for (let c = 0; c < maxChannels; c++) peaks[c] = view[HEADER + c * STRIDE];
+  };
+
+  const slot = (channel: number) => HEADER + channel * STRIDE;
+
+  const listeners = new Set<LevelsListener>();
+  let stopTicking: (() => void) | null = null;
+  // The version and the frame of the most recent delivery. Together they are
+  // the whole rate policy: never twice for the same reading, never twice in
+  // one animation frame.
+  let notifiedVersion = 0;
+  let notifiedFrame = -1;
+
+  // Two things call this - a posted frame arriving, and the driver's tick -
+  // and neither needs to know about the other.
+  //
+  // Under `"message"` at the default 16 ms cadence a message is a frame, so a
+  // subscriber is notified as each one lands. Turn `postIntervalMs` down and
+  // the extra messages coalesce here rather than waking React four times
+  // between paints; the reading is never stale for more than a frame, because
+  // the tick delivers whatever the message could not.
+  const notify = () => {
+    if (listeners.size === 0 || version === notifiedVersion) return;
+    const frame = currentFrame();
+    if (frame === notifiedFrame) return;
+    notifiedFrame = frame;
+    notifiedVersion = version;
+    for (const listener of Array.from(listeners)) listener(levels);
+  };
+
+  // Hand-rolled rather than built with `createWorkletConstructor`: that helper
+  // exists to wire `AudioParam`s from a `ParamInput` map, and the meter has no
+  // parameters by design. What it does need is a `processorOptions` payload,
+  // which the helper does not carry. Not an oversight - there is nothing here
+  // for it to do.
+  const node = new AudioWorkletNode(context, "LevelMeterProcessor", {
+    numberOfInputs: 1,
+    numberOfOutputs: outputs,
+    processorOptions: {
+      levelsBuffer,
+      maxChannels,
+      releaseDbPerSecond: options.releaseDbPerSecond,
+      holdMs: options.holdMs,
+      clipHoldMs: options.clipHoldMs,
+      clipThreshold: options.clipThreshold,
+      rmsMs: options.rmsMs,
+      postIntervalMs: options.postIntervalMs ?? DEFAULT_POST_INTERVAL_MS,
+    },
+  }) as LevelMeterWorkletNode;
+
+  if (!shared) {
+    node.port.onmessage = (event: MessageEvent) => {
+      view.set(event.data as Float32Array);
+      readView();
+      notify();
+    };
+  }
+
+  // Today a dead processor is indistinguishable from a silent signal: the
+  // browser stops calling `process()` for good and the readings simply stop
+  // moving. Worth surfacing in both forms, and worth it even if tap mode had
+  // turned out to be impossible.
+  node.onprocessorerror = (event: Event) => {
+    error = true;
+    options.onError?.(event);
+  };
+
+  Object.defineProperty(node, "transport", {
+    value: shared ? "shared" : "message",
+    enumerable: true,
+  });
+
+  // One object, reused. `truePeak`, `momentary` and `shortTerm` read NaN
+  // rather than -Infinity while their measurement is off: "not measured" and
+  // "silent" are different answers and a UI has to be able to tell them apart.
+  const levels: Levels = {
+    get channelCount() {
+      return view[1];
+    },
+    get version() {
+      return version;
+    },
+    get momentary() {
+      return NaN;
+    },
+    get shortTerm() {
+      return NaN;
+    },
+    get error() {
+      return error;
+    },
+    peak: (channel) => toDb(view[slot(channel)]),
+    hold: (channel) => toDb(view[slot(channel) + 1]),
+    rms: (channel) => toDb(view[slot(channel) + 2]),
+    truePeak: () => NaN,
+    clipped: (channel) => ((view[2] >>> channel) & 1) === 1,
+    clearClip() {
+      node.port.postMessage({ type: "CLEAR_CLIP" });
+      // The processor clears its own copy too; this is so a reader looking
+      // before the next frame arrives sees the click it just made.
+      view[2] = 0;
+    },
+    snapshot() {
+      const count = view[1];
+      const each = (read: (channel: number) => number) =>
+        Array.from({ length: count }, (_, c) => read(c));
+      return {
+        channelCount: count,
+        peak: each(levels.peak),
+        hold: each(levels.hold),
+        rms: each(levels.rms),
+        truePeak: each(levels.truePeak),
+        clipped: Array.from({ length: count }, (_, c) => levels.clipped(c)),
+        momentary: levels.momentary,
+        shortTerm: levels.shortTerm,
+        version,
+      };
+    },
+  };
+
+  node.getLevels = () => {
+    if (shared) readView();
+    return levels;
+  };
+
+  node.getPeaks = () => {
+    if (shared) readView();
+    return peaks;
+  };
+
+  node.subscribe = (listener: LevelsListener) => {
+    listeners.add(listener);
+    if (listeners.size === 1) {
+      // From here, not from zero: a new subscriber is told about the next
+      // change, not about the one before it arrived.
+      notifiedVersion = version;
+      notifiedFrame = -1;
+      // The renderer's driver, shared. Under `"shared"` the tick is the only
+      // trigger there is - memory has no events - and under `"message"` it is
+      // what delivers anything a message had to coalesce.
+      stopTicking = onAnimationFrame(() => {
+        if (shared) readView();
+        notify();
+      });
+    }
+    let live = true;
+    return () => {
+      if (!live) return;
+      live = false;
+      listeners.delete(listener);
+      if (listeners.size === 0) {
+        stopTicking?.();
+        stopTicking = null;
+      }
+    };
+  };
+
+  // Set before `disposable`, which composes with whatever `dispose` it finds
+  // rather than replacing it. A disposed meter with a forgotten subscriber
+  // would otherwise keep an animation frame alive for the life of the page.
+  node.dispose = () => {
+    listeners.clear();
+    stopTicking?.();
+    stopTicking = null;
+  };
+
+  return node;
+}
 
 export const LevelMeter = Object.assign(
   (
     context: AudioContext,
     options: LevelMeterOptions = {},
-  ): LevelMeterWorkletNode => {
-    const maxChannels = resolveMaxChannels(options.maxChannels);
-    const length = levelsLength(maxChannels);
-
-    const shared = sharedBufferAvailable();
-    const levelsBuffer = shared
-      ? new SharedArrayBuffer(length * Float32Array.BYTES_PER_ELEMENT)
-      : undefined;
-    // One view, whichever transport wrote it: shared memory the audio thread is
-    // updating live, or the destination the posted copy lands in.
-    const view = levelsBuffer
-      ? new Float32Array(levelsBuffer)
-      : new Float32Array(length);
-
-    // The deprecated flat peak view, kept in step with the strided one.
-    const peaks = new Float32Array(maxChannels);
-    // What the view held when `version` was last bumped.
-    const previous = new Float32Array(length);
-
-    let version = 0;
-    let error = false;
-
-    // The one place on the main thread where the view becomes readable. Under
-    // `"message"` it runs when a frame arrives; under `"shared"` the memory is
-    // already live, so it runs when a reader asks. Everything derived from the
-    // view is derived here, so `subscribe` has somewhere to live.
-    const readView = () => {
-      // A page can only end up here with a mismatched bundle by registering two
-      // versions of the processor in one context, where the registrar's cache
-      // means the first one wins. `[0]` exists so that fails loudly instead of
-      // reading a stride that moved. 0 is "no block has run yet".
-      const layout = view[0];
-      if (layout !== 0 && layout !== LEVELS_LAYOUT_VERSION) {
-        throw Error(
-          `LevelMeter: the registered processor writes layout ${layout}, this build reads ${LEVELS_LAYOUT_VERSION}`,
-        );
-      }
-
-      let changed = false;
-      for (let i = 0; i < length; i++) {
-        if (previous[i] !== view[i]) {
-          previous[i] = view[i];
-          changed = true;
-        }
-      }
-      if (!changed) return;
-
-      version++;
-      for (let c = 0; c < maxChannels; c++)
-        peaks[c] = view[HEADER + c * STRIDE];
-    };
-
-    const slot = (channel: number) => HEADER + channel * STRIDE;
-
-    const listeners = new Set<LevelsListener>();
-    let stopTicking: (() => void) | null = null;
-    // The version and the frame of the most recent delivery. Together they are
-    // the whole rate policy: never twice for the same reading, never twice in
-    // one animation frame.
-    let notifiedVersion = 0;
-    let notifiedFrame = -1;
-
-    // Two things call this - a posted frame arriving, and the driver's tick -
-    // and neither needs to know about the other.
-    //
-    // Under `"message"` at the default 16 ms cadence a message is a frame, so a
-    // subscriber is notified as each one lands. Turn `postIntervalMs` down and
-    // the extra messages coalesce here rather than waking React four times
-    // between paints; the reading is never stale for more than a frame, because
-    // the tick delivers whatever the message could not.
-    const notify = () => {
-      if (listeners.size === 0 || version === notifiedVersion) return;
-      const frame = currentFrame();
-      if (frame === notifiedFrame) return;
-      notifiedFrame = frame;
-      notifiedVersion = version;
-      for (const listener of Array.from(listeners)) listener(levels);
-    };
-
-    // Hand-rolled rather than built with `createWorkletConstructor`: that helper
-    // exists to wire `AudioParam`s from a `ParamInput` map, and the meter has no
-    // parameters by design. What it does need is a `processorOptions` payload,
-    // which the helper does not carry. Not an oversight - there is nothing here
-    // for it to do.
-    const node = new AudioWorkletNode(context, "LevelMeterProcessor", {
-      numberOfInputs: 1,
-      numberOfOutputs: 1,
-      processorOptions: {
-        levelsBuffer,
-        maxChannels,
-        releaseDbPerSecond: options.releaseDbPerSecond,
-        holdMs: options.holdMs,
-        clipHoldMs: options.clipHoldMs,
-        clipThreshold: options.clipThreshold,
-        rmsMs: options.rmsMs,
-        postIntervalMs: options.postIntervalMs ?? DEFAULT_POST_INTERVAL_MS,
-      },
-    }) as LevelMeterWorkletNode;
-
-    if (!shared) {
-      node.port.onmessage = (event: MessageEvent) => {
-        view.set(event.data as Float32Array);
-        readView();
-        notify();
-      };
-    }
-
-    Object.defineProperty(node, "transport", {
-      value: shared ? "shared" : "message",
-      enumerable: true,
-    });
-
-    // One object, reused. `truePeak`, `momentary` and `shortTerm` read NaN
-    // rather than -Infinity while their measurement is off: "not measured" and
-    // "silent" are different answers and a UI has to be able to tell them apart.
-    const levels: Levels = {
-      get channelCount() {
-        return view[1];
-      },
-      get version() {
-        return version;
-      },
-      get momentary() {
-        return NaN;
-      },
-      get shortTerm() {
-        return NaN;
-      },
-      get error() {
-        return error;
-      },
-      peak: (channel) => toDb(view[slot(channel)]),
-      hold: (channel) => toDb(view[slot(channel) + 1]),
-      rms: (channel) => toDb(view[slot(channel) + 2]),
-      truePeak: () => NaN,
-      clipped: (channel) => ((view[2] >>> channel) & 1) === 1,
-      clearClip() {
-        node.port.postMessage({ type: "CLEAR_CLIP" });
-        // The processor clears its own copy too; this is so a reader looking
-        // before the next frame arrives sees the click it just made.
-        view[2] = 0;
-      },
-      snapshot() {
-        const count = view[1];
-        const each = (read: (channel: number) => number) =>
-          Array.from({ length: count }, (_, c) => read(c));
-        return {
-          channelCount: count,
-          peak: each(levels.peak),
-          hold: each(levels.hold),
-          rms: each(levels.rms),
-          truePeak: each(levels.truePeak),
-          clipped: Array.from({ length: count }, (_, c) => levels.clipped(c)),
-          momentary: levels.momentary,
-          shortTerm: levels.shortTerm,
-          version,
-        };
-      },
-    };
-
-    node.getLevels = () => {
-      if (shared) readView();
-      return levels;
-    };
-
-    node.getPeaks = () => {
-      if (shared) readView();
-      return peaks;
-    };
-
-    node.subscribe = (listener: LevelsListener) => {
-      listeners.add(listener);
-      if (listeners.size === 1) {
-        // From here, not from zero: a new subscriber is told about the next
-        // change, not about the one before it arrived.
-        notifiedVersion = version;
-        notifiedFrame = -1;
-        // The renderer's driver, shared. Under `"shared"` the tick is the only
-        // trigger there is - memory has no events - and under `"message"` it is
-        // what delivers anything a message had to coalesce.
-        stopTicking = onAnimationFrame(() => {
-          if (shared) readView();
-          notify();
-        });
-      }
-      let live = true;
-      return () => {
-        if (!live) return;
-        live = false;
-        listeners.delete(listener);
-        if (listeners.size === 0) {
-          stopTicking?.();
-          stopTicking = null;
-        }
-      };
-    };
-
-    // Set before `disposable`, which composes with whatever `dispose` it finds
-    // rather than replacing it. A disposed meter with a forgotten subscriber
-    // would otherwise keep an animation frame alive for the life of the page.
-    node.dispose = () => {
-      listeners.clear();
-      stopTicking?.();
-      stopTicking = null;
-    };
-
-    return disposable(node);
+  ): LevelMeterWorkletNode => disposable(createMeter(context, options, 1)),
+  {
+    /**
+     * Meter `source` without going in front of it.
+     *
+     * ```ts
+     * const meter = LevelMeter.tap(source); // adds an edge; changes nothing else
+     * meter.dispose(); // removes it
+     * ```
+     *
+     * A second outgoing edge is additive and reversible: whatever `source` was
+     * already connected to stays connected, and there is nothing downstream of
+     * the meter that a thrown processor could silence. Pass-through
+     * (`LevelMeter(ac)`) means owning the edge you are metering, knowing what
+     * it was connected to, taking it apart and putting it back on `dispose()`
+     * - reach for it only when you actually want the meter in the path.
+     *
+     * The node has `numberOfOutputs: 0`. Chrome renders such a node at the full
+     * block rate whether or not `source` reaches the destination; Firefox and
+     * Safari are unverified.
+     *
+     * The context comes from `source`, so there is nothing to pass. Registering
+     * the worklet first is still the caller's job in this release.
+     */
+    tap(
+      source: AudioNode,
+      options: LevelMeterOptions = {},
+    ): LevelMeterWorkletNode {
+      const node = createMeter(source.context, options, 0);
+      source.connect(node);
+      // Composed with the cascade, not replacing it: `disposable` takes the
+      // node down and this takes down the edge that made it a tap.
+      return disposable(node, [() => source.disconnect(node)]);
+    },
+    // No parameters: the meter is configured by options, not AudioParams.
+    descriptors: [] as readonly ParamDescriptor[],
   },
-  // No parameters: the meter is configured by options, not AudioParams.
-  { descriptors: [] as readonly ParamDescriptor[] },
 );
 
 export { Compound, disposable } from "./_worklet";

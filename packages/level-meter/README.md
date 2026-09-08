@@ -1,13 +1,13 @@
 # @synthlet/level-meter
 
-> A pass-through peak meter you can read from the main thread
+> A peak meter you can tap onto any node and read from the main thread
 
 Part of [Synthlet](https://github.com/danigb/synthlet).
 
-Insert it anywhere in a graph and it passes audio through untouched while
-tracking a peak, a hold marker and a clip latch per channel. Reading them from
-an animation frame is a typed-array read: shared memory where the page allows
-it, a posted frame where it does not, and the same numbers either way.
+Tap it onto any node in a graph — a second edge, changing nothing else — and it
+tracks a peak, a hold marker, an RMS and a clip latch per channel. Reading them
+from an animation frame is a typed-array read: shared memory where the page
+allows it, a posted frame where it does not, and the same numbers either way.
 
 `AnalyserNode` can do this, but it hands you a whole time-domain buffer to
 reduce yourself on every frame. This hands you the numbers.
@@ -32,8 +32,8 @@ import {
 const ac = new AudioContext();
 await registerLevelMeterWorklet(ac);
 
-const meter = LevelMeter(ac);
-source.connect(meter).connect(ac.destination);
+// A tap: adds an edge to `source` and changes nothing else.
+const meter = LevelMeter.tap(source);
 
 const ui = new LevelMeterUI({ minDb: -40, maxDb: 0 });
 ui.attach(document.querySelector("canvas"), meter);
@@ -44,6 +44,50 @@ resize handling. `ui.detach()` gives them back. Every meter on the page shares
 one `requestAnimationFrame`, so the eighth costs what the first did.
 
 Don't want a canvas? See [Build your own](#build-your-own).
+
+## Tap, or pass-through
+
+Two forms, and **`tap` is the one to reach for**.
+
+```ts
+const meter = LevelMeter.tap(source); // adds an edge; changes nothing else
+meter.dispose(); // removes it
+```
+
+A tap is a second _outgoing_ edge. It is additive and reversible: whatever
+`source` was already connected to stays connected, you do not need to know what
+that was, and there is nothing downstream of the meter for a thrown processor
+to silence. The context comes from `source`, so there is none to pass.
+
+```ts
+const meter = LevelMeter(ac); // pass-through: one input, one output
+source.connect(meter).connect(ac.destination);
+```
+
+Pass-through goes _in_ the path, so metering a connection means breaking it —
+`source.disconnect(dest)`, reconnect through the meter, and put it back on
+`dispose()`, which nothing helps you with. It is what the package has always
+done and it still works; reach for it only when you actually want the meter in
+the signal path.
+
+**Both forms report a dead processor.** If the processor throws, the browser
+stops calling it permanently and the readings freeze. `getLevels().error` says
+so, and an `onError` option is called with the event:
+
+```ts
+LevelMeter.tap(source, {
+  onError: (event) => console.warn("meter died", event),
+});
+```
+
+**On browser support.** A tap has `numberOfOutputs: 0` and nothing downstream,
+so whether it keeps being rendered is a browser behaviour rather than a
+guarantee. Measured in Chrome 152 on macOS, headless and headful: a zero-output
+node is called at the full block rate — 652 of an expected 652 blocks over 2 s —
+whether or not its source reaches the destination, and it sees the real signal.
+**Firefox and Safari are unverified.** If a browser turns out to prune such a
+node, the fallback is a zero-gain sink between the meter and the destination,
+and pass-through works everywhere today.
 
 ## Configuration
 
@@ -118,8 +162,7 @@ with a real minus sign: `formatDb(-Infinity)` is `"−∞"`.
 ```js
 import { LevelMeter, dbToUnit, formatDb } from "@synthlet/level-meter";
 
-const meter = LevelMeter(ac);
-source.connect(meter).connect(ac.destination);
+const meter = LevelMeter.tap(source);
 
 const container = document.querySelector("#meter");
 const bars = [];
