@@ -1,5 +1,11 @@
 import { frameListenerCount, isDriverRunning } from "./driver";
-import { dbToUnit, formatDb, LevelMeter, Levels } from "./index";
+import {
+  dbToUnit,
+  formatDb,
+  LevelMeter,
+  Levels,
+  registerLevelMeterWorklet,
+} from "./index";
 
 // The factory's own surface, not the processor's: what it validates, what it
 // sizes, and what it hands the audio thread. `AudioWorkletNode` is a stub, so
@@ -741,6 +747,65 @@ describe("LevelMeter", () => {
       });
     },
   );
+
+  // `createRegistrar` is the shared contract in `scripts/_worklet.ts`, copied
+  // into all 23 packages. It is exercised here because this is the package that
+  // made a cached failure matter: once `LevelMeter.tap` registers implicitly,
+  // nobody is watching the call that failed.
+  describe("registerLevelMeterWorklet", () => {
+    const workletContext = (addModule: jest.Mock) =>
+      ({ audioWorklet: { addModule } }) as unknown as AudioContext;
+
+    it("registers once per context, however many meters ask", async () => {
+      const addModule = jest.fn().mockResolvedValue(undefined);
+      const ac = workletContext(addModule);
+
+      await Promise.all([
+        registerLevelMeterWorklet(ac),
+        registerLevelMeterWorklet(ac),
+      ]);
+      await registerLevelMeterWorklet(ac);
+
+      expect(addModule).toHaveBeenCalledTimes(1);
+    });
+
+    // The promise was cached before it settled and never cleared, so one
+    // rejection - a CSP that blocks `blob:`, a closed context, a dev-server
+    // hiccup - made every later call on that context fail identically, forever.
+    it("retries after a rejection rather than caching it forever", async () => {
+      const addModule = jest
+        .fn()
+        .mockRejectedValueOnce(new Error("blocked by CSP"))
+        .mockResolvedValueOnce(undefined);
+      const ac = workletContext(addModule);
+
+      await expect(registerLevelMeterWorklet(ac)).rejects.toThrow(
+        "blocked by CSP",
+      );
+      await expect(registerLevelMeterWorklet(ac)).resolves.toBeUndefined();
+      expect(addModule).toHaveBeenCalledTimes(2);
+    });
+
+    it("still caches the success that follows a failure", async () => {
+      const addModule = jest
+        .fn()
+        .mockRejectedValueOnce(new Error("nope"))
+        .mockResolvedValue(undefined);
+      const ac = workletContext(addModule);
+
+      await expect(registerLevelMeterWorklet(ac)).rejects.toThrow();
+      await registerLevelMeterWorklet(ac);
+      await registerLevelMeterWorklet(ac);
+
+      expect(addModule).toHaveBeenCalledTimes(2);
+    });
+
+    it("says so where AudioWorklet does not exist", () => {
+      expect(() => registerLevelMeterWorklet({} as AudioContext)).toThrow(
+        /AudioWorklet/,
+      );
+    });
+  });
 
   describe("ballistics", () => {
     it("passes the options through to the processor", () => {

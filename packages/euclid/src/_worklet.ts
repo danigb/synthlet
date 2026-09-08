@@ -233,7 +233,19 @@ export function createRegistrar(processorName: string, processor: string) {
 
     const blob = new Blob([processor], { type: "application/javascript" });
     const url = URL.createObjectURL(blob);
-    const promise = context.audioWorklet.addModule(url);
+    // The promise is cached before it settles, so concurrent callers share one
+    // `addModule`. A rejection must not be cached with it: a CSP that blocks
+    // `blob:`, a context that was closed, a dev-server hiccup - any of them
+    // would otherwise make every later call on that context return the same
+    // failure forever, with no way to retry.
+    //
+    // That was tolerable while registration was an explicit call a developer
+    // could watch fail. It is not once registration is implicit, as it is
+    // behind `LevelMeter.tap`, where a cached failure is invisible.
+    const promise = context.audioWorklet.addModule(url).catch((error) => {
+      delete (context as any)[key];
+      throw error;
+    });
     (context as any)[key] = promise;
     return promise;
   };
