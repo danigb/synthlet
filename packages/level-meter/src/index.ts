@@ -149,6 +149,9 @@ export type LevelMeterWorkletNode = AudioWorkletNode & {
    * At most one call per animation frame, on either transport, and none at all
    * while nothing is changing. Subscribing is what starts the loop; the last
    * unsubscribe stops it.
+   *
+   * The reference is stable for the life of the node, so it can be handed
+   * straight to `useSyncExternalStore` without a `useCallback` around it.
    */
   subscribe(listener: LevelsListener): () => void;
   readonly transport: LevelMeterTransport;

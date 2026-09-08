@@ -586,7 +586,7 @@ describe("LevelMeter", () => {
       // --- README, verbatim ---
       function useLevels(meter: any) {
         useSyncExternalStore(
-          (onChange) => meter.subscribe(onChange),
+          meter.subscribe,
           () => meter.getLevels().version,
           () => 0,
         );

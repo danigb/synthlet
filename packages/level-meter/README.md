@@ -180,7 +180,7 @@ export function useLevels(meter: LevelMeterWorkletNode) {
   // do. The accessor is one reused object, so React could not diff it — but it
   // is also allocation-free, which is why it is what gets returned.
   useSyncExternalStore(
-    (onChange) => meter.subscribe(onChange),
+    meter.subscribe, // stable for the life of the node, so no useCallback
     () => meter.getLevels().version,
     () => 0, // server render: no meter, no readings
   );
