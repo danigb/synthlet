@@ -78,37 +78,150 @@ describe("LevelMeterProcessor", () => {
   });
 
   describe("attack", () => {
-    // Ticket 03: one one-pole serves as both attack and release, so a single
-    // full-scale sample reads -20 dB - and -20 dB is also the highest the meter
-    // ever gets over the whole decay. A kick drum reads 20 dB low.
-    it.failing(
-      "a single full-scale sample in a block reads 0 dB (ticket 03)",
-      () => {
+    it.each([0, 77, BLOCK - 1])(
+      "a single full-scale sample at index %i reads 0 dB",
+      (index) => {
         const meter = createMeter(Processor, { maxChannels: 1 });
-        runProcess(meter.processor, [spike(1)]);
-        expect(meter.peakDb(0)).toBeCloseTo(0, 2);
+        runProcess(meter.processor, [spike(1, index)]);
+        expect(meter.peakDb(0)).toBeCloseTo(0, 6);
       },
     );
+
+    it("reads exactly -Infinity for a silent channel, not a floor", () => {
+      const meter = createMeter(Processor, { maxChannels: 1 });
+      runProcess(meter.processor, [constant(0)], 10);
+      expect(meter.peakDb(0)).toBe(-Infinity);
+    });
+
+    it("flushes a decayed peak to exact zero rather than to a denormal", () => {
+      const meter = createMeter(Processor, { maxChannels: 1 });
+      runProcess(meter.processor, [constant(1)]);
+      // 8.7 dB/s takes 23 s to cross the -200 dB flush threshold.
+      runProcess(meter.processor, [constant(0)], blocksFor(30, SAMPLE_RATE));
+      expect(meter.peak(0)).toBe(0);
+      expect(meter.peakDb(0)).toBe(-Infinity);
+    });
   });
 
   describe("release", () => {
-    // Ticket 03: the coefficient is applied per *block*, so the fall rate is a
-    // different constant at every sample rate - 315, 343 and 686 dB/s - and all
-    // three are two orders of magnitude too fast.
-    it.failing(
-      "falls at the declared rate, and at the same rate at 44.1, 48 and 96 kHz (ticket 03)",
-      () => {
-        const measured = [44100, 48000, 96000].map((sampleRate) =>
-          measureFallRate(Processor, sampleRate),
-        );
+    it("falls at the declared rate, and at the same rate at 44.1, 48 and 96 kHz", () => {
+      const measured = [44100, 48000, 96000].map((sampleRate) =>
+        measureFallRate(Processor, sampleRate),
+      );
 
-        for (const rate of measured) {
-          expect(relativeError(rate, RELEASE_DB_PER_SECOND)).toBeLessThan(0.05);
-        }
-        const spread = Math.max(...measured) - Math.min(...measured);
-        expect(spread).toBeLessThan(0.05 * RELEASE_DB_PER_SECOND);
-      },
-    );
+      for (const rate of measured) {
+        expect(relativeError(rate, RELEASE_DB_PER_SECOND)).toBeLessThan(0.05);
+      }
+      const spread = Math.max(...measured) - Math.min(...measured);
+      expect(spread).toBeLessThan(0.05 * RELEASE_DB_PER_SECOND);
+    });
+
+    it("honours a releaseDbPerSecond of its own", () => {
+      const meter = createMeter(Processor, {
+        maxChannels: 1,
+        releaseDbPerSecond: 20,
+      });
+      runProcess(meter.processor, [constant(1)]);
+      const blocks = blocksFor(1, SAMPLE_RATE);
+      runProcess(meter.processor, [constant(0)], blocks);
+      const elapsed = (blocks * BLOCK) / SAMPLE_RATE;
+      expect(meter.peakDb(0)).toBeCloseTo(-20 * elapsed, 4);
+    });
+  });
+
+  describe("hold", () => {
+    // K-Meter holds for 10 s, which is right for a mastering meter and too long
+    // for a synth voice; 1500 ms is the package's own number.
+    const HOLD_MS = 1500;
+
+    it("parks the marker at the maximum for holdMs, then falls at the release rate", () => {
+      const meter = createMeter(Processor, { maxChannels: 1, holdMs: HOLD_MS });
+      runProcess(meter.processor, [constant(1)]);
+      expect(meter.holdDb(0)).toBeCloseTo(0, 6);
+
+      // Still parked just short of holdMs, while the peak underneath it has
+      // already fallen more than 10 dB.
+      runProcess(meter.processor, [constant(0)], blocksFor(1.4, SAMPLE_RATE));
+      expect(meter.holdDb(0)).toBeCloseTo(0, 6);
+      expect(meter.peakDb(0)).toBeLessThan(-10);
+
+      // And moving shortly after it.
+      runProcess(meter.processor, [constant(0)], blocksFor(0.4, SAMPLE_RATE));
+      expect(meter.holdDb(0)).toBeLessThan(-0.5);
+    });
+
+    it("falls at the same rate as the peak once the hold expires", () => {
+      const meter = createMeter(Processor, { maxChannels: 1, holdMs: HOLD_MS });
+      runProcess(meter.processor, [constant(1)]);
+      runProcess(meter.processor, [constant(0)], blocksFor(2, SAMPLE_RATE));
+      const start = meter.holdDb(0);
+
+      const blocks = blocksFor(2, SAMPLE_RATE);
+      runProcess(meter.processor, [constant(0)], blocks);
+      const rate = (start - meter.holdDb(0)) / ((blocks * BLOCK) / SAMPLE_RATE);
+
+      expect(relativeError(rate, RELEASE_DB_PER_SECOND)).toBeLessThan(0.05);
+    });
+
+    it("re-parks on a new maximum", () => {
+      const meter = createMeter(Processor, { maxChannels: 1, holdMs: HOLD_MS });
+      runProcess(meter.processor, [constant(0.5)]);
+      expect(meter.holdDb(0)).toBeCloseTo(dB(0.5), 5);
+      runProcess(meter.processor, [constant(1)]);
+      expect(meter.holdDb(0)).toBeCloseTo(0, 6);
+    });
+  });
+
+  describe("clip", () => {
+    it.each([1, -1, 1.5])("latches on a sample of %p", (value) => {
+      const meter = createMeter(Processor, { maxChannels: 1 });
+      expect(meter.clipped(0)).toBe(false);
+      runProcess(meter.processor, [spike(value)]);
+      expect(meter.clipped(0)).toBe(true);
+    });
+
+    it("does not latch just below the threshold", () => {
+      const meter = createMeter(Processor, { maxChannels: 1 });
+      runProcess(meter.processor, [spike(0.999)]);
+      expect(meter.clipped(0)).toBe(false);
+    });
+
+    it("latches per channel, not across the node", () => {
+      const meter = createMeter(Processor, { maxChannels: 2 });
+      runProcess(meter.processor, [spike(1), constant(0.5)]);
+      expect(meter.clipped(0)).toBe(true);
+      expect(meter.clipped(1)).toBe(false);
+    });
+
+    it("holds the latch for clipHoldMs and then releases it", () => {
+      const meter = createMeter(Processor, {
+        maxChannels: 1,
+        clipHoldMs: 1500,
+      });
+      runProcess(meter.processor, [spike(1)]);
+      runProcess(meter.processor, [constant(0)], blocksFor(1.4, SAMPLE_RATE));
+      expect(meter.clipped(0)).toBe(true);
+      runProcess(meter.processor, [constant(0)], blocksFor(0.2, SAMPLE_RATE));
+      expect(meter.clipped(0)).toBe(false);
+    });
+
+    it("clears on a CLEAR_CLIP message from the main thread", () => {
+      const meter = createMeter(Processor, { maxChannels: 1 });
+      runProcess(meter.processor, [spike(1)]);
+      expect(meter.clipped(0)).toBe(true);
+
+      meter.processor.port.onmessage({ data: { type: "CLEAR_CLIP" } });
+      expect(meter.clipped(0)).toBe(false);
+    });
+
+    it("honours a clipThreshold of its own", () => {
+      const meter = createMeter(Processor, {
+        maxChannels: 1,
+        clipThreshold: 0.5,
+      });
+      runProcess(meter.processor, [spike(0.6)]);
+      expect(meter.clipped(0)).toBe(true);
+    });
   });
 
   describe("silence", () => {
@@ -118,7 +231,7 @@ describe("LevelMeterProcessor", () => {
     it.failing(
       "keeps decaying while the input is disconnected (ticket 04)",
       () => {
-        const meter = createMeter(Processor, { maxChannels: 1, holdMs: 0 });
+        const meter = createMeter(Processor, { maxChannels: 1 });
         runProcess(meter.processor, [constant(1)]);
         const start = meter.peakDb(0);
 
@@ -208,8 +321,17 @@ function createMeter(Processor: any, options: Record<string, any> = {}) {
     processor,
     view,
     peak: (channel: number) => view[channel],
-    peakDb: (channel: number) => 20 * Math.log10(view[channel]),
+    peakDb: (channel: number) => dB(view[channel]),
+    // The hold marker and the clip latch are processor-internal until ticket 06
+    // gives the buffer a layout with room for them and an accessor over it.
+    hold: (channel: number) => processor.h[channel],
+    holdDb: (channel: number) => dB(processor.h[channel]),
+    clipped: (channel: number) => processor.cl[channel] > 0,
   };
+}
+
+function dB(magnitude: number) {
+  return 20 * Math.log10(magnitude);
 }
 
 function blocksFor(seconds: number, sampleRate: number) {
@@ -224,7 +346,7 @@ function relativeError(measured: number, expected: number) {
 // release alone.
 function measureFallRate(Processor: any, sampleRate: number) {
   setSampleRate(sampleRate);
-  const meter = createMeter(Processor, { maxChannels: 1, holdMs: 0 });
+  const meter = createMeter(Processor, { maxChannels: 1 });
   runProcess(meter.processor, [constant(1)]);
   const start = meter.peakDb(0);
 

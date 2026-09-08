@@ -14,8 +14,22 @@ export type LevelMeterWorkletNode = AudioWorkletNode & {
   getPeaks(): Float32Array;
 };
 
+// Ballistics are construction options, not `AudioParam`s. They are properties of
+// the instrument, fixed for its life - the same reasoning `lookahead-limiter`
+// gives for `lookaheadMs`. Making the package's first parameter out of a number
+// nobody modulates would cost a rate declaration and a `params.ts` for
+// `check:rates` to read, and buy nothing.
 export type LevelMeterOptions = {
+  /** Slots in the level buffer. Default 16. */
   maxChannels?: number;
+  /** Peak fall rate, in dB per second. Default 8.7 - K-Meter's 26 dB / 3 s. */
+  releaseDbPerSecond?: number;
+  /** How long the hold marker parks at a new maximum, in ms. Default 1500. */
+  holdMs?: number;
+  /** How long the clip latch stays lit, in ms. Default 1500. */
+  clipHoldMs?: number;
+  /** Linear magnitude that counts as a clip. Default 1, i.e. 0 dBFS. */
+  clipThreshold?: number;
 };
 
 export const LevelMeter = Object.assign(
@@ -38,6 +52,10 @@ export const LevelMeter = Object.assign(
       numberOfOutputs: 1,
       processorOptions: {
         peaksBuffer,
+        releaseDbPerSecond: options.releaseDbPerSecond,
+        holdMs: options.holdMs,
+        clipHoldMs: options.clipHoldMs,
+        clipThreshold: options.clipThreshold,
       },
     }) as LevelMeterWorkletNode;
 

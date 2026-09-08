@@ -1,18 +1,75 @@
+// The render quantum. `sampleRate` is a worklet global; the block size is not,
+// and the spec fixes it at 128.
+const BLOCK = 128;
+
+// Ballistics defaults, from K-Meter - an open-source implementation of Bob
+// Katz's published K-System spec, and the only *sourced* set of numbers found
+// for a digital peak meter:
+// https://github.com/mzuther/K-Meter/blob/master/Source/meter_ballistics.cpp
+//
+// Peak attack is instantaneous and peak release is 26 dB in 3 s = 8.7 dB/s. The
+// "20 dB in 1.7 s" figure that circulates in forums could not be traced to
+// IEC/TR 60268-18, which is paywalled and was not obtained, so it is not cited
+// here.
+//
+// Hold is K-Meter's one departure: it holds for 10 s, which is right for a
+// mastering meter and far too long for a synth voice.
+const DEFAULT_RELEASE_DB_PER_SECOND = 8.7;
+const DEFAULT_HOLD_MS = 1500;
+const DEFAULT_CLIP_HOLD_MS = 1500;
+const DEFAULT_CLIP_THRESHOLD = 1;
+
+// Below this the reading is zero, so `20*log10(peak)` prints -Infinity rather
+// than -200 dB and no UI has to special-case a floor that should not exist.
+// This is a correctness fix, not a performance one: V8's denormal penalty was
+// measured at 1.00x in the state-variable-filter audit, and claiming a speed
+// benefit that was measured not to exist would be wrong.
+const SILENCE = 1e-10;
+
 export class LevelMeterProcessor extends AudioWorkletProcessor {
-  peaks: Float32Array;
+  peaks: Float32Array; // per channel, linear magnitude, decaying
+  h: Float32Array; // per channel, the hold marker
+  ht: Int32Array; // per channel, blocks left before the hold marker falls
+  cl: Int32Array; // per channel, blocks left on the clip latch
   max: number;
+  d: number; // release, as a per-block multiplier
+  hb: number; // holdMs, in blocks
+  cb: number; // clipHoldMs, in blocks
+  ct: number; // clip threshold, linear
   r: boolean;
 
   constructor(options: AudioWorkletNodeOptions) {
     super();
     this.r = true;
-    const peaksBuffer = options.processorOptions.peaksBuffer;
-    this.peaks = new Float32Array(peaksBuffer);
+    const o = options.processorOptions ?? {};
+    this.peaks = new Float32Array(o.peaksBuffer);
     this.max = 8;
+
+    // Derived from `sampleRate`, once, at construction. A meter's fall rate is a
+    // property of the meter, not of the interface it happens to be running on:
+    // applying a fixed coefficient per block made the same audio meter
+    // differently at 44.1 and 96 kHz, by a factor of 2.2.
+    const blockSeconds = BLOCK / sampleRate;
+    const release = o.releaseDbPerSecond ?? DEFAULT_RELEASE_DB_PER_SECOND;
+    this.d = Math.pow(10, (-release * blockSeconds) / 20);
+    this.hb = Math.round((o.holdMs ?? DEFAULT_HOLD_MS) / 1000 / blockSeconds);
+    this.cb = Math.round(
+      (o.clipHoldMs ?? DEFAULT_CLIP_HOLD_MS) / 1000 / blockSeconds,
+    );
+    this.ct = o.clipThreshold ?? DEFAULT_CLIP_THRESHOLD;
+
+    const n = this.peaks.length;
+    this.h = new Float32Array(n);
+    this.ht = new Int32Array(n);
+    this.cl = new Int32Array(n);
+
     this.port.onmessage = (event) => {
       switch (event.data.type) {
         case "DISPOSE":
           this.r = false;
+          break;
+        case "CLEAR_CLIP":
+          this.cl.fill(0);
           break;
       }
     };
@@ -31,11 +88,38 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
     for (let channel = 0; channel < channels; channel++) {
       const chIn = input[channel];
       const chOut = output[channel];
-      let peak = 0;
+      let blockPeak = 0;
       for (let i = 0; i < chIn.length; i++) {
-        peak = Math.max(peak, Math.abs(chIn[i]));
+        const x = chIn[i] < 0 ? -chIn[i] : chIn[i];
+        if (x > blockPeak) blockPeak = x;
       }
-      this.peaks[channel] = this.peaks[channel] * 0.9 + peak * 0.1;
+
+      // Instant attack, exponential release. The attack falls out of the
+      // comparison and the release is one multiply.
+      let peak = this.peaks[channel] * this.d;
+      if (blockPeak > peak) peak = blockPeak;
+      if (peak < SILENCE) peak = 0;
+      this.peaks[channel] = peak;
+
+      // The hold marker is a running maximum, parked for `hb` blocks after it
+      // was last raised and then released at the same rate as the peak.
+      let hold = this.h[channel];
+      if (peak >= hold) {
+        hold = peak;
+        this.ht[channel] = this.hb;
+      } else if (this.ht[channel] > 0) {
+        this.ht[channel]--;
+      } else {
+        hold *= this.d;
+        if (hold < SILENCE) hold = 0;
+      }
+      this.h[channel] = hold;
+
+      // `blockPeak` is already the largest |x| in the block, so one compare
+      // says whether any sample in it reached the threshold.
+      if (blockPeak >= this.ct) this.cl[channel] = this.cb;
+      else if (this.cl[channel] > 0) this.cl[channel]--;
+
       chOut.set(chIn);
     }
     return this.r;
