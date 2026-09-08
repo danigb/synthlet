@@ -14,6 +14,15 @@ import {
   monoStopAll,
 } from "./mono";
 import { toFrequency, toMidi } from "./notes";
+import {
+  assertNoReservedParams,
+  Preset,
+  PresetBank,
+  presetNames,
+  PresetOptions,
+  RESERVED,
+  resolvePreset,
+} from "./presets";
 
 export {
   createNoteStack,
@@ -33,6 +42,22 @@ export type { Fanouts, ParamSpec } from "./fanout";
 export { createMonoState, monoStart, monoStop, monoStopAll } from "./mono";
 export type { MonoOptions, MonoState, MonoWrite } from "./mono";
 export { toFrequency, toMidi } from "./notes";
+export {
+  assertNoReservedParams,
+  fromDescriptor,
+  presetNames,
+  RESERVED,
+  resolvePreset,
+} from "./presets";
+export type {
+  Preset,
+  PresetBank,
+  PresetBankEntry,
+  PresetOptions,
+  PresetSchema,
+  ReservedKey,
+  ResolvedPreset,
+} from "./presets";
 
 /**
  * One voice: a node that ends the voice's signal path, plus the three
@@ -59,6 +84,8 @@ export type Voice = Disposable<AudioNode> & {
  * fan-out to hand `create`, and without `register` there is no `ready`.
  */
 export type VoiceDefinition<P extends string, V extends Voice = Voice> = {
+  /** Names the definition in a preset error message. */
+  name?: string;
   params: Record<P, ParamSpec>;
   /**
    * Build one voice, wiring the fan-out `inlets` into it. Called once per
@@ -67,8 +94,13 @@ export type VoiceDefinition<P extends string, V extends Voice = Voice> = {
   create: (context: BaseAudioContext, inlets: Record<P, AudioNode>) => V;
   /** Registers the voice's worklets. Registrars are cached per context. */
   register: (context: BaseAudioContext) => Promise<unknown>;
-  /** Named sounds, read by `setPreset`. */
-  presets?: Record<string, Partial<Record<P, number>>>;
+  /**
+   * Named sounds, read by `setPreset`. Each is flat - a value per parameter,
+   * plus any of the reserved keys (`glide`, `legato`, `priority`) - and typed
+   * against this definition's own `P`, so a typo in a factory preset is a
+   * build error rather than a runtime throw.
+   */
+  presets?: PresetBank<P>;
   /**
    * Whether a note already sounding reuses its voice. Default `true`. A
    * plucked string wants `false`: a repeated note is a second string.
@@ -92,9 +124,15 @@ export type NoteEvent = {
 /** Stops the note it came from, now or at `time`. */
 export type StopFn = (time?: number) => void;
 
-export type InstrumentOptions = {
+export type InstrumentOptions<P extends string = string> = {
   /** Default 8. */
   voices?: number;
+  /**
+   * The sound to load. A name from the definition's bank, or a preset object.
+   * Applied at `ready`, after the pool is built and before queued notes are
+   * flushed, so a note started before `ready` sounds with it.
+   */
+  preset?: string | Preset<P>;
   /** dB at construction. Default 0. */
   volume?: number;
   /** Default `StealMode.Protect`. */
@@ -142,6 +180,18 @@ export type InstrumentNode<
   hold: boolean;
   /** Portamento in seconds. The next note uses whatever it says. */
   glide: number;
+  /** The definition's bank, in declaration order. `[]` without one. */
+  presets: readonly string[];
+  /**
+   * Load a sound: one `setValueAtTime` per declared parameter, at `time` or
+   * at `currentTime`. A preset is complete, so the parameters it does not name
+   * are written with their declared defaults rather than left as they were.
+   *
+   * Before `ready` it is queued, in call order with the notes.
+   */
+  setPreset(preset: string | Preset<P>, options?: { time?: number }): void;
+  /** The sound as it stands, complete, ready to be stored as JSON. */
+  getPreset(name?: string): Preset<P>;
   start(event: NoteEvent): StopFn & { voice: V | null };
   stop(
     what?: number | string | { note?: number | string; time?: number },
@@ -185,8 +235,13 @@ function release(unit: ConnectedUnit) {
 export function Instrument<P extends string, V extends Voice = Voice>(
   context: BaseAudioContext,
   definition: VoiceDefinition<P, V>,
-  options: InstrumentOptions = {},
+  options: InstrumentOptions<P> = {},
 ): InstrumentNode<P, V> {
+  // The definition's schema is checked before anything is built: a parameter
+  // named after a reserved preset key is a programming error, and the earliest
+  // throw is the useful one.
+  assertNoReservedParams(definition);
+
   const size = options.voices ?? 8;
   const stealFade = options.stealFade ?? 0.005;
   const velocityToGain = definition.velocityToGain ?? midiVelocityToGain;
@@ -234,10 +289,18 @@ export function Instrument<P extends string, V extends Voice = Voice>(
   /** The last note each voice sounded, or -1. What glide ramps from. */
   const previous: number[] = [];
 
+  type QueuedNote = NoteEvent & {
+    note: number;
+    velocity: number;
+    time: number;
+  };
+  /** A `setPreset` that arrived early, queued in call order with the notes. */
+  type QueuedPreset = { preset: string | Preset<P>; at?: number };
+  const isPreset = (entry: QueuedNote | QueuedPreset): entry is QueuedPreset =>
+    "preset" in entry;
+
   /** Events that arrived before `ready`. `null` once the pool exists. */
-  let queued:
-    (NoteEvent & { note: number; velocity: number; time: number })[] | null =
-    [];
+  let queued: (QueuedNote | QueuedPreset)[] | null = [];
 
   /**
    * Pitch into one voice, glided from wherever that voice left off.
@@ -280,7 +343,10 @@ export function Instrument<P extends string, V extends Voice = Voice>(
         writeFrequency(0, write.note, write.time, write.glide);
       } else if (write.param === "velocity") {
         voice.velocity?.setValueAtTime(write.velocity / 127, write.time);
-        gains[0].gain.setValueAtTime(velocityToGain(write.velocity), write.time);
+        gains[0].gain.setValueAtTime(
+          velocityToGain(write.velocity),
+          write.time,
+        );
       } else {
         const at = write.justBefore
           ? write.time - 1 / context.sampleRate
@@ -428,7 +494,10 @@ export function Instrument<P extends string, V extends Voice = Voice>(
       // due before `at` still plays: it is not one of the notes being stopped.
       queued = queued.filter(
         (event) =>
-          event.time < at || (midi !== undefined && event.note !== midi),
+          // A queued preset is not a note and no `stop` form addresses one.
+          isPreset(event) ||
+          event.time < at ||
+          (midi !== undefined && event.note !== midi),
       );
       return;
     }
@@ -444,6 +513,58 @@ export function Instrument<P extends string, V extends Voice = Voice>(
       return;
     }
     noteOff(midi, at);
+  }
+
+  /**
+   * The reserved keys are instrument options, not parameters: they have no
+   * fan-out node and nothing to write to, so a preset carrying one sets the
+   * option instead. A lead sound *is* its glide.
+   */
+  function applyOptions(values: PresetOptions) {
+    if (values.glide !== undefined) glide = values.glide;
+    if (values.legato !== undefined) monoOptions.legato = values.legato;
+    if (values.priority !== undefined) monoOptions.priority = values.priority;
+  }
+
+  function applyPreset(preset: string | Preset<P>, time?: number) {
+    const resolved = resolvePreset(definition, preset);
+    const at = time ?? context.currentTime;
+    // Every declared parameter, every time: `resolvePreset` has already filled
+    // in the ones the preset did not name with their defaults.
+    for (const [key, value] of resolved.writes) {
+      params[key as P].setValueAtTime(value, at);
+    }
+    applyOptions(resolved.options);
+  }
+
+  function setPreset(
+    preset: string | Preset<P>,
+    presetOptions: { time?: number } = {},
+  ) {
+    if (queued) {
+      // Resolved now even though it is applied later, so a bad name throws at
+      // the call rather than inside `ready`, where nobody is listening.
+      resolvePreset(definition, preset);
+      queued.push({ preset, at: presetOptions.time });
+      return;
+    }
+    applyPreset(preset, presetOptions.time);
+  }
+
+  function getPreset(name = "untitled"): Preset<P> {
+    const values = {} as Partial<Record<P, number>>;
+    for (const key of Object.keys(definition.params) as P[]) {
+      // Before `ready` there are no inlets to read and the sound is still its
+      // declared defaults, which is what a round-trip should give back.
+      values[key] = params[key]?.value ?? definition.params[key].default;
+    }
+    return {
+      name,
+      params: values,
+      glide,
+      legato: monoOptions.legato,
+      priority: monoOptions.priority,
+    };
   }
 
   const node = disposable(out, owned) as InstrumentNode<P, V>;
@@ -478,7 +599,15 @@ export function Instrument<P extends string, V extends Voice = Voice>(
     Object.assign(node, { params, voices });
     const pending = queued!;
     queued = null;
+    // The sound before the notes: `options.preset` lands after the pool exists
+    // and before the queue is flushed, so a note started before `ready` sounds
+    // with the preset rather than with the definition's defaults.
+    if (options.preset !== undefined) applyPreset(options.preset);
     for (const event of pending) {
+      if (isPreset(event)) {
+        applyPreset(event.preset, event.at);
+        continue;
+      }
       // Late on arrival: dropped, silently, the way smplr drops one.
       if (event.time < context.currentTime) continue;
       schedule(event.note, event.velocity, event.time, event.duration);
@@ -491,6 +620,9 @@ export function Instrument<P extends string, V extends Voice = Voice>(
     volume: out.gain,
     params,
     voices,
+    presets: presetNames(definition),
+    setPreset,
+    getPreset,
     start,
     stop,
     dispose() {
