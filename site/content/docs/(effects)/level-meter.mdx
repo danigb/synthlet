@@ -1,35 +1,150 @@
 ---
 title: Level Meter
-description: A level meter
+description: Peak, RMS, true peak and loudness from any node in the graph
 package: level-meter
 ---
 
-Not an audio effect per se: a level meter that con be used to track output level meter.
+import LevelMeterExample from "../../../examples/LevelMeterExample";
 
-The level meter has two parts, one worklet that measures the signal:
+Not an effect: a meter. Attach it to any node in any Web Audio graph — synthlet's
+or not — and read peak, hold, clip, RMS and, if you ask for them, true peak and
+LUFS.
+
+<LevelMeterExample />
+
+## Tap a node
+
+`LevelMeter.tap(node)` adds a second outgoing edge from `node`. It does not go
+in front of anything, so whatever `node` was already connected to stays
+connected, and there is nothing downstream of the meter that a broken processor
+could silence.
 
 ```ts
 import { LevelMeter } from "synthlet";
 
-const levelMeter = LevelMeter(audioContext);
+const meter = LevelMeter.tap(osc);
 
-connect(levelMeter).connect(audioContext.destination);
+const levels = meter.getLevels();
+levels.peak(0); // dBFS, -Infinity for silence
+levels.rms(0);
+levels.clipped(0);
+
+meter.dispose(); // removes the edge
 ```
 
-And one UI component that displays the level:
+One line, and no `registerLevelMeterWorklet` call: the context comes from the
+node, and registration happens behind `meter.ready`. It returns synchronously
+and reads silence — `channelCount` 0, `-Infinity` everywhere — until the worklet
+is running, so a UI can be attached in the next line without awaiting anything.
+
+## Or put it in the path
+
+`LevelMeter(context)` is a pass-through: audio in, the same audio out. It is a
+native `GainNode` with a tap beside it, so the audio never waits for the worklet.
 
 ```ts
-import { LevelMeterUI } from "synthlet";
+import { LevelMeter } from "synthlet";
 
-const levelMeterUI = LevelMeterUI({
-  orientation: "horizontal",
-});
+const meter = LevelMeter(audioContext);
 
-levelMeterUI.setCanvas(htmlCanvasElement);
+osc.connect(meter).connect(audioContext.destination);
+```
 
-const numberOfChannels = 2;
+Prefer `tap` unless you actually want the meter in the signal path. Metering a
+connection should not mean breaking it.
 
-requestAnimationFrame(() => {
-  levelMeterUI.render(levelMeter.peaks, numberOfChannels);
+## Draw it
+
+`LevelMeterUI` is a canvas renderer. `attach` takes the animation frame, the
+`devicePixelRatio` sizing and the resize handling, and every attached meter on
+the page shares one `requestAnimationFrame`.
+
+```ts
+import { LevelMeter, LevelMeterUI } from "synthlet";
+
+const meter = LevelMeter.tap(osc);
+const ui = new LevelMeterUI({ minDb: -60, maxDb: 0 });
+
+ui.attach(document.querySelector("canvas"), meter);
+// ui.detach() when the canvas goes away
+```
+
+If the canvas is not the UI you want, `subscribe` is the same readings pushed at
+you, at most once per animation frame:
+
+```ts
+import { dbToUnit, formatDb } from "synthlet";
+
+const stop = meter.subscribe((levels) => {
+  bar.style.width = `${dbToUnit(levels.peak(0), -60, 0) * 100}%`;
+  label.textContent = formatDb(levels.peak(0), 1);
 });
 ```
+
+`subscribe` has the shape `useSyncExternalStore` and a Svelte store consume
+without adaptation, and the reference is stable for the life of the node. The
+example above the fold is a React hook in ten lines and a DOM meter in twenty;
+both are in the [package README](https://github.com/danigb/synthlet/tree/main/packages/level-meter).
+
+## What it measures
+
+Every reading is in dB and silence reads exactly `-Infinity`, not a floor.
+
+| Reading                   | Ballistics                                         |
+| ------------------------- | -------------------------------------------------- |
+| `peak(c)`                 | instant attack, 8.7 dB/s release                   |
+| `hold(c)`                 | the running maximum, parked 1500 ms, then 8.7 dB/s |
+| `rms(c)`                  | one-pole, 600 ms to 99 % of a step                 |
+| `clipped(c)`              | latched at 0 dBFS, held 1500 ms, `clearClip()`     |
+| `truePeak(c)`             | opt-in; `NaN` until you ask for it                 |
+| `momentary` / `shortTerm` | opt-in; `NaN` until you ask for it                 |
+
+The numbers are [K-Meter's](https://github.com/mzuther/K-Meter/blob/master/Source/meter_ballistics.cpp),
+an implementation of Bob Katz's published K-System spec, and all of them are
+derived from `sampleRate` — the same signal meters the same at 44.1, 48 and
+96 kHz. Every one is a construction option, not an `AudioParam`.
+
+The two expensive quantities are off by default:
+
+```ts
+const meter = LevelMeter.tap(bus, { truePeak: true, loudness: true });
+
+meter.getLevels().truePeak(0); // dBTP
+meter.getLevels().momentary; // LUFS
+```
+
+True peak costs about **10.6×** everything else in the meter put together, which
+is why it is asked for rather than assumed. Loudness is far cheaper. See the
+[metering and loudness guide](/docs/metering-and-loudness) for what each number
+means and when you want it.
+
+## Offline
+
+The same analyzer runs over a rendered buffer, with no context and no worklet:
+
+```ts
+import { analyzeAudioBuffer } from "synthlet/dsp";
+
+const analysis = await analyzeAudioBuffer(buffer, { truePeak: true });
+analysis.peak; // dBFS per channel, over the whole buffer
+analysis.truePeak; // dBTP per channel
+```
+
+It is chunked and yields between chunks, so a five-minute track does not freeze
+the tab. The recipe for hitting a delivery target is in the
+[guide](/docs/metering-and-loudness).
+
+## Transport
+
+The readings travel over a `SharedArrayBuffer` when the page is cross-origin
+isolated and over `postMessage` when it is not — about 20 floats at 60 Hz either
+way. The choice is feature-detected, the numbers are identical, and
+`meter.transport` says which is running. **Nothing needs COOP or COEP headers**;
+this page is a static export on GitHub Pages and the demo above is running.
+
+## See also
+
+- [Lookahead limiter](/docs/lookahead-limiter) — the meter's true-peak detector
+  is the limiter's, so the two agree about dBTP by construction.
+- [Metering and loudness](/docs/metering-and-loudness) — the guide: what to
+  measure, and the offline normalisation recipe.
