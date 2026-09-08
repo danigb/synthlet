@@ -58,6 +58,11 @@ kick.connect(ac.destination);
 `clock` is `a-rate`, so a step boundary lands on its own sample rather than at
 the top of the next render quantum.
 
+The ramp is read modulo 1 once `subdivision` has scaled it, so a `clock` of
+exactly 1 is the top of the ramp read as the bottom of the next step — the same
+phase as 0. `@synthlet/clock` emits `[0, 1)` and never reaches it, but `clock` is
+an ordinary `AudioParam` and anything can be patched in.
+
 The other five are structural: `steps`, `beats` and `rotation` are one
 Euclidean pattern, generated and cached when any of them changes — rotating a
 pattern is choosing a different pattern, not interpolating toward one. All three

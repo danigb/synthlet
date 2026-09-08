@@ -1,4 +1,4 @@
-import { createEuclid, euclid, GenerateFn } from "./dsp";
+import { createEuclid, euclid, GenerateFn, wrapPhase } from "./dsp";
 import { PARAMS } from "./params";
 
 /**
@@ -20,6 +20,10 @@ import { PARAMS } from "./params";
  * all of them an out-of-range index feeding a multiply, and a `NaN` reaching a
  * destination silences that branch of the graph for the lifetime of the context
  * - so nothing throws, nothing warns, and the audio dies.
+ *
+ * The third block is `wrapPhase` held against the subtraction loop it replaced,
+ * across the whole declared range of `clock` and `subdivision`, plus the one
+ * input where the two deliberately disagree.
  */
 
 /** One render quantum - the block size the processor is called with. */
@@ -292,6 +296,56 @@ describe("no way to emit NaN", () => {
       update(steps, beats, rotation);
       return render(generate, ramp(), 8 * 4);
     }
+  });
+});
+
+describe("wrapPhase", () => {
+  // Criterion 3 of the ticket: the new expression equals the one it replaced
+  // everywhere the old one was right, and disagrees only where the old one was
+  // wrong. Exact equality, not `toBeCloseTo`: for a scaled phase under 21 every
+  // intermediate `x - k` is exactly representable, so repeated subtraction and
+  // one subtraction of the floor give bit-identical doubles.
+  it("agrees with the subtraction loop it replaced, over the declared range", () => {
+    for (let subdivision = 1; subdivision <= 20; subdivision++) {
+      for (let i = 0; i < 1000; i++) {
+        const scaled = (i / 1000) * subdivision;
+        let loop = scaled;
+        while (loop > 1) loop -= 1;
+        // The one disagreement, and the point of the change: the loop stops at
+        // 1.0, which `gatePulse` reads as low.
+        expect(wrapPhase(scaled)).toBe(loop === 1 ? 0 : loop);
+      }
+    }
+  });
+
+  it("reads a phase of exactly 1 as the bottom of the next step", () => {
+    // Reachable for any `subdivision` from `clock: 1`, which is `clock`'s
+    // declared maximum. The loop left every one of these at 1.0.
+    for (let subdivision = 1; subdivision <= 20; subdivision++) {
+      expect(wrapPhase(1 * subdivision)).toBe(0);
+    }
+  });
+
+  it("stays in [0, 1) across the whole declared range", () => {
+    for (let subdivision = 1; subdivision <= 20; subdivision++) {
+      for (let i = 0; i <= 1000; i++) {
+        const p = wrapPhase((i / 1000) * subdivision);
+        expect(p).toBeGreaterThanOrEqual(0);
+        expect(p).toBeLessThan(1);
+      }
+    }
+  });
+
+  it("does not go silent on a clock pinned at 1", () => {
+    // The engine rather than the helper. A phase held at exactly 1 used to be
+    // the only value in `clock`'s declared range that produced no output:
+    // `gatePulse(1, w)` is 0, where a phase held anywhere in `[0, pulseWidth)`
+    // holds the gate high. It now reads as 0.
+    const [generate, update] = createEuclid();
+    update(1, 1, 0);
+    const output = new Float32Array(BLOCK);
+    generate(output, Float32Array.of(1), 1, 0.5, NO_RESET);
+    expect(Array.from(output).every((v) => v === 1)).toBe(true);
   });
 });
 

@@ -52,7 +52,8 @@ the wrong step.
 
 - `clock`: a clock that drives the rhythm. This is the clock's **phase ramp** -
   the `Clock` node itself, not `clock.gate` - because subdividing a clock means
-  multiplying its phase.
+  multiplying its phase. The scaled ramp is read modulo 1, so a value of exactly
+  1 is the same phase as 0.
 - `subdivision`: the subdivision of the clock
 
 #### Output

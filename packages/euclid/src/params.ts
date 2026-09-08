@@ -8,7 +8,7 @@ import type { ParamDescriptor } from "./_worklet";
 // `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
 // every `k-rate` below is an explicit opt-out and carries a reason for being
 // one. `scripts/_worklet.ts`, next to `ParamDescriptor`, has the two grounds.
-export const PARAMS: readonly ParamDescriptor[] = [
+export const PARAMS = [
   {
     // Not a gate: a phase ramp, rising 0 towards 1 over each beat, and the step
     // boundary is the wrap. a-rate so that boundary lands on its own sample
@@ -115,4 +115,4 @@ export const PARAMS: readonly ParamDescriptor[] = [
     maxValue: 1,
     automationRate: "a-rate",
   },
-];
+] as const satisfies readonly ParamDescriptor[];
