@@ -17,6 +17,7 @@ export type EuclidInputs = {
   beats?: ParamInput;
   subdivision?: ParamInput;
   rotation?: ParamInput;
+  spread?: ParamInput;
   pulseWidth?: ParamInput;
   reset?: ParamInput;
 };
@@ -27,13 +28,15 @@ export type EuclidWorkletNode = AudioWorkletNode & {
   beats: AudioParam;
   subdivision: AudioParam;
   rotation: AudioParam;
+  spread: AudioParam;
   pulseWidth: AudioParam;
   reset: AudioParam;
 };
 
 /**
- * A Euclidean rhythm node: the pattern's hits on its own output, and the steps
- * the hits leave empty on `.rests`.
+ * A Euclidean rhythm node: the pattern's hits on its own output, the steps the
+ * hits leave empty on `.rests`, and three more entry points into the same
+ * necklace on `.b`, `.c` and `.d`.
  *
  * The complement of a Euclidean rhythm is a Euclidean rhythm - Morrill 2022's
  * Lemma 3, "Euclidean rhythms distribute their rests in the same manner as
@@ -45,16 +48,52 @@ export type EuclidWorkletNode = AudioWorkletNode & {
  * E(k,n) is never E(n-k,n) at `rotation: 0`. A second `Euclid` at
  * `beats: steps - beats` plays the right necklace from the wrong place and
  * collides with the first instead of interlocking, and there is no rotation
- * value to compute by ear. Both outputs also share one step counter, one
- * pattern, one clamped `pulseWidth` and one `reset`, so they cannot skew.
+ * value to compute by ear. The hits and the rests also share one step counter,
+ * one pattern, one clamped `pulseWidth` and one `reset`, so they cannot skew -
+ * as does every other output on this node.
  *
  * ```ts
  * const rhythm = Euclid(ac, { clock, steps: 8, beats: 3 });
  * KickDrum(ac, { trigger: rhythm });        // x . . x . . x .
  * HiHatDrum(ac, { trigger: rhythm.rests }); // . x x . x x . x
  * ```
+ *
+ * **The fan.** One necklace is several named rhythms at once - Toussaint 2005
+ * keeps saying so - and they are the parts different players hold
+ * simultaneously rather than variations on one part. `spread` is that: channel
+ * `i` plays `Euclid.pattern(steps, beats, rotation + i * spread)`, so `.b`,
+ * `.c` and `.d` are the same pattern entered `spread`, `2 * spread` and
+ * `3 * spread` steps further in. All four come off one pattern array and one
+ * step counter, so they cannot drift and one `reset` aligns every one of them.
+ *
+ * `spread: 0` is unison and is the default, so nothing that does not set it
+ * changes what it plays; `spread === steps` is unison again, because `i *
+ * spread` is then 0 mod `steps`.
+ *
+ * ```ts
+ * const rhythm = Euclid(ac, { clock, subdivision: 4, ...EuclidRhythm.Samba, spread: 2 });
+ * KickDrum(ac,  { trigger: rhythm });    // x..x.x.x..x.x.x.  rotation 0, the samba necklace
+ * TomDrum(ac,   { trigger: rhythm.b });  // x.x..x.x.x..x.x.  rotation 2, the samba as played
+ * CongaDrum(ac, { trigger: rhythm.c });  // x.x.x..x.x.x..x.  rotation 4
+ * ClaveDrum(ac, { trigger: rhythm.d });  // x.x.x.x..x.x.x..  rotation 6, a clapping pattern from Ghana
+ * ```
+ *
+ * `.rests` is the complement of **channel a only**. That is not an omission:
+ * the complement commutes with rotation, so the complement of any other
+ * channel is one patched node away - same `steps`, `beats`, `clock` and
+ * `reset`, the rotation you want - where the *base* complement is reachable
+ * from no second node at all, which is why that one is an output.
+ *
+ * ```ts
+ * const rhythm = Euclid(ac, { clock, steps: 16, beats: 5, spread: 4, reset });
+ * // the rests of channel c (rotation 8), which this node does not emit:
+ * const cRests = Euclid(ac, { clock, steps: 16, beats: 5, rotation: 8, reset }).rests;
+ * ```
  */
-export type EuclidNode = CompoundNode<EuclidWorkletNode, { rests: GainNode }>;
+export type EuclidNode = CompoundNode<
+  EuclidWorkletNode,
+  { rests: GainNode; b: GainNode; c: GainNode; d: GainNode }
+>;
 
 const createEuclidNode = createWorkletConstructor<
   EuclidWorkletNode,
@@ -64,25 +103,46 @@ const createEuclidNode = createWorkletConstructor<
   descriptors: PARAMS,
   workletOptions: () => ({
     numberOfInputs: 0,
-    numberOfOutputs: 2,
+    numberOfOutputs: 5,
     // Declared explicitly rather than left to the spec's default, matching
-    // `Clock`: both outputs are one-channel gates and cannot be widened by a
+    // `Clock`: every output is a one-channel gate and cannot be widened by a
     // channel-count negotiation.
-    outputChannelCount: [1, 1],
+    outputChannelCount: [1, 1, 1, 1, 1],
   }),
 });
 
 export const Euclid = Object.assign(
   (context: AudioContext, inputs: EuclidInputs = {}): EuclidNode => {
     const node = createEuclidNode(context, inputs);
-    // A second output needs to be a node a caller can connect *from*, so it
-    // gets a gain to hang off - `Clock.gate` exactly. One idle gain per node
-    // whether or not anyone reads `.rests`; see `packages/clock/src/index.ts`
-    // for why that is deliberate, and euclid ticket 06 - which takes this
-    // module to five outputs - for when to revisit it.
+    // Each secondary output needs to be a node a caller can connect *from*, so
+    // each gets its own gain to hang off - `Clock.gate` exactly. Four idle
+    // gains per `Euclid` whether or not anyone reads them, the way `Clock`'s
+    // three are.
+    //
+    // `packages/clock/src/index.ts` asks that creating these lazily be
+    // reconsidered if a fifth output is ever proposed. It was, here, and the
+    // answer is no. `numberOfOutputs` is fixed when the `AudioWorkletNode` is
+    // constructed and cannot grow, and the spec hands `process()` a fully
+    // allocated, zero-filled buffer for every declared output whether it is
+    // connected or not - so the per-sample writes happen either way and all a
+    // lazy getter defers is three allocations at construction time, which is
+    // not where the cost is. Against that, a lazy `.b` would be a getter:
+    // absent from a debugger and from a spread of the node until it is
+    // touched, and a different kind of property from `.rests` on the same
+    // object. So the count grew, deliberately.
     const rests = new GainNode(context);
+    const b = new GainNode(context);
+    const c = new GainNode(context);
+    const d = new GainNode(context);
     node.connect(rests, 1);
-    return Compound({ output: node, owns: [rests], exposes: { rests } });
+    node.connect(b, 2);
+    node.connect(c, 3);
+    node.connect(d, 4);
+    return Compound({
+      output: node,
+      owns: [rests, b, c, d],
+      exposes: { rests, b, c, d },
+    });
   },
   {
     descriptors: PARAMS,

@@ -11,7 +11,7 @@ import { PARAMS } from "./params";
  *
  * The package's other tests drive the engine and the processor; this is the
  * first that looks at what `Euclid()` actually hands back, which is where the
- * second output either exists or does not.
+ * secondary outputs either exist or do not.
  */
 
 class ParamMock {
@@ -63,33 +63,56 @@ beforeAll(() => {
 });
 
 describe("Euclid", () => {
-  it("is a two-output source, one channel each", () => {
+  it("is a five-output source, one channel each", () => {
     const rhythm = created(Euclid(context));
 
     expect(rhythm.processorName).toBe("EuclidProcessor");
     expect(rhythm.options.numberOfInputs).toBe(0);
-    expect(rhythm.options.numberOfOutputs).toBe(2);
-    // Declared rather than negotiated: both outputs are one-channel gates, and
+    expect(rhythm.options.numberOfOutputs).toBe(5);
+    // Declared rather than negotiated: every output is a one-channel gate, and
     // a gate that got down-mixed would arrive at a trigger as an average.
-    expect(rhythm.options.outputChannelCount).toEqual([1, 1]);
+    expect(rhythm.options.outputChannelCount).toEqual([1, 1, 1, 1, 1]);
   });
 
-  it("publishes the second output as `.rests`", () => {
+  it("publishes the secondary outputs at the indices the engine writes", () => {
     const rhythm = Euclid(context);
 
-    expect(rhythm.rests).toBeInstanceOf(GainNodeMock);
-    // Output 1, permanently. Euclid ticket 06 appends 2, 3 and 4; nothing
-    // renumbers.
-    expect(created(rhythm).connect).toHaveBeenCalledWith(rhythm.rests, 1);
+    // The indices are asserted explicitly because an off-by-one here is silent
+    // in every other test in the package: the engine writes all five outputs
+    // correctly and only the wiring would be wrong, so nothing that drives
+    // `generate` directly could catch it.
+    //
+    // Output 1 is `.rests`, permanently - ticket 05 - and 2, 3, 4 are the fan.
+    // Nothing renumbers.
+    const outputs = [
+      ["rests", 1],
+      ["b", 2],
+      ["c", 3],
+      ["d", 4],
+    ] as const;
+    for (const [name, index] of outputs) {
+      expect(rhythm[name]).toBeInstanceOf(GainNodeMock);
+      expect(created(rhythm).connect).toHaveBeenCalledWith(rhythm[name], index);
+    }
+    // Channel a has no property: it is the node itself, the way `Clock`'s
+    // phase output is. An `.a` would be a circular self-reference on the
+    // object `Compound` is assembling.
+    expect((rhythm as unknown as Record<string, unknown>).a).toBeUndefined();
   });
 
   it("sets its parameters from its inputs, through the Compound wrap", () => {
-    const rhythm = Euclid(context, { steps: 16, beats: 5, pulseWidth: 0.25 });
+    const rhythm = Euclid(context, {
+      steps: 16,
+      beats: 5,
+      pulseWidth: 0.25,
+      spread: 4,
+    });
 
     expect(rhythm.steps.value).toBe(16);
     expect(rhythm.beats.value).toBe(5);
     expect(rhythm.pulseWidth.value).toBe(0.25);
     expect(rhythm.rotation.value).toBe(0);
+    expect(rhythm.spread.value).toBe(4);
   });
 
   it("still carries its descriptors after the Compound wrap", () => {
@@ -106,19 +129,22 @@ describe("Euclid", () => {
     expect(Euclid.pattern).toBe(euclidPattern);
   });
 
-  it("disposes the rests gain with the node", () => {
+  it("disposes all four gains with the node", () => {
     const rhythm = Euclid(context);
     rhythm.dispose();
 
     expect(created(rhythm).disconnect).toHaveBeenCalled();
-    expect(rhythm.rests.disconnect).toHaveBeenCalled();
     expect(created(rhythm).port.postMessage).toHaveBeenCalledWith({
       type: "DISPOSE",
     });
+    for (const gain of [rhythm.rests, rhythm.b, rhythm.c, rhythm.d])
+      expect(gain.disconnect).toHaveBeenCalled();
 
     // Idempotent - `Compound` composes with the cascade the factory already
-    // installed rather than replacing it, and neither runs twice.
+    // installed rather than replacing it, and neither runs twice. Asserted on
+    // every gain: `owns` is a list, and a gain left out of it would leak.
     rhythm.dispose();
-    expect(rhythm.rests.disconnect).toHaveBeenCalledTimes(1);
+    for (const gain of [rhythm.rests, rhythm.b, rhythm.c, rhythm.d])
+      expect(gain.disconnect).toHaveBeenCalledTimes(1);
   });
 });

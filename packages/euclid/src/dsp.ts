@@ -14,14 +14,17 @@ const RENDER_QUANTUM = 128;
  * change. It is a plain nested array with nothing from the worklet global
  * scope in it - `dsp.test.ts` builds one by hand.
  *
- * Output 0 is the hits and is not optional. Output 1 is the rests and may be
- * absent.
+ * Output 0 is the hits - channel a - and is not optional. Output 1 is the
+ * rests; 2, 3 and 4 are the fan's channels b, c and d. All four of 1-4 may be
+ * absent, which is the shape a test drives and never the shape the browser
+ * hands over.
  */
 export type GenerateFn = (
   outputs: Float32Array[][],
   clock: Float32Array,
   subdivision: number,
   pulseWidth: number,
+  spread: number,
   reset: Float32Array,
 ) => void;
 
@@ -37,11 +40,25 @@ export type ResetFn = () => void;
  * everything here is a pure function of the ramp it is handed. There is no
  * sample rate in this file and no state that a test cannot drive directly.
  *
- * Two outputs, and they are one step read twice. Output 0 is the pattern's
- * hits; output 1 is the steps the hits leave empty. There is one pattern, one
- * step counter, one clamped width and one `reset` behind both, so they
- * partition every step and cannot skew - which is the thing two nodes could
- * not have given.
+ * Five outputs, and they are one step read five times. Output 0 is the
+ * pattern's hits - channel a; output 1 is the steps the hits leave empty; and
+ * outputs 2, 3 and 4 are the fan - channels b, c and d, the same necklace
+ * entered at three other places. There is one pattern, one step counter, one
+ * clamped width, one `reset` and one `gatePulse` behind all five, so they
+ * cannot skew and one `reset` aligns every one of them - which is the thing
+ * five nodes could not have given.
+ *
+ * **The fan.** Channel `i` plays `Euclid.pattern(steps, beats, rotation + i *
+ * spread)`: four entry points into one necklace, off one array, at no extra
+ * state. `spread: 0` is unison and is the default, so a caller who never sets
+ * it plays exactly what this module played before the parameter existed.
+ *
+ * The sign is worth stating once, here, because it reads backwards in the
+ * code. `pattern` is *already* rotated by `rotation` when `generate()` gets
+ * it, and `rotate` is a RIGHT rotation - `rotate(a, r)[j] === a[(j - r) mod
+ * len]` - so moving a channel's entry point *forward* means reading the array
+ * *backward*. Hence `generate()`'s `back`, which is `-spread` reduced into
+ * `[0, n)`.
  *
  * Returns three functions rather than an object: `generate` renders a block,
  * `update` rebuilds the pattern when one of its three parameters moved, and
@@ -63,10 +80,6 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
   // state
   let prevClock = 0;
   let current = 0;
-  // The rests of the step `step()` last rendered. A second return value
-  // without a per-sample allocation: `step()` still returns the hit level, so
-  // output 0's path is unchanged, and `generate` reads this for output 1.
-  let restLevel = 0;
   const detectReset = createGateDetector();
 
   /**
@@ -105,30 +118,17 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
     // counter never recovers - so it does not advance at all when there is
     // nothing to advance through.
     if (gate && pattern.length) current = (current + 1) % pattern.length;
-    // The floor. `current` is in range by construction - `update` clamps it on
-    // every rebuild and the line above reduces it on every boundary - so this
-    // guards the one case that is not an index at all: the empty pattern, where
-    // `pattern[current]` is `undefined` and `undefined * 1` is `NaN`. Narrow on
-    // purpose. `pattern[current] || 0` would be cheaper and would also swallow
-    // an out-of-range index, which is a bug that should stay loud.
-    const hit = pattern.length ? pattern[current] : 0;
-    // One `gatePulse` call, shared. That is what makes the two outputs the
-    // same pulse rather than two pulses that happen to agree.
-    const pulse = gatePulse(currentClock, pulseWidth);
-    // Lemma 3 (Morrill 2022): the complement of a Euclidean rhythm is a
-    // Euclidean rhythm - E(n-k,n), at some rotation. That is the *proof* the
-    // second output is a rhythm worth having, not the recipe: the recipe is
-    // `1 - hit`, and it needs no rotation arithmetic at all because `pattern`
-    // is already rotated when it gets here.
+    // One `gatePulse` call per sample, returned rather than applied. Every
+    // output is this pulse times a 0 or a 1 read out of one array at one of
+    // five offsets from one counter - which is what "the outputs cannot skew"
+    // means, mechanically.
     //
-    // Same step, same pulse, same sample, so the two outputs cannot skew.
-    //
-    // `pattern.length ?` is not decoration: on the empty pattern `hit` is 0
-    // and `1 - hit` is 1, so without it `steps: 0` would silence the hits and
-    // fire the rests on every step - the exact opposite of "a pattern with no
-    // steps has nothing to play".
-    restLevel = pattern.length ? (1 - hit) * pulse : 0;
-    return hit * pulse;
+    // `generate` does the reads because it is in this closure and can see
+    // `pattern` and `current`. Five levels returned from here would be five
+    // closure variables, and ticket 05's single `restLevel` does not
+    // generalise - so it is gone, and the closure holds one variable *fewer*
+    // than it did with two outputs.
+    return gatePulse(currentClock, pulseWidth);
   }
 
   function generate(
@@ -136,16 +136,71 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
     clock: Float32Array,
     subdivision: number,
     pulseWidth: number,
+    spread: number,
     resetIn: Float32Array,
   ) {
     const output = outputs[0][0];
     const restsOut = outputs[1]?.[0];
-    // Output 1 is always connected in the browser - `index.ts` hangs a
-    // GainNode off it whether or not the caller ever touches `.rests` - so
-    // this guard is what lets a test drive the engine with one buffer, not a
-    // saving anyone pays for. Measured: the second write is +0.22 us on a
-    // 2667 us block.
+    const bOut = outputs[2]?.[0];
+    const cOut = outputs[3]?.[0];
+    const dOut = outputs[4]?.[0];
+    // All five outputs are always connected in the browser - `index.ts` hangs
+    // a GainNode off each of 1-4 whether or not the caller touches them, and
+    // the spec hands `process()` a zero-filled buffer for every declared
+    // output regardless - so these guards are what let a test drive the engine
+    // with one buffer, not a saving anyone pays for. See the README, which
+    // says the same thing.
     const wantRests = restsOut !== undefined;
+    const wantB = bOut !== undefined;
+    const wantC = cOut !== undefined;
+    const wantD = dOut !== undefined;
+
+    // `pattern` cannot change inside a block - `update()` runs once per block,
+    // before this, and `reset()` does not change the length - so `n` hoists.
+    const n = pattern.length;
+    // Channel `i` is the pattern at `rotation + i * spread`. `pattern` is
+    // already rotated by `rotation` when it gets here, and `rotate` is a RIGHT
+    // rotation - `rotate(a, r)[j] === a[(j - r) mod len]` - so rotating the
+    // entry point *forward* means reading the array *backward*. Hence the
+    // negation: `back` is `-spread` reduced into `[0, n)`, and channel `i`
+    // reads `(current + i * back) mod n`.
+    //
+    // The other sign is self-consistent and is what the ticket's prose says,
+    // and it fans the other way: channel `i` would be `rotation - i * spread`,
+    // so `{rotation: 0, spread: 2}` on E(7,16) would give 0, 14, 12, 10 rather
+    // than 0, 2, 4, 6 - and the README's table of Toussaint's played variants
+    // counts in positive rotations. The fan runs the way the documentation
+    // counts.
+    //
+    // `spread` is a count off an AudioParam, so it is a float, and
+    // `pattern[3.5]` is `undefined` while `undefined * pulse` is NaN - the
+    // same shape as the three NaN paths ticket 02 closed. Floored here rather
+    // than in `update()` because the fan rebuilds nothing: `spread` never
+    // reaches `update()`, and if it ever does, the design drifted.
+    //
+    // `Number.isFinite` because `Infinity % n` and `NaN % n` are both NaN. An
+    // AudioParam clamps to the declared range so neither should arrive - and
+    // `clock` declares a range too, and ticket 02 still had to guard it.
+    //
+    // k-rate, so this is three integers per block and the per-sample cost is
+    // one add and one modulo per channel. `current` and each `i * back` are
+    // both below `n`, so the sum is below `2n` and one `%` reduces it.
+    //
+    // Written `(n - (s % n)) % n` and not the more obvious `((-s % n) + n) % n`
+    // because the latter evaluates `-0` whenever `s` is a multiple of `n` -
+    // `-0 % 16` is `-0` - and `-0` is a double rather than a Smi, so V8 gives
+    // the whole expression double type feedback and the per-sample `%` in the
+    // loop below stops being integer arithmetic. Measured: the `-0` form costs
+    // 2.30 us/block against 1.65 at exactly the settings where `s % n === 0`,
+    // and flat 1.65 either side of them. Those settings are the unison ones -
+    // `spread: 0` is one of them, and it is the **default** - so the obvious
+    // form put a 40% penalty on the path every existing caller takes. The two
+    // are numerically identical over `n` 1…64 and `s` -200…200, verified.
+    const s = Math.floor(spread);
+    const back = n && Number.isFinite(s) ? (n - (s % n)) % n : 0;
+    const back2 = n ? (2 * back) % n : 0;
+    const back3 = n ? (3 * back) % n : 0;
+
     // The house a-rate check, hoisted. An unautomated `clock` arrives as one
     // value and the whole block is one step of the ramp, which is what this
     // did before and costs the same. `reset` is read the same way, and its
@@ -155,15 +210,49 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
       const width = clampWidth(pulseWidth, stepIncrement(clock) * subdivision);
       for (let i = 0; i < output.length; i++) {
         if (detectReset(rRate ? resetIn[i] : resetIn[0]) === true) reset();
-        output[i] = step(clock[i], subdivision, width);
-        if (wantRests) restsOut![i] = restLevel;
+        const pulse = step(clock[i], subdivision, width);
+        // The floor. `current` is in range by construction - `update` clamps it
+        // on every rebuild and `step` reduces it on every boundary - so `n ?`
+        // guards the one case that is not an index at all: the empty pattern,
+        // where `pattern[current]` is `undefined` and `undefined * 1` is `NaN`.
+        // Narrow on purpose. `pattern[current] || 0` would be cheaper and would
+        // also swallow an out-of-range index, which is a bug that should stay
+        // loud. `steps: 0` is silence on all five outputs.
+        const hit = n ? pattern[current] : 0;
+        output[i] = hit * pulse;
+        // Lemma 3 (Morrill 2022): the complement of a Euclidean rhythm is a
+        // Euclidean rhythm - E(n-k,n), at some rotation. That is the *proof*
+        // output 1 is a rhythm worth having, not the recipe: the recipe is
+        // `1 - hit`, and it needs no rotation arithmetic at all because
+        // `pattern` is already rotated when it gets here.
+        //
+        // `n ?` is not decoration here either: on the empty pattern `hit` is 0
+        // and `1 - hit` is 1, so without it `steps: 0` would silence the hits
+        // and fire the rests on every step.
+        //
+        // The rests are the complement of **channel a only**, read at
+        // `current` and unfanned. The complement of any other channel is one
+        // patched node away - same `steps`, `beats`, `clock` and `reset`, the
+        // rotation you want - because the complement commutes with rotation;
+        // the *base* complement is the one that cannot be patched, which is
+        // why it is an output and these are not.
+        if (wantRests) restsOut![i] = n ? (1 - hit) * pulse : 0;
+        if (wantB) bOut![i] = n ? pattern[(current + back) % n] * pulse : 0;
+        if (wantC) cOut![i] = n ? pattern[(current + back2) % n] * pulse : 0;
+        if (wantD) dOut![i] = n ? pattern[(current + back3) % n] * pulse : 0;
       }
     } else {
       // No increment to read and no within-block gate either: the whole block
-      // is one value. The clamp has nothing to work with and stands aside.
+      // is one value, on every output. The clamp has nothing to work with and
+      // stands aside.
       if (detectReset(resetIn[0]) === true) reset();
-      output.fill(step(clock[0], subdivision, pulseWidth));
-      if (wantRests) restsOut!.fill(restLevel);
+      const pulse = step(clock[0], subdivision, pulseWidth);
+      const hit = n ? pattern[current] : 0;
+      output.fill(hit * pulse);
+      if (wantRests) restsOut!.fill(n ? (1 - hit) * pulse : 0);
+      if (wantB) bOut!.fill(n ? pattern[(current + back) % n] * pulse : 0);
+      if (wantC) cOut!.fill(n ? pattern[(current + back2) % n] * pulse : 0);
+      if (wantD) dOut!.fill(n ? pattern[(current + back3) % n] * pulse : 0);
     }
   }
 

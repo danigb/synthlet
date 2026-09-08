@@ -58,6 +58,9 @@ const CYCLE = 4 * BLOCK;
  * it, because every value below it is reachable from a knob. */
 const MAX = 100;
 
+/** How many outputs the node declares: hits, rests, and the fan's b, c and d. */
+const OUTPUTS = 5;
+
 describe("euclid", () => {
   it("generates E(3, 8)", () => {
     // Three onsets over eight steps - the tresillo, and the one Euclidean
@@ -210,18 +213,25 @@ describe("no way to emit NaN", () => {
           for (const subdivision of SUBDIVISIONS) {
             const [generate, update] = createEuclid();
             update(steps, beats, rotation);
-            const out = render(generate, ramp(), 200, { subdivision });
+            const out = render(generate, ramp(), 200, {
+              subdivision,
+              spread: rotation,
+            });
             checked += out.length;
-            // Both outputs: `render` fills the rests buffer too, so the sweep
-            // protects the whole surface rather than half of it.
-            if (!out.rests.every(Number.isFinite))
-              broken.push(
-                `E(${beats},${steps}) rot ${rotation} /${subdivision} rests`,
-              );
-            if (!out.every(Number.isFinite))
-              broken.push(
-                `E(${beats},${steps}) rot ${rotation} /${subdivision}`,
-              );
+            // Every output: `render` fills all five buffers, so the sweep
+            // protects the whole surface rather than a fifth of it. `spread`
+            // is swept too - it is a fourth way to index out of the pattern.
+            for (const [name, channel] of [
+              ["hits", out.hits],
+              ["rests", out.rests],
+              ["b", out.b],
+              ["c", out.c],
+              ["d", out.d],
+            ] as const)
+              if (!channel.every(Number.isFinite))
+                broken.push(
+                  `E(${beats},${steps}) rot ${rotation} /${subdivision} ${name}`,
+                );
           }
 
     expect(broken).toEqual([]);
@@ -240,9 +250,12 @@ describe("no way to emit NaN", () => {
         for (const rotation of [0, 7]) {
           const [generate, update] = createEuclid();
           update(steps, beats, rotation);
-          const out = render(generate, ramp(), 20, { reset: resetting });
-          expect(out.every(Number.isFinite)).toBe(true);
-          expect(out.rests.every(Number.isFinite)).toBe(true);
+          const out = render(generate, ramp(), 20, {
+            reset: resetting,
+            spread: 3,
+          });
+          for (const channel of [out.hits, out.rests, out.b, out.c, out.d])
+            expect(channel.every(Number.isFinite)).toBe(true);
         }
   });
 
@@ -309,7 +322,7 @@ describe("no way to emit NaN", () => {
     kUpdate(0, 0, 0);
     const out = new Float32Array(BLOCK);
     for (let b = 0; b < 8; b++) {
-      kGenerate([[out]], Float32Array.of((b % 4) / 4), 1, 0.5, NO_RESET);
+      kGenerate([[out]], Float32Array.of((b % 4) / 4), 1, 0.5, 0, NO_RESET);
       expect(Array.from(out).every((v) => v === 0)).toBe(true);
     }
   });
@@ -499,6 +512,187 @@ describe("the rests", () => {
   });
 });
 
+describe("the fan", () => {
+  // Criterion 2, and the whole design in one assertion. `Euclid.pattern` is the
+  // oracle ticket 04 exists to provide.
+  //
+  // Note the SIGN. `rotate` is a right rotation, so moving a channel's entry
+  // point *forward* means reading the pattern array *backward*: the engine
+  // reads `(current - i * spread) mod n`. The ticket's prose says the read is
+  // `+` and its four illustrative strings follow the prose; both describe the
+  // other fan, the one that runs 0, 14, 12, 10 where the README's table of
+  // Toussaint's played variants counts 0, 2, 4, 6. This is the sign that
+  // agrees with the documentation, and it is the ticket's own criterion 2.
+  it("plays `Euclid.pattern(steps, beats, rotation + i * spread)` on channel i", () => {
+    const settings: [number, number][] = [
+      [16, 5],
+      [16, 7],
+      [16, 9],
+      [8, 3],
+      [8, 5],
+      [12, 7],
+      [5, 2],
+      [9, 4],
+      [24, 13],
+      [8, 0],
+      [8, 8],
+    ];
+    const wrong: string[] = [];
+    let checked = 0;
+    for (const [steps, beats] of settings)
+      for (const rotation of [0, 3, 12])
+        for (const spread of [0, 1, 2, 4, 5, 8, 16, 100]) {
+          const played = renderChannels(steps, beats, rotation, spread);
+          for (let i = 0; i < 4; i++) {
+            checked++;
+            const expected = euclidPattern(steps, beats, rotation + i * spread);
+            if (played[i].join("") !== expected.join(""))
+              wrong.push(
+                `E(${beats},${steps})+${rotation} spread ${spread} ch ${"abcd"[i]}: ` +
+                  `${played[i].join("")} != ${expected.join("")}`,
+              );
+          }
+        }
+    expect(wrong).toEqual([]);
+    // A sweep that renders nothing passes the above.
+    expect(checked).toBe(11 * 3 * 8 * 4);
+  });
+
+  // Criterion 1. `spread: 0` is the default, so this is also the statement
+  // that nothing which does not set the parameter changed.
+  it("is unison at `spread: 0`, and again at `spread === steps`", () => {
+    for (const [steps, beats, rotation] of [
+      [16, 5, 0],
+      [8, 3, 5],
+      [12, 7, 3],
+    ]) {
+      const fan = renderChannels(steps, beats, rotation, 0);
+      expect(fan.slice(1)).toEqual([fan[0], fan[0], fan[0]]);
+      // And `spread === steps` is the same thing, because `i * spread` is then
+      // 0 mod `steps` - a consequence of the arithmetic, not a special case,
+      // which is why the range needs no upper bound below `rotation`'s.
+      expect(renderChannels(steps, beats, rotation, steps)).toEqual(fan);
+      expect(renderChannels(steps, beats, rotation, 2 * steps)).toEqual(fan);
+    }
+  });
+
+  // Criterion 6, at the engine: the channel-a path does not depend on how many
+  // buffers came with it.
+  it("leaves channel a identical however many outputs are connected", () => {
+    const all = renderChannels(16, 5, 3, 7, OUTPUTS)[0];
+    for (const buffers of [1, 2, 3, 4, 5])
+      expect(renderChannels(16, 5, 3, 7, buffers)[0]).toEqual(all);
+  });
+
+  // Criterion 3: one reset, one sample, all five outputs.
+  it("re-aligns every output on the same sample", () => {
+    const resetting = new Float32Array(BLOCK);
+    resetting.fill(1, 40, 80);
+    const [generate, update] = createEuclid();
+    update(8, 3, 0);
+    const clock = ramp();
+    // A whole cycle first, so the reset arrives mid-pattern and re-aligning is
+    // visible rather than a no-op.
+    render(generate, clock, 4, { spread: 3 });
+    const first = render(generate, clock, 1, {
+      spread: 3,
+      reset: resetting,
+    });
+    const rest = render(generate, clock, 8 * 4, { spread: 3 });
+
+    // Sample 40 is the reset's own sample, and `reset()` arms that very read as
+    // a boundary, so step 0 of the pattern starts there - on every output at
+    // once. E(3,8) is `x..x..x.`; at `spread: 3` the four channels are
+    // rotations 0, 3, 6 and 9(=1), whose step 0 is 1, 1, 1 and 0.
+    const at = (channel: number[], i: number) => (channel[i] > 0 ? 1 : 0);
+    const channels = [
+      first.hits.concat(rest.hits),
+      first.b.concat(rest.b),
+      first.c.concat(rest.c),
+      first.d.concat(rest.d),
+    ];
+    for (let i = 0; i < 4; i++)
+      expect(at(channels[i], 40)).toBe(euclidPattern(8, 3, i * 3)[0]);
+    // The rests are channel a's complement on that same sample.
+    expect(at(first.rests.concat(rest.rests), 40)).toBe(0);
+
+    // And every later step is still shared: each channel is its own pattern
+    // read from the same counter, 40 samples into each step.
+    for (let step = 1; step < 8; step++)
+      for (let i = 0; i < 4; i++)
+        expect(at(channels[i], 40 + step * CYCLE)).toBe(
+          euclidPattern(8, 3, i * 3)[step],
+        );
+  });
+
+  // Criterion 5, and the guard that keeps it honest.
+  it("tiles the cycle at `steps: 16, beats: 5, spread: 4` - and not in general", () => {
+    // Every step filled, none struck by more than two of the four. That is
+    // hocket, and it is the case *for* the feature.
+    expect(profile(16, 5, 0, 4)).toEqual([0, 12, 4, 0, 0]);
+    // The drum-machine profile it is contrasted with: four independent `beats`
+    // over one cycle. One silent step, and one where all four coincide.
+    expect(independentProfile(16, [4, 5, 7, 9])).toEqual([1, 8, 5, 1, 1]);
+    // And the honesty guard. **Tiling is a property of this setting, not of
+    // `spread`**: at spread 3 the same pattern leaves eight of sixteen steps
+    // silent and strikes two of them with all four voices - a worse profile
+    // than the independent-`beats` row it is being contrasted with. Of the
+    // sixteen spreads on E(5,16), four tile and one is unison. Nothing in the
+    // README or the mdx may generalise this claim past its setting.
+    expect(profile(16, 5, 0, 3)).toEqual([8, 2, 2, 2, 2]);
+    expect(profile(16, 5, 0, 0)).toEqual([11, 0, 0, 0, 5]);
+  });
+
+  // The musical case, and the reason the sign is what it is: the fan has to run
+  // in the same direction the README's played-variant table counts in.
+  it("puts Toussaint's named variants on the fan at `Samba, spread: 2`", () => {
+    const fan = renderChannels(16, 7, 0, 2);
+    // E(7,16) at rotations 0, 2, 4 and 6. Three of the four are named in the
+    // paper, and the strings are the README's own.
+    expect(
+      fan.map((channel) => channel.map((v) => (v ? "x" : ".")).join("")),
+    ).toEqual([
+      "x..x.x.x..x.x.x.", // the samba necklace
+      "x.x..x.x.x..x.x.", // the samba as played, started on the last onset
+      "x.x.x..x.x.x..x.",
+      "x.x.x.x..x.x.x..", // a clapping pattern from Ghana, started on the fifth onset
+    ]);
+  });
+
+  // `spread` is a count, like `steps`, `beats` and `rotation`, and it is the
+  // only one that does not go through `update()`'s flooring.
+  it("floors `spread`, and emits no NaN at any value of it", () => {
+    expect(renderChannels(16, 5, 0, 4.9)).toEqual(renderChannels(16, 5, 0, 4));
+    expect(renderChannels(16, 5, 0, 0.9)).toEqual(renderChannels(16, 5, 0, 0));
+
+    // `pattern[3.5]` is `undefined` and `undefined * pulse` is NaN; so is
+    // `Infinity % n`, and so is `NaN % n`. None of them may reach an output.
+    for (const [steps, beats, spread] of [
+      [0, 0, 4],
+      [8, 3, NaN],
+      [8, 3, Infinity],
+      [8, 3, -Infinity],
+      [8, 3, -5],
+      [8, 3, 2.7],
+      [0, 0, NaN],
+      [0, 0, Infinity],
+    ]) {
+      const out = renderRaw(steps, beats, 0, spread);
+      for (const channel of [out.hits, out.rests, out.b, out.c, out.d])
+        expect(channel.every(Number.isFinite)).toBe(true);
+    }
+  });
+
+  // `steps: 0` is silence on all five, not just on the two ticket 05 guarded.
+  it("is silent on every output at `steps: 0`", () => {
+    for (const spread of [0, 1, 4, 100]) {
+      const out = renderRaw(0, 0, 0, spread);
+      for (const channel of [out.hits, out.rests, out.b, out.c, out.d])
+        expect(channel.every((v) => v === 0)).toBe(true);
+    }
+  });
+});
+
 describe("wrapPhase", () => {
   // Criterion 3 of the ticket: the new expression equals the one it replaced
   // everywhere the old one was right, and disagrees only where the old one was
@@ -544,7 +738,7 @@ describe("wrapPhase", () => {
     const [generate, update] = createEuclid();
     update(1, 1, 0);
     const output = new Float32Array(BLOCK);
-    generate([[output]], Float32Array.of(1), 1, 0.5, NO_RESET);
+    generate([[output]], Float32Array.of(1), 1, 0.5, 0, NO_RESET);
     expect(Array.from(output).every((v) => v === 1)).toBe(true);
   });
 });
@@ -850,16 +1044,18 @@ function ramp(samplesPerCycle = CYCLE) {
 
 /**
  * Renders `blocks` blocks and returns output 0's samples - with output 1's
- * attached as `.rests`, and output 0's again as `.hits`.
+ * attached as `.rests`, output 0's again as `.hits`, and the fan's three as
+ * `.b`, `.c` and `.d`.
  *
  * The array-with-properties return is so that every assertion written against
  * the one-output engine (`render(...).every(...)`, `risingEdges(render(...))`)
- * keeps working unchanged while the rests tests read `.hits` and `.rests`.
+ * keeps working unchanged while the rests and fan tests read the properties.
  *
- * `restsConnected: false` hands `generate` a one-output `outputs` array, which
- * is the shape a caller who never touches `.rests` would have if the node did
- * not create its gain eagerly - and is what pins output 0 as independent of
- * whether the second buffer is there at all.
+ * `buffers` is how many output buffers `generate` is handed - the shape a
+ * caller has if the node did not create its gains eagerly, and what pins
+ * output 0 as independent of whether the other four buffers are there at all.
+ * `restsConnected: false` is `buffers: 1`, kept as a spelling because ticket
+ * 05's tests read that way.
  */
 function render(
   generate: GenerateFn,
@@ -868,28 +1064,104 @@ function render(
   params: {
     subdivision?: number;
     pulseWidth?: number;
+    spread?: number;
     reset?: Float32Array;
     restsConnected?: boolean;
+    buffers?: number;
   } = {},
 ) {
-  const hits: number[] = [];
-  const rests: number[] = [];
-  const output = new Float32Array(BLOCK);
-  const restsOut = new Float32Array(BLOCK);
-  const outputs =
-    params.restsConnected === false ? [[output]] : [[output], [restsOut]];
+  const count =
+    params.buffers ?? (params.restsConnected === false ? 1 : OUTPUTS);
+  const collected: number[][] = Array.from({ length: OUTPUTS }, () => []);
+  const buffers = Array.from(
+    { length: OUTPUTS },
+    () => new Float32Array(BLOCK),
+  );
+  const outputs = buffers.slice(0, count).map((buffer) => [buffer]);
   for (let b = 0; b < blocks; b++) {
     generate(
       outputs,
       nextClock(),
       params.subdivision ?? 1,
       params.pulseWidth ?? 0.5,
+      params.spread ?? 0,
       params.reset ?? NO_RESET,
     );
-    hits.push(...output);
-    rests.push(...restsOut);
+    for (let i = 0; i < OUTPUTS; i++) collected[i].push(...buffers[i]);
   }
-  return Object.assign(hits, { hits, rests });
+  const [hits, rests, b, c, d] = collected;
+  return Object.assign(hits, { hits, rests, b, c, d });
+}
+
+/**
+ * The four fan channels as arrays of 0s and 1s, one entry per step, sampled
+ * at the same offset inside each step.
+ *
+ * The order is the node's: a is output 0, and b, c and d are outputs 2, 3 and
+ * 4 - output 1 is the rests and is not part of the fan.
+ */
+function renderChannels(
+  steps: number,
+  beats: number,
+  rotation: number,
+  spread: number,
+  buffers = OUTPUTS,
+) {
+  const out = renderRaw(steps, beats, rotation, spread, buffers);
+  const channels = [out.hits, out.b, out.c, out.d];
+  // A quarter into each step: inside the pulse window at the default width,
+  // and clear of the boundary sample either side of it.
+  return channels.map((channel) =>
+    Array.from({ length: steps }, (_, i) =>
+      channel[i * CYCLE + CYCLE / 4] > 0 ? 1 : 0,
+    ),
+  );
+}
+
+/** Build, `update` and render one whole cycle, returning the raw samples. */
+function renderRaw(
+  steps: number,
+  beats: number,
+  rotation: number,
+  spread: number,
+  buffers = OUTPUTS,
+) {
+  const [generate, update] = createEuclid();
+  update(steps, beats, rotation);
+  return render(generate, ramp(), Math.max(steps, 1) * 4, { spread, buffers });
+}
+
+/**
+ * How many of the four channels strike each step, bucketed: `[silent, 1, 2, 3,
+ * 4]`. Built on `euclidPattern` rather than on a render, so the table test is
+ * pure and fast - what it is about is the geometry, and the engine's agreement
+ * with `euclidPattern` is criterion 2's own test.
+ */
+function profile(
+  steps: number,
+  beats: number,
+  rotation: number,
+  spread: number,
+) {
+  const channels = Array.from({ length: 4 }, (_, i) =>
+    euclidPattern(steps, beats, rotation + i * spread),
+  );
+  return histogram(steps, channels);
+}
+
+/** The same histogram for four independent generators - the drum-machine row. */
+function independentProfile(steps: number, beatsList: number[]) {
+  return histogram(
+    steps,
+    beatsList.map((beats) => euclidPattern(steps, beats, 0)),
+  );
+}
+
+function histogram(steps: number, channels: number[][]) {
+  const buckets = [0, 0, 0, 0, 0];
+  for (let i = 0; i < steps; i++)
+    buckets[channels.reduce((sum, channel) => sum + channel[i], 0)]++;
+  return buckets;
 }
 
 /** Build, `update`, and render one whole cycle of the pattern four times over. */

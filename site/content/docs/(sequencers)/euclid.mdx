@@ -13,38 +13,60 @@ import {
   registerAllWorklets,
   Clock,
   Euclid,
-  EuclidRhythm,
   KickDrum,
-  HiHatDrum,
+  TomDrum,
+  CongaDrum,
+  ClaveDrum,
 } from "synthlet";
 
 const ac = new AudioContext();
 await registerAllWorklets(ac);
 
 const clock = Clock(ac, { bpm: 60 });
-const rhythm = Euclid(ac, { clock, ...EuclidRhythm.BossaNova });
 
-// One pattern, two voices: the kick on the hits, the hat on the steps they
-// leave empty.
-const kick = KickDrum(ac, { trigger: rhythm }); // x . . x . . x .
-const hat = HiHatDrum(ac, { trigger: rhythm.rests }); // . x x . x x . x
-kick.connect(ac.destination);
-hat.connect(ac.destination);
+// One pattern, four voices. `spread` is the only thing that differs between
+// them: channel `i` plays the pattern at `rotation + i * spread`.
+const rhythm = Euclid(ac, {
+  clock,
+  subdivision: 4,
+  steps: 16,
+  beats: 5,
+  spread: 4,
+});
+
+const kick = KickDrum(ac, { trigger: rhythm }); // rotation 0
+const tom = TomDrum(ac, { trigger: rhythm.b }); // rotation 4
+const conga = CongaDrum(ac, { trigger: rhythm.c }); // rotation 8
+const clave = ClaveDrum(ac, { trigger: rhythm.d }); // rotation 12
+
+[kick, tom, conga, clave].forEach((drum) => drum.connect(ac.destination));
 
 clock.bpm.value = 150;
 ```
 
+Sweep **Spread** to 0 below and the four voices collapse onto one rhythm.
+
 <EuclidExample />
 
-## Two outputs
+## Five outputs
 
-The node plays the pattern's hits. `rhythm.rests` plays the steps the hits
-leave empty.
+The node plays the pattern's hits — channel a. `rhythm.rests` plays the steps
+they leave empty, and `.b`, `.c` and `.d` play the same pattern entered further
+in, `spread` steps at a time.
 
-| Output          | What it is                                                                |
-| --------------- | ------------------------------------------------------------------------- |
-| the node itself | the pattern's hits — a pulse over the first `pulseWidth` of each hit step |
-| `rhythm.rests`  | the steps the hits leave empty — same width, same samples                 |
+| Output          | What it is                                                                               |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| the node itself | channel **a** — the pattern's hits, a pulse over the first `pulseWidth` of each hit step |
+| `rhythm.rests`  | the steps channel a leaves empty — same width, same samples                              |
+| `rhythm.b`      | the pattern at `rotation + spread`                                                       |
+| `rhythm.c`      | the pattern at `rotation + 2 × spread`                                                   |
+| `rhythm.d`      | the pattern at `rotation + 3 × spread`                                                   |
+
+```ts
+const rhythm = Euclid(ac, { clock, ...EuclidRhythm.BossaNova });
+const kick = KickDrum(ac, { trigger: rhythm }); // x . . x . . x .
+const hat = HiHatDrum(ac, { trigger: rhythm.rests }); // . x x . x x . x
+```
 
 The complement of a Euclidean rhythm is a Euclidean rhythm — Morrill's
 [Lemma 3](https://arxiv.org/abs/2206.12421), _"Euclidean rhythms distribute
@@ -58,9 +80,10 @@ is never `E(n−k,n)` as generated: `E(3,8)`'s rests are `E(5,8)` rotated by 5,
 `beats: steps - beats` plays the right necklace from the wrong place, and there
 is no rotation to work out by ear.
 
-Both outputs come off one pattern, one step counter, one `pulseWidth` and one
-`reset`, read at the same sample — so they partition every step and cannot
-skew. `steps: 0` is silence on both. Both are
+Every output comes off one pattern, one step counter, one `pulseWidth` and one
+`reset`, read at the same sample — so the hits and the rests partition every
+step, none of the five can skew, and one `reset` aligns all of them.
+`steps: 0` is silence on every one. All five are
 [gates](/docs/gates-and-triggers), like everything
 [Clock](/docs/sequencers/clock) emits on `.gate`.
 
@@ -68,7 +91,63 @@ The complement is **dense**, and that is the point: `E(3,8)`'s rests are five
 hits in eight. Sparse kick, busy hat. It is not a second layer of the same
 pattern — onsets move rather than accumulate.
 
-`.rests` adds no parameters.
+`.rests` adds no parameters, and it is the complement of **channel a only** —
+the complement commutes with rotation, so the complement of any other channel
+is one patched node away at the rotation you want. The base complement is the
+one no second node can reach, which is why that one is an output.
+
+### The fan
+
+One necklace is several named rhythms at once. On E(9,16): started on its
+fourth onset it is played in West and Central Africa and is also the Brazilian
+samba cowbell; on its penultimate onset it is the Ngbaka-Maibo bell pattern.
+Those are the parts different players hold **simultaneously**, over one cycle.
+
+`spread` is that, as one knob. Channel _i_ plays
+`Euclid.pattern(steps, beats, rotation + i * spread)`:
+
+```ts
+const rhythm = Euclid(ac, {
+  clock,
+  subdivision: 4,
+  ...EuclidRhythm.Samba,
+  spread: 2,
+});
+KickDrum(ac, { trigger: rhythm }); // x..x.x.x..x.x.x.  rotation 0 — the samba necklace
+TomDrum(ac, { trigger: rhythm.b }); // x.x..x.x.x..x.x.  rotation 2 — the samba as played
+CongaDrum(ac, { trigger: rhythm.c }); // x.x.x..x.x.x..x.  rotation 4
+ClaveDrum(ac, { trigger: rhythm.d }); // x.x.x.x..x.x.x..  rotation 6 — a clapping pattern from Ghana
+```
+
+Three of those four are rhythms Toussaint names, off one setting. It is the
+same array read at four offsets, so nothing rebuilds and nothing can drift.
+
+`spread: 0` is unison and is the default, so nothing that does not set it plays
+differently. `spread` equal to `steps` is unison again.
+
+**No single `spread` reaches all three of E(9,16)'s published entry points** —
+they are rotations 5, 10 and 14, spaced 5 and 4, and `spread` gives evenly
+spaced entry points. A tradition's are not evenly spaced. It is the same
+finding as "there is no canonical origin", one level up.
+
+At `steps: 16, beats: 5, spread: 4` the four channels **tile the cycle**: every
+step filled, none struck by more than two voices, no unison downbeat. That is
+hocket, and it is a different texture from four independent generators:
+
+| design                                  | silent |  1 hit |     2 |     3 |     4 |
+| --------------------------------------- | -----: | -----: | ----: | ----: | ----: |
+| independent `beats` 4/5/7/9, rotation 0 |      1 |      8 |     5 |     1 |     1 |
+| **one pattern, `E(5,16)`, `spread: 4`** |  **0** | **12** | **4** | **0** | **0** |
+
+**Tiling is a property of that setting, not of `spread`.** On the same
+`E(5,16)`, `spread: 3` leaves eight of sixteen steps silent and strikes two of
+them with all four voices — worse than the row above it. Four of the sixteen
+spreads tile; one is unison. The fan is not layering, either: onsets move
+rather than accumulate.
+
+The rotations of the rhythms Toussaint publishes as played variants — the ones
+`spread` walks between — are in the
+[package README](https://github.com/danigb/synthlet/tree/main/packages/euclid#the-rhythm-as-played).
 
 ## Parameters
 
@@ -107,7 +186,13 @@ ring of LEDs. The sixteen named rhythms, their rotations and their attributions
 are in the
 [package README](https://github.com/danigb/synthlet/tree/main/packages/euclid#named-rhythms).
 
-All three are counts and all three are floored — they arrive from an
+- `spread`: how far apart the fan's four channels are, in steps. It is in
+  `rotation`'s own units and carries `rotation`'s range. `0` is unison and is
+  the default. It rebuilds nothing — the fan is an offset applied when the
+  pattern is read, not a second pattern — so it is the one count that does not
+  go through the pattern cache.
+
+All four are counts and all four are floored — they arrive from an
 `AudioParam` as floats, and half a step is not a step.
 
 The pattern itself is
@@ -133,8 +218,8 @@ the wrong step.
 - `reset`: on a rising edge, the next step boundary is step 0 of the pattern.
   Edge triggered, and `a-rate` so it lands on its own sample.
 
-`pulseWidth` and `reset` apply to **both outputs**: there is one width, one
-clamp and one step counter behind the hits and the rests alike.
+`pulseWidth` and `reset` apply to **every output**: there is one width, one
+clamp and one step counter behind the hits, the rests and the fan alike.
 
 Two `Euclid`s on one `Clock` each keep a private step counter starting from
 whenever that node was built, so they play different rotations of the same

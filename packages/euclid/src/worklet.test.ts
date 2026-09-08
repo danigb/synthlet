@@ -168,6 +168,63 @@ describe("EuclidProcessor", () => {
     expect(Euclid.pattern).toBe(euclidPattern);
   });
 
+  it("plays the fan `Euclid.pattern` describes, on every channel", () => {
+    // Criterion 2 at processor level, not only at the engine's: the parameter
+    // is declared, read out of `params.spread[0]`, and reaches the offset.
+    // Everything between `PARAMS` and `generate()` is in this path.
+    const wrong: string[] = [];
+    for (const { steps, beats, rotation } of [
+      EuclidRhythm.Samba,
+      EuclidRhythm.BossaNova,
+      EuclidRhythm.Tresillo,
+      { steps: 16, beats: 9, rotation: 5 },
+    ])
+      for (const spread of [0, 2, 4, 9, 16]) {
+        const out = run(new Worklet(), steps, {
+          steps,
+          beats,
+          rotation,
+          spread,
+        });
+        for (let i = 0; i < 4; i++) {
+          const played = Array.from({ length: steps }, (_, s) =>
+            out.fan[i][s * BLOCKS_PER_CYCLE] > 0 ? 1 : 0,
+          );
+          const expected = Euclid.pattern(steps, beats, rotation + i * spread);
+          if (played.join("") !== expected.join(""))
+            wrong.push(
+              `E(${beats},${steps})+${rotation} spread ${spread} ch ${"abcd"[i]}: ` +
+                `${played.join("")} != ${expected.join("")}`,
+            );
+        }
+      }
+    expect(wrong).toEqual([]);
+  });
+
+  it("plays the same channel a with `spread` unset and with no fan buffers", () => {
+    // Criterion 1 and criterion 6 at processor level. `spread` defaults to 0,
+    // so a caller who never sets it gets what the module played before the
+    // parameter existed - and however many output buffers arrive, output 0 is
+    // the same samples.
+    for (const { steps, beats, rotation } of [
+      EuclidRhythm.Samba,
+      EuclidRhythm.Cinquillo,
+    ]) {
+      const full = Array.from(
+        run(new Worklet(), steps, { steps, beats, rotation }),
+      );
+      for (const outputs of [1, 2, 5])
+        expect(
+          Array.from(
+            run(new Worklet(), steps, { steps, beats, rotation, outputs }),
+          ),
+        ).toEqual(full);
+      // And unison: at `spread: 0` every channel is channel a.
+      const fan = run(new Worklet(), steps, { steps, beats, rotation }).fan;
+      expect(fan.slice(1)).toEqual([fan[0], fan[0], fan[0]]);
+    }
+  });
+
   it("still steps once per clock cycle, and `subdivision` times faster", () => {
     for (const [subdivision, cycles, steps] of [
       [1, 4, 4],
@@ -187,7 +244,12 @@ describe("EuclidProcessor", () => {
 
 function aRateParams(
   clock: Float32Array,
-  params: { steps?: number; beats?: number; pulseWidth?: number } = {},
+  params: {
+    steps?: number;
+    beats?: number;
+    pulseWidth?: number;
+    spread?: number;
+  } = {},
 ) {
   return {
     clock,
@@ -195,6 +257,7 @@ function aRateParams(
     beats: [params.beats ?? 1],
     subdivision: [1],
     rotation: [0],
+    spread: [params.spread ?? 0],
     pulseWidth: [params.pulseWidth ?? 0.5],
     reset: NO_RESET,
   };
@@ -214,24 +277,36 @@ function run(
     beats?: number;
     subdivision?: number;
     rotation?: number;
+    spread?: number;
     pulseWidth?: number;
+    outputs?: number;
   } = {},
 ) {
   const out: number[] = [];
+  const fan: number[][] = [[], [], [], []];
   for (let i = 0; i < cycles * BLOCKS_PER_CYCLE; i++) {
-    const outputs = [[new Float32Array(BLOCK)]];
+    const outputs = Array.from({ length: params.outputs ?? 5 }, () => [
+      new Float32Array(BLOCK),
+    ]);
     worklet.process([], outputs, {
       clock: [(i % BLOCKS_PER_CYCLE) / BLOCKS_PER_CYCLE],
       steps: [params.steps ?? 1],
       beats: [params.beats ?? 1],
       subdivision: [params.subdivision ?? 1],
       rotation: [params.rotation ?? 0],
+      spread: [params.spread ?? 0],
       pulseWidth: [params.pulseWidth ?? 0.5],
       reset: NO_RESET,
     });
     out.push(outputs[0][0][0]);
+    // The fan is outputs 0, 2, 3, 4 - output 1 is the rests. Absent when the
+    // caller asked for fewer buffers, which is what pins output 0 as
+    // independent of how many came with it.
+    [0, 2, 3, 4].forEach((index, channel) => {
+      if (outputs[index]) fan[channel].push(outputs[index][0][0]);
+    });
   }
-  return out;
+  return Object.assign(out, { fan });
 }
 
 function createWorkletTestContext(sampleRate = 44100, ctx: any = global) {

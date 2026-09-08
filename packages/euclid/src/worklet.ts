@@ -28,6 +28,7 @@ export class EuclidProcessor extends AudioWorkletProcessor {
       params.clock,
       params.subdivision[0],
       params.pulseWidth[0],
+      params.spread[0],
       params.reset,
     );
 

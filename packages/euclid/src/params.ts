@@ -3,7 +3,7 @@ import type { ParamDescriptor } from "./_worklet";
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 //
-// Seven parameters, two of them a-rate.
+// Eight parameters, two of them a-rate.
 //
 // `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
 // every `k-rate` below is an explicit opt-out and carries a reason for being
@@ -76,6 +76,33 @@ export const PARAMS = [
     // How far the pattern is rotated. Structural, cached with `steps` and
     // `beats`: rotating a pattern is choosing a different pattern.
     name: "rotation",
+    defaultValue: 0,
+    minValue: 0,
+    maxValue: 100,
+    automationRate: "k-rate",
+  },
+  {
+    // How far apart the fan's four channels are, in steps. Channel `i` plays
+    // the pattern at `rotation + i * spread`, so this is a *rotation
+    // increment* and it is in `rotation`'s own units - which is why it carries
+    // `rotation`'s range and sits next to it.
+    //
+    // 0 is unison: every channel is the pattern at `rotation`, which is what
+    // the module played before this parameter existed. The whole feature is
+    // opt-in by turning one knob off zero, and nothing that does not turn it
+    // changes what it plays.
+    //
+    // k-rate for `rotation`'s stated reason: rotating a pattern is choosing a
+    // different pattern, not interpolating toward one. Unlike `rotation` it is
+    // not structural - it rebuilds nothing, because the fan is an offset
+    // applied when the pattern is read rather than a second pattern - so it is
+    // read once per block in `generate()` and never reaches `update()`.
+    //
+    // No negative half to the range, matching `rotation`. A fan that runs the
+    // other way is the same four patterns in the other order: `{rotation: r,
+    // spread: -s}` is `{rotation: r - 3s, spread: s}` read d-c-b-a, verified.
+    // A second sign on the knob would be a second way to spell one thing.
+    name: "spread",
     defaultValue: 0,
     minValue: 0,
     maxValue: 100,

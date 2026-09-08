@@ -62,12 +62,15 @@ Euclid(ac, { clock, ...EuclidRhythm.Cinquillo }); // the same three numbers, nam
 
 See [Named rhythms](#named-rhythms).
 
-## Two outputs
+## Five outputs
 
-| Output          | What it is                                                                |
-| --------------- | ------------------------------------------------------------------------- |
-| the node itself | the pattern's hits — a pulse over the first `pulseWidth` of each hit step |
-| `.rests`        | the steps the hits leave empty — same width, same samples                 |
+| Output          | What it is                                                                               |
+| --------------- | ---------------------------------------------------------------------------------------- |
+| the node itself | channel **a** — the pattern's hits, a pulse over the first `pulseWidth` of each hit step |
+| `.rests`        | the steps channel a leaves empty — same width, same samples                              |
+| `.b`            | the pattern at `rotation + spread`                                                       |
+| `.c`            | the pattern at `rotation + 2 × spread`                                                   |
+| `.d`            | the pattern at `rotation + 3 × spread`                                                   |
 
 **The complement of a Euclidean rhythm is a Euclidean rhythm.** That is
 Morrill's Lemma 3 — _"Euclidean rhythms distribute their rests in the same
@@ -89,19 +92,114 @@ So a second `Euclid` at `beats: steps - beats` plays the right necklace from
 the wrong place — it collides with the first instead of interlocking — and
 there is no rotation value to work out by ear.
 
-Both outputs are **one step read twice**: one pattern, one step counter, one
-clamped `pulseWidth`, one `reset`. They partition every step — never both,
-never neither — and they cannot skew or drift. `steps: 0` is silence on both.
+The hits and the rests are **one step read twice**: one pattern, one step
+counter, one clamped `pulseWidth`, one `reset`. They partition every step —
+never both, never neither — and they cannot skew or drift. All five outputs are
+read from that same step, so none of them can skew, and `steps: 0` is silence on
+every one.
 
 **The complement is dense, and that is correct.** `E(3,8)`'s rests are five
 hits in eight, `E(5,16)`'s are eleven in sixteen: sparse kick, busy hat. It is
 _not_ a second layer of the same pattern — onsets move rather than accumulate —
 and the pairing it is for is exactly the one above.
 
-`.rests` adds **no parameters**. Every parameter below applies to both outputs.
-The gain node behind it is created with the node whether or not you connect to
-it, the way `Clock`'s three are, so it is one idle `GainNode` per `Euclid`
-rather than nothing.
+`.rests` adds **no parameters**, and `spread` is the fan's only one. Every
+parameter below applies to every output: there is one width, one clamp, one
+step counter and one `reset` behind all five.
+
+The gain nodes behind the four secondary outputs are created with the node
+whether or not you connect to them, the way `Clock`'s three are, so it is four
+idle `GainNode`s per `Euclid` rather than nothing. That is deliberate and was
+reconsidered when this module reached five outputs: `numberOfOutputs` is fixed
+when the worklet node is constructed and cannot grow, and the spec hands
+`process()` a zero-filled buffer for every declared output whether it is
+connected or not — so the per-sample writes happen either way, and all a lazy
+getter would defer is three allocations at construction time.
+
+### The fan
+
+**One necklace is several named rhythms at once.** Toussaint keeps saying so:
+E(9,16) started on its fourth onset is played in West and Central Africa and is
+also the Brazilian samba cowbell; started on its penultimate onset it is the
+Ngbaka-Maibo bell pattern. These are not variations on a rhythm — they are the
+parts different players hold **simultaneously**, over one cycle.
+
+`spread` is that. Channel _i_ plays `Euclid.pattern(steps, beats, rotation + i × spread)`:
+
+```ts
+const rhythm = Euclid(ac, {
+  clock,
+  subdivision: 4,
+  ...EuclidRhythm.Samba,
+  spread: 2,
+});
+KickDrum(ac, { trigger: rhythm }); // x..x.x.x..x.x.x.  rotation 0 — the samba necklace
+TomDrum(ac, { trigger: rhythm.b }); // x.x..x.x.x..x.x.  rotation 2 — the samba as played
+CongaDrum(ac, { trigger: rhythm.c }); // x.x.x..x.x.x..x.  rotation 4
+ClaveDrum(ac, { trigger: rhythm.d }); // x.x.x.x..x.x.x..  rotation 6 — a clapping pattern from Ghana
+```
+
+Three of those four are rhythms the paper names, off one setting.
+
+It is the same array read at four offsets, so the four channels share one
+pattern, one step counter, one clamped `pulseWidth`, one `gatePulse` and one
+`reset`. They cannot drift apart and one `reset` aligns every one of them —
+which four separate nodes could not promise.
+
+**`spread: 0` is unison and is the default**, so nothing that does not set it
+plays differently. `spread` equal to `steps` is unison again, because _i_ ×
+`spread` is then 0 mod `steps` — a consequence of the arithmetic, not a special
+case, which is why the range needs no upper bound below `rotation`'s.
+
+**No single `spread` reaches all three of E(9,16)'s published entry points.**
+They are rotations 5, 10 and 14 — spaced 5 and 4 — and `spread` gives _evenly
+spaced_ entry points. A tradition's entry points are not evenly spaced. That is
+the same finding as "there is no canonical origin", one level up: the fan gives
+you four places in the necklace at a regular interval, and where a tradition
+enters it remains ethnomusicology.
+
+#### Tiling, at one setting
+
+At `steps: 16, beats: 5, spread: 4` the four channels tile the cycle — every
+step filled, none struck by more than two of the four voices, no unison
+downbeat. That is hocket, and it is a genuinely different texture from four
+independent generators:
+
+| design                                  | silent |  1 hit |     2 |     3 |     4 |
+| --------------------------------------- | -----: | -----: | ----: | ----: | ----: |
+| independent `beats` 4/5/7/9, rotation 0 |      1 |      8 |     5 |     1 |     1 |
+| **one pattern, `E(5,16)`, `spread: 4`** |  **0** | **12** | **4** | **0** | **0** |
+
+**Tiling is a property of that setting, not of `spread`.** On the same
+`E(5,16)`, `spread: 3` leaves eight of sixteen steps silent and strikes two of
+them with all four voices — `8|2|2|2|2`, a worse profile than the
+independent-`beats` row above it. Of the sixteen spreads available, four tile
+and one is unison. Both profiles are pinned in `src/dsp.test.ts`.
+
+And the fan is **not layering**. Onsets move rather than accumulate: the four
+channels are one rhythm entered at four places, not four densities of it.
+
+#### `.rests` is the complement of channel a
+
+Only channel a, and that is not an omission. The complement commutes with
+rotation, so the complement of any other channel is one patched node away —
+same `steps`, `beats`, `clock` and `reset`, at the rotation you want:
+
+```ts
+const rhythm = Euclid(ac, { clock, steps: 16, beats: 5, spread: 4, reset });
+// the rests of channel c (rotation 8), which this node does not emit:
+const cRests = Euclid(ac, {
+  clock,
+  steps: 16,
+  beats: 5,
+  rotation: 8,
+  reset,
+}).rests;
+```
+
+The **base** complement is the one that is reachable from no second node at all
+— that is the argument above, and it is why that one is an output and these
+three are not.
 
 ## Parameters
 
@@ -112,6 +210,7 @@ rather than nothing.
 | `beats`       | 3       | 0 … 100 | k-rate | How many of those steps are hits                         |
 | `subdivision` | 1       | 1 … 20  | k-rate | Pattern cycles per clock cycle — a multiplier on `clock` |
 | `rotation`    | 0       | 0 … 100 | k-rate | How far the pattern is rotated                           |
+| `spread`      | 0       | 0 … 100 | k-rate | How far apart the fan's channels are, in steps           |
 | `pulseWidth`  | 0.5     | 0 … 1   | k-rate | How much of each step a hit is high for¹                 |
 | `reset`       | 0       | 0 … 1   | a-rate | Rising edge makes the next step boundary step 0          |
 

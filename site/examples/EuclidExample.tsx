@@ -1,14 +1,15 @@
 "use client";
 
 import {
+  ClaveDrum,
   Clock,
   Compound,
+  CongaDrum,
   Euclid,
-  EuclidRhythm,
   Gain,
-  HiHatDrum,
   KickDrum,
   Param,
+  TomDrum,
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
@@ -19,32 +20,42 @@ const RhythmBox = (ac: AudioContext) => {
   const volume = Param.db(ac, -12);
   const clock = Clock(ac, { bpm });
 
-  // One clock, *one* euclidean pattern, two drums mixed into the output: the
-  // kick on the hits and the hat on the steps they leave empty. Two `Euclid`
-  // nodes could not do this - the complement of E(5,16) is E(11,16) rotated by
-  // 3, and there is no rotation you would find by ear.
+  // One clock, ONE euclidean pattern, four drums. `spread` is the only thing
+  // that differs between them: channel `i` plays the pattern at
+  // `rotation + i * spread`, off one pattern array and one step counter, so
+  // they cannot drift apart. Turn Spread to 0 and all four collapse onto the
+  // same rhythm; at 4 the four entry points tile this cycle - every step
+  // filled, none struck by more than two of the voices.
   //
-  // The three pattern numbers come from `EuclidRhythm` rather than being
-  // written here, because the rotation cannot be guessed: this was
-  // `steps: 16, beats: 5` at the default `rotation: 0`, which plays
-  // `x...x..x..x..x..` where the bossa-nova necklace is `x..x..x..x..x...`.
-  // The demo was off by a rotation and nothing said so.
+  // That tiling is a property of *this setting* and not of `spread`: at 3 the
+  // same pattern leaves half the cycle silent and strikes two steps with all
+  // four voices. The slider is worth sweeping for exactly that reason.
+  //
+  // The slider hands over a fractional value on its way between integers,
+  // which is harmless - `spread` is a count and the engine floors it once per
+  // block, the way `steps`, `beats` and `rotation` are floored.
+  const spread = Param(ac, { input: 4 });
   const rhythm = Euclid(ac, {
     clock,
     subdivision: 4,
-    ...EuclidRhythm.BossaNova,
+    steps: 16,
+    beats: 5,
+    spread,
   });
   const kick = KickDrum(ac, { trigger: rhythm, volume });
-  const hat = HiHatDrum(ac, { trigger: rhythm.rests, volume });
+  const tom = TomDrum(ac, { trigger: rhythm.b, volume });
+  const conga = CongaDrum(ac, { trigger: rhythm.c, volume });
+  const clave = ClaveDrum(ac, { trigger: rhythm.d, volume });
   const out = Gain(ac);
 
-  [kick, hat].forEach((drum) => drum.connect(out));
+  [kick, tom, conga, clave].forEach((drum) => drum.connect(out));
 
   return Compound({
     output: out,
-    owns: [kick, hat, rhythm, clock, bpm, volume],
+    owns: [kick, tom, conga, clave, rhythm, clock, bpm, spread, volume],
     exposes: {
       bpm: bpm.input,
+      spread: spread.input,
       volume: volume.input,
     },
   });
@@ -64,6 +75,14 @@ function Example() {
           max={1000}
           param={synth.bpm}
           units="bpm"
+        />
+        <Slider
+          label="Spread"
+          inputClassName="col-span-2"
+          min={0}
+          max={8}
+          param={synth.spread}
+          units="steps"
         />
       </div>
       <div className="flex px-1 pt-2 mt-2 border-t border-fd-border gap-4">
