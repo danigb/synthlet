@@ -25,6 +25,8 @@ the node has no business dropping audio. Measure is what the buffer holds.
 Decay runs **every block**, over every slot, whatever the channel count is,
 including zero.
 
-`maxChannels` is now validated: an integer from 1 to 32, and a `RangeError`
+`maxChannels` is now validated: an integer from 1 to 24, and a `RangeError`
 naming the option for anything else, rather than a `SharedArrayBuffer`
-complaint about a negative length.
+complaint about a negative length. The ceiling is 24 because the clip flags are
+one bit per channel in a single `Float32`, which holds integers exactly only up
+to 2^24.

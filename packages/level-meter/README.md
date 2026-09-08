@@ -5,9 +5,9 @@
 Part of [Synthlet](https://github.com/danigb/synthlet).
 
 Insert it anywhere in a graph and it passes audio through untouched while
-tracking a smoothed peak per channel. The peaks live in a `SharedArrayBuffer`,
-so reading them from an animation frame costs nothing — no `postMessage`, no
-allocation, no per-frame round trip to the audio thread.
+tracking a peak, a hold marker and a clip latch per channel. Reading them from
+an animation frame is a typed-array read: shared memory where the page allows
+it, a posted frame where it does not, and the same numbers either way.
 
 `AnalyserNode` can do this, but it hands you a whole time-domain buffer to
 reduce yourself on every frame. This hands you the numbers.
@@ -64,9 +64,11 @@ processor meters **at most 8 channels** whatever `maxChannels` is set to.
 (defaults −40 and 0), then `setCanvas(canvas)` and `render(peaks, channels)`
 per frame. Only `"horizontal"` orientation is implemented.
 
-**`SharedArrayBuffer` requires a cross-origin-isolated page.** Serve with
-`Cross-Origin-Opener-Policy: same-origin` and
-`Cross-Origin-Embedder-Policy: require-corp`, or the constructor throws.
+**No page requirements.** The readings travel over a `SharedArrayBuffer` when
+the page is cross-origin isolated and over `postMessage` when it is not — about
+20 floats at 60 Hz either way. The choice is made by feature detection, the
+numbers are the same, and `meter.transport` says which is running, for
+diagnostics. Nothing needs COOP or COEP headers.
 
 ## License
 

@@ -285,6 +285,127 @@ describe("LevelMeterProcessor", () => {
     });
   });
 
+  describe("layout", () => {
+    it("stamps the layout version and the channel count every block", () => {
+      const meter = createMeter(Processor, { maxChannels: 8 });
+      expect(meter.version()).toBe(0);
+
+      runProcess(meter.processor, channels(2, ramp));
+      expect(meter.version()).toBe(LAYOUT_VERSION);
+      expect(meter.channelCount()).toBe(2);
+
+      runProcess(meter.processor, channels(6, ramp));
+      expect(meter.channelCount()).toBe(6);
+    });
+
+    it("counts only the channels it can measure, not the ones it copies", () => {
+      const meter = createMeter(Processor, { maxChannels: 2 });
+      runProcess(meter.processor, channels(6, ramp));
+      expect(meter.channelCount()).toBe(2);
+    });
+
+    // Reporting 0 would hide the decay: an empty `inputs[0]` is "nothing this
+    // block", not "zero channels of audio".
+    it("keeps the channel count when the input is disconnected", () => {
+      const meter = createMeter(Processor, { maxChannels: 2 });
+      runProcess(meter.processor, channels(2, ramp));
+      runProcess(meter.processor, [], 10, { outputChannels: 2 });
+      expect(meter.channelCount()).toBe(2);
+    });
+
+    it("leaves the reserved true-peak and LUFS slots alone", () => {
+      const meter = createMeter(Processor, { maxChannels: 2 });
+      runProcess(
+        meter.processor,
+        channels(2, () => constant(1)),
+      );
+
+      for (let c = 0; c < 2; c++) {
+        expect(meter.view[HEADER + c * STRIDE + 2]).toBe(0); // rms, ticket 06
+        expect(meter.view[HEADER + c * STRIDE + 3]).toBe(0); // true peak, 10
+      }
+      const tail = HEADER + 2 * STRIDE;
+      expect(Array.from(meter.view.slice(tail, tail + TAIL))).toEqual([0, 0]);
+    });
+  });
+
+  describe("transport", () => {
+    it("writes into the buffer it was given and posts nothing", () => {
+      const meter = createMeter(Processor, { maxChannels: 2 });
+      runProcess(
+        meter.processor,
+        channels(2, () => constant(1)),
+        100,
+      );
+
+      expect(meter.peak(0)).toBeCloseTo(1, 6);
+      expect(meter.processor.port.postMessage).not.toHaveBeenCalled();
+    });
+
+    it("owns a buffer and posts it when it was given none", () => {
+      const meter = createMeter(Processor, {
+        maxChannels: 2,
+        transport: "message",
+        postIntervalMs: 16,
+      });
+      const post = meter.processor.port.postMessage;
+
+      // 16 ms is 6 blocks at 48 kHz, so five blocks are not yet a frame.
+      runProcess(
+        meter.processor,
+        channels(2, () => constant(1)),
+        5,
+      );
+      expect(post).not.toHaveBeenCalled();
+
+      runProcess(
+        meter.processor,
+        channels(2, () => constant(1)),
+      );
+      expect(post).toHaveBeenCalledTimes(1);
+
+      // The payload is the buffer itself - one pre-shaped array, not an object
+      // literal - and it carries the whole layout.
+      const posted: Float32Array = post.mock.calls[0][0];
+      expect(posted).toBeInstanceOf(Float32Array);
+      expect(posted).toHaveLength(meterViewLength(2));
+      expect(posted[0]).toBe(LAYOUT_VERSION);
+      expect(posted[1]).toBe(2);
+      expect(posted[HEADER]).toBeCloseTo(1, 6);
+    });
+
+    it("posts at a cadence derived from sampleRate, not from a block count", () => {
+      setSampleRate(96000);
+      const meter = createMeter(Processor, {
+        maxChannels: 1,
+        transport: "message",
+        postIntervalMs: 16,
+      });
+
+      // Twice the sample rate is twice the blocks per 16 ms: 12, not 6.
+      runProcess(meter.processor, [constant(1)], 11);
+      expect(meter.processor.port.postMessage).not.toHaveBeenCalled();
+      runProcess(meter.processor, [constant(1)]);
+      expect(meter.processor.port.postMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it("reads the same numbers under either transport", () => {
+      const shared = createMeter(Processor, { maxChannels: 2 });
+      const posted = createMeter(Processor, {
+        maxChannels: 2,
+        transport: "message",
+      });
+
+      const input = () => channels(2, (c) => constant((c + 1) / 4));
+      runProcess(shared.processor, input(), 40);
+      runProcess(posted.processor, input(), 40);
+      runProcess(shared.processor, [], 200, { outputChannels: 2 });
+      runProcess(posted.processor, [], 200, { outputChannels: 2 });
+
+      expect(Array.from(posted.view)).toEqual(Array.from(shared.view));
+    });
+  });
+
   describe("disposal", () => {
     it("returns false after a DISPOSE message", () => {
       const meter = createMeter(Processor, { maxChannels: 1 });
@@ -312,31 +433,50 @@ function ramp(channel: number): Float32Array {
   );
 }
 
-// The one place that knows the buffer layout: tickets 05 and 06 give it a
-// header and a stride, and every test above reads through here.
+// The one place in the tests that knows the buffer layout. Both transports
+// carry it, so both read through here.
+const LAYOUT_VERSION = 1;
+const HEADER = 3;
+const STRIDE = 4;
+const TAIL = 2;
+
 function meterViewLength(maxChannels: number) {
-  return maxChannels;
+  return HEADER + maxChannels * STRIDE + TAIL;
 }
 
+/**
+ * A processor with a buffer around it.
+ *
+ * `transport: "message"` withholds the buffer, which is how the factory tells
+ * the processor to own one and post copies of it; the view is then the
+ * processor's own, which is what the main thread's copy is a copy of.
+ */
 function createMeter(Processor: any, options: Record<string, any> = {}) {
   const maxChannels = options.maxChannels ?? 2;
-  const peaksBuffer = new ArrayBuffer(
-    meterViewLength(maxChannels) * Float32Array.BYTES_PER_ELEMENT,
-  );
-  const view = new Float32Array(peaksBuffer);
+  const levelsBuffer =
+    options.transport === "message"
+      ? undefined
+      : new ArrayBuffer(
+          meterViewLength(maxChannels) * Float32Array.BYTES_PER_ELEMENT,
+        );
   const processor = new Processor({
-    processorOptions: { ...options, peaksBuffer },
+    processorOptions: { ...options, maxChannels, levelsBuffer },
   });
+  const view: Float32Array = levelsBuffer
+    ? new Float32Array(levelsBuffer)
+    : processor.v;
+  const slot = (channel: number) => HEADER + channel * STRIDE;
   return {
     processor,
     view,
-    peak: (channel: number) => view[channel],
-    peakDb: (channel: number) => dB(view[channel]),
-    // The hold marker and the clip latch are processor-internal until ticket 06
-    // gives the buffer a layout with room for them and an accessor over it.
-    hold: (channel: number) => processor.h[channel],
-    holdDb: (channel: number) => dB(processor.h[channel]),
-    clipped: (channel: number) => processor.cl[channel] > 0,
+    version: () => view[0],
+    channelCount: () => view[1],
+    flags: () => view[2],
+    peak: (channel: number) => view[slot(channel)],
+    peakDb: (channel: number) => dB(view[slot(channel)]),
+    hold: (channel: number) => view[slot(channel) + 1],
+    holdDb: (channel: number) => dB(view[slot(channel) + 1]),
+    clipped: (channel: number) => ((view[2] >>> channel) & 1) === 1,
   };
 }
 
