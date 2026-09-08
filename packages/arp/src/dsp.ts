@@ -38,7 +38,19 @@ export enum ArpScale {
   WholeTone = 1365,
 }
 
-export function createArpeggiator() {
+/**
+ * The engine: one note per rising edge of `trigger`, held on the output as a
+ * frequency in Hz until the next one.
+ *
+ * @param random the source of randomness. It is an argument so the tests can
+ *   assert a *sequence* rather than a distribution - without it every
+ *   assertion in this package has to be hedged around `Math.random`. There is
+ *   deliberately no user-facing `seed` parameter: this is a test seam, and an
+ *   `AudioParam` carrying an integer nobody can interpret would be the only
+ *   parameter in the library with no musical meaning. `worklet.ts` never
+ *   passes an argument, so the shipped module is unchanged.
+ */
+export function createArpeggiator(random: () => number = Math.random) {
   let $note = 60;
   let $scale = 0;
   let $octaves = 1;
@@ -81,8 +93,8 @@ export function createArpeggiator() {
   };
 
   function nextRandom() {
-    const octave = Math.floor(Math.random() * $octaves);
-    const randomFromScale = scaleNotes[Math.floor(Math.random() * len)];
+    const octave = Math.floor(random() * $octaves);
+    const randomFromScale = scaleNotes[Math.floor(random() * len)];
     return $note + randomFromScale + octave * 12;
   }
 }
