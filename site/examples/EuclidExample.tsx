@@ -35,12 +35,22 @@ const RhythmBox = (ac: AudioContext) => {
   // which is harmless - `spread` is a count and the engine floors it once per
   // block, the way `steps`, `beats` and `rotation` are floored.
   const spread = Param(ac, { input: 4 });
+  // One knob, and every voice takes it - the four channels are one step phase
+  // read four times, so swing cannot skew them against each other. It is a
+  // *ratio*: 1 is straight, 2 is triplet feel, 3 is dotted-eighth. Applied
+  // against the subdivision, so at `subdivision: 4` these are sixteenth pairs.
+  //
+  // It is the MPC/DAW constant-ratio convention and not a model of jazz swing
+  // - Honing & de Haas 2008 test exactly that model and reject it. See the
+  // package README.
+  const swing = Param(ac, { input: 1 });
   const rhythm = Euclid(ac, {
     clock,
     subdivision: 4,
     steps: 16,
     beats: 5,
     spread,
+    swing,
   });
   const kick = KickDrum(ac, { trigger: rhythm, volume });
   const tom = TomDrum(ac, { trigger: rhythm.b, volume });
@@ -52,10 +62,11 @@ const RhythmBox = (ac: AudioContext) => {
 
   return Compound({
     output: out,
-    owns: [kick, tom, conga, clave, rhythm, clock, bpm, spread, volume],
+    owns: [kick, tom, conga, clave, rhythm, clock, bpm, spread, swing, volume],
     exposes: {
       bpm: bpm.input,
       spread: spread.input,
+      swing: swing.input,
       volume: volume.input,
     },
   });
@@ -83,6 +94,15 @@ function Example() {
           max={8}
           param={synth.spread}
           units="steps"
+        />
+        <Slider
+          label="Swing"
+          inputClassName="col-span-2"
+          min={1}
+          max={3}
+          step={0.01}
+          param={synth.swing}
+          defaultValue={1}
         />
       </div>
       <div className="flex px-1 pt-2 mt-2 border-t border-fd-border gap-4">

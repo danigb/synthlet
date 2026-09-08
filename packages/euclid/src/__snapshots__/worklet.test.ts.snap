@@ -32,6 +32,13 @@ exports[`EuclidProcessor has parameter descriptors 1`] = `
   },
   {
     "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 3,
+    "minValue": 1,
+    "name": "swing",
+  },
+  {
+    "automationRate": "k-rate",
     "defaultValue": 0,
     "maxValue": 100,
     "minValue": 0,

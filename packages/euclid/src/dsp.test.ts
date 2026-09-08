@@ -8,6 +8,7 @@ import {
   EuclidRhythmName,
   euclidPattern,
   GenerateFn,
+  stepPhase,
   wrapPhase,
 } from "./dsp";
 import { PARAMS } from "./params";
@@ -322,7 +323,7 @@ describe("no way to emit NaN", () => {
     kUpdate(0, 0, 0);
     const out = new Float32Array(BLOCK);
     for (let b = 0; b < 8; b++) {
-      kGenerate([[out]], Float32Array.of((b % 4) / 4), 1, 0.5, 0, NO_RESET);
+      kGenerate([[out]], Float32Array.of((b % 4) / 4), 1, 1, 0.5, 0, NO_RESET);
       expect(Array.from(out).every((v) => v === 0)).toBe(true);
     }
   });
@@ -738,8 +739,299 @@ describe("wrapPhase", () => {
     const [generate, update] = createEuclid();
     update(1, 1, 0);
     const output = new Float32Array(BLOCK);
-    generate([[output]], Float32Array.of(1), 1, 0.5, 0, NO_RESET);
+    generate([[output]], Float32Array.of(1), 1, 1, 0.5, 0, NO_RESET);
     expect(Array.from(output).every((v) => v === 1)).toBe(true);
+  });
+});
+
+describe("swing", () => {
+  // Criterion 1, at the expression rather than through a render: `swing: 1` is
+  // *bit*-identical to no swing, not identical to within an epsilon. 4.8M
+  // samples across the declared range of `clock` and `subdivision`, plus the
+  // fractional subdivisions nothing floors.
+  //
+  // The proof is that at `swingPoint === 0.5` the pair reduction is
+  // algebraically the step reduction: writing `q = wrapPhase(scaled / 2)`, an
+  // even `floor(scaled)` gives `q = w/2 < 0.5` and `q / 0.5 = w`, an odd one
+  // gives `q = (w + 1)/2 >= 0.5` and `(q - 0.5) / 0.5 = w`. Every operation in
+  // it is exact in binary floating point - halving and doubling are exponent
+  // shifts, a fractional part is a suffix of a significand, and `q - 0.5` for
+  // `q` in `[0.5, 1)` is exact by Sterbenz - so `Object.is` is the right
+  // relation and any deviation is a bug in the code rather than in the proof.
+  it("is bit-identical to no swing at `swing: 1`", () => {
+    const straight = 1 / (1 + 1);
+    // And so the swung branch is reached at all, rather than the equality
+    // resting on a `swingPoint` that missed 0.5 by an ulp.
+    expect(straight).toBe(0.5);
+    const subdivisions = [...Array(20).keys()]
+      .map((i) => i + 1)
+      .concat([1.5, 2.5, 3.7, 19.9]);
+    let differ = 0;
+    for (const subdivision of subdivisions) {
+      const paired = subdivision - (subdivision % 2);
+      for (let i = 0; i <= 20000; i++) {
+        const scaled = (i / 20000) * subdivision;
+        if (!Object.is(stepPhase(scaled, paired, straight), wrapPhase(scaled)))
+          differ++;
+      }
+    }
+    expect(differ).toBe(0);
+  });
+
+  // ...and the clamp too, which is the other half of criterion 1: the width the
+  // straight path computes must be the same float it computed before.
+  it("leaves the pulse-width clamp untouched at `swing: 1`", () => {
+    const shortStep = 0.5 / (1 - 0.5);
+    expect(shortStep).toBe(1);
+    for (let inc = 1e-7; inc < 1e-2; inc *= 1.01)
+      for (const subdivision of [1, 3, 7, 20])
+        expect(inc * subdivision * shortStep).toBe(inc * subdivision);
+  });
+
+  // Criterion 2. The ratio is the ratio, in samples, at three tempi and three
+  // subdivisions.
+  //
+  // Stated as the *boundary position* rather than as a ratio of the two IOIs,
+  // because that is where "within one sample" is the true claim: a boundary
+  // lands on a sample, so each IOI carries up to half a sample of quantisation
+  // and the ratio of two short IOIs magnifies it. Measured worst case over this
+  // grid: 0.75 samples of boundary error and 0.0048 of ratio error, at
+  // `swing: 3`, 400 BPM, `subdivision: 2`.
+  it("puts the pair's two steps in the declared ratio", () => {
+    for (const samplesPerBeat of [44100, 22050, 6615])
+      // 60, 120, 400 BPM
+      for (const subdivision of [2, 4, 8])
+        for (const swing of [1, 2, 3]) {
+          const [long, short] = firstPair(samplesPerBeat, subdivision, swing);
+          const ideal = (swing / (1 + swing)) * (long + short);
+          expect(Math.abs(long - ideal)).toBeLessThanOrEqual(1);
+          expect(long / short).toBeCloseTo(swing, 1);
+        }
+  });
+
+  // Criterion 3, and the whole argument for this parameter being in `Euclid`
+  // rather than in `Clock`: at `subdivision: 4` the pairs are sixteenth pairs.
+  // A warp on the *beat* phase would give 720, 720, 960, 1440 here - a half-bar
+  // shuffle whose step lengths are not even monotonic.
+  //
+  // Pinned as measured, and the measurement carries up to one sample of
+  // quantisation: `clock` is a Float32 ramp, so the phase at sample 3200 of
+  // 3840 rounds just below 5/6 and that boundary is read one sample late. The
+  // ideal grid is asserted separately, to a sample.
+  it("swings against the subdivision, not the beat", () => {
+    expect(stepLengths(3840, 2, 2)).toEqual([2560, 1280]);
+    expect(stepLengths(3840, 4, 2)).toEqual([1280, 640, 1281, 639]);
+    expect(stepLengths(3840, 8, 2)).toEqual([
+      640, 320, 641, 319, 640, 320, 640, 320,
+    ]);
+    // The same claim without the quantisation: every pair is 2:1 to a sample.
+    for (const subdivision of [2, 4, 8]) {
+      const lengths = stepLengths(3840, subdivision, 2);
+      const pair = 3840 / (subdivision / 2);
+      for (let i = 0; i + 1 < lengths.length; i += 2) {
+        expect(Math.abs(lengths[i] - (2 / 3) * pair)).toBeLessThanOrEqual(1);
+        expect(Math.abs(lengths[i + 1] - (1 / 3) * pair)).toBeLessThanOrEqual(
+          1,
+        );
+      }
+    }
+  });
+
+  // Criterion 4, first half: an odd `subdivision` does not drop or gain a step,
+  // ever. This is the invariant the leftover-step rule exists to protect, and
+  // it is what rules out the alternatives - a truncated half-pair, or a pair
+  // grid carried across clock cycles.
+  it("keeps exactly `subdivision` boundaries in every clock cycle", () => {
+    const wrong: string[] = [];
+    for (let subdivision = 1; subdivision <= 20; subdivision++)
+      for (const swing of [1, 1.5, 2, 2.2, 2.5, 3])
+        for (const samplesPerCycle of [4 * BLOCK, 16 * BLOCK]) {
+          const per = boundariesPerCycle(
+            samplesPerCycle,
+            subdivision,
+            swing,
+            4,
+          );
+          if (!per.every((n) => n === subdivision))
+            wrong.push(`/${subdivision} swing ${swing}: ${per}`);
+        }
+    expect(wrong).toEqual([]);
+  });
+
+  // Criterion 4, second half: the leftover step of an odd `subdivision` is
+  // straight and full length. A decision, not a fallback - letting the
+  // half-pair truncate would give that step a phase spanning only
+  // `[0, 0.5/swingPoint)`, so any `pulseWidth` above 0.67 would produce a gate
+  // that never falls in it.
+  it("makes the leftover step of an odd subdivision a straight, full-length step", () => {
+    // Measured sample counts, pinned. A straight step is `3840 / subdivision`,
+    // and the last entry - the leftover - is exactly that in all three.
+    expect(stepLengths(3840, 3, 2)).toEqual([1707, 853, 1280]); // 1280 = 3840/3
+    expect(stepLengths(3840, 5, 3)).toEqual([1152, 384, 1153, 383, 768]); // 768 = 3840/5
+    expect(stepLengths(3840, 7, 2)).toEqual([
+      732, 366, 731, 366, 731, 366, 548,
+    ]);
+    // The leftover is a straight step to the sample, at every odd subdivision
+    // and every swing - which is the rule, rather than three pinned rows of it.
+    for (const subdivision of [3, 5, 7, 9, 11])
+      for (const swing of [1, 1.5, 2, 2.5, 3]) {
+        const lengths = stepLengths(3840, subdivision, swing);
+        expect(lengths).toHaveLength(subdivision);
+        const leftover = lengths[lengths.length - 1];
+        expect(Math.abs(leftover - 3840 / subdivision)).toBeLessThanOrEqual(1);
+      }
+    // Every cycle is still whole: no step is lost to rounding.
+    for (const [subdivision, swing] of [
+      [3, 2],
+      [5, 3],
+      [7, 2],
+      [1, 3],
+    ] as const)
+      expect(
+        stepLengths(3840, subdivision, swing).reduce((a, b) => a + b, 0),
+      ).toBe(3840);
+  });
+
+  it("is inert at `subdivision: 1`", () => {
+    // `paired` is 0, so every step is the leftover and the branch reduces to
+    // `wrapPhase(scaled)`. Which is right: swing subdivides the beat, and at
+    // `subdivision: 1` the step *is* the beat.
+    let differ = 0;
+    for (const swing of [1, 1.3, 2, 2.2, 2.5, 3])
+      for (let i = 0; i <= 20000; i++) {
+        const c = i / 20000;
+        if (!Object.is(stepPhase(c, 0, swing / (1 + swing)), wrapPhase(c)))
+          differ++;
+      }
+    expect(differ).toBe(0);
+    expect(stepLengths(3840, 1, 3)).toEqual([3840]);
+  });
+
+  // Criterion 4, third part - odd `steps` against the pair grid. The ticket
+  // reads this as a property of `steps`; it is not. The pairing belongs to
+  // `subdivision`, which is the clock grid, and the pattern has no pairs of its
+  // own - so what an odd `steps` does is *beat* against the grid, with period 2
+  // pattern cycles. Defined, stable, and re-anchored by `reset`: asserted, not
+  // fixed, because fixing it would mean the counter skipping or repeating a
+  // step.
+  it("lets an odd `steps` alternate its step 0 between the halves, with period 2", () => {
+    expect(step0Lengths(7, 2, 2, 512, 6)).toEqual([
+      342, 170, 342, 170, 342, 170,
+    ]);
+    expect(step0Lengths(8, 2, 2, 512, 5)).toEqual([342, 342, 342, 342, 342]);
+  });
+
+  // Criterion 5. The clamp is computed against the *short* step, so a falling
+  // edge and a render quantum low in every step - over the whole declared space
+  // except the corner where the short step is itself shorter than a render
+  // quantum, which no width can rescue.
+  //
+  // The criterion is **not** true everywhere, and this test says where.
+  // Measured over the full 2268-cell sweep (bpm {30, 60, 120, 200, 400, 700,
+  // 1000} x subdivision {1, 2, 3, 4, 5, 8, 12, 16, 20} x swing {1, 1.5, 2, 2.2,
+  // 2.5, 3} x pulseWidth {0.05, 0.25, 0.5, 0.75, 0.9, 1}): 96 cells leave less
+  // than one quantum low, **0 of them at `swing: 1`**, and every one of the 96
+  // is in `bpm 700 x subdivision >= 16` or `bpm 1000 x subdivision >= 12`. So
+  // the sweep here is the honest domain, and the corner is pinned in the test
+  // below rather than skipped.
+  it("keeps every step retriggerable wherever the short step is renderable", () => {
+    const failures: string[] = [];
+    for (const bpm of [30, 60, 120, 200, 400, 700, 1000])
+      for (const subdivision of [1, 2, 3, 4, 5, 8, 12, 16, 20]) {
+        if (bpm >= 700 && subdivision >= 12) continue; // the corner, below
+        const samplesPerBeat = Math.round((44100 * 60) / bpm);
+        for (const swing of [1, 1.5, 2, 2.2, 2.5, 3])
+          for (const pulseWidth of [0.05, 0.25, 0.5, 0.75, 0.9, 1]) {
+            const shortest = minLowRun(
+              samplesPerBeat,
+              subdivision,
+              swing,
+              pulseWidth,
+            );
+            if (shortest < BLOCK)
+              failures.push(
+                `${bpm}bpm /${subdivision} swing ${swing} pw ${pulseWidth}: ${shortest}`,
+              );
+          }
+      }
+    expect(failures).toEqual([]);
+  });
+
+  it("cannot rescue a short step shorter than a render quantum, and says so", () => {
+    // 700 BPM, subdivision 20, swing 2: the short step is 125 samples, under a
+    // render quantum, so no width leaves a quantum low. The same cell at
+    // `swing: 1` is fine, which is exactly where the limit comes from - the
+    // clamp is tuned to the straight step and stays so.
+    expect(shortStepSamples(3780, 20, 2)).toBeLessThan(BLOCK);
+    expect(minLowRun(3780, 20, 2, 0.05)).toBeLessThan(BLOCK);
+    expect(minLowRun(3780, 20, 1, 0.05)).toBeGreaterThanOrEqual(BLOCK);
+  });
+
+  // Criterion 6. Two nodes born in different blocks, one shared reset: after
+  // it, identical sample for sample.
+  //
+  // Note the mechanism, because it is stronger than the ticket assumed. The
+  // ticket says that before `reset` "two swung `Euclid`s would have swung in
+  // opposite directions, permanently". That is true of the delay-the-odd-steps
+  // implementation it rejects; under the pair-phase form, which half of a pair
+  // a sample is in is a pure function of `clock * subdivision`, so two
+  // `Euclid`s on one clock **always** swing in the same direction, `reset` or
+  // no `reset`. What `reset` anchors is where the *pattern* sits on that grid.
+  it("swings identically in two nodes with a shared reset, at every birth offset", () => {
+    for (const swing of [1, 2, 3])
+      for (const subdivision of [1, 2, 3, 4, 8]) {
+        const reference = renderFromBirth(0, { swing, subdivision });
+        for (let birth = 1; birth < 32; birth++)
+          expect(renderFromBirth(birth, { swing, subdivision })).toEqual(
+            reference,
+          );
+      }
+  });
+
+  // The corollary of that, and the thing the README has to state: a reset
+  // landing past the swing point puts step 0 on the *short* half. 512 samples
+  // per cycle at `subdivision: 2` puts the swing point at sample 341, so a
+  // reset at 32 leaves the rest of the long half to step 0 and the next whole
+  // step is short; a reset at 384 leaves the rest of the short half and the
+  // next whole step is long. Deterministic, and identical in every node that
+  // shares the reset - so criterion 6 is unaffected.
+  it("puts step 0 on the long half when the reset lands before the swing point", () => {
+    expect(iois(resetAt(32, { subdivision: 2, swing: 2 })).slice(0, 3)).toEqual(
+      [170, 342, 170],
+    );
+    expect(
+      iois(resetAt(384, { subdivision: 2, swing: 2 })).slice(0, 3),
+    ).toEqual([342, 170, 342]);
+  });
+
+  // D7: swing moves every output together and nothing per-output. `step()`
+  // computes one `currentClock` and `generate()` reads the pattern five times
+  // off it, so a swung grid cannot skew the outputs against each other - and
+  // the diff that adds swing adds no per-output arithmetic at all.
+  it("swings the rests and the fan with the hits", () => {
+    const grid = gridBoundaries(CYCLE, 4, 2, 8);
+    for (const spread of [0, 4]) {
+      const [generate, update] = createEuclid();
+      update(8, 3, 0);
+      const out = render(generate, ramp(), 8 * 4, {
+        subdivision: 4,
+        swing: 2,
+        spread,
+      });
+      const hitEdges = risingEdges(out.hits);
+      const restEdges = risingEdges(out.rests);
+      // The hits and the rests partition the swung grid: never both, never
+      // neither, and every edge of both is a boundary of the swung grid rather
+      // than of a uniform one.
+      expect(hitEdges.filter((e) => restEdges.includes(e))).toEqual([]);
+      expect([...hitEdges, ...restEdges].sort((a, b) => a - b)).toEqual(grid);
+      // And the fan's three channels land on that same grid, so the fan and
+      // the swing compose with nothing between them.
+      for (const channel of [out.b, out.c, out.d])
+        expect(risingEdges(channel).filter((e) => !grid.includes(e))).toEqual(
+          [],
+        );
+    }
   });
 });
 
@@ -1063,6 +1355,7 @@ function render(
   blocks: number,
   params: {
     subdivision?: number;
+    swing?: number;
     pulseWidth?: number;
     spread?: number;
     reset?: Float32Array;
@@ -1083,6 +1376,7 @@ function render(
       outputs,
       nextClock(),
       params.subdivision ?? 1,
+      params.swing ?? 1,
       params.pulseWidth ?? 0.5,
       params.spread ?? 0,
       params.reset ?? NO_RESET,
@@ -1173,6 +1467,238 @@ function renderPattern(steps: number, beats: number, rotation = 0) {
 
 function risingEdges(values: number[]) {
   return values.flatMap((v, i) => (v > 0 && !(values[i - 1] > 0) ? [i] : []));
+}
+
+/**
+ * The step boundaries of the swung grid, as sample indices.
+ *
+ * Driven with an all-hits pattern - `update(1, 1, 0)`, one step, that step a
+ * hit - so every boundary produces a rising edge and the assertion is about the
+ * *grid* rather than about `E(k,n)`. `pulseWidth` narrow enough that the pulse
+ * always falls before the next boundary, including the short step of a pair at
+ * the fastest subdivision here.
+ */
+function gridBoundaries(
+  samplesPerCycle: number,
+  subdivision: number,
+  swing: number,
+  cycles: number,
+  pulseWidth = 0.25,
+) {
+  const [generate, update] = createEuclid();
+  update(1, 1, 0);
+  const blocks = Math.ceil((samplesPerCycle * cycles) / BLOCK);
+  return risingEdges(
+    render(generate, ramp(samplesPerCycle), blocks, {
+      subdivision,
+      swing,
+      pulseWidth,
+    }),
+  );
+}
+
+/**
+ * The lengths of the `subdivision` steps of one clock cycle, in samples.
+ *
+ * The *first* cycle: the ramp starts at phase 0, so cycle 0 is the one with no
+ * accumulated drift in it, and the values are reproducible.
+ */
+function stepLengths(
+  samplesPerCycle: number,
+  subdivision: number,
+  swing: number,
+) {
+  const edges = gridBoundaries(samplesPerCycle, subdivision, swing, 2);
+  const cycle = edges.filter((i) => i < samplesPerCycle);
+  const next = edges.find((i) => i >= samplesPerCycle)!;
+  return cycle.map((v, i) => (i + 1 < cycle.length ? cycle[i + 1] : next) - v);
+}
+
+/** How many step boundaries fall in each of the first `cycles` clock cycles. */
+function boundariesPerCycle(
+  samplesPerCycle: number,
+  subdivision: number,
+  swing: number,
+  cycles: number,
+) {
+  const edges = gridBoundaries(samplesPerCycle, subdivision, swing, cycles + 1);
+  return Array.from(
+    { length: cycles },
+    (_, c) =>
+      edges.filter(
+        (i) => i >= c * samplesPerCycle && i < (c + 1) * samplesPerCycle,
+      ).length,
+  );
+}
+
+/** The first pair of steps of a clock cycle, `[long, short]`, in samples. */
+function firstPair(samplesPerBeat: number, subdivision: number, swing: number) {
+  const edges = gridBoundaries(samplesPerBeat, subdivision, swing, 2);
+  return [edges[1] - edges[0], edges[2] - edges[1]];
+}
+
+/**
+ * The length of pattern **step 0** on each of the first `count` pattern cycles.
+ *
+ * All hits, so every step boundary is an edge, and step 0 is every `steps`-th
+ * one: the engine starts at `current = 0` and the first sample of the render is
+ * step 0, because a boundary is a wrap and there is nothing to wrap from yet.
+ */
+function step0Lengths(
+  steps: number,
+  subdivision: number,
+  swing: number,
+  samplesPerCycle: number,
+  count: number,
+) {
+  const [generate, update] = createEuclid();
+  update(steps, steps, 0);
+  const blocks = Math.ceil(
+    (samplesPerCycle * (count + 2) * steps) / (BLOCK * subdivision),
+  );
+  const edges = risingEdges(
+    render(generate, ramp(samplesPerCycle), blocks, {
+      subdivision,
+      swing,
+      pulseWidth: 0.25,
+    }),
+  );
+  const lengths = edges.slice(1).map((v, i) => v - edges[i]);
+  return Array.from({ length: count }, (_, k) => lengths[k * steps]);
+}
+
+/**
+ * The shortest complete low run over two clock cycles of an all-hits pattern -
+ * the quantity clock ticket 04's clamp exists to keep at or above one render
+ * quantum, measured per *step* rather than per beat.
+ *
+ * Scans each block in place rather than going through `render()`. The sweep
+ * this feeds is 2268 cells and the slowest of them is 30 BPM, which is 176 400
+ * samples a cell; collecting five output arrays per block to read one of them
+ * made the sweep take forty seconds on its own.
+ */
+function minLowRun(
+  samplesPerBeat: number,
+  subdivision: number,
+  swing: number,
+  pulseWidth: number,
+) {
+  const [generate, update] = createEuclid();
+  update(1, 1, 0);
+  const buffer = new Float32Array(BLOCK);
+  const outputs = [[buffer]];
+  const nextClock = ramp(samplesPerBeat);
+  const blocks = Math.ceil((samplesPerBeat * 2) / BLOCK);
+  let shortest = Infinity;
+  let run = 0;
+  let started = false;
+  for (let b = 0; b < blocks; b++) {
+    generate(outputs, nextClock(), subdivision, swing, pulseWidth, 0, NO_RESET);
+    for (let i = 0; i < BLOCK; i++) {
+      if (!(buffer[i] > 0)) {
+        if (started) run++;
+      } else {
+        if (run && run < shortest) shortest = run;
+        run = 0;
+        started = true;
+      }
+    }
+  }
+  return shortest === Infinity ? 0 : shortest;
+}
+
+/** The shortest step of one clock cycle, in samples: the pair's short half. */
+function shortStepSamples(
+  samplesPerBeat: number,
+  subdivision: number,
+  swing: number,
+) {
+  return Math.min(...stepLengths(samplesPerBeat, subdivision, swing));
+}
+
+/** One shared clock, precomputed, so every node in a birth sweep sees the
+ * same ramp whatever block it was built in. 512 samples per cycle. */
+const SHARED_CLOCK = (() => {
+  const blocks: Float32Array[] = [];
+  const next = ramp();
+  for (let b = 0; b < 64; b++) blocks.push(next());
+  return blocks;
+})();
+
+/** The block, and the sample inside it, that the shared reset fires on. */
+const RESET_BLOCK = 40;
+const RESET_SAMPLE = 7;
+
+/**
+ * A node built at block `birth`, rendered to the end of `SHARED_CLOCK`, with
+ * the samples from the shared reset onward returned.
+ *
+ * Criterion 6's sweep: every birth offset must give the same array.
+ */
+function renderFromBirth(
+  birth: number,
+  params: { swing: number; subdivision: number },
+) {
+  const [generate, update] = createEuclid();
+  update(8, 3, 0);
+  const buffer = new Float32Array(BLOCK);
+  const outputs = [[buffer]];
+  const collected: number[] = [];
+  for (let b = birth; b < SHARED_CLOCK.length; b++) {
+    const reset = new Float32Array(BLOCK);
+    if (b === RESET_BLOCK) reset[RESET_SAMPLE] = 1;
+    generate(
+      outputs,
+      SHARED_CLOCK[b],
+      params.subdivision,
+      params.swing,
+      0.5,
+      0,
+      reset,
+    );
+    if (b >= RESET_BLOCK) collected.push(...buffer);
+  }
+  return collected.slice(RESET_SAMPLE + 1);
+}
+
+/**
+ * An all-hits render whose reset fires at `sample`, returned from that sample.
+ *
+ * `pulseWidth` is deliberately narrow. `reset` moves the *pattern*, not the
+ * clock, so the gate at the reset sample is whatever the grid phase says - and
+ * at a wide width the reset can land inside a pulse that is already high, which
+ * hides the boundary from `risingEdges` at one setting and not the other.
+ */
+function resetAt(
+  sample: number,
+  params: { subdivision: number; swing: number },
+) {
+  const [generate, update] = createEuclid();
+  update(1, 1, 0);
+  const buffer = new Float32Array(BLOCK);
+  const outputs = [[buffer]];
+  const collected: number[] = [];
+  for (let b = 0; b < 16; b++) {
+    const reset = new Float32Array(BLOCK);
+    if (Math.floor(sample / BLOCK) === b) reset[sample % BLOCK] = 1;
+    generate(
+      outputs,
+      SHARED_CLOCK[b],
+      params.subdivision,
+      params.swing,
+      0.05,
+      0,
+      reset,
+    );
+    collected.push(...buffer);
+  }
+  return collected.slice(sample);
+}
+
+/** The intervals between successive rising edges. */
+function iois(values: number[]) {
+  const edges = risingEdges(values);
+  return edges.slice(1).map((v, i) => v - edges[i]);
 }
 
 /**

@@ -44,7 +44,8 @@ const clave = ClaveDrum(ac, { trigger: rhythm.d }); // rotation 12
 clock.bpm.value = 150;
 ```
 
-Sweep **Spread** to 0 below and the four voices collapse onto one rhythm.
+Sweep **Spread** to 0 below and the four voices collapse onto one rhythm;
+sweep **Swing** and all four swing together, because they are one step phase.
 
 <EuclidExample />
 
@@ -209,6 +210,24 @@ the wrong step.
   multiplying its phase. The scaled ramp is read modulo 1, so a value of exactly
   1 is the same phase as 0.
 - `subdivision`: the subdivision of the clock
+- `swing`: the long-short ratio of each pair of steps. Default `1`, straight;
+  `2` is triplet feel, `3` — the maximum — is dotted-eighth. It moves one
+  boundary inside each pair rather than delaying the odd steps, so the gate
+  stays the same fraction of whichever step it is in and `swing: 1` is
+  bit-identical to no swing at all. Swing is applied against the
+  **subdivision**, so `subdivision: 4` swings sixteenth pairs and
+  `subdivision: 2` eighth pairs; at `subdivision: 1` there is nothing to
+  subdivide and it is inert. At an odd `subdivision` the leftover step is a
+  straight, full-length one, so a clock cycle always holds exactly
+  `subdivision` steps.
+
+  This is the MPC/DAW convention rather than a model of jazz swing.
+  [Honing & de Haas (2008)](https://doi.org/10.1525/mp.2008.25.5.471) test the
+  constant-ratio-at-any-tempo model every DAW implements and reject it — real
+  swing ratios are "systematically adapted to a global tempo", plateau near
+  2.2:1 at slower tempi, and need "a more complex model". The knob is the
+  convention users expect and can turn; it is not a claim about how anybody
+  plays.
 
 #### Output
 
@@ -225,6 +244,10 @@ Two `Euclid`s on one `Clock` each keep a private step counter starting from
 whenever that node was built, so they play different rotations of the same
 pattern unless you align them. Patch both `reset` inlets from the same gate and
 they agree.
+
+Two swung `Euclid`s on one `Clock` always swing the **same way** — which half of
+a pair a sample falls in is a function of the clock phase alone. What `reset`
+does is put their patterns on the same half of the pair.
 
 Euclid's output is a [gate](/docs/gates-and-triggers): each hit is a pulse over
 the first `pulseWidth` of its step, so two adjacent hits are two triggers. (It

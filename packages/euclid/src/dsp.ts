@@ -23,6 +23,7 @@ export type GenerateFn = (
   outputs: Float32Array[][],
   clock: Float32Array,
   subdivision: number,
+  swing: number,
   pulseWidth: number,
   spread: number,
   reset: Float32Array,
@@ -59,6 +60,15 @@ export type ResetFn = () => void;
  * len]` - so moving a channel's entry point *forward* means reading the array
  * *backward*. Hence `generate()`'s `back`, which is `-spread` reduced into
  * `[0, n)`.
+ *
+ * **Swing.** `swing` moves one boundary inside each pair of steps - a pair's
+ * two steps start at `0` and `swing / (1 + swing)` of the pair rather than `0`
+ * and `0.5` - and it is applied to the one step phase every output is read
+ * from, so all five swing identically and nothing per-output is involved. It
+ * is applied against the *subdivision*, which is the whole argument for the
+ * parameter being here rather than on `Clock`: a warp on the beat phase swings
+ * eighths and gives a half-bar shuffle at `subdivision: 4`. `swing: 1` is
+ * straight and bit-identical to no swing at all. See `stepPhase`.
  *
  * Returns three functions rather than an object: `generate` renders a block,
  * `update` rebuilds the pattern when one of its three parameters moved, and
@@ -110,8 +120,18 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
   // sample of a running clock is positive, so `> 0` would latch on at the
   // first one and never see a step again. `createGateDetector` is imported
   // here for `reset` alone, which genuinely is a gate.
-  function step(clock: number, subdivision: number, pulseWidth: number) {
-    const currentClock = wrapPhase(clock * subdivision);
+  function step(
+    clock: number,
+    subdivision: number,
+    paired: number,
+    swingPoint: number,
+    pulseWidth: number,
+  ) {
+    // The one line swing warps, and the only one it needs to: `gate`,
+    // `prevClock`, `current`, and every one of the five reads `generate()`
+    // makes hang off this value, so all five outputs swing together and
+    // nothing per-output is involved. See `stepPhase`.
+    const currentClock = stepPhase(clock * subdivision, paired, swingPoint);
     const gate = currentClock < prevClock;
     prevClock = currentClock;
     // Advance the pattern. `% 0` on the empty pattern is `NaN`, and a `NaN`
@@ -135,6 +155,7 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
     outputs: Float32Array[][],
     clock: Float32Array,
     subdivision: number,
+    swing: number,
     pulseWidth: number,
     spread: number,
     resetIn: Float32Array,
@@ -201,16 +222,51 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
     const back2 = n ? (2 * back) % n : 0;
     const back3 = n ? (3 * back) % n : 0;
 
+    // All three k-rate, so all three once per block. 07 spent half a ticket
+    // taking per-sample work off this path and a modulo and two divides per
+    // sample would put some back. They are passed into `step()` as arguments
+    // rather than kept in the closure, because this file's header says no
+    // state a test cannot drive directly and everything else `step()` reads is
+    // an argument.
+    //
+    // `swing` is a ratio of r : 1, and `swingPoint` is where inside the pair
+    // that puts the second step: 0.5 straight, 0.667 triplet, 0.75 at the
+    // declared maximum. `1 / (1 + 1)` is 0.5 exactly, so the straight case
+    // reaches the same branch every other setting does.
+    const swingPoint = swing / (1 + swing);
+    // `2 * Math.floor(subdivision / 2)` - the part of the cycle whole pairs
+    // cover. The remainder, at an odd `subdivision`, is one straight
+    // full-length step. See `stepPhase`.
+    //
+    // Written as a subtraction and not `2 * Math.floor(subdivision / 2)`
+    // because `subdivision` is a non-negative float off an `AudioParam` and
+    // `x % 2` on it stays a small positive double; the shape to avoid on this
+    // path is a `%` that can produce `-0`, which 06 measured at a 40% penalty
+    // on the whole loop. Neither operand here can be negative.
+    const paired = subdivision - (subdivision % 2);
+    // The clamp is per *step*, and under swing the two steps of a pair are not
+    // the same length: the step phase advances at `increment / half`, so the
+    // short step - `1 - swingPoint`, the smaller half over the declared range
+    // - has the largest increment and its cap is the binding one. Clock ticket
+    // 04's guarantee is "a render quantum low in every step", so it has to be
+    // computed against the shortest step and not the average. Exactly 1 at
+    // `swing: 1`, and `y * 1 === y` for every float, so the straight case
+    // computes the same width it computed before this parameter existed.
+    const shortStep = 0.5 / (1 - swingPoint);
+
     // The house a-rate check, hoisted. An unautomated `clock` arrives as one
     // value and the whole block is one step of the ramp, which is what this
     // did before and costs the same. `reset` is read the same way, and its
     // length-1 case - unconnected, or a connected constant - is the common one.
     const rRate = resetIn.length > 1;
     if (clock.length > 1) {
-      const width = clampWidth(pulseWidth, stepIncrement(clock) * subdivision);
+      const width = clampWidth(
+        pulseWidth,
+        stepIncrement(clock) * subdivision * shortStep,
+      );
       for (let i = 0; i < output.length; i++) {
         if (detectReset(rRate ? resetIn[i] : resetIn[0]) === true) reset();
-        const pulse = step(clock[i], subdivision, width);
+        const pulse = step(clock[i], subdivision, paired, swingPoint, width);
         // The floor. `current` is in range by construction - `update` clamps it
         // on every rebuild and `step` reduces it on every boundary - so `n ?`
         // guards the one case that is not an index at all: the empty pattern,
@@ -246,7 +302,7 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
       // is one value, on every output. The clamp has nothing to work with and
       // stands aside.
       if (detectReset(resetIn[0]) === true) reset();
-      const pulse = step(clock[0], subdivision, pulseWidth);
+      const pulse = step(clock[0], subdivision, paired, swingPoint, pulseWidth);
       const hit = n ? pattern[current] : 0;
       output.fill(hit * pulse);
       if (wantRests) restsOut!.fill(n ? (1 - hit) * pulse : 0);
@@ -317,6 +373,69 @@ export function createEuclid(): [GenerateFn, UpdateFn, ResetFn] {
  */
 export function wrapPhase(phase: number) {
   return phase - Math.floor(phase);
+}
+
+/**
+ * The phase of the current step, in `[0, 1)`, with swing applied.
+ *
+ * Not "delay the odd steps" - that phrasing invites an implementation that adds
+ * a delay to an event and gets the gate width wrong. This moves **one boundary
+ * inside each pair of steps**: a pair's two steps start at `0` and `swingPoint`
+ * of the pair rather than `0` and `0.5`, and each step's phase is rescaled to
+ * `[0, 1)` against its own - now unequal - length. So `pulseWidth` still means
+ * "this fraction of *this* step", the boundary is still `phase < prevPhase`,
+ * and a swung step's gate is not subtly wider than a straight one.
+ *
+ * `swingPoint` is `r / (1 + r)` for a ratio of `r : 1`: 0.5 straight, 0.667 for
+ * triplet feel, 0.75 for the declared maximum of 3.
+ *
+ * At `swingPoint === 0.5` this is `wrapPhase(scaled)`, bit-for-bit and not
+ * merely to within an epsilon. Writing `q = wrapPhase(scaled / 2)`: an even
+ * `floor(scaled)` gives `q = w/2 < 0.5` and `q / 0.5 = w`; an odd one gives
+ * `q = (w + 1)/2 >= 0.5` and `(q - 0.5) / 0.5 = w`. Every step of that is exact
+ * in binary floating point - halving and doubling are exponent shifts, a
+ * fractional part is a suffix of a significand, and `q - 0.5` for `q` in
+ * `[0.5, 1)` is exact by Sterbenz. Measured over 4.8M samples across the
+ * declared range of `clock` and `subdivision`, and over 46M samples of the
+ * five outputs held against the pre-swing engine: zero differ. `swing: 1` is the
+ * default, so the default is *provably* inert rather than approximately so.
+ *
+ * `paired` is `2 * floor(subdivision / 2)`, hoisted by the caller: the part of
+ * the clock cycle that whole pairs cover. Pairs only tile a clock cycle when
+ * `subdivision` is even, and above `paired` - reachable only at an odd
+ * `subdivision` - is the **leftover step, which is straight and full length**.
+ * That is a decision, not a fallback: letting the half-pair truncate would give
+ * that step a phase spanning only `[0, 0.5/swingPoint)`, so any `pulseWidth`
+ * above 0.67 would produce a gate that never falls in it. With the rule as
+ * written, every clock cycle contains exactly `subdivision` boundaries at every
+ * subdivision 1..20 and every swing 1..3 - measured, no cell drops or gains a
+ * step - and the step lengths at `subdivision: 5, swing: 2` are
+ * 1.333, 0.667, 1.333, 0.667, 1.000 straight steps.
+ *
+ * At `subdivision: 1` that makes `paired` 0, so every step is the leftover and
+ * swing is **exactly inert** - bit-identical to no swing, measured across the
+ * whole declared range. Which is right: swing subdivides the beat, and at
+ * `subdivision: 1` the step is the beat.
+ *
+ * No guard on `swingPoint`. `swing` declares `1 ... 3` and an `AudioParam`
+ * clamps to its declared range, so `swingPoint` is in `[0.5, 0.75]`, the
+ * divides cannot approach zero, and a `swingPoint` below 0.5 - which would put
+ * an extra boundary in the leftover half-pair - is unreachable through the
+ * module's own surface. The same argument `wrapPhase` makes about negative
+ * phases.
+ *
+ * Exported for `dsp.test.ts`, which holds it against `wrapPhase` over the whole
+ * declared range, and not re-exported from `index.ts`.
+ */
+export function stepPhase(scaled: number, paired: number, swingPoint: number) {
+  // The leftover step of an odd `subdivision`: straight, full length. Also the
+  // one place `clock: 1` lands at an odd subdivision, which `wrapPhase` reads
+  // as the bottom of the next step - see its own comment.
+  if (scaled >= paired) return wrapPhase(scaled - paired);
+  const pair = wrapPhase(scaled * 0.5);
+  return pair < swingPoint
+    ? pair / swingPoint
+    : (pair - swingPoint) / (1 - swingPoint);
 }
 
 /**

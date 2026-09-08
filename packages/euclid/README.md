@@ -209,6 +209,7 @@ three are not.
 | `steps`       | 8       | 0 … 100 | k-rate | Length of the cycle                                      |
 | `beats`       | 3       | 0 … 100 | k-rate | How many of those steps are hits                         |
 | `subdivision` | 1       | 1 … 20  | k-rate | Pattern cycles per clock cycle — a multiplier on `clock` |
+| `swing`       | 1       | 1 … 3   | k-rate | Long-short ratio of each pair of steps; 1 is straight²   |
 | `rotation`    | 0       | 0 … 100 | k-rate | How far the pattern is rotated                           |
 | `spread`      | 0       | 0 … 100 | k-rate | How far apart the fan's channels are, in steps           |
 | `pulseWidth`  | 0.5     | 0 … 1   | k-rate | How much of each step a hit is high for¹                 |
@@ -264,6 +265,99 @@ is what a consumer reading its trigger once per block needs in order to see the
 falling edge. The cap is derived from the incoming clock's own rate and the
 `subdivision` applied to it, so it tracks the tempo, and it is inert at any
 width you would ordinarily set.
+
+² Under `swing` the two steps of a pair are not the same length, so the cap is
+computed against the **short** one — the binding step — and there is still one
+width for every output. `pulseWidth: 1` therefore retriggers at every swing
+setting except the corner where the short step is itself under a render
+quantum: above about 700 BPM at `subdivision ≥ 12`, where no width can leave a
+quantum low. Measured over 2268 settings (`bpm` 30–1000 × `subdivision` 1–20 ×
+`swing` 1–3 × `pulseWidth` 0.05–1), 96 leave the gate under a quantum and every
+one is in that corner — **none at `swing: 1`**. It is the "inert wherever it
+cannot help" limit the straight clamp already had.
+
+## Swing
+
+`swing` moves **one boundary inside each pair of steps**. A pair's two steps
+start at `0` and `swing / (1 + swing)` of the pair instead of `0` and `0.5`, and
+each step's phase is measured against its own — now unequal — length. So a swung
+step's gate is not subtly wider than a straight one: `pulseWidth` still means
+"this fraction of _this_ step".
+
+It is not "delay the odd steps". That phrasing invites an implementation that
+adds a delay to an event and gets the gate width wrong.
+
+| `swing` | feel                          |
+| ------- | ----------------------------- |
+| `1`     | straight — the default        |
+| `2`     | triplet feel, the 2:1 shuffle |
+| `3`     | dotted-eighth feel, 3:1       |
+
+A **ratio**, not a percentage. It is the unit the papers use (2:1, 3:1, the
+2.2:1 plateau below), and a knob whose 0.5 means straight has caught out every
+person who has ever read an MPC manual. The cost is a non-zero number in the
+"off" position, which is unusual for this library; it is the smaller of the two
+costs. `swing: 1` is not merely close to no swing, it is **bit-identical** to
+it — the pair reduction is algebraically the step reduction at a swing point of
+0.5, and every operation in it is exact in binary floating point. Measured, zero
+differing samples over 46 million.
+
+**Against the subdivision.** At `subdivision: 2` the pairs are eighth pairs, at
+`4` sixteenth pairs. This is why the parameter is here and not on `@synthlet/clock`,
+which has no subdivision: a warp applied to the beat phase has its breakpoint at
+the beat, so it swings eighths correctly and gives a half-bar shuffle at
+`subdivision: 4`. Measured, at `subdivision: 4` over one beat of 3840 samples,
+this design gives step lengths of **1280, 640, 1280, 640** where a beat-phase
+warp gives 720, 720, 960, 1440 — not even monotonic. (Measured through the
+module's own Float32 `clock` ramp the second pair reads 1281, 639: a boundary
+that falls on 3200 of 3840 lands one sample late, because that phase rounds just
+below 5/6 in single precision. Every pair is 2:1 to within that one sample.)
+
+**Odd `subdivision`.** Pairs tile a clock cycle only when `subdivision` is even.
+The leftover step is a **straight, full-length** step, so a clock cycle always
+holds exactly `subdivision` boundaries — verified at every subdivision 1…20 and
+every swing 1…3, with no cell dropping or gaining a step. At `subdivision: 5`
+and `swing: 2` the cycle is 1.333, 0.667, 1.333, 0.667, 1.000 straight steps.
+That is a decision rather than a fallback: letting the half-pair truncate would
+give the leftover a phase spanning only `[0, 0.5/swingPoint)`, so any
+`pulseWidth` above 0.67 would produce a gate that never falls in it.
+
+**At `subdivision: 1` swing is inert**, bit-identically. `subdivision: 1` makes
+every step the leftover, and that is right — swing subdivides the beat, and here
+the step _is_ the beat.
+
+**Parity.** Which half of a pair a sample falls in is a pure function of the
+clock phase, so **two `Euclid`s on one `Clock` always swing the same way**,
+`reset` or no `reset`. What `reset` anchors is where the _pattern_ sits on that
+grid — and a reset landing past the swing point puts step 0 on the **short**
+half, deterministically and identically in every node that shares the reset.
+Reset on the beat and the downbeat is long. (Same class as the already
+documented "a reset mid-step truncates the first step".) An odd `steps` beats
+against the grid the same way: its step 0 alternates between the halves on
+successive pattern cycles, with period 2 — defined, stable, and re-anchored by
+`reset`.
+
+### It is a convention, not a model of swing
+
+This is the MPC/DAW knob, and it is worth saying what that knob is. Honing & de
+Haas (2008) measured professional jazz drummers at beat durations across the
+musical range and tested exactly the constant-ratio-at-any-tempo model every DAW
+implements. They reject it: the swing ratio _"is not kept constant, but it is
+systematically adapted to a global tempo"_, and swing performance _"cannot be
+transposed in tempo by multiplying all durations with a constant factor"_. They
+reject the linear alternative too — _"no evidence was found for a linear
+interpretation"_ — and Friberg & Sundström's constant ~100 ms floor on the short
+note, finding the second note's duration linear in beat duration instead,
+r(3446) = .94, p < .0001, _"without support for a lower limit around 100 ms"_.
+Their own data stabilise _"around a swing ratio close to 2.2:1"_ at slower tempi
+and fall toward straight through the 250–350 ms beat-duration range, and they
+decline to fit a curve: _"Clearly, a more complex model is needed."_
+
+So this knob is a constant ratio at any tempo because that is the control users
+expect and can turn — **not** because a drummer plays that way. Shipping the
+convention and saying it is a convention is a stronger position than either
+omitting swing or claiming it is authentic; shipping a tempo curve the corpus
+does not supply would be worse than both.
 
 ## The generator
 
@@ -387,6 +481,11 @@ above are that translation, done once.
   arXiv:2206.12421, 2022 — §4 is the generator in this package, Lemma 2 and
   Corollary 2 are what its tests assert, and Lemma 3 is why `.rests` is a
   rhythm
+- H. Honing and W. B. de Haas,
+  [_Swing Once More: Relating Timing and Tempo in Expert Jazz Drumming_](https://doi.org/10.1525/mp.2008.25.5.471),
+  Music Perception 25(5), 2008 — why `swing` is a convention rather than a
+  model: they test the constant-ratio-at-any-tempo model every DAW implements
+  and reject it
 
 ## License
 

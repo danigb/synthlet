@@ -3,7 +3,7 @@ import type { ParamDescriptor } from "./_worklet";
 // The single list of this module's parameters: the processor registers it,
 // the factory wires inputs by it, and it is exposed as `X.descriptors`.
 //
-// Eight parameters, two of them a-rate.
+// Nine parameters, two of them a-rate.
 //
 // `AudioParamDescriptor.automationRate` defaults to `"a-rate"` in the spec, so
 // every `k-rate` below is an explicit opt-out and carries a reason for being
@@ -70,6 +70,55 @@ export const PARAMS = [
     defaultValue: 1,
     minValue: 1,
     maxValue: 20,
+    automationRate: "k-rate",
+  },
+  {
+    // The long-short division of the beat that makes a groove feel like a
+    // groove. A ratio: the second step of each pair starts at
+    // `swing / (1 + swing)` of the pair rather than halfway, so 1 is straight
+    // (0.5), 2 is triplet feel (0.667) and 3 is dotted-eighth feel (0.75).
+    //
+    // It lives here rather than in `Clock` because swing is defined against a
+    // *subdivision* and `Clock` has none: a warp on the beat phase has its
+    // breakpoint at the beat, so it swings eighths correctly and gives a
+    // half-bar shuffle at `subdivision: 4`. Measured, at `subdivision: 4` and
+    // one beat of 3840 samples, this gives 1280/640/1281/639 - 2:1 pairs to
+    // within the sample a Float32 clock ramp quantises to - where a beat-phase
+    // warp gives 720/720/960/1440.
+    //
+    // **This is the MPC/DAW convention, not a model of jazz swing.** Honing &
+    // de Haas 2008 test exactly the constant-ratio-at-any-tempo model every DAW
+    // implements and reject it: the swing ratio "is not kept constant, but it is
+    // systematically adapted to a global tempo", and swing performance "cannot
+    // be transposed in tempo by multiplying all durations with a constant
+    // factor". They also reject the linear alternative - "no evidence was found
+    // for a linear interpretation" - and Friberg & Sundstrom's ~100 ms
+    // short-note floor, find their own data stabilising "around a swing ratio
+    // close to 2.2:1" at slower tempi, and decline to fit a curve: "a more
+    // complex model is needed". So: ship the constant ratio, because it is the
+    // convention users expect and can control, and say what it is.
+    // `docs/papers-md/rhythm/honing-dehaas-2008-swing-once-more-timing-tempo-jazz-drumming-music-perception.md`.
+    //
+    // A ratio and not a 0-to-1 percentage: the ratio is the unit the papers use,
+    // and a knob whose 0.5 means straight has caught out everyone who has read
+    // an MPC manual. The cost is a non-zero number in the "off" position, which
+    // is unusual for this library, and it is the smaller of the two costs.
+    //
+    // `minValue: 1` is arithmetic, not taste. Below 1 the short step comes
+    // first, which is a pushed feel rather than swing, and at an odd
+    // `subdivision` it puts an extra boundary inside the leftover half-pair - so
+    // a clock cycle would stop containing exactly `subdivision` steps. An
+    // `AudioParam` clamps to its declared range, so it is unreachable from here.
+    // `maxValue: 3` keeps `1 - swingPoint` at or above 0.25, so neither divide
+    // in `dsp.ts` can approach zero, and is already past everything the corpus
+    // reports.
+    //
+    // k-rate for `pulseWidth`'s reason: it describes the *shape of a step*, and
+    // the boundary that places the step is carried by `clock`.
+    name: "swing",
+    defaultValue: 1,
+    minValue: 1,
+    maxValue: 3,
     automationRate: "k-rate",
   },
   {

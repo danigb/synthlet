@@ -16,6 +16,7 @@ export type EuclidInputs = {
   steps?: ParamInput;
   beats?: ParamInput;
   subdivision?: ParamInput;
+  swing?: ParamInput;
   rotation?: ParamInput;
   spread?: ParamInput;
   pulseWidth?: ParamInput;
@@ -27,6 +28,7 @@ export type EuclidWorkletNode = AudioWorkletNode & {
   steps: AudioParam;
   beats: AudioParam;
   subdivision: AudioParam;
+  swing: AudioParam;
   rotation: AudioParam;
   spread: AudioParam;
   pulseWidth: AudioParam;
