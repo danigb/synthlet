@@ -15,19 +15,15 @@
  *   3  channel sum      L_K = -0.691 + 10*log10(sum_i G_i * z_i)   eq (2)
  *   4  gating           400 ms blocks at 75% overlap, two thresholds
  *
- * Everything is built on one grid: **100 ms blocks**. A block's per-channel
- * mean square goes into a 30-slot ring, and every window in the standard is a
- * run of slots off that ring - Momentary is the last 4 (400 ms), Short-term
- * the last 30 (3 s), and the gating block of eq (3) is the same last-4 window
- * emitted once per block, which is exactly the 400 ms block at a 100 ms hop
- * that 75% overlap means. One accumulator, four numbers.
+ * Everything is built on one grid: **20 ms sub-blocks**. A sub-block's
+ * per-channel mean square goes into a 150-slot ring, and every window in the
+ * standard is a run of slots off that ring - Momentary is the last 20
+ * (400 ms), Short-term the last 150 (3 s), and the gating block of eq (3) is
+ * the last 20 emitted every fifth sub-block, which is exactly the 400 ms block
+ * at the 100 ms hop that 75% overlap means. One accumulator, four numbers.
  *
- * The grid is also the update rate, 10 Hz, which meets Tech 3341 §2.2 (>=10 Hz
- * for Short-term, >=1 Hz for Integrated; no rate is stated for Momentary). Its
- * one visible cost is that the sliding windows can only start on a 100 ms
- * boundary, so a tone that starts off-grid never fills a window exactly -
- * `loudness.test.ts` derives that bound and asserts it against Tech 3341
- * cases 13 and 14 rather than leaving it implicit.
+ * See `SUB_BLOCK_MS` for why the grid is 20 ms and not the 100 ms that the
+ * gating hop alone would need.
  *
  * Integrated and LRA are histograms, so their memory does not depend on how
  * long the programme is. See `HISTOGRAM_BINS`.
@@ -128,14 +124,40 @@ export function kWeightingCoefficients(
  */
 export const LOUDNESS_OFFSET_LUFS = -0.691;
 
-/** The accumulation grid, in milliseconds. A quarter of a gating block. */
-export const BLOCK_MS = 100;
+/**
+ * The accumulation grid, in milliseconds. **Do not raise this to 100 ms.**
+ *
+ * 100 ms is all the gating of eq (3) needs - a 400 ms block at a 100 ms hop is
+ * four slots and a hop of one. But Tech 3341 §2.2 calls Momentary and
+ * Short-term *sliding* rectangular windows, and cases 13 and 14 are built to
+ * catch a meter that only slides in gating-sized steps: they walk a 400 ms tone
+ * past the grid in 20 ms increments and require the peak reading within
+ * +/-0.1 LU at every offset. On a 100 ms grid the best-placed window covers as
+ * little as 360 ms of a tone offset by 40 ms, which reads 0.46 LU low and fails.
+ *
+ * 20 ms is the coarsest grid those two cases can be read on, and it divides
+ * every sample rate in practical use into a whole number of samples (960 at
+ * 48 kHz, 882 at 44.1, 1920 at 96) - `loudness.test.ts` asserts that. The cost
+ * is the ring: 150 slots per channel instead of 30, still a few hundred floats
+ * and still allocation-free.
+ */
+export const SUB_BLOCK_MS = 20;
 
 /** Momentary: a sliding 400 ms rectangular window. EBU Tech 3341 §2.2 item 1. */
-export const MOMENTARY_BLOCKS = 4;
+export const MOMENTARY_SUB_BLOCKS = 20;
 
 /** Short-term: a sliding 3 s rectangular window. EBU Tech 3341 §2.2 item 2. */
-export const SHORT_TERM_BLOCKS = 30;
+export const SHORT_TERM_SUB_BLOCKS = 150;
+
+/**
+ * The gating hop: 100 ms, the 75% overlap of a 400 ms block that BS.1770-5
+ * eq (3) specifies. Every fifth sub-block, so the histograms see exactly the
+ * blocks the standard defines however fine the accumulation grid gets.
+ *
+ * It is also the update rate of the gated readings, 10 Hz, which meets Tech
+ * 3341 §2.2 (>=10 Hz for Short-term, >=1 Hz for Integrated).
+ */
+export const GATING_HOP_SUB_BLOCKS = 5;
 
 /**
  * The absolute 'silence' gate. BS.1770-5 Annex 1 eq (6), `Gamma_a = -70 LKFS`;
@@ -362,8 +384,8 @@ export interface LoudnessReadings {
 
 export interface LoudnessAnalyzer {
   readonly sampleRate: number;
-  /** Samples in one 100 ms accumulation block. */
-  readonly blockSize: number;
+  /** Samples in one 20 ms accumulation sub-block. */
+  readonly subBlockSize: number;
   /** The `G_i` actually in use. Live - do not mutate. */
   readonly channelWeights: Float64Array;
   /**
@@ -423,7 +445,7 @@ export function createLoudnessAnalyzer(
 ): LoudnessAnalyzer {
   const maxChannels =
     options.maxChannels ?? options.channelWeights?.length ?? 16;
-  const blockSize = Math.round((sampleRate * BLOCK_MS) / 1000);
+  const subBlockSize = Math.round((sampleRate * SUB_BLOCK_MS) / 1000);
 
   const weights = new Float64Array(maxChannels);
   weights.fill(1);
@@ -447,8 +469,8 @@ export function createLoudnessAnalyzer(
   const state = new Float64Array(maxChannels * STATE_WORDS);
   const blockSum = new Float64Array(maxChannels);
   const blockHasSignal = new Uint8Array(maxChannels);
-  // The ring: 30 slots (Short-term) x maxChannels of block mean square.
-  const ring = new Float64Array(SHORT_TERM_BLOCKS * maxChannels);
+  // The ring: 150 slots (Short-term) x maxChannels of sub-block mean square.
+  const ring = new Float64Array(SHORT_TERM_SUB_BLOCKS * maxChannels);
 
   const integratedHistogram = createGatingHistogram();
   const lraHistogram = createGatingHistogram();
@@ -473,26 +495,27 @@ export function createLoudnessAnalyzer(
   let channelCount = 0;
   let blockFill = 0;
   let writeIndex = 0;
-  let blocksSeen = 0;
+  let subBlocksSeen = 0;
   let integrating = options.integrate ?? true;
 
   /**
-   * `sum_i G_i * z_i` over the last `blocks` slots of the ring, where `z_i` is
-   * the channel's mean square across the window. Slots not yet written are
+   * `sum_i G_i * z_i` over the last `subBlocks` slots of the ring, where `z_i`
+   * is the channel's mean square across the window. Slots not yet written are
    * zero, so a window that reaches back before the start of the signal is a
    * window over silence - which is what it is.
    */
-  function windowEnergy(blocks: number): number {
+  function windowEnergy(subBlocks: number): number {
     let total = 0;
     for (let c = 0; c < channelCount; c++) {
       const weight = weights[c];
       if (weight === 0) continue;
       let power = 0;
-      for (let k = 1; k <= blocks; k++) {
-        const slot = (writeIndex - k + SHORT_TERM_BLOCKS) % SHORT_TERM_BLOCKS;
+      for (let k = 1; k <= subBlocks; k++) {
+        const slot =
+          (writeIndex - k + SHORT_TERM_SUB_BLOCKS) % SHORT_TERM_SUB_BLOCKS;
         power += ring[slot * maxChannels + c];
       }
-      total += weight * (power / blocks);
+      total += weight * (power / subBlocks);
     }
     return total;
   }
@@ -547,17 +570,18 @@ export function createLoudnessAnalyzer(
   }
 
   /**
-   * Close a 100 ms block: write the ring, flush, and emit to the histograms.
+   * Close a 20 ms sub-block: write the ring, flush, and - on every fifth one -
+   * emit a gating block to the histograms.
    *
    * The flush is the reason a silent channel reads `-Infinity` rather than
    * "very quiet". Two biquads in series ring for a long time in f64, and a
    * channel carrying no signal must not report the tail of one it used to
-   * carry - so a block with no non-zero input sample zeroes both the power and
-   * the filter state. Everything else only loses state that is already below
+   * carry - so a sub-block with no non-zero input sample zeroes both the power
+   * and the filter state. Everything else only loses state that is already below
    * -600 dB, which also keeps the one per-sample recursive loop in the package
    * out of the denormal range.
    */
-  function finishBlock(): void {
+  function finishSubBlock(): void {
     const base = writeIndex * maxChannels;
     for (let c = 0; c < channelCount; c++) {
       const o = c * STATE_WORDS;
@@ -565,7 +589,7 @@ export function createLoudnessAnalyzer(
         ring[base + c] = 0;
         for (let w = 0; w < STATE_WORDS; w++) state[o + w] = 0;
       } else {
-        ring[base + c] = blockSum[c] / blockSize;
+        ring[base + c] = blockSum[c] / subBlockSize;
         for (let w = 0; w < STATE_WORDS; w++) {
           if (Math.abs(state[o + w]) < STATE_FLUSH_FLOOR) state[o + w] = 0;
         }
@@ -573,23 +597,25 @@ export function createLoudnessAnalyzer(
       blockSum[c] = 0;
       blockHasSignal[c] = 0;
     }
-    writeIndex = (writeIndex + 1) % SHORT_TERM_BLOCKS;
-    blocksSeen++;
+    writeIndex = (writeIndex + 1) % SHORT_TERM_SUB_BLOCKS;
+    subBlocksSeen++;
 
     if (!integrating) return;
+    // The gating grid is 100 ms whatever the accumulation grid is.
+    if (subBlocksSeen % GATING_HOP_SUB_BLOCKS !== 0) return;
 
     // The gating block of BS.1770-5 eq (3): 400 ms, 75% overlap, emitted once
     // the first complete one exists. "Incomplete gating blocks at the end of
     // the measurement interval are not used" - and there is no end here, so a
-    // trailing partial 100 ms block simply never closes.
-    if (blocksSeen >= MOMENTARY_BLOCKS) {
-      const z = windowEnergy(MOMENTARY_BLOCKS);
+    // trailing partial sub-block simply never closes.
+    if (subBlocksSeen >= MOMENTARY_SUB_BLOCKS) {
+      const z = windowEnergy(MOMENTARY_SUB_BLOCKS);
       const l = loudnessFromEnergy(z);
       // eq (6): `J_g = {j : l_j > Gamma_a}`, strictly greater.
       if (l > ABSOLUTE_GATE_LUFS) addBlock(integratedHistogram, l, z);
     }
-    if (blocksSeen >= SHORT_TERM_BLOCKS) {
-      const z = windowEnergy(SHORT_TERM_BLOCKS);
+    if (subBlocksSeen >= SHORT_TERM_SUB_BLOCKS) {
+      const z = windowEnergy(SHORT_TERM_SUB_BLOCKS);
       const l = loudnessFromEnergy(z);
       // Tech 3342 §5 gates with `>=`; the difference from eq (6) is a set of
       // measure zero, but it is the document's own comparison.
@@ -647,7 +673,7 @@ export function createLoudnessAnalyzer(
 
   return {
     sampleRate,
-    blockSize,
+    subBlockSize,
     channelWeights: weights,
     bytes,
 
@@ -659,27 +685,31 @@ export function createLoudnessAnalyzer(
 
       let done = 0;
       while (done < count) {
-        const take = Math.min(blockSize - blockFill, count - done);
+        const take = Math.min(subBlockSize - blockFill, count - done);
         for (let c = 0; c < n; c++) {
           filterInto(channels[c], c, offset + done, take);
         }
         blockFill += take;
         done += take;
-        if (blockFill === blockSize) {
-          finishBlock();
+        if (blockFill === subBlockSize) {
+          finishSubBlock();
           blockFill = 0;
         }
       }
     },
 
-    momentary: () => loudnessFromEnergy(windowEnergy(MOMENTARY_BLOCKS)),
-    shortTerm: () => loudnessFromEnergy(windowEnergy(SHORT_TERM_BLOCKS)),
+    momentary: () => loudnessFromEnergy(windowEnergy(MOMENTARY_SUB_BLOCKS)),
+    shortTerm: () => loudnessFromEnergy(windowEnergy(SHORT_TERM_SUB_BLOCKS)),
     integrated,
     lra,
 
     results() {
-      readings.momentary = loudnessFromEnergy(windowEnergy(MOMENTARY_BLOCKS));
-      readings.shortTerm = loudnessFromEnergy(windowEnergy(SHORT_TERM_BLOCKS));
+      readings.momentary = loudnessFromEnergy(
+        windowEnergy(MOMENTARY_SUB_BLOCKS),
+      );
+      readings.shortTerm = loudnessFromEnergy(
+        windowEnergy(SHORT_TERM_SUB_BLOCKS),
+      );
       readings.integrated = integrated();
       readings.lra = lra();
       return readings;
@@ -703,7 +733,7 @@ export function createLoudnessAnalyzer(
       channelCount = 0;
       blockFill = 0;
       writeIndex = 0;
-      blocksSeen = 0;
+      subBlocksSeen = 0;
     },
   };
 }

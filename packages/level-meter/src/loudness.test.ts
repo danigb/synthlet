@@ -20,19 +20,20 @@ import {
   BS1770_50_CHANNEL_WEIGHTS,
   createLoudnessAnalyzer,
   gainToTarget,
+  GATING_HOP_SUB_BLOCKS,
   HISTOGRAM_BIN_LU,
   HISTOGRAM_BINS,
   INTEGRATED_RELATIVE_GATE_LU,
   kWeightingCoefficients,
   LOUDNESS_OFFSET_LUFS,
   LRA_RELATIVE_GATE_LU,
-  MOMENTARY_BLOCKS,
-  SHORT_TERM_BLOCKS,
+  MOMENTARY_SUB_BLOCKS,
+  SHORT_TERM_SUB_BLOCKS,
+  SUB_BLOCK_MS,
 } from "./loudness";
 import {
   feed,
   feedTrackingMax,
-  gridQuantisationDb,
   RENDER_QUANTUM,
   silence,
   sineProgramme,
@@ -385,8 +386,8 @@ describe("EBU Tech 3341 Table 1", () => {
       maxima.push(runningMax);
     }
 
-    // The tones start at 0.15i s, so half of them are 50 ms off the 100 ms
-    // grid - worth 0.07 dB on a 3 s window, inside the document's tolerance.
+    // The tones start at 0.15i s, so half of them sit 10 ms off the 20 ms
+    // grid - worth 0.01 dB on a 3 s window.
     for (let i = 0; i < 20; i++) {
       expectWithin(maxima[i], -38 + i, EBU_TOLERANCE_LU);
     }
@@ -420,25 +421,17 @@ describe("EBU Tech 3341 Table 1", () => {
   });
 
   /**
-   * Cases #13 and #14 are the two that the 100 ms accumulation grid cannot
-   * meet as written, and they are the reason the grid is documented rather
-   * than assumed.
+   * Cases #13 and #14 are what sets the accumulation grid.
    *
-   * Both walk a 400 ms tone past the grid in 20 ms steps. Tech 3341 §2.2 calls
-   * Momentary "a sliding rectangular time window of length 0.4 s" and states no
-   * update rate for it; a meter that slides sample by sample (libebur128 keeps
-   * a 400 ms ring of *audio* to do exactly this) sees every tone whole. A meter
-   * built on 100 ms block powers - four numbers of state instead of 19 200 per
-   * channel, which is the trade ticket 11 chose - can only place the window on
-   * the grid, so a tone offset by 20-80 ms is measured across at best 380 ms of
-   * itself.
-   *
-   * That bound is arithmetic, not slack: `gridQuantisationDb`. The four tones
-   * per case that do land on the grid are asserted at the document's own
-   * +/-0.1 LU; the rest are asserted against the bound, which is what makes
-   * this a test of the design rather than a weakened tolerance.
+   * Both walk a 400 ms tone past the grid in 20 ms steps, and Tech 3341 §2.2
+   * calls Momentary "a sliding rectangular time window of length 0.4 s" - so a
+   * meter that only slides in gating-sized 100 ms steps measures a tone offset
+   * by 40 ms across 360 ms of itself and reads 0.46 LU low at eight of the
+   * twenty offsets. That is why `SUB_BLOCK_MS` is 20 and not 100: every offset
+   * these two cases use lands on the grid, and the readings are asserted at
+   * the document's own +/-0.1 LU with nothing subtracted.
    */
-  it("#13 file-based: max M per segment, at the grid and at the bound", () => {
+  it("#13 file-based: max M is -23.0 LUFS at every 20 ms offset", () => {
     const analyzer = createLoudnessAnalyzer(SR);
     for (let i = 0; i < 20; i++) {
       analyzer.reset();
@@ -450,9 +443,7 @@ describe("EBU Tech 3341 Table 1", () => {
       const maxM = feedTrackingMax(analyzer, signal, () =>
         analyzer.momentary(),
       );
-      const bound = gridQuantisationDb(i * 20, 400);
-      if (bound === 0) expectWithin(maxM, -23.0, EBU_TOLERANCE_LU);
-      expectWithin(maxM, -23.0 + bound, EBU_TOLERANCE_LU);
+      expectWithin(maxM, -23.0, EBU_TOLERANCE_LU);
     }
   });
 
@@ -480,9 +471,7 @@ describe("EBU Tech 3341 Table 1", () => {
     }
 
     for (let i = 0; i < 20; i++) {
-      const bound = gridQuantisationDb(i * 20, 400);
-      if (bound === 0) expectWithin(maxima[i], -38 + i, EBU_TOLERANCE_LU);
-      expectWithin(maxima[i], -38 + i + bound, EBU_TOLERANCE_LU);
+      expectWithin(maxima[i], -38 + i, EBU_TOLERANCE_LU);
     }
   });
 });
@@ -760,18 +749,47 @@ describe("memory", () => {
     expect(ABSOLUTE_GATE_LUFS + HISTOGRAM_BINS * HISTOGRAM_BIN_LU).toBe(30);
   });
 
-  it("sizes the sliding windows at 400 ms and 3 s of 100 ms blocks", () => {
-    expect(MOMENTARY_BLOCKS).toBe(4);
-    expect(SHORT_TERM_BLOCKS).toBe(30);
-    expect(createLoudnessAnalyzer(48000).blockSize).toBe(4800);
-    expect(createLoudnessAnalyzer(44100).blockSize).toBe(4410);
+  it("sizes the sliding windows at 400 ms and 3 s of 20 ms sub-blocks", () => {
+    expect(SUB_BLOCK_MS).toBe(20);
+    expect(MOMENTARY_SUB_BLOCKS * SUB_BLOCK_MS).toBe(400);
+    expect(SHORT_TERM_SUB_BLOCKS * SUB_BLOCK_MS).toBe(3000);
+    // The gating hop stays 100 ms - BS.1770-5 eq (3)'s 75% overlap - whatever
+    // the accumulation grid underneath it is.
+    expect(GATING_HOP_SUB_BLOCKS * SUB_BLOCK_MS).toBe(100);
+  });
+
+  /**
+   * 20 ms has to divide the sample rate into a whole number of samples, or the
+   * grid drifts against the audio and the sliding-tone cases stop landing on
+   * it. It does at every rate in practical use - the CD/DAT family and their
+   * multiples - because they are all multiples of 50.
+   *
+   * The one exception is 11025 Hz, at which 20 ms is 220.5 samples. 100 ms was
+   * no better there (1102.5), it is below the 8 kHz floor most implementations
+   * enforce for `new AudioContext({ sampleRate })`, and `Math.round` handles it
+   * the same way it always did.
+   */
+  it("divides every practical sample rate into whole sub-blocks", () => {
+    const rates = [
+      8000, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 176400,
+      192000,
+    ];
+    for (const rate of rates) {
+      const analyzer = createLoudnessAnalyzer(rate, { maxChannels: 1 });
+      expect(analyzer.subBlockSize).toBe((rate * SUB_BLOCK_MS) / 1000);
+      expect(Number.isInteger(analyzer.subBlockSize)).toBe(true);
+    }
+    expect(createLoudnessAnalyzer(48000).subBlockSize).toBe(960);
+    expect(createLoudnessAnalyzer(44100).subBlockSize).toBe(882);
+    expect(createLoudnessAnalyzer(96000).subBlockSize).toBe(1920);
   });
 
   /**
    * Success criterion: memory is constant regardless of programme length. The
    * histogram is what buys it - every gating block ever seen is one increment
    * of one of 1000 bins - so the assertion is on the analyzer's own footprint,
-   * not on a heap measurement that would mostly report the test signal.
+   * not on a heap measurement that would mostly report the test signal. The
+   * 20 ms grid costs 120 more ring slots per channel and nothing that grows.
    */
   it("holds the same bytes after 1 s and after 5 minutes", () => {
     const short = createLoudnessAnalyzer(SR, { maxChannels: 2 });

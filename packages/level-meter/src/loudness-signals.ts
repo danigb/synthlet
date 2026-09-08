@@ -129,23 +129,3 @@ export function feedTrackingMax(
   }
   return max;
 }
-
-/**
- * The reading a 400 ms window can reach for a `windowMs` tone that starts
- * `offsetMs` after a 100 ms grid boundary.
- *
- * A window that can only start on the grid cannot be centred on a tone that
- * does not; the best it can do is the larger of the two straddling positions.
- * Zero for any offset that is a multiple of the grid - which is why the
- * conformance cases that land on the grid are asserted at the document's own
- * +/-0.1 LU, and the rest are asserted against this.
- */
-export function gridQuantisationDb(
-  offsetMs: number,
-  windowMs: number,
-  gridMs = 100,
-): number {
-  const d = ((offsetMs % gridMs) + gridMs) % gridMs;
-  const covered = Math.max(windowMs - d, windowMs - gridMs + d);
-  return 10 * Math.log10(covered / windowMs);
-}
