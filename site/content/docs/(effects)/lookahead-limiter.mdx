@@ -48,6 +48,23 @@ Web Audio has no automatic delay compensation, so any dry signal mixed in parall
 const dry = new DelayNode(audioContext, { delayTime: limiter.latencyTime });
 ```
 
+## Checking the ceiling
+
+The limiter's true-peak detector is [the level meter's](/docs/level-meter) — one
+implementation, so the two agree about dBTP by construction rather than by
+inspection. To see what the limiter is actually delivering, tap its output:
+
+```ts
+import { LevelMeter } from "synthlet";
+
+const meter = LevelMeter.tap(limiter, { truePeak: true });
+meter.getLevels().truePeak(0); // dBTP, against your threshold
+```
+
+[Metering and loudness](/docs/metering-and-loudness) is the guide: which number
+to check, the delivery targets, and how to normalise a render before limiting
+it.
+
 ## References
 
 - Hämäläinen, [_Smoothing of the Control Signal without Clipped Output in Digital Peak Limiters_](https://www.dafx.de/paper-archive/2002/papers/DAFX02_Hamalainen_smoothing_control_signal.pdf), DAFx-02, §3.5

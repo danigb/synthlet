@@ -1,0 +1,210 @@
+---
+title: Metering and loudness
+description: What to measure, how to read it, and how to hit a delivery target
+---
+
+Three questions a meter answers, and they are not the same question:
+
+- **Is it clipping?** — peak, and really true peak.
+- **How loud is it?** — LUFS.
+- **How much is it moving?** — RMS, and loudness range.
+
+`@synthlet/level-meter` answers all three from any node in any graph, live or
+over a rendered buffer. This page is about using it with the rest of the
+library and with a host; the
+[package README](https://github.com/danigb/synthlet/tree/main/packages/level-meter)
+is the reference for the meter on its own.
+
+## Tap anything
+
+```ts
+import { LevelMeter } from "synthlet";
+
+const meter = LevelMeter.tap(bus);
+
+const levels = meter.getLevels();
+levels.peak(0); // dBFS
+levels.rms(0);
+levels.clipped(0);
+```
+
+`tap` adds a second outgoing edge and takes nothing away, so whatever `bus` was
+already connected to stays connected and you do not have to know what that was.
+It returns synchronously, reads silence until `meter.ready` resolves, and
+`meter.dispose()` puts the graph back exactly as it was.
+
+The node it taps does not have to be synthlet's. Anything that is an
+`AudioNode` works, including a `GainNode` you made by hand — see
+[Other libraries](#other-libraries) below.
+
+## Why not `AnalyserNode`
+
+Two correctness reasons, before any convenience one:
+
+1. **`AnalyserNode` down-mixes to mono before it analyses.** A stereo bus with
+   a hot right channel reads as neither channel. Per-channel metering with
+   `AnalyserNode` means a `ChannelSplitter` and one analyser per channel, kept
+   in step by hand.
+2. **`AnalyserNode` shows you the last N samples at the moment you ask.** Drop a
+   frame, background the tab, or run at 30 fps and every peak between those
+   moments is never seen. A worklet sees every sample, which is the entire point
+   of a peak meter — and it is why a transient that a lagged meter misses is the
+   thing the demo on the [level meter page](/docs/level-meter) is built to show.
+
+## Which number do you want
+
+| Quantity                  | Answers                              | Cost                              |
+| ------------------------- | ------------------------------------ | --------------------------------- |
+| `peak`                    | did a _sample_ exceed full scale     | free, always on                   |
+| `truePeak`                | will the _waveform_ clip a converter | ~10.6× everything else            |
+| `rms`                     | how much energy, unweighted          | free, always on                   |
+| `momentary` / `shortTerm` | how loud it sounds, now              | cheap; opt in                     |
+| `integrated`              | how loud the whole programme is      | offline; needs a start and an end |
+| `lra`                     | how much the loudness moves          | offline                           |
+
+Peak and true peak are different numbers and you usually need both. Sampling
+hides up to 3 dB: a quarter-Nyquist sine sampled at its zero crossings has every
+sample at ±0.707 while the reconstructed waveform reaches 1.0. That is why
+delivery specs are written in dBTP, and why a track that never exceeds 0 dBFS on
+a sample meter can still clip a converter or a lossy encoder.
+
+```ts
+const meter = LevelMeter.tap(master, { truePeak: true, loudness: true });
+```
+
+Both are off by default. True peak costs about **10.6×** everything else in the
+meter put together — 48 multiply-accumulates per sample per channel — so it is
+asked for rather than assumed. Loudness is much cheaper; it is opt-in because a
+number nobody reads is still waste.
+
+The meter's true-peak detector **is** the
+[lookahead limiter's](/docs/lookahead-limiter). One implementation, so the two
+agree about dBTP by construction rather than by inspection.
+
+## Delivery targets
+
+What the number is usually being checked against. Broadcast figures are
+normative and cited; the streaming ones are platform policy, they drift, and the
+platform's own page is the only current source.
+
+| Target                | Programme loudness | True-peak ceiling | Source                                                  |
+| --------------------- | ------------------ | ----------------- | ------------------------------------------------------- |
+| EBU R 128 (broadcast) | −23.0 LUFS         | −1 dBTP           | [EBU R 128](https://tech.ebu.ch/docs/r/r128.pdf) §h, §m |
+| ATSC A/85 (US TV)     | −24 LKFS           | —                 | ATSC A/85, via ITU-R BS.1770-5                          |
+| Streaming             | ≈ −14 LUFS         | −1 dBTP           | Each platform's own documentation                       |
+
+Checked 2026-09-08. `−23.0 LUFS` and `−1 dBTP` are quoted from EBU R 128 (2023),
+recommendations h and m. The streaming row is an approximation and is **not**
+verified against any platform's documentation here — individual services differ
+from it, and change. **Do not hardcode any of these**: read the target from the
+platform you are delivering to and pass it to `gainToTarget`.
+
+`TRUE_PEAK_CEILING_DBTP` is exported for the −1 dBTP line, so a renderer does
+not have to hardcode it either.
+
+## Normalise a render
+
+Integrated loudness needs a programme — a start and an end. A synth that has
+been running since page load has neither, which is why `integrated` is an
+offline number. An `OfflineAudioContext` render has exactly the boundary that
+was missing.
+
+```ts
+import { analyze, analyzeAudioBuffer, gainToTarget } from "synthlet/dsp";
+
+// 1. Render.
+const render = new OfflineAudioContext(2, 48000 * 4, 48000);
+const osc = new OscillatorNode(render, { frequency: 220 });
+const gain = new GainNode(render, { gain: 0.5 });
+osc.connect(gain).connect(render.destination);
+osc.start();
+const buffer = await render.startRendering();
+
+// 2. Measure.
+const analysis = await analyzeAudioBuffer(buffer, {
+  loudness: true,
+  truePeak: true,
+});
+analysis.integrated; // -6.92 LUFS
+analysis.truePeak; // [-6.01, -6.01] dBTP
+
+// 3. Decide.
+const gainDb = gainToTarget(analysis.integrated, -14); // -7.08 dB
+
+// 4. Apply, and check the ceiling you moved.
+const factor = Math.pow(10, gainDb / 20);
+const normalised = Array.from({ length: buffer.numberOfChannels }, (_, c) =>
+  Float32Array.from(buffer.getChannelData(c), (x) => x * factor),
+);
+const after = await analyze(normalised, buffer.sampleRate, {
+  loudness: true,
+  truePeak: true,
+});
+after.integrated; // -14.00 LUFS
+after.truePeak; // [-13.09, -13.09] dBTP — under the -1 ceiling
+```
+
+The numbers in the comments are the ones this exact snippet printed when it was
+run in Chrome on 2026-09-08. `gainToTarget` returns dB and leaves applying it to
+you on purpose: a gain that hits a loudness target can push the true peak
+through the ceiling, and deciding what to do about that — limit, or turn down —
+is a different job. That is what the
+[lookahead limiter](/docs/lookahead-limiter) is for.
+
+`analyze` is chunked and yields to the host between chunks, so a five-minute
+track does not freeze the tab, and `onProgress` reports a fraction per chunk.
+
+## `synthlet/dsp`
+
+Everything above imports from `synthlet/dsp` rather than `synthlet`: the same
+analyzer, with no Web Audio anywhere in it. It runs in node, in a worker and in
+a test, and it does not drag twenty-three minified worklet strings into a bundle
+that only wanted `analyze`.
+
+```ts
+import { analyze, createLevelAnalyzer, gainToTarget } from "synthlet/dsp";
+```
+
+The offline and realtime readings are the same numbers because they are the same
+code: the ballistics run on a fixed 128-sample frame either way, and the two
+leave the readings buffer in byte-identical states over the same samples.
+
+## Other libraries
+
+`LevelMeter.tap` takes the context from the node you hand it, so metering a
+graph you did not build is one line — **as long as what you hand it is a native
+`AudioNode`.**
+
+**Tone.js needs two lines, and the first is not the meter's.** Tone's default
+context is a ponyfill: `Tone.getContext().rawContext` is a wrapper, its nodes are
+not `instanceof AudioNode`, and there is no native node underneath to add an edge
+from. Give Tone a context you own and the wrapper goes away:
+
+```ts
+import * as Tone from "tone";
+import { LevelMeter } from "synthlet";
+
+const context = new AudioContext();
+Tone.setContext(context); // Tone now builds on a native context
+
+const probe = new GainNode(context);
+synth.connect(probe); // a Tone node connects to a native node
+probe.connect(context.destination);
+
+const meter = LevelMeter.tap(probe);
+```
+
+Verified against Tone 15.0.4 in Chrome on 2026-09-08: with
+`Tone.setContext(new AudioContext())` the tap reads −6.000 dBFS from a
+`Tone.Oscillator` at `volume.value = -6`, and −0.00002 dBFS from one at unity.
+Without it, `LevelMeter.tap` throws `AudioWorklet not supported`, because the
+context it was handed is not a real one.
+
+## No page requirements
+
+The readings travel over a `SharedArrayBuffer` when the page is cross-origin
+isolated and over `postMessage` when it is not — about 20 floats at 60 Hz either
+way, feature-detected, same numbers. `meter.transport` says which is running, for
+diagnostics; nothing should branch on it. **No COOP or COEP headers are needed**,
+which is why every example on this site — a static export on GitHub Pages —
+shows a live meter in its header.

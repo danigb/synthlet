@@ -31,6 +31,7 @@
     // fresh clone with no `dist/` anywhere.
     "baseUrl": ".",
     "paths": {
+      "synthlet/dsp": ["./packages/synthlet/src/dsp-entry.ts"],
       "@synthlet/level-meter/dsp": ["./packages/level-meter/src/dsp-entry.ts"],
       "@synthlet/lookahead-limiter/dsp": [
         "./packages/lookahead-limiter/src/dsp-entry.ts"

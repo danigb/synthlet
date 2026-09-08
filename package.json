@@ -20,6 +20,7 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "moduleNameMapper": {
+      "^synthlet/dsp$": "<rootDir>/packages/synthlet/src/dsp-entry.ts",
       "^@synthlet/([^/]+)/dsp$": "<rootDir>/packages/$1/src/dsp-entry.ts",
       "^@synthlet/(.*)$": "<rootDir>/packages/$1/src/index.ts"
     },
