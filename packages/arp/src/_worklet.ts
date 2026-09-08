@@ -223,7 +223,12 @@ export function Compound<N extends AudioNode, E extends object = {}>(options: {
 }
 
 export function createRegistrar(processorName: string, processor: string) {
-  return function (context: AudioContext): Promise<void> {
+  // `BaseAudioContext`, not `AudioContext`: `audioWorklet` is declared on the
+  // base, an `OfflineAudioContext` registers the same way, and a module that
+  // takes its context from a node it was handed - `LevelMeter.tap(source)`,
+  // which reads `source.context` - only has the base type to give. A widening,
+  // so every existing caller still compiles.
+  return function (context: BaseAudioContext): Promise<void> {
     const key = "__" + processorName + "__";
     if (key in context) return (context as any)[key];
 

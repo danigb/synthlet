@@ -23,16 +23,20 @@ Or `npm i synthlet` for every module at once.
 ## Usage
 
 ```ts
-import {
-  registerLevelMeterWorklet,
-  LevelMeter,
-  LevelMeterUI,
-} from "@synthlet/level-meter";
+import { LevelMeter } from "@synthlet/level-meter";
 
-const ac = new AudioContext();
-await registerLevelMeterWorklet(ac);
+const meter = LevelMeter.tap(source);
+```
 
-// A tap: adds an edge to `source` and changes nothing else.
+That is the whole thing. No context argument — it comes from `source`. No
+`registerLevelMeterWorklet` call to forget — the meter registers the worklet
+itself. No `await` — `tap` returns synchronously and reads silence until it is
+measuring, which takes a few milliseconds and cannot be observed by the audio
+graph, because a tap has no output for anything to notice.
+
+```ts
+import { LevelMeter, LevelMeterUI } from "@synthlet/level-meter";
+
 const meter = LevelMeter.tap(source);
 
 const ui = new LevelMeterUI({ minDb: -40, maxDb: 0 });
@@ -44,6 +48,10 @@ resize handling. `ui.detach()` gives them back. Every meter on the page shares
 one `requestAnimationFrame`, so the eighth costs what the first did.
 
 Don't want a canvas? See [Build your own](#build-your-own).
+
+`await meter.ready` if you need to know when it started — it resolves once the
+worklet is registered, the node built and the edge connected, and rejects only
+when nothing can run at all.
 
 ## Tap, or pass-through
 
@@ -57,18 +65,28 @@ meter.dispose(); // removes it
 A tap is a second _outgoing_ edge. It is additive and reversible: whatever
 `source` was already connected to stays connected, you do not need to know what
 that was, and there is nothing downstream of the meter for a thrown processor
-to silence. The context comes from `source`, so there is none to pass.
+to silence. `source` can be a `Compound` — it is its own output node, so tapping
+one needs no reference to which node it ends in. Pass `{ output: 1 }` for a node
+with more than one output.
 
 ```ts
-const meter = LevelMeter(ac); // pass-through: one input, one output
+const meter = LevelMeter(ac); // pass-through: audio in, same audio out
 source.connect(meter).connect(ac.destination);
 ```
 
 Pass-through goes _in_ the path, so metering a connection means breaking it —
 `source.disconnect(dest)`, reconnect through the meter, and put it back on
-`dispose()`, which nothing helps you with. It is what the package has always
-done and it still works; reach for it only when you actually want the meter in
-the signal path.
+`dispose()`, which nothing helps you with. Reach for it only when you actually
+want the meter in the signal path.
+
+It is a **native `GainNode` with a tap beside it**, so the audio never waits for
+the worklet to register and there is no JavaScript in the signal path at all.
+The processor has `numberOfOutputs: 0` in both forms. `LevelMeterWorkletNode` is
+kept as a deprecated alias of `LevelMeterNode` for one release.
+
+`registerLevelMeterWorklet(ac)` is still exported, for callers who would rather
+front-load registration; both forms go through it, so a context registers once
+however many meters it carries.
 
 **Both forms report a dead processor.** If the processor throws, the browser
 stops calling it permanently and the readings freeze. `getLevels().error` says
