@@ -33,6 +33,22 @@ connect(limiter).connect(audioContext.destination);
 
 Below the threshold the limiter is a bit-exact passthrough, delayed. Automating `threshold` downward takes `lookahead` samples to reach the smoothed gain, though the arithmetic backstop reads the current value, so the hard bound holds instantly.
 
+## Showing the gain reduction
+
+`meter: true` publishes how hard the limiter is working — the block's largest reduction in dB, `20·log10` of the smallest gain it applied. Off by default, because a limiter sits on every master chain and most have nothing reading this.
+
+```ts
+const limiter = LookaheadLimiter(ac, { threshold: -1, meter: true });
+limiter.getLevels().gainReduction; // 0 doing nothing, -6 took 6 dB off
+limiter.subscribe((levels) => draw(levels.gainReduction));
+```
+
+It is the same contract [`@synthlet/level-meter`](/docs/level-meter) publishes, shared by copy between the two packages, so the meter's renderer draws it with no adapter:
+
+```ts
+new LevelMeterUI({ mode: "reduction", minDb: -20 }).attach(canvas, limiter);
+```
+
 ## Latency
 
 The node reports the delay it introduces — the lookahead window plus the detector's 6-sample group delay:

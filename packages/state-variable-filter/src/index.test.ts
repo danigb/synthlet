@@ -19,7 +19,10 @@ class AudioContextMock {
   constructor(worklets = true) {
     if (worklets) {
       this.audioWorklet = {
-        addModule: jest.fn(),
+        // Resolved, because `addModule` returns `Promise<void>` and the
+        // registrar now attaches a `.catch` to clear its cache on failure -
+        // a bare `jest.fn()` returns `undefined` and is not the real API.
+        addModule: jest.fn().mockResolvedValue(undefined),
       };
     }
   }

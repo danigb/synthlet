@@ -1,4 +1,4 @@
-import { frameListenerCount, isDriverRunning } from "./driver";
+import { frameListenerCount, isDriverRunning } from "./_levels";
 // Type-only, so the test does not pull the factory in: `Levels` is the meter's
 // contract and the fake below has to satisfy it exactly.
 import type { Levels } from "./index";
@@ -533,6 +533,101 @@ describe("orientation", () => {
     expect(up.w).toBeCloseTo(40 / 2 - 2, 6);
     // Bars grow from the bottom.
     expect(up.y + up.h).toBeCloseTo(200, 6);
+  });
+});
+
+// Ticket 17, success criterion 4: the limiter's reduction is drawn by the same
+// code that draws the meter's peak.
+describe("reduction mode", () => {
+  const limiterLike = (gainReduction: number) => ({
+    getLevels: () => ({ gainReduction }),
+  });
+
+  it("hangs one bar down from 0 dB", () => {
+    const canvas = new CanvasStub(200, 40);
+    const meter = ui({
+      mode: "reduction",
+      minDb: -20,
+      maxDb: 0,
+      scale: false,
+      stripes: false,
+      clip: false,
+    });
+    meter.attach(asCanvas(canvas), limiterLike(-5));
+    runFrame();
+
+    const bars = barsOf(ctxOf(canvas));
+    expect(bars).toHaveLength(1);
+    // 5 dB of 20 is a quarter of the scale, anchored at the far end.
+    expect(bars[0].w).toBeCloseTo(0.25 * 200, 6);
+    expect(bars[0].x + bars[0].w).toBeCloseTo(200, 6);
+  });
+
+  it("draws nothing while the limiter is not working", () => {
+    const canvas = new CanvasStub(200, 40);
+    const meter = ui({
+      mode: "reduction",
+      minDb: -20,
+      scale: false,
+      stripes: false,
+      clip: false,
+    });
+    meter.attach(asCanvas(canvas), limiterLike(0));
+    runFrame();
+
+    expect(barsOf(ctxOf(canvas))).toHaveLength(0);
+  });
+
+  it("fills the bar once the reduction reaches the bottom of the scale", () => {
+    const canvas = new CanvasStub(200, 40);
+    const meter = ui({
+      mode: "reduction",
+      minDb: -20,
+      scale: false,
+      stripes: false,
+      clip: false,
+    });
+    meter.attach(asCanvas(canvas), limiterLike(-40));
+    runFrame();
+
+    expect(barsOf(ctxOf(canvas))[0].w).toBeCloseTo(200, 6);
+  });
+
+  it("grows downward when vertical", () => {
+    const canvas = new CanvasStub(40, 200);
+    const meter = ui({
+      mode: "reduction",
+      minDb: -20,
+      orientation: "vertical",
+      scale: false,
+      stripes: false,
+      clip: false,
+    });
+    meter.attach(asCanvas(canvas), limiterLike(-5));
+    runFrame();
+
+    const bar = barsOf(ctxOf(canvas))[0];
+    expect(bar.h).toBeCloseTo(0.25 * 200, 6);
+    // Hanging from the top, not standing on the bottom.
+    expect(bar.y).toBeCloseTo(0, 6);
+  });
+
+  it("still draws a level meter the other way up", () => {
+    const canvas = new CanvasStub(200, 40);
+    const meter = ui({
+      minDb: -20,
+      scale: false,
+      stripes: false,
+      clip: false,
+      hold: false,
+      rms: false,
+    });
+    meter.setCanvas(asCanvas(canvas));
+    meter.render(fakeLevels({ peak: [-5] }));
+
+    const bar = barsOf(ctxOf(canvas))[0];
+    expect(bar.x).toBe(0);
+    expect(bar.w).toBeCloseTo(0.75 * 200, 6);
   });
 });
 

@@ -5,7 +5,7 @@ import {
   Disposable,
   ParamDescriptor,
 } from "./_worklet";
-import { currentFrame, onAnimationFrame } from "./driver";
+import { createLevelsReader } from "./_levels";
 import {
   createScriptProcessorDriver,
   resolveBufferSize,
@@ -256,17 +256,6 @@ export type LevelMeterWorkletNode = LevelMeterNode;
 // not have to special-case a floor that should not exist.
 const toDb = (magnitude: number) => 20 * Math.log10(magnitude);
 
-// SharedArrayBuffer exists in every current browser, but only *usable* on a
-// cross-origin isolated page - and unusable ones are still constructible in
-// some engines, so both halves are checked.
-function sharedBufferAvailable(): boolean {
-  return (
-    typeof SharedArrayBuffer !== "undefined" &&
-    typeof crossOriginIsolated !== "undefined" &&
-    crossOriginIsolated
-  );
-}
-
 // Ballistics are construction options, not `AudioParam`s. They are properties of
 // the instrument, fixed for its life - the same reasoning `lookahead-limiter`
 // gives for `lookaheadMs`. Making the package's first parameter out of a number
@@ -291,10 +280,11 @@ export type LevelMeterOptions = {
   rmsMs?: number;
   /**
    * Measure true peak, with `lookahead-limiter`'s own BS.1770-style 4x
-   * interpolator. **Off by default**: measured at 10.6x the cost of everything
-   * else in the meter put together, which makes it the one thing here
-   * expensive enough to need asking for. Turns on `levels.truePeak`, which
-   * reads `NaN` until it does.
+   * interpolator. **Off by default**: it costs more than everything else in the
+   * meter put together by better than an order of magnitude - roughly 3.3 s of
+   * CPU per 5 minutes of 48 kHz stereo, against 181 ms with loudness on - which
+   * makes it the one thing here expensive enough to need asking for. Turns on
+   * `levels.truePeak`, which reads `NaN` until it does.
    */
   truePeak?: boolean;
   /**
@@ -381,50 +371,25 @@ function createLevelsCore(options: LevelMeterOptions) {
   // `maxChannels` and is resolved once here rather than per read.
   const tail = HEADER + maxChannels * STRIDE;
 
-  const shared = sharedBufferAvailable();
-  const levelsBuffer = shared
-    ? new SharedArrayBuffer(length * Float32Array.BYTES_PER_ELEMENT)
-    : undefined;
-  // One view, whichever transport wrote it: shared memory the audio thread is
-  // updating live, or the destination the posted copy lands in.
-  const view = levelsBuffer
-    ? new Float32Array(levelsBuffer)
-    : new Float32Array(length);
+  // The transport, from `scripts/_levels.ts` - the same one the limiter's gain
+  // reduction travels over, which is what lets one renderer draw both.
+  const levels_ = createLevelsReader({
+    length,
+    layoutVersion: LEVELS_LAYOUT_VERSION,
+    name: "LevelMeter",
+  });
+  const { view, shared } = levels_;
+  const levelsBuffer = levels_.buffer;
 
   // The deprecated flat peak view, kept in step with the strided one.
   const peaks = new Float32Array(maxChannels);
-  // What the view held when `version` was last bumped.
-  const previous = new Float32Array(length);
 
-  let version = 0;
   let error = false;
 
-  // The one place on the main thread where the view becomes readable. Under
-  // `"message"` it runs when a frame arrives; under `"shared"` the memory is
-  // already live, so it runs when a reader asks. Everything derived from the
-  // view is derived here, so `subscribe` has somewhere to live.
+  // The shared reader detects the change and moves `version`; the only thing
+  // left here is the deprecated flat mirror it knows nothing about.
   const readView = () => {
-    // A page can only end up here with a mismatched bundle by registering two
-    // versions of the processor in one context, where the registrar's cache
-    // means the first one wins. `[0]` exists so that fails loudly instead of
-    // reading a stride that moved. 0 is "no block has run yet".
-    const layout = view[0];
-    if (layout !== 0 && layout !== LEVELS_LAYOUT_VERSION) {
-      throw Error(
-        `LevelMeter: the registered processor writes layout ${layout}, this build reads ${LEVELS_LAYOUT_VERSION}`,
-      );
-    }
-
-    let changed = false;
-    for (let i = 0; i < length; i++) {
-      if (previous[i] !== view[i]) {
-        previous[i] = view[i];
-        changed = true;
-      }
-    }
-    if (!changed) return;
-
-    version++;
+    if (!levels_.read()) return;
     for (let c = 0; c < maxChannels; c++) peaks[c] = view[HEADER + c * STRIDE];
   };
 
@@ -433,31 +398,6 @@ function createLevelsCore(options: LevelMeterOptions) {
   // "Not measured" and "silent" are different answers, and the reserved slot
   // reads as digital silence while nothing is writing it.
   const truePeakOn = options.truePeak === true;
-
-  const listeners = new Set<LevelsListener>();
-  let stopTicking: (() => void) | null = null;
-  // The version and the frame of the most recent delivery. Together they are
-  // the whole rate policy: never twice for the same reading, never twice in
-  // one animation frame.
-  let notifiedVersion = 0;
-  let notifiedFrame = -1;
-
-  // Two things call this - a posted frame arriving, and the driver's tick -
-  // and neither needs to know about the other.
-  //
-  // Under `"message"` at the default 16 ms cadence a message is a frame, so a
-  // subscriber is notified as each one lands. Turn `postIntervalMs` down and
-  // the extra messages coalesce here rather than waking React four times
-  // between paints; the reading is never stale for more than a frame, because
-  // the tick delivers whatever the message could not.
-  const notify = () => {
-    if (listeners.size === 0 || version === notifiedVersion) return;
-    const frame = currentFrame();
-    if (frame === notifiedFrame) return;
-    notifiedFrame = frame;
-    notifiedVersion = version;
-    for (const listener of Array.from(listeners)) listener(levels);
-  };
 
   // Hand-rolled rather than built with `createWorkletConstructor`: that helper
   // exists to wire `AudioParam`s from a `ParamInput` map, and the meter has no
@@ -523,7 +463,7 @@ function createLevelsCore(options: LevelMeterOptions) {
       return view[1];
     },
     get version() {
-      return version;
+      return levels_.version;
     },
     // `NaN` when the measurement is off, `-Infinity` when it is on and the
     // signal is silent - which is why the buffer is not the thing that carries
@@ -563,7 +503,7 @@ function createLevelsCore(options: LevelMeterOptions) {
         clipped: Array.from({ length: count }, (_, c) => levels.clipped(c)),
         momentary: levels.momentary,
         shortTerm: levels.shortTerm,
-        version,
+        version: levels_.version,
       };
     },
   };
@@ -591,31 +531,11 @@ function createLevelsCore(options: LevelMeterOptions) {
 
     command,
 
+    // The shared reader owns the rate policy and the page's one animation
+    // frame; all this adds is that a listener is handed the dB accessor rather
+    // than the raw view.
     subscribe(listener: LevelsListener) {
-      listeners.add(listener);
-      if (listeners.size === 1) {
-        // From here, not from zero: a new subscriber is told about the next
-        // change, not about the one before it arrived.
-        notifiedVersion = version;
-        notifiedFrame = -1;
-        // The renderer's driver, shared. Under `"shared"` the tick is the only
-        // trigger there is - memory has no events - and under `"message"` it is
-        // what delivers anything a message had to coalesce.
-        stopTicking = onAnimationFrame(() => {
-          if (shared) readView();
-          notify();
-        });
-      }
-      let live = true;
-      return () => {
-        if (!live) return;
-        live = false;
-        listeners.delete(listener);
-        if (listeners.size === 0) {
-          stopTicking?.();
-          stopTicking = null;
-        }
-      };
+      return levels_.subscribe(() => listener(levels));
     },
 
     /** The levels view, for the script-processor driver to write into. */
@@ -630,8 +550,10 @@ function createLevelsCore(options: LevelMeterOptions) {
      * after a posted frame lands.
      */
     written() {
-      readView();
-      notify();
+      levels_.written();
+      // `written` moved `version` itself; this is the deprecated mirror.
+      for (let c = 0; c < maxChannels; c++)
+        peaks[c] = view[HEADER + c * STRIDE];
     },
 
     /**
@@ -651,9 +573,9 @@ function createLevelsCore(options: LevelMeterOptions) {
       queued.length = 0;
       if (!shared) {
         built.port.onmessage = (event: MessageEvent) => {
-          view.set(event.data as Float32Array);
-          readView();
-          notify();
+          levels_.receive(event.data as Float32Array);
+          for (let c = 0; c < maxChannels; c++)
+            peaks[c] = view[HEADER + c * STRIDE];
         };
       }
       // A dead processor is otherwise indistinguishable from a silent signal:
@@ -667,9 +589,7 @@ function createLevelsCore(options: LevelMeterOptions) {
 
     /** Drop the subscribers and, with the last of them, the animation frame. */
     release() {
-      listeners.clear();
-      stopTicking?.();
-      stopTicking = null;
+      levels_.release();
     },
   };
 }

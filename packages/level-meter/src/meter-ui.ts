@@ -1,4 +1,4 @@
-import { onAnimationFrame } from "./driver";
+import { onAnimationFrame } from "./_levels";
 // Type-only, so it is erased: `index.ts` imports this module for the class, and
 // a value import back would be a cycle.
 import type { Levels } from "./index";
@@ -6,6 +6,17 @@ import type { Levels } from "./index";
 /** Anything the renderer can read levels from - a `LevelMeterWorkletNode`. */
 export interface LevelsSource {
   getLevels(): Levels;
+}
+
+/**
+ * A single downward-growing reading, for a gain-reduction meter.
+ *
+ * `LookaheadLimiter(ac, { meter: true })` is one, because it publishes the same
+ * contract from the same `scripts/_levels.ts` - which is the point of ticket 17
+ * and the reason this is a second *shape* rather than a second renderer.
+ */
+export interface ReductionSource {
+  getLevels(): { readonly gainReduction: number };
 }
 
 // `OffscreenCanvas` is a target too, which is why nothing here reaches for
@@ -70,6 +81,16 @@ export type LevelMeterUIOptions = {
   stripes: boolean;
   /** Gap between channel bars, in px. Default 2, shrunk to fit. */
   gap: number;
+  /**
+   * What the bar means.
+   *
+   * `"level"` is the default: one bar per channel, growing from `minDb`.
+   * `"reduction"` is a gain-reduction meter - one bar, growing *down* from
+   * 0 dB, which is how every GR meter in existence draws it. In that mode
+   * `maxDb` is the bottom of the scale and 0 dB is the top, so
+   * `{ minDb: -20 }` reads "20 dB of reduction fills the bar".
+   */
+  mode: "level" | "reduction";
   colors: Partial<LevelMeterUIColors>;
 };
 
@@ -158,6 +179,36 @@ function createTile(
 }
 
 /**
+ * Present a single gain-reduction number as a one-channel `Levels`.
+ *
+ * The renderer then draws it with the same code that draws a peak bar - the
+ * only difference is which end of the axis the bar is anchored to, which is one
+ * branch in `render`. That is what makes "one renderer, every package's meter"
+ * true rather than aspirational.
+ */
+function reductionLevels(source: ReductionSource): LevelsSource {
+  const nothing = () => -Infinity;
+  const levels: Levels = {
+    channelCount: 1,
+    version: 0,
+    peak: () => source.getLevels().gainReduction,
+    hold: nothing,
+    rms: nothing,
+    truePeak: () => NaN,
+    clipped: () => false,
+    clearClip: () => {},
+    momentary: NaN,
+    shortTerm: NaN,
+    error: false,
+    snapshot: () => {
+      throw Error("a reduction meter has no snapshot");
+    },
+  };
+  // One object, reused, exactly as the meter's own accessor is.
+  return { getLevels: () => levels };
+}
+
+/**
  * Draws a meter's levels on a canvas.
  *
  * ```ts
@@ -179,6 +230,7 @@ export class LevelMeterUI {
   minDb: number;
   maxDb: number;
   orientation: "horizontal" | "vertical";
+  readonly mode: "level" | "reduction";
   readonly colors: LevelMeterUIColors;
 
   private readonly showScale: boolean;
@@ -216,6 +268,7 @@ export class LevelMeterUI {
     this.showRms = options.rms ?? true;
     this.showStripes = options.stripes ?? true;
     this.gap = Math.max(0, options.gap ?? 2);
+    this.mode = options.mode ?? "level";
     this.colors = { ...DEFAULT_COLORS, ...options.colors };
   }
 
@@ -245,10 +298,16 @@ export class LevelMeterUI {
    *
    * Every attached renderer on the page shares one `requestAnimationFrame`.
    */
-  attach(canvas: LevelMeterUICanvas, meter: LevelsSource): this {
+  attach(
+    canvas: LevelMeterUICanvas,
+    meter: LevelsSource | ReductionSource,
+  ): this {
     this.detach();
     this.setCanvas(canvas);
-    this.meter = meter;
+    this.meter =
+      this.mode === "reduction"
+        ? reductionLevels(meter as ReductionSource)
+        : (meter as LevelsSource);
     this.cssSize = measure(canvas);
 
     const Observer = (globalThis as any).ResizeObserver;
@@ -328,7 +387,23 @@ export class LevelMeterUI {
         const cross = c * slot;
         const peak = dbToUnit(levels.peak(c), this.minDb, this.maxDb);
         ctx.fillStyle = this.gradient ?? this.colors.low;
-        fill(ctx, vertical, meterH, 0, peak * valueSpan, cross, thickness);
+        // The one branch the reduction mode costs. A level bar grows from
+        // `minDb` towards 0; a gain-reduction bar hangs *down* from 0, which is
+        // how every GR meter draws it - so it is anchored at the far end and
+        // its length is what the reading took away.
+        if (this.mode === "reduction") {
+          fill(
+            ctx,
+            vertical,
+            meterH,
+            peak * valueSpan,
+            valueSpan,
+            cross,
+            thickness,
+          );
+        } else {
+          fill(ctx, vertical, meterH, 0, peak * valueSpan, cross, thickness);
+        }
 
         if (this.showRms) {
           const inset = thickness / 4;

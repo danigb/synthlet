@@ -269,6 +269,23 @@ export function createLimiter(sampleRate: number, lookaheadMs: number) {
  * The interpolator is not the ITU reference coefficient table - see the file
  * header for what is and is not claimed.
  */
+/**
+ * The limiter's levels layout: `_levels.ts`'s shared header, then one slot.
+ *
+ * A gain-reduction meter answers one question - how hard is it working *now* -
+ * and at 60 Hz "now" is the block. The slot carries the block's largest
+ * reduction, `20·log10` of the smallest gain applied in it: 0 dB when the
+ * limiter is doing nothing, -6 dB when it took 6 dB off.
+ *
+ * Here rather than in `worklet.ts` because the main thread reads the same slot,
+ * and importing it from the worklet would evaluate `AudioWorkletProcessor`
+ * outside a worklet.
+ */
+export const LEVELS_LAYOUT_VERSION = 1;
+/** Index of the gain-reduction slot: the first word after the header. */
+export const GAIN_REDUCTION = 3;
+export const LEVELS_LENGTH = 4;
+
 export function createTruePeakDetector() {
   const history: Float64Array[] = []; // one TP_HISTORY ring per channel
   let pos = 0;

@@ -13,7 +13,10 @@ class AudioNodeMock {
 }
 
 class AudioWorkletNodeMock extends AudioNodeMock {
-  readonly port = { postMessage: jest.fn() };
+  readonly port: {
+    postMessage: jest.Mock;
+    onmessage?: (event: MessageEvent) => void;
+  } = { postMessage: jest.fn() };
   readonly parameters: { get(name: string): ParamMock };
 
   constructor(
@@ -41,9 +44,27 @@ class AudioWorkletNodeMock extends AudioNodeMock {
 const context = { sampleRate: 48000 } as AudioContext;
 const created = (node: unknown) => node as unknown as AudioWorkletNodeMock;
 
+// `subscribe` coalesces to one call per animation frame, on this package as on
+// `level-meter`, so the frame has to be under the test's control.
+const pendingFrames = new Map<number, (now: number) => void>();
+let nextFrameHandle = 1;
+
+function runFrame() {
+  const due = Array.from(pendingFrames.values());
+  pendingFrames.clear();
+  for (const callback of due) callback(0);
+}
+
 beforeAll(() => {
   (global as any).AudioNode = AudioNodeMock;
   (global as any).AudioWorkletNode = AudioWorkletNodeMock;
+  (globalThis as any).requestAnimationFrame = (cb: (now: number) => void) => {
+    const handle = nextFrameHandle++;
+    pendingFrames.set(handle, cb);
+    return handle;
+  };
+  (globalThis as any).cancelAnimationFrame = (handle: number) =>
+    pendingFrames.delete(handle);
 });
 
 describe("LookaheadLimiter", () => {
@@ -101,5 +122,100 @@ describe("LookaheadLimiter", () => {
       "release",
       "gain",
     ]);
+  });
+
+  // Ticket 17: the readout the limiter's own plan deferred "pending the
+  // SharedArrayBuffer decision", over the transport `level-meter` now shares.
+  describe("the gain reduction meter", () => {
+    /** One posted frame, the way the processor would send it. */
+    const frame = (gainReductionDb: number) => {
+      const view = new Float32Array(4);
+      view[0] = 1; // layout version
+      view[1] = 1; // one slot
+      view[3] = gainReductionDb;
+      return view;
+    };
+
+    const deliver = (limiter: any, view: Float32Array) =>
+      created(limiter).port.onmessage!({ data: view } as MessageEvent);
+
+    it("is off by default, and says so rather than reporting 0 dB", () => {
+      const limiter = LookaheadLimiter(context);
+
+      expect(created(limiter).options.processorOptions.meter).toBeUndefined();
+      expect(limiter.getLevels().gainReduction).toBeNaN();
+    });
+
+    it("asks the processor for it when it is on", () => {
+      const limiter = LookaheadLimiter(context, { meter: true });
+      expect(created(limiter).options.processorOptions.meter).toBe(true);
+      expect(limiter.getLevels().gainReduction).toBe(0);
+    });
+
+    it("reads the slot the processor writes", () => {
+      const limiter = LookaheadLimiter(context, { meter: true });
+      deliver(limiter, frame(-6.5));
+      expect(limiter.getLevels().gainReduction).toBeCloseTo(-6.5, 6);
+    });
+
+    it("hands back the same object every call", () => {
+      const limiter = LookaheadLimiter(context, { meter: true });
+      expect(limiter.getLevels()).toBe(limiter.getLevels());
+    });
+
+    it("moves version only when the reading moves", () => {
+      const limiter = LookaheadLimiter(context, { meter: true });
+      deliver(limiter, frame(-3));
+      const first = limiter.getLevels().version;
+      expect(first).toBeGreaterThan(0);
+
+      deliver(limiter, frame(-3));
+      expect(limiter.getLevels().version).toBe(first);
+
+      deliver(limiter, frame(-9));
+      expect(limiter.getLevels().version).toBeGreaterThan(first);
+    });
+
+    // Success criterion 5: the same shape `level-meter`'s README hook consumes.
+    it("notifies subscribers, at most once per animation frame", () => {
+      const limiter = LookaheadLimiter(context, { meter: true });
+      const listener = jest.fn();
+      const off = limiter.subscribe(listener);
+
+      deliver(limiter, frame(-2));
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener.mock.calls[0][0].gainReduction).toBeCloseTo(-2, 6);
+
+      deliver(limiter, frame(-4));
+      expect(listener).toHaveBeenCalledTimes(1);
+      runFrame();
+      expect(listener).toHaveBeenCalledTimes(2);
+
+      off();
+      deliver(limiter, frame(-8));
+      runFrame();
+      expect(listener).toHaveBeenCalledTimes(2);
+    });
+
+    it("subscribing with the meter off is a no-op, not a throw", () => {
+      const limiter = LookaheadLimiter(context);
+      const listener = jest.fn();
+      const off = limiter.subscribe(listener);
+
+      runFrame();
+      expect(listener).not.toHaveBeenCalled();
+      expect(() => off()).not.toThrow();
+    });
+
+    it("never listens on the port with the meter off", () => {
+      const limiter = LookaheadLimiter(context);
+      expect(created(limiter).port.onmessage).toBeUndefined();
+    });
+
+    it("says which transport is carrying it", () => {
+      expect(LookaheadLimiter(context, { meter: true }).transport).toBe(
+        "message",
+      );
+    });
   });
 });
