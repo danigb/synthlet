@@ -11,7 +11,7 @@ node benchmarks/arp-rate/bench.mjs
 ```
 
 Node 24 on Apple silicon, 48 kHz, 128-sample blocks, 600 s of audio per timed
-run, median of 5. Zero setup beyond the workspace's own `esbuild`, which turns
+run, median of 9. Zero setup beyond the workspace's own `esbuild`, which turns
 `dsp.ts` into something node can import.
 
 **Not comparable with [`../automation-rate/`](../automation-rate/README.md)'s
@@ -58,6 +58,14 @@ The four columns are four shapes the `trigger` parameter arrives in:
 - **a-rate** — the same, with one rising edge mid-block. One musical step.
 - **a-rate ×64** — a trigger every other sample, so 64 steps in one block. Not a
   patch anybody writes; it is the ceiling, and it is still 0.1 % of budget.
+
+**Re-run after ticket 03**, which replaced the memoryless pick with a flat-index
+traversal and added five pieces of state: 0.98-5.1 µs across runs on a machine
+that was also running a full test suite. The reason to read that as noise rather
+than as a regression is the **a-rate idle** column, which never calls the
+advance at all - it moved by the same factor, run for run. The traversal runs on
+triggers, not on samples, so the only thing this ticket added to the per-sample
+path is the argument it passes.
 
 **Re-run after ticket 02**, which added a `Math.floor`/`Math.max` on `octaves`
 to every call and therefore to every sample of the a-rate path: 0.9-1.8 µs on a

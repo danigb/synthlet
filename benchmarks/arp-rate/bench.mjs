@@ -34,10 +34,13 @@ const BLOCK = 128;
 // under the noise floor of everything else on the machine. This is the number
 // that makes the rows repeatable.
 const SECONDS = 600;
-const REPEATS = 5;
+const REPEATS = 9;
 
 const BASE_NOTE = 60;
 const OCTAVES = 4;
+// Passed explicitly, so the row measures the traversal the module ships with
+// rather than the argument default.
+let MODE = 0; // ArpMode.Up, resolved from the enum once the bundle is loaded
 
 const root = resolve(import.meta.dirname, "../..");
 const dir = mkdtempSync(join(tmpdir(), "arp-bench-"));
@@ -56,9 +59,11 @@ try {
     { cwd: root, stdio: ["ignore", "ignore", "inherit"] },
   );
 
-  const { createArpeggiator, ArpScale } = await import(
+  const { createArpeggiator, ArpScale, ArpMode } = await import(
     pathToFileURL(bundle).href
   );
+
+  MODE = ArpMode.Up;
 
   const blocks = Math.round((SAMPLE_RATE * SECONDS) / BLOCK);
   const output = new Float32Array(BLOCK);
@@ -80,14 +85,14 @@ try {
   function runARate(arp, trigger, scale) {
     for (let i = 0; i < blocks; i++) {
       for (let s = 0; s < BLOCK; s++) {
-        output[s] = arp(trigger[s], BASE_NOTE, scale, OCTAVES);
+        output[s] = arp(trigger[s], BASE_NOTE, scale, OCTAVES, MODE);
       }
     }
   }
 
   function runKRate(arp, trigger, scale) {
     for (let i = 0; i < blocks; i++) {
-      output.fill(arp(trigger[0], BASE_NOTE, scale, OCTAVES));
+      output.fill(arp(trigger[0], BASE_NOTE, scale, OCTAVES, MODE));
     }
   }
 

@@ -11,6 +11,13 @@ exports[`ArpProcessor has parameter descriptors 1`] = `
   },
   {
     "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 4,
+    "minValue": 0,
+    "name": "mode",
+  },
+  {
+    "automationRate": "k-rate",
     "defaultValue": 60,
     "maxValue": 127,
     "minValue": 0,
@@ -18,7 +25,7 @@ exports[`ArpProcessor has parameter descriptors 1`] = `
   },
   {
     "automationRate": "k-rate",
-    "defaultValue": 1,
+    "defaultValue": 137,
     "maxValue": 4095,
     "minValue": 1,
     "name": "scale",

@@ -39,8 +39,46 @@ export enum ArpScale {
 }
 
 /**
+ * How the sequence is traversed. An index into a bank of traversal functions,
+ * not a quantity - see `params.ts` for why it is k-rate.
+ *
+ * Both `UpDown` variants are spelled out rather than merged behind an
+ * `inclusive` flag because Arturia, u-he and PolyBrute all ship the two as
+ * separate menu entries, and a bare `UpDown` makes the user guess which one
+ * they got. The index sequences in the comments are the KeyStep Pro manual's,
+ * over a four-note set, and `dsp.test.ts` asserts them verbatim.
+ */
+export enum ArpMode {
+  /** 1,2,3,4 · 1,2,3,4 … */
+  Up = 0,
+  /** 4,3,2,1 · 4,3,2,1 … */
+  Down = 1,
+  /** 1,2,3,4,3,2,1 · 2,3,4,3,2,1 …  the turnaround notes play once */
+  UpDownExclusive = 2,
+  /** 1,2,3,4,4,3,2,1 · 1,2,3,4,4,3,2,1 …  the turnaround notes play twice */
+  UpDownInclusive = 3,
+  /**
+   * Uniform and memoryless, which is what this module did before it had an
+   * order: it repeats the note it just played 1/n of the time, and twelve
+   * triggers over a seven-note scale sound all seven in fewer than a quarter
+   * of runs. Ticket 04 of the arp folder gives it a memory.
+   */
+  Random = 4,
+}
+
+/**
  * The engine: one note per rising edge of `trigger`, held on the output as a
  * frequency in Hz until the next one.
+ *
+ * **It stores a position, not a note.** `flat` is one integer walking the
+ * `len * octaves` sequence, and `readNote()` turns it into a MIDI note when the
+ * note is read. Three things follow, and all three are the reason for the
+ * shape: `baseNote` becomes a live transposition inlet rather than something
+ * that only applies to the next pick; the value held before the first trigger
+ * is the note about to be played, with no special case; and the traversal
+ * refers to nothing but a flat index and its length, so it lifts out of this
+ * file unchanged the day the polyphonic voice module wants the same modes over
+ * a stack of held notes.
  *
  * @param random the source of randomness. It is an argument so the tests can
  *   assert a *sequence* rather than a distribution - without it every
@@ -53,15 +91,26 @@ export enum ArpScale {
 export function createArpeggiator(random: () => number = Math.random) {
   let $note = 60;
   let $scale = 0;
-  let $octaves = 1;
+  // 0 rather than 1, so the first call always takes the rebuild branch below.
+  let $octaves = 0;
+  let $mode: ArpMode = ArpMode.Up;
 
   let scaleNotes = [0];
   let len = 1;
+  /** How many entries the sequence has: every note, in every octave. */
+  let size = 1;
+
+  /** Where in that sequence we are, and which way we are going. */
+  let flat = 0;
+  let direction = 1;
+  let seeded = false;
+
   const detectGate = createGateDetector();
-  // Resolved to the root on the first call. It used to be seeded with `$note`
-  // here, which is the literal 60 at construction time whatever `baseNote`
-  // turns out to be - so `Arp(ac, { baseNote: 48 })` held 261.63 Hz, neither
-  // the root nor a member of the set, until its first trigger.
+  // Resolved on the first call to the note the sequence is sitting on. It used
+  // to be seeded with `$note`, which is the literal 60 at construction time
+  // whatever `baseNote` turns out to be - so `Arp(ac, { baseNote: 48 })` held
+  // 261.63 Hz, neither the root nor a member of the set, until its first
+  // trigger.
   let current = NaN;
 
   // The note-to-frequency conversion is memoised on the MIDI note because
@@ -76,24 +125,61 @@ export function createArpeggiator(random: () => number = Math.random) {
     baseNote: number,
     scale: number,
     octaves: number,
+    // Optional so the whole of this file's contract is still four arguments
+    // and a traversal; `worklet.ts` always passes it.
+    mode: ArpMode = ArpMode.Up,
   ): number {
     $note = baseNote;
-    // A count, and floored once per call rather than per use:
-    // `Math.floor(random() * 2.5)` yields 0, 1 *and* 2 - three octaves for a
-    // request of two and a half - and an `AudioParam` hands over a fractional
-    // value from any ramp or from any node patched into it. `Math.max` because
-    // the parameter's `minValue` is enforced by the graph, not by this
-    // function, which the tests call directly.
-    $octaves = Math.max(1, Math.floor(octaves));
+    // A count, and floored once per call rather than per use: an `AudioParam`
+    // hands over a fractional value from any ramp or from any node patched
+    // into it, and `octaves: 2.5` used to span three. `Math.max` because the
+    // parameter's `minValue` is enforced by the graph, not by this function,
+    // which the tests call directly.
+    const octaveCount = Math.max(1, Math.floor(octaves));
 
-    if ($scale !== scale) {
+    if ($scale !== scale || $octaves !== octaveCount) {
       $scale = scale;
+      $octaves = octaveCount;
       scaleNotes = getPitchClasses(scale);
       len = scaleNotes.length;
+      size = len * octaveCount;
+      // Clamp *here*, where `size` is recomputed, and not on the next gate
+      // edge. `euclid` has a measured `NaN` from doing it the other way round:
+      // it rebuilds its pattern when `steps` changes but only wraps its cursor
+      // when a gate fires, so it indexes past the end for up to 122 ms.
+      if (flat >= size) flat = size - 1;
     }
 
-    if (detectGate(trigger) === true) current = nextRandom();
-    else if (Number.isNaN(current)) current = $note;
+    if ($mode !== mode) {
+      $mode = mode;
+      // A mode change re-derives the *direction* and leaves the position
+      // alone, which is what Yarns does. Restarting the pattern here would
+      // make a modulated `mode` - a slow LFO patched into it, an arpeggiator
+      // whose direction is itself sequenced - unusable.
+      if (mode === ArpMode.Up) direction = 1;
+      else if (mode === ArpMode.Down) direction = -1;
+    }
+
+    if (!seeded) {
+      // `Down` starts at the top, as Yarns does. Seeded on the first call and
+      // not at construction, because `mode` is a parameter and is not known
+      // until one arrives.
+      seeded = true;
+      if (mode === ArpMode.Down) {
+        flat = size - 1;
+        direction = -1;
+      }
+    }
+
+    // Emit, then advance: the first trigger sounds the note the sequence is
+    // already sitting on, which for `Up` is the root. rune06's Juno
+    // arpeggiator asserts the same thing of its own first note.
+    if (detectGate(trigger) === true) {
+      current = readNote();
+      advance();
+    } else if (Number.isNaN(current)) {
+      current = readNote();
+    }
 
     if (current !== $current) {
       $current = current;
@@ -103,10 +189,14 @@ export function createArpeggiator(random: () => number = Math.random) {
     return $frequency;
   };
 
-  function nextRandom() {
-    const octave = Math.floor(random() * $octaves);
-    const randomFromScale = scaleNotes[Math.floor(random() * len)];
-    let note = $note + randomFromScale + octave * 12;
+  /**
+   * The position, read as a note. Serial octave traversal: the whole set, then
+   * up an octave and the whole set again.
+   */
+  function readNote() {
+    const noteIndex = flat % len;
+    const octaveIndex = Math.floor(flat / len) % $octaves;
+    let note = $note + scaleNotes[noteIndex] + octaveIndex * 12;
     // Fold, don't clamp. `baseNote` and `octaves` are declared 0...127 and
     // 1...10, and at both maxima this sum reaches MIDI 246 - 12.1 MHz - which
     // no consumer can play: `polyblep-oscillator` caps `frequency` at 20000
@@ -115,12 +205,51 @@ export function createArpeggiator(random: () => number = Math.random) {
     //
     // Folding is the only option that keeps the pitch class, which is the
     // thing the set actually chose: clamping to 127 gives a note outside the
-    // set, and skipping the note changes the pattern's length. Yarns folds
-    // exactly this way (`while (note > 127) note -= 12`) and rune06 folds at
-    // 96, modelling the Juno's keyboard. `while` and not `%` because at most a
-    // handful of iterations are possible and the intent is legible.
+    // set, and skipping the note would change the pattern's length. Yarns
+    // folds exactly this way and rune06 folds at 96, modelling the Juno's
+    // keyboard.
     while (note > 127) note -= 12;
     return note;
+  }
+
+  /** One step along the sequence, in whatever direction the mode implies. */
+  function advance() {
+    // Required, not defensive. Without it `UpDownExclusive` on a one-note set
+    // loops forever - the exclusive turnaround sets `flat = size - 2 = -1`,
+    // which immediately re-wraps - and that is an unbounded loop on the audio
+    // thread, where the render quantum never returns and the context dies. It
+    // was reachable from the shipped defaults until this ticket changed them:
+    // `scale: 1` is the root alone. Plaits carries the same guard and calls it
+    // "a corner case for the Up/down pattern code".
+    if (size === 1) {
+      flat = 0;
+      return;
+    }
+
+    if ($mode === ArpMode.Random) {
+      // The octave drawn first and the note second, which is the order the
+      // memoryless pick drew them in before the sequence had an order - so a
+      // seeded stream still produces the same notes.
+      flat = Math.floor(random() * $octaves) * len + Math.floor(random() * len);
+      return;
+    }
+
+    if ($mode === ArpMode.Up) direction = 1;
+    else if ($mode === ArpMode.Down) direction = -1;
+    flat += direction;
+
+    while (flat >= size || flat < 0) {
+      if ($mode === ArpMode.Up || $mode === ArpMode.Down) {
+        flat = (flat + size) % size;
+        break;
+      }
+      // The turnaround, at the ends of the *whole* sequence and not of each
+      // octave: the octave is inside the traversal, not outside it.
+      direction = -direction;
+      const inclusive = $mode === ArpMode.UpDownInclusive;
+      flat =
+        direction > 0 ? (inclusive ? 0 : 1) : inclusive ? size - 1 : size - 2;
+    }
   }
 }
 

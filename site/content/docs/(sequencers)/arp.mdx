@@ -6,15 +6,23 @@ package: arp
 
 import ArpExample from "../../../examples/ArpExample";
 
-Generates a note sequence from a given scale.
+Generates a note sequence from a given scale, in an order you choose.
 
-<Callout title="Not arpeggiator" type="warn">
-  This module is WIP. Currently it only generates a random note from a given
-  scale.
+<Callout title="No rate of its own" type="info">
+  `Arp` has an order but no clock: every step comes from a rising edge on
+  `trigger`. Rate, gate length and rhythm live in [Clock](/docs/clock) and
+  [Euclid](/docs/euclid).
 </Callout>
 
 ```ts
-import { registerAllWorklets, Arp, ArpScale, Clock, MonoSynth } from "synthlet";
+import {
+  registerAllWorklets,
+  Arp,
+  ArpMode,
+  ArpScale,
+  Clock,
+  MonoSynth,
+} from "synthlet";
 
 const audioContext = await registerAllWorklets(new AudioContext());
 const clock = Clock(audioContext, { bpm: 120 });
@@ -22,8 +30,9 @@ const clock = Clock(audioContext, { bpm: 120 });
 // the gate - see [Gates and triggers](/docs/gates-and-triggers).
 const arp = Arp(audioContext, {
   trigger: clock.gate,
-  scale: ArpScale.Major,
+  scale: ArpScale.TriadMinor, // a chord is a short scale
   octaves: 2,
+  mode: ArpMode.UpDownExclusive,
 });
 
 const mono = MonoSynth(audioContext, {
@@ -37,9 +46,26 @@ const mono = MonoSynth(audioContext, {
 ## Parameters
 
 - `trigger`: Advances the arpeggiator on its rising edge - when it goes from 0 (or below) to a positive value. See [Gates and triggers](/docs/gates-and-triggers).
-- `baseNote`: The base midi note of the arpeggiator. Default is `60`.
-- `scale`: The scale bitmask. Default is `1` (root only). See below.
+- `mode`: The traversal. Default is `ArpMode.Up`. See below.
+- `baseNote`: The base midi note of the arpeggiator. Default is `60`. Fractional values are fine tuning: `60.5` is a quarter tone.
+- `scale`: The scale bitmask. Default is `137` (`ArpScale.TriadMinor`). See below.
 - `octaves`: The number of octaves to span. Default is `1`.
+
+## Modes
+
+Over a four-note set, where the numbers are positions in it:
+
+| `ArpMode`         | plays                             |
+| ----------------- | --------------------------------- |
+| `Up`              | 1 2 3 4 · 1 2 3 4                 |
+| `Down`            | 4 3 2 1 · 4 3 2 1                 |
+| `UpDownExclusive` | 1 2 3 4 3 2 1 · 2 3 4 3 2 1       |
+| `UpDownInclusive` | 1 2 3 4 4 3 2 1 · 1 2 3 4 4 3 2 1 |
+| `Random`          | any note of the set, uniformly    |
+
+The two `UpDown` modes differ in whether the turnaround notes play once or
+twice, which is why both are spelled out. Over more than one octave they turn at
+the ends of the whole range rather than at each octave.
 
 ## Scales
 
