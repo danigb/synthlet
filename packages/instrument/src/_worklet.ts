@@ -12,9 +12,7 @@
 // so an `OfflineAudioContext` builds and renders the same graph, which is how
 // a host verifies audio without listening to it. `AudioContext` is a subtype,
 // so every existing call site still compiles.
-export type Connector<N extends AudioNode> = (
-  context: BaseAudioContext,
-) => N;
+export type Connector<N extends AudioNode> = (context: BaseAudioContext) => N;
 
 export type ParamInput = number | Connector<AudioNode> | AudioNode;
 
