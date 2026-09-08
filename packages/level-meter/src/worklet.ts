@@ -1,4 +1,4 @@
-class LevelMeterProcessor extends AudioWorkletProcessor {
+export class LevelMeterProcessor extends AudioWorkletProcessor {
   peaks: Float32Array;
   max: number;
   r: boolean;
