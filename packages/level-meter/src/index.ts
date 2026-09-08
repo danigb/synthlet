@@ -20,7 +20,7 @@ export type LevelMeterOptions = {
 
 export const LevelMeter = Object.assign(
   (
-    context: AudioContext,
+    context: BaseAudioContext,
     options: LevelMeterOptions = {},
   ): LevelMeterWorkletNode => {
     const maxChannels = options.maxChannels || 16;

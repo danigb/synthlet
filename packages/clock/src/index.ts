@@ -69,7 +69,7 @@ const createClockNode = createWorkletConstructor<ClockWorkletNode, ClockInputs>(
 );
 
 export const Clock = Object.assign(
-  (context: AudioContext, inputs: ClockInputs = {}): ClockNode => {
+  (context: BaseAudioContext, inputs: ClockInputs = {}): ClockNode => {
     const node = createClockNode(context, inputs);
     // Each secondary output needs to be a node a caller can connect *from*, so
     // each gets its own gain to hang off. One clock, one phase accumulator and

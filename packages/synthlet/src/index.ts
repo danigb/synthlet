@@ -74,9 +74,9 @@ export * from "./synths/mono";
 export { registerDrums, registerMonoSynth } from "./synths/registrars";
 export * from "./waa";
 
-export function registerAllWorklets(
-  context: AudioContext,
-): Promise<AudioContext> {
+export function registerAllWorklets<C extends BaseAudioContext>(
+  context: C,
+): Promise<C> {
   return Promise.all([
     registerAdsrWorklet(context),
     registerAdWorklet(context),

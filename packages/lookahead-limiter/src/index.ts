@@ -61,7 +61,7 @@ const create = createWorkletConstructor<
  * ```
  */
 export const LookaheadLimiter = Object.assign(
-  (context: AudioContext, inputs: LookaheadLimiterInputs = {}) => {
+  (context: BaseAudioContext, inputs: LookaheadLimiterInputs = {}) => {
     const node = create(context, inputs);
     // `createWorkletConstructor`'s `postCreate` hook doesn't see the inputs, so
     // the latency - which depends on `lookahead` - is attached here instead.

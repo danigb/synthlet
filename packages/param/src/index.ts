@@ -42,19 +42,19 @@ const Create = createWorkletConstructor<ParamWorkletNode, ParamInputs>({
 });
 
 export const Param = Object.assign(Create, {
-  input: (context: AudioContext, value?: ParamInput) =>
+  input: (context: BaseAudioContext, value?: ParamInput) =>
     Create(context, { input: value }),
-  db: (context: AudioContext, db: ParamInput) =>
+  db: (context: BaseAudioContext, db: ParamInput) =>
     Create(context, { scale: ParamScaleType.DbToGain, input: db }),
   lin: (
-    context: AudioContext,
+    context: BaseAudioContext,
     input: ParamInput,
     min: ParamInput,
     max: ParamInput,
   ) => Create(context, { scale: ParamScaleType.Linear, input, min, max }),
-  mul: (context: AudioContext, input: ParamInput, gain: ParamInput) =>
+  mul: (context: BaseAudioContext, input: ParamInput, gain: ParamInput) =>
     Create(context, { input, gain }),
-  inv: (context: AudioContext, value: ParamInput) =>
+  inv: (context: BaseAudioContext, value: ParamInput) =>
     Create(context, { input: value, gain: -1 }),
 });
 

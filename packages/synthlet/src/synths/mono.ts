@@ -19,7 +19,10 @@ export type MonoSynthInputs = {
   amp?: AdsrInputs;
 };
 
-export function MonoSynth(context: AudioContext, inputs: MonoSynthInputs = {}) {
+export function MonoSynth(
+  context: BaseAudioContext,
+  inputs: MonoSynthInputs = {},
+) {
   // Params: the inlets. Each is a Param node because it has to be scaled
   // (volume, in decibels) or fanned out (gate, to two envelopes).
   const gate = Param(context, { input: inputs.gate });

@@ -14,9 +14,11 @@ import { Param } from "@synthlet/param";
 // 40 opens the envelope at sample 40, through both nodes.
 //
 // It drives the two *processors* directly rather than building a `MonoSynth`.
-// `test-utils.ts` records topology and nothing audio-rate, and there is no
-// `AudioContext` in node - so a real compound cannot be rendered here. What
-// this reproduces is the signal chain, which is where the bug was.
+// `test-utils.ts` records topology and nothing audio-rate, so a real compound
+// cannot be rendered here. What this reproduces is the signal chain, which is
+// where the bug was. (`offline.test.ts` does render a whole `MonoSynth`, on an
+// `OfflineAudioContext` - but at whole-envelope resolution, not the single
+// sample this file is about.)
 
 const BLOCK = 128;
 const SAMPLE_RATE = 44100;
