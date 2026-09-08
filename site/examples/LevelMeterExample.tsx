@@ -7,7 +7,7 @@ import {
   Gain,
   LevelMeter,
   LevelMeterUI,
-  type LevelMeterWorkletNode,
+  type LevelMeterTap,
   Param,
   dbToUnit,
   formatDb,
@@ -26,21 +26,25 @@ function MeterSynth(ac: AudioContext) {
   const drum = ClaveDrum(ac);
   const drive = Param.db(ac, 0);
   const input = Gain(ac, { gain: drive });
-  const meter = LevelMeter(ac);
   const out = Gain(ac);
 
-  drum.connect(input).connect(meter).connect(out);
+  drum.connect(input).connect(out);
+
+  // The one-line form, and the thing worth showing: the meter is a second edge
+  // off `input`, not a node in the path. Nothing above changed to make room
+  // for it, and `dispose()` puts the graph back exactly as it was.
+  const meter = LevelMeter.tap(input);
 
   return Compound({
     output: out,
-    owns: [drum, drive, input, meter],
+    owns: [drum, drive, input, () => meter.dispose()],
     exposes: { meter, trigger: drum.trigger, drive: drive.input },
   });
 }
 
 // The README's "Build your own" hook, pasted. `meter.subscribe` is stable for
 // the life of the node, so React never resubscribes.
-function useLevels(meter: LevelMeterWorkletNode) {
+function useLevels(meter: LevelMeterTap) {
   useSyncExternalStore(
     meter.subscribe,
     () => meter.getLevels().version,
@@ -51,7 +55,7 @@ function useLevels(meter: LevelMeterWorkletNode) {
 
 // Recipe 1: no canvas. One row per channel, width from `dbToUnit`, a hold
 // marker positioned the same way, and the clip latch as a colour.
-function DomMeter({ meter }: { meter: LevelMeterWorkletNode }) {
+function DomMeter({ meter }: { meter: LevelMeterTap }) {
   const levels = useLevels(meter);
   const channels = Math.max(1, levels.channelCount);
 
@@ -89,7 +93,7 @@ function DomMeter({ meter }: { meter: LevelMeterWorkletNode }) {
 // Recipe 3: the canvas renderer, reading the same meter. `attach` owns the
 // animation frame, the devicePixelRatio sizing and the resize handling - and
 // shares its frame with every other meter on the page, this one included.
-function CanvasMeter({ meter }: { meter: LevelMeterWorkletNode }) {
+function CanvasMeter({ meter }: { meter: LevelMeterTap }) {
   const canvas = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
