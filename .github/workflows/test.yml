@@ -28,15 +28,14 @@ jobs:
         run: npm run build
 
       # Every package commits its worklet as a minified esbuild bundle: src/processor.ts,
-      # or src/_processor.ts in level-meter, which calls its worklet source processor.ts.
-      # The build above just rewrote all of them, so any diff here means the committed copy
-      # was stale. Do not add turbo caching to CI without rechecking this: a cached build
-      # restores dist/ only and leaves these files alone.
+      # built from src/worklet.ts. The build above just rewrote all of them, so any diff
+      # here means the committed copy was stale. Do not add turbo caching to CI without
+      # rechecking this: a cached build restores dist/ only and leaves these files alone.
       - name: Check the generated processors are in sync
         run: |
-          git diff --exit-code --stat -- 'packages/*/src/processor.ts' 'packages/*/src/_processor.ts' || {
+          git diff --exit-code --stat -- 'packages/*/src/processor.ts' || {
             echo "::error::A generated worklet bundle is out of date. Run 'npm run build' and commit the result."
-            git status --porcelain -- 'packages/*/src/processor.ts' 'packages/*/src/_processor.ts'
+            git status --porcelain -- 'packages/*/src/processor.ts'
             exit 1
           }
 

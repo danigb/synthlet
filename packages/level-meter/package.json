@@ -35,8 +35,9 @@
     "preset": "ts-jest"
   },
   "scripts": {
-    "worklet": "esbuild src/processor.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/_processor.ts",
+    "worklet": "esbuild src/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/processor.ts",
     "lib": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
-    "build": "npm run worklet && npm run lib"
+    "build": "npm run worklet && npm run lib",
+    "test": "jest"
   }
 }

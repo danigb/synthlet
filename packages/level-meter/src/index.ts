@@ -1,4 +1,4 @@
-import { PROCESSOR } from "./_processor";
+import { PROCESSOR } from "./processor";
 import { createRegistrar, disposable, ParamDescriptor } from "./_worklet";
 export { LevelMeterUI } from "./meter-ui";
 
@@ -28,6 +28,11 @@ export const LevelMeter = Object.assign(
       maxChannels * Float32Array.BYTES_PER_ELEMENT,
     );
     const peaks = new Float32Array(peaksBuffer);
+    // Hand-rolled rather than built with `createWorkletConstructor`: that helper
+    // exists to wire `AudioParam`s from a `ParamInput` map, and the meter has no
+    // parameters by design. What it does need is a `processorOptions` payload,
+    // which the helper does not carry. Not an oversight - there is nothing here
+    // for it to do.
     const node = new AudioWorkletNode(context, "LevelMeterProcessor", {
       numberOfInputs: 1,
       numberOfOutputs: 1,
