@@ -22,7 +22,20 @@
     // for `index.ts` - across all 23 packages, with the build scripts split to
     // match. Until that is worth doing, skip the declaration check: with it
     // on, `tsc --noEmit` reports zero errors over the whole monorepo.
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    // The `./dsp` subpaths, which `moduleResolution: "node"` cannot find on its
+    // own: node10 resolution predates `exports`, so it looks for
+    // `node_modules/@synthlet/lookahead-limiter/dsp` as a directory and gives
+    // up. The published packages resolve it through their `exports` map; inside
+    // the repo these point at the source, so `tsc` and `tsup --dts` work on a
+    // fresh clone with no `dist/` anywhere.
+    "baseUrl": ".",
+    "paths": {
+      "@synthlet/level-meter/dsp": ["./packages/level-meter/src/dsp-entry.ts"],
+      "@synthlet/lookahead-limiter/dsp": [
+        "./packages/lookahead-limiter/src/dsp-entry.ts"
+      ]
+    }
   },
   "include": ["packages/**/*.ts", "../../packages/**/*"],
   "exclude": ["node_modules", "**/dist/**/*"]

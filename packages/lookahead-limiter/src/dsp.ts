@@ -254,8 +254,10 @@ export function createLimiter(sampleRate: number, lookaheadMs: number) {
 }
 
 /**
- * Exported for `dsp.test.ts` only - `index.ts` does not re-export it, so it
- * stays inside the package and out of the published surface.
+ * Published at `@synthlet/lookahead-limiter/dsp`, where `@synthlet/level-meter`
+ * picks it up: sharing it is what makes the limiter and the meter agree about
+ * dBTP by construction rather than by inspection. Two detectors disagreeing by
+ * 0.2 dB is a worse outcome than 48 multiply-accumulates.
  *
  * BS.1770-style 4x true-peak detection: an oversampled reconstruction of the
  * sample TP_DELAY inputs ago, taken as the max over all channels.
@@ -308,7 +310,8 @@ export function createTruePeakDetector() {
 }
 
 /**
- * Exported for `dsp.test.ts` only, like `createTruePeakDetector` above.
+ * Exported for `dsp.test.ts` only: `index.ts` does not re-export it and
+ * `dsp-entry.ts` does not publish it, so it stays inside the package.
  *
  * Monotonic deque: O(1) amortised sliding minimum over the last `window`
  * pushes, including the current one.

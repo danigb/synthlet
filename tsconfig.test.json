@@ -6,7 +6,13 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
+    // `paths` replaces the base config's rather than merging with it, so the
+    // `./dsp` subpaths are repeated here.
     "paths": {
+      "@synthlet/level-meter/dsp": ["packages/level-meter/src/dsp-entry.ts"],
+      "@synthlet/lookahead-limiter/dsp": [
+        "packages/lookahead-limiter/src/dsp-entry.ts"
+      ],
       "@synthlet/*": ["packages/*/src/index.ts"]
     }
   }
