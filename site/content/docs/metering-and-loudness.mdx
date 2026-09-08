@@ -37,6 +37,14 @@ The node it taps does not have to be synthlet's. Anything that is an
 `AudioNode` works, including a `GainNode` you made by hand — see
 [Other libraries](#other-libraries) below.
 
+**And the page does not have to be https.** `AudioWorklet` is `[SecureContext]`,
+so on a phone on the LAN or an intranet page there is no `ac.audioWorklet` to
+register at all; the same `tap` call then runs on a `ScriptProcessorNode` driver
+over the same core, and `meter.engine` says which one is measuring. The readings
+are the same numbers either way. See
+[Works on http](/docs/level-meter#works-on-http) for what differs and what it
+costs.
+
 ## Why not `AnalyserNode`
 
 Two correctness reasons, before any convenience one:
@@ -217,3 +225,14 @@ way, feature-detected, same numbers. `meter.transport` says which is running, fo
 diagnostics; nothing should branch on it. **No COOP or COEP headers are needed**,
 which is why every example on this site — a static export on GitHub Pages —
 shows a live meter in its header.
+
+Two diagnostics, and they answer different questions:
+
+| Property          | Says                       | Values                            |
+| ----------------- | -------------------------- | --------------------------------- |
+| `meter.engine`    | what computes the readings | `"worklet"`, `"script-processor"` |
+| `meter.transport` | how they reach this thread | `"shared"`, `"message"`           |
+
+Neither needs a header, neither changes a number, and no UI should branch on
+either. `engine` is [Works on http](/docs/level-meter#works-on-http); `transport`
+is the paragraph above.

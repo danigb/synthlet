@@ -135,13 +135,74 @@ It is chunked and yields between chunks, so a five-minute track does not freeze
 the tab. The recipe for hitting a delivery target is in the
 [guide](/docs/metering-and-loudness).
 
+## Works on http
+
+`AudioWorklet` is `[SecureContext]` in the Web Audio IDL, and on a page that is
+not a secure context `ac.audioWorklet` is not a rejected promise or a feature
+flag — it is **`undefined`**. That is a phone on the LAN at
+`http://192.168.1.20:3000`, an intranet tool, a kiosk, an https page inside an
+http iframe. `localhost` and `127.0.0.1` _are_ secure contexts, which is exactly
+why this works on every developer's machine and fails on the first device that
+is not one.
+
+The same call covers both. The meter carries a second engine and picks one:
+
+```ts
+import { LevelMeter } from "synthlet";
+
+const meter = LevelMeter.tap(source); // same call on http and https
+meter.engine; // "worklet" | "script-processor"
+```
+
+`"script-processor"` is a `ScriptProcessorNode` driving **the same core** the
+worklet runs — the one `synthlet/dsp` exports — so the readings are the same
+numbers, not an approximation of them. A jest test feeds both engines the same
+blocks at every allowed buffer size, with true peak and loudness on and off, and
+asserts the resulting level buffers are equal.
+
+It is chosen when there is no `audioWorklet` at all, and when registration
+_rejects_ — a CSP that blocks `blob:` scripts is the common one. Force it with
+`{ engine: "script-processor" }`, which is how it stays testable from an https
+page, and the only way to see it here: **this site is a static export on GitHub
+Pages, which is https, so the demo above is always on the worklet.**
+
+**`AnalyserNode` is not the fallback**, because it would change what the number
+means: it down-mixes to mono and reports only the last N samples at the moment
+you ask. A meter that quietly reports a different quantity on http than on https
+is worse than one that throws.
+
+**What it costs.** `onaudioprocess` runs on the main thread, which is a late
+_reading_ for a tap and would be a dropout in the signal path — so this is a tap
+driver, and pass-through being a native `GainNode` is what lets both modes use
+it. The audio never touches JavaScript on the main thread; only the reading does.
+The [package README](https://github.com/danigb/synthlet/tree/main/packages/level-meter#works-on-http)
+measures it in Chrome 152 on macOS (Apple Silicon), 48 kHz stereo, per
+1024-frame buffer — 21.3 ms of audio — at **7.5 µs** for peak, hold, RMS and
+clip, 18.3 µs with `loudness`, and 261.7 µs with `truePeak`: 1.23 % of realtime,
+and the same 48 multiply-accumulates per sample per channel it costs on the
+worklet.
+
+Two things differ from the worklet, and neither is a reading. `bufferSize`
+(default 1024, one of 256 … 16384) sets how often the reading updates — 21 ms at
+48 kHz, a frame and a half at 60 fps, invisible against a 1.5 s hold. And a
+`ScriptProcessorNode`'s input channel count is fixed when it is built, so this
+engine cannot follow a source that changes its own; it uses the source's
+`channelCount`, and `inputChannels` overrides it.
+
+**What has actually been checked.** Headless Chrome 152, engine forced on an
+https page: it meters, `engine` reads `"script-processor"`, and it agrees with a
+worklet meter on the same oscillator to 0.02 dB. **Not checked**: a real
+plain-http page from a real phone, and Firefox, Safari and iOS Safari.
+
 ## Transport
 
-The readings travel over a `SharedArrayBuffer` when the page is cross-origin
-isolated and over `postMessage` when it is not — about 20 floats at 60 Hz either
-way. The choice is feature-detected, the numbers are identical, and
-`meter.transport` says which is running. **Nothing needs COOP or COEP headers**;
-this page is a static export on GitHub Pages and the demo above is running.
+Which engine computes the readings is one question; how they reach the main
+thread is another, and `meter.transport` is the answer to the second. They travel
+over a `SharedArrayBuffer` when the page is cross-origin isolated and over
+`postMessage` when it is not — about 20 floats at 60 Hz either way. The choice is
+feature-detected and the numbers are identical. **Nothing needs COOP or COEP
+headers**; this page is a static export on GitHub Pages and the demo above is
+running.
 
 ## See also
 
