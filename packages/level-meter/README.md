@@ -36,14 +36,14 @@ const meter = LevelMeter(ac);
 source.connect(meter).connect(ac.destination);
 
 const ui = new LevelMeterUI({ minDb: -40, maxDb: 0 });
-ui.setCanvas(document.querySelector("canvas"));
-
-function draw() {
-  ui.render(meter.getPeaks(), 2); // a live Float32Array, one entry per channel
-  requestAnimationFrame(draw);
-}
-draw();
+ui.attach(document.querySelector("canvas"), meter);
 ```
+
+`attach` takes the animation frame, the `devicePixelRatio` sizing and the
+resize handling. `ui.detach()` gives them back. Every meter on the page shares
+one `requestAnimationFrame`, so the eighth costs what the first did.
+
+Don't want a canvas? See [Build your own](#build-your-own).
 
 ## Configuration
 
@@ -86,9 +86,142 @@ answers.
 `getPeaks()` is **deprecated** and still returns what it always did — one linear
 peak per slot, the same `Float32Array` every call.
 
-`LevelMeterUI` is an optional canvas renderer: `new LevelMeterUI({ minDb, maxDb })`
-(defaults −40 and 0), then `setCanvas(canvas)` and `render(peaks, channels)`
-per frame. Only `"horizontal"` orientation is implemented.
+### Being told, instead of asking
+
+`getLevels()` is pull. `subscribe` is push, for anything that would otherwise
+write its own animation loop:
+
+```ts
+const stop = meter.subscribe((levels) => {
+  console.log(levels.peak(0), levels.version);
+});
+stop();
+```
+
+At most one call per animation frame, on either transport, and none at all
+while nothing is changing. Subscribing starts the loop and the last unsubscribe
+stops it — with no subscriber and no attached renderer, nothing is scheduled.
+
+`levels.version` is a number that changes exactly when the readings do, which is
+what a framework that diffs by reference needs: the accessor itself is one
+reused object, so there is nothing to diff.
+
+## Build your own
+
+The canvas renderer is one UI. These are the numbers, and two ways to draw them
+without it. `dbToUnit(db, minDb, maxDb)` is the whole dB-to-pixel conversion —
+clamped to `[0, 1]`, and `-Infinity` is 0. `formatDb(db, digits?)` is the label,
+with a real minus sign: `formatDb(-Infinity)` is `"−∞"`.
+
+### 1. A DOM meter, in twenty lines
+
+```js
+import { LevelMeter, dbToUnit, formatDb } from "@synthlet/level-meter";
+
+const meter = LevelMeter(ac);
+source.connect(meter).connect(ac.destination);
+
+const container = document.querySelector("#meter");
+const bars = [];
+
+function addBar(c) {
+  const row = document.createElement("div");
+  const peak = document.createElement("i");
+  const hold = document.createElement("b");
+  row.className = "bar";
+  row.append(peak, hold);
+  container.append(row);
+  return (bars[c] = { row, peak, hold });
+}
+
+const stop = meter.subscribe((levels) => {
+  for (let c = 0; c < levels.channelCount; c++) {
+    const { row, peak, hold } = bars[c] ?? addBar(c);
+    peak.style.width = dbToUnit(levels.peak(c), -60, 0) * 100 + "%";
+    hold.style.left = dbToUnit(levels.hold(c), -60, 0) * 100 + "%";
+    row.classList.toggle("clip", levels.clipped(c));
+    row.title = formatDb(levels.peak(c), 1);
+  }
+});
+```
+
+```css
+.bar {
+  position: relative;
+  height: 12px;
+  background: #111;
+  margin: 2px 0;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  background: #3cb43c;
+}
+.bar b {
+  position: absolute;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: #eee;
+}
+.bar.clip {
+  outline: 2px solid #a01000;
+}
+```
+
+### 2. A React hook, in ten
+
+```tsx
+import { useSyncExternalStore } from "react";
+import { dbToUnit, type LevelMeterWorkletNode } from "@synthlet/level-meter";
+
+export function useLevels(meter: LevelMeterWorkletNode) {
+  // `version` is the snapshot: a number that changes exactly when the readings
+  // do. The accessor is one reused object, so React could not diff it — but it
+  // is also allocation-free, which is why it is what gets returned.
+  useSyncExternalStore(
+    (onChange) => meter.subscribe(onChange),
+    () => meter.getLevels().version,
+    () => 0, // server render: no meter, no readings
+  );
+  return meter.getLevels();
+}
+```
+
+```tsx
+function Meter({ meter }: { meter: LevelMeterWorkletNode }) {
+  const levels = useLevels(meter);
+  return (
+    <div className="meter">
+      {Array.from({ length: levels.channelCount }, (_, c) => (
+        <div key={c} className={levels.clipped(c) ? "bar clip" : "bar"}>
+          <i style={{ width: `${dbToUnit(levels.peak(c), -60, 0) * 100}%` }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+There is no `@synthlet/react`: a package would need a peer dependency, a release
+cadence and an opinion about every framework that is not React. Ten lines carry
+none of that.
+
+### 3. The canvas one, for contrast
+
+```ts
+import { LevelMeterUI } from "@synthlet/level-meter";
+
+new LevelMeterUI({ orientation: "vertical" }).attach(canvas, meter);
+```
+
+`LevelMeterUI` draws the peak bar, the RMS bar inset within it, the hold marker,
+a latching clip indicator and a dB scale. Options: `minDb` and `maxDb` (−40 and
+0; any range with `minDb < maxDb` works), `orientation` (`"horizontal"` or
+`"vertical"`), `scale`, `scaleDb`, `clip`, `hold`, `rms`, `stripes`, `gap` and
+`colors`. `setCanvas(canvas)` plus `render(levels)` is the manual path, for
+callers who already own a loop — in that mode the canvas's pixel size is yours
+to set.
 
 **No page requirements.** The readings travel over a `SharedArrayBuffer` when
 the page is cross-origin isolated and over `postMessage` when it is not — about

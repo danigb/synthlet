@@ -1,8 +1,10 @@
 import { frameListenerCount, isDriverRunning } from "./driver";
+// Type-only, so the test does not pull the factory in: `Levels` is the meter's
+// contract and the fake below has to satisfy it exactly.
+import type { Levels } from "./index";
 import {
   dbToUnit,
   formatDb,
-  Levels,
   LevelMeterUI,
   LevelMeterUIOptions,
 } from "./meter-ui";
@@ -235,6 +237,20 @@ describe("dbToUnit", () => {
 
   it("reads silence as the bottom of the scale", () => {
     expect(dbToUnit(-Infinity, -40, 0)).toBe(0);
+  });
+
+  // The three ranges §C7 measured the old renderer throwing on, at the three dB
+  // values it placed gradient stops at. This is the whole fix, as one function.
+  it.each([
+    [-12, 0],
+    [-60, -20],
+    [-3, 0],
+  ])("stays in range for the §C7 case {%d, %d}", (minDb, maxDb) => {
+    for (const db of [-18, -6, 0, -Infinity]) {
+      const unit = dbToUnit(db, minDb, maxDb);
+      expect(unit).toBeGreaterThanOrEqual(0);
+      expect(unit).toBeLessThanOrEqual(1);
+    }
   });
 });
 

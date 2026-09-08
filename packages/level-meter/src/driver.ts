@@ -19,6 +19,11 @@ const FALLBACK_MS = 16;
 
 const ticks = new Set<FrameTick>();
 
+// Increments once per frame the driver runs. `subscribe` uses it to deliver at
+// most one notification per frame from two triggers - a posted message and the
+// driver's own tick - without either having to know about the other.
+let frameIndex = 0;
+
 // Non-null exactly while a frame is pending. Holds the cancel for whichever
 // scheduler requested it, so a fallback timeout is never handed to
 // `cancelAnimationFrame`.
@@ -49,6 +54,7 @@ function schedule() {
 
 function frame(timestamp: number) {
   cancelPending = null;
+  frameIndex++;
   try {
     // A copy, so a tick that detaches itself - or another renderer - during the
     // frame does not mutate the set being iterated.
@@ -77,6 +83,14 @@ export function onAnimationFrame(tick: FrameTick): () => void {
       cancelPending = null;
     }
   };
+}
+
+/**
+ * Which frame the driver is on. Only the ordering matters: two things that read
+ * the same number are inside the same frame.
+ */
+export function currentFrame(): number {
+  return frameIndex;
 }
 
 /** True while a frame is pending. For tests, and for 16's success criterion 2. */

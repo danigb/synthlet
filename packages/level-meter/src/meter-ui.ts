@@ -1,48 +1,7 @@
 import { onAnimationFrame } from "./driver";
-
-// The accessor ticket 06 adds to the meter. Declared here rather than imported
-// from `./index` only because 06 has not landed yet; when it does, this block is
-// deleted and the type comes from the main entry. The shape is the shared
-// contract, so the swap is one import.
-export interface LevelsSnapshot {
-  channelCount: number;
-  peak: number[];
-  hold: number[];
-  rms: number[];
-  truePeak: number[];
-  clipped: boolean[];
-  momentary: number;
-  shortTerm: number;
-  version: number;
-}
-
-/**
- * A meter's readings, in dB. The same object on every call and allocation-free,
- * because it is read from an animation frame.
- */
-export interface Levels {
-  readonly channelCount: number;
-  /** Monotonic; bumped on every write to the view. */
-  readonly version: number;
-  /** dBFS, `-Infinity` for silence. */
-  peak(channel: number): number;
-  /** dBFS. The peak-hold marker. */
-  hold(channel: number): number;
-  /** dBFS. */
-  rms(channel: number): number;
-  /** dBTP, or `NaN` when the true-peak option is off. */
-  truePeak(channel: number): number;
-  clipped(channel: number): boolean;
-  clearClip(): void;
-  /** LUFS, or `NaN` when the loudness option is off. */
-  readonly momentary: number;
-  /** LUFS, or `NaN` when off. */
-  readonly shortTerm: number;
-  /** Whether the processor has thrown. */
-  readonly error: boolean;
-  /** Allocates a plain object. Do not call it from a render loop. */
-  snapshot(): LevelsSnapshot;
-}
+// Type-only, so it is erased: `index.ts` imports this module for the class, and
+// a value import back would be a cycle.
+import type { Levels } from "./index";
 
 /** Anything the renderer can read levels from - a `LevelMeterWorkletNode`. */
 export interface LevelsSource {

@@ -1,6 +1,17 @@
 import { PROCESSOR } from "./processor";
 import { createRegistrar, disposable, ParamDescriptor } from "./_worklet";
+import { currentFrame, onAnimationFrame } from "./driver";
 export { LevelMeterUI } from "./meter-ui";
+// The dB-to-pixel arithmetic, from the file that needs it most. Every hand-built
+// UI clamps a bar length and the canvas renderer clamps a gradient stop; they
+// are the same function, and §C7 is what happens when it exists twice.
+export { dbToUnit, formatDb } from "./meter-ui";
+export type {
+  LevelMeterUICanvas,
+  LevelMeterUIColors,
+  LevelMeterUIOptions,
+  LevelsSource,
+} from "./meter-ui";
 
 export const registerLevelMeterWorklet = createRegistrar(
   "LEVEL_METER",
@@ -119,11 +130,27 @@ export interface Levels {
   snapshot(): LevelsSnapshot;
 }
 
+/** Called with the live accessor when the readings change. */
+export type LevelsListener = (levels: Levels) => void;
+
 export type LevelMeterWorkletNode = AudioWorkletNode & {
   dispose(): void;
   /** @deprecated Use `getLevels()`, which knows the channel count. */
   getPeaks(): Float32Array;
   getLevels(): Levels;
+  /**
+   * Call `listener` when the readings change; returns the unsubscribe.
+   *
+   * The shape `useSyncExternalStore`, a Svelte store and a plain callback all
+   * consume without adaptation. `listener` is handed the same live accessor
+   * `getLevels()` returns - read what you need from it, or take a
+   * `snapshot()` if you mean to keep it.
+   *
+   * At most one call per animation frame, on either transport, and none at all
+   * while nothing is changing. Subscribing is what starts the loop; the last
+   * unsubscribe stops it.
+   */
+  subscribe(listener: LevelsListener): () => void;
   readonly transport: LevelMeterTransport;
 };
 
@@ -230,6 +257,31 @@ export const LevelMeter = Object.assign(
 
     const slot = (channel: number) => HEADER + channel * STRIDE;
 
+    const listeners = new Set<LevelsListener>();
+    let stopTicking: (() => void) | null = null;
+    // The version and the frame of the most recent delivery. Together they are
+    // the whole rate policy: never twice for the same reading, never twice in
+    // one animation frame.
+    let notifiedVersion = 0;
+    let notifiedFrame = -1;
+
+    // Two things call this - a posted frame arriving, and the driver's tick -
+    // and neither needs to know about the other.
+    //
+    // Under `"message"` at the default 16 ms cadence a message is a frame, so a
+    // subscriber is notified as each one lands. Turn `postIntervalMs` down and
+    // the extra messages coalesce here rather than waking React four times
+    // between paints; the reading is never stale for more than a frame, because
+    // the tick delivers whatever the message could not.
+    const notify = () => {
+      if (listeners.size === 0 || version === notifiedVersion) return;
+      const frame = currentFrame();
+      if (frame === notifiedFrame) return;
+      notifiedFrame = frame;
+      notifiedVersion = version;
+      for (const listener of Array.from(listeners)) listener(levels);
+    };
+
     // Hand-rolled rather than built with `createWorkletConstructor`: that helper
     // exists to wire `AudioParam`s from a `ParamInput` map, and the meter has no
     // parameters by design. What it does need is a `processorOptions` payload,
@@ -254,6 +306,7 @@ export const LevelMeter = Object.assign(
       node.port.onmessage = (event: MessageEvent) => {
         view.set(event.data as Float32Array);
         readView();
+        notify();
       };
     }
 
@@ -318,6 +371,42 @@ export const LevelMeter = Object.assign(
     node.getPeaks = () => {
       if (shared) readView();
       return peaks;
+    };
+
+    node.subscribe = (listener: LevelsListener) => {
+      listeners.add(listener);
+      if (listeners.size === 1) {
+        // From here, not from zero: a new subscriber is told about the next
+        // change, not about the one before it arrived.
+        notifiedVersion = version;
+        notifiedFrame = -1;
+        // The renderer's driver, shared. Under `"shared"` the tick is the only
+        // trigger there is - memory has no events - and under `"message"` it is
+        // what delivers anything a message had to coalesce.
+        stopTicking = onAnimationFrame(() => {
+          if (shared) readView();
+          notify();
+        });
+      }
+      let live = true;
+      return () => {
+        if (!live) return;
+        live = false;
+        listeners.delete(listener);
+        if (listeners.size === 0) {
+          stopTicking?.();
+          stopTicking = null;
+        }
+      };
+    };
+
+    // Set before `disposable`, which composes with whatever `dispose` it finds
+    // rather than replacing it. A disposed meter with a forgotten subscriber
+    // would otherwise keep an animation frame alive for the life of the page.
+    node.dispose = () => {
+      listeners.clear();
+      stopTicking?.();
+      stopTicking = null;
     };
 
     return disposable(node);
