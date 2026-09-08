@@ -37,26 +37,15 @@ export type {
   VoiceAllocator,
   VoiceAllocatorOptions,
 } from "./_voices";
-export { createFanouts } from "./fanout";
-export type { Fanouts, ParamSpec } from "./fanout";
-export { createMonoState, monoStart, monoStop, monoStopAll } from "./mono";
-export type { MonoOptions, MonoState, MonoWrite } from "./mono";
+export type { ParamSpec } from "./fanout";
 export { toFrequency, toMidi } from "./notes";
-export {
-  assertNoReservedParams,
-  fromDescriptor,
-  presetNames,
-  RESERVED,
-  resolvePreset,
-} from "./presets";
+export { fromDescriptor } from "./presets";
 export type {
   Preset,
   PresetBank,
   PresetBankEntry,
   PresetOptions,
-  PresetSchema,
   ReservedKey,
-  ResolvedPreset,
 } from "./presets";
 
 /**
