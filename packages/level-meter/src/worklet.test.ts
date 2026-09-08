@@ -17,10 +17,10 @@ import {
 // rendered at all. Those are browser checks, not unit tests, and a green run
 // here does not stand in for them.
 //
-// Tests marked `it.failing` assert intended behaviour that the shipped
-// processor does not have yet; each names the ticket that makes it pass. Jest
+// Several of these were written against intended behaviour before the processor
+// had it, marked `it.failing` with the ticket that would make each pass - jest
 // fails a `.failing` test the day it starts passing, which is what turns the
-// list into a checklist instead of a comment.
+// list into a checklist rather than a comment. None are left.
 
 const SAMPLE_RATE = 48000;
 const BLOCK = 128;
@@ -318,14 +318,88 @@ describe("LevelMeterProcessor", () => {
       runProcess(
         meter.processor,
         channels(2, () => constant(1)),
+        100,
       );
 
+      // Reserved now, written by the true-peak and loudness tickets, so those
+      // do not each have to bump the layout version.
       for (let c = 0; c < 2; c++) {
-        expect(meter.view[HEADER + c * STRIDE + 2]).toBe(0); // rms, ticket 06
-        expect(meter.view[HEADER + c * STRIDE + 3]).toBe(0); // true peak, 10
+        expect(meter.view[HEADER + c * STRIDE + 3]).toBe(0);
       }
       const tail = HEADER + 2 * STRIDE;
       expect(Array.from(meter.view.slice(tail, tail + TAIL))).toEqual([0, 0]);
+    });
+  });
+
+  describe("rms", () => {
+    // K-Meter's average meter: 0.6 s to 99 % of a step. The one-pole runs on
+    // the mean square, so "99 %" is 99 % of the power.
+    const RMS_MS = 600;
+
+    it("reads -3.01 dB for a full-scale sine, against 0 dB peak", () => {
+      const meter = createMeter(Processor, { maxChannels: 1, rmsMs: RMS_MS });
+      const sine = sineBlock(4); // 1500 Hz at 48 kHz
+      runProcess(meter.processor, [sine], blocksFor(4, SAMPLE_RATE));
+
+      expect(meter.rmsDb(0)).toBeCloseTo(-3.01, 2);
+      expect(meter.peakDb(0)).toBeCloseTo(0, 3);
+    });
+
+    it("reads 0 dB for a full-scale square, where peak and rms agree", () => {
+      const meter = createMeter(Processor, { maxChannels: 1, rmsMs: RMS_MS });
+      runProcess(meter.processor, [constant(1)], blocksFor(4, SAMPLE_RATE));
+      expect(meter.rmsDb(0)).toBeCloseTo(0, 2);
+    });
+
+    it.each([44100, 48000, 96000])(
+      "settles to 99 %% of a step in the declared time at %i Hz",
+      (sampleRate) => {
+        setSampleRate(sampleRate);
+        const meter = createMeter(Processor, { maxChannels: 1, rmsMs: RMS_MS });
+        runProcess(
+          meter.processor,
+          [constant(1)],
+          blocksFor(RMS_MS / 1000, sampleRate),
+        );
+
+        // 99 % of the power is sqrt(0.99) of the magnitude.
+        expect(meter.rms(0)).toBeCloseTo(Math.sqrt(0.99), 2);
+      },
+    );
+
+    it("is not the peak's release: it neither jumps nor falls with it", () => {
+      const meter = createMeter(Processor, { maxChannels: 1, rmsMs: RMS_MS });
+      runProcess(meter.processor, [constant(1)]);
+
+      // One block in, the peak is already there and the average is 17 dB
+      // behind it, on its way to the same place over the next 0.6 s.
+      expect(meter.peakDb(0)).toBeCloseTo(0, 6);
+      expect(meter.rmsDb(0)).toBeLessThan(-15);
+
+      runProcess(meter.processor, [constant(1)], blocksFor(4, SAMPLE_RATE));
+      expect(meter.rmsDb(0)).toBeCloseTo(0, 2);
+    });
+
+    it("keeps falling on a disconnected input, at the same rate as on zeros", () => {
+      const disconnected = createMeter(Processor, { maxChannels: 1 });
+      const zeros = createMeter(Processor, { maxChannels: 1 });
+      runProcess(disconnected.processor, [constant(1)], 200);
+      runProcess(zeros.processor, [constant(1)], 200);
+
+      runProcess(disconnected.processor, [], 100, { outputChannels: 1 });
+      runProcess(zeros.processor, [constant(0)], 100);
+
+      expect(disconnected.rms(0)).toBeGreaterThan(0);
+      expect(disconnected.rms(0)).toBeCloseTo(zeros.rms(0), 6);
+    });
+
+    it("reads exactly -Infinity for silence, not a denormal floor", () => {
+      const meter = createMeter(Processor, { maxChannels: 1, rmsMs: 10 });
+      runProcess(meter.processor, [constant(1)], 10);
+      runProcess(meter.processor, [constant(0)], blocksFor(5, SAMPLE_RATE));
+
+      expect(meter.rms(0)).toBe(0);
+      expect(meter.rmsDb(0)).toBe(-Infinity);
     });
   });
 
@@ -424,6 +498,14 @@ describe("LevelMeterProcessor", () => {
   });
 });
 
+// A whole number of sine cycles in one block, so repeating the block is a
+// continuous tone and its mean square is exactly 0.5 - which is what makes
+// -3.01 dB an assertion about the meter rather than about the test signal.
+function sineBlock(cyclesPerBlock: number): Float32Array {
+  const step = (2 * Math.PI * cyclesPerBlock) / BLOCK;
+  return Float32Array.from({ length: BLOCK }, (_, i) => Math.sin(i * step));
+}
+
 // A distinct waveform per channel, so a pass-through that aliased two channels
 // onto one buffer would not go unnoticed.
 function ramp(channel: number): Float32Array {
@@ -476,6 +558,8 @@ function createMeter(Processor: any, options: Record<string, any> = {}) {
     peakDb: (channel: number) => dB(view[slot(channel)]),
     hold: (channel: number) => view[slot(channel) + 1],
     holdDb: (channel: number) => dB(view[slot(channel) + 1]),
+    rms: (channel: number) => view[slot(channel) + 2],
+    rmsDb: (channel: number) => dB(view[slot(channel) + 2]),
     clipped: (channel: number) => ((view[2] >>> channel) & 1) === 1,
   };
 }

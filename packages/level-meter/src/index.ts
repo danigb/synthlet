@@ -72,12 +72,64 @@ function resolveMaxChannels(value: number | undefined): number {
  */
 export type LevelMeterTransport = "shared" | "message";
 
+/** A plain object copy of one reading, for anything that needs to keep it. */
+export type LevelsSnapshot = {
+  channelCount: number;
+  peak: number[];
+  hold: number[];
+  rms: number[];
+  truePeak: number[];
+  clipped: boolean[];
+  momentary: number;
+  shortTerm: number;
+  version: number;
+};
+
+/**
+ * One reading of the meter, in dB.
+ *
+ * The same object on every call and allocation-free, so a renderer can read it
+ * once per animation frame without producing garbage. The raw view stays linear;
+ * this converts, because every consumer converted anyway and having each of them
+ * re-derive the `-Infinity` case is how floor bugs get written.
+ */
+export interface Levels {
+  /** Channels the meter is measuring - the source's, not `maxChannels`. */
+  readonly channelCount: number;
+  /** Monotonic; changes when the readings change. */
+  readonly version: number;
+  /** dBFS, `-Infinity` for silence. */
+  peak(channel: number): number;
+  /** dBFS. The hold marker: a running maximum, parked and then released. */
+  hold(channel: number): number;
+  /** dBFS. */
+  rms(channel: number): number;
+  /** dBTP, or `NaN` while true-peak measurement is off. */
+  truePeak(channel: number): number;
+  clipped(channel: number): boolean;
+  /** Clears every channel's clip latch. */
+  clearClip(): void;
+  /** LUFS momentary, or `NaN` while loudness measurement is off. */
+  readonly momentary: number;
+  /** LUFS short-term, or `NaN` while loudness measurement is off. */
+  readonly shortTerm: number;
+  /** Whether the processor has reported an error. */
+  readonly error: boolean;
+  /** A plain object copy - this one allocates, by definition. */
+  snapshot(): LevelsSnapshot;
+}
+
 export type LevelMeterWorkletNode = AudioWorkletNode & {
   dispose(): void;
   /** @deprecated Use `getLevels()`, which knows the channel count. */
   getPeaks(): Float32Array;
+  getLevels(): Levels;
   readonly transport: LevelMeterTransport;
 };
+
+// `Math.log10(0)` is already `-Infinity`, which is the whole point: a UI should
+// not have to special-case a floor that should not exist.
+const toDb = (magnitude: number) => 20 * Math.log10(magnitude);
 
 // SharedArrayBuffer exists in every current browser, but only *usable* on a
 // cross-origin isolated page - and unusable ones are still constructible in
@@ -107,6 +159,12 @@ export type LevelMeterOptions = {
   /** Linear magnitude that counts as a clip. Default 1, i.e. 0 dBFS. */
   clipThreshold?: number;
   /**
+   * How long the RMS one-pole takes to reach 99 % of a step, in ms. Default
+   * 600 — K-Meter's average meter. Not the peak's release: they answer
+   * different questions.
+   */
+  rmsMs?: number;
+  /**
    * How often the processor posts its readings when the transport is
    * `"message"`, in ms. Default 16, i.e. about one animation frame. Ignored
    * when the transport is `"shared"`.
@@ -134,15 +192,43 @@ export const LevelMeter = Object.assign(
 
     // The deprecated flat peak view, kept in step with the strided one.
     const peaks = new Float32Array(maxChannels);
+    // What the view held when `version` was last bumped.
+    const previous = new Float32Array(length);
+
+    let version = 0;
+    let error = false;
 
     // The one place on the main thread where the view becomes readable. Under
     // `"message"` it runs when a frame arrives; under `"shared"` the memory is
     // already live, so it runs when a reader asks. Everything derived from the
-    // view is derived here, so `subscribe`/`version` have somewhere to live.
+    // view is derived here, so `subscribe` has somewhere to live.
     const readView = () => {
+      // A page can only end up here with a mismatched bundle by registering two
+      // versions of the processor in one context, where the registrar's cache
+      // means the first one wins. `[0]` exists so that fails loudly instead of
+      // reading a stride that moved. 0 is "no block has run yet".
+      const layout = view[0];
+      if (layout !== 0 && layout !== LEVELS_LAYOUT_VERSION) {
+        throw Error(
+          `LevelMeter: the registered processor writes layout ${layout}, this build reads ${LEVELS_LAYOUT_VERSION}`,
+        );
+      }
+
+      let changed = false;
+      for (let i = 0; i < length; i++) {
+        if (previous[i] !== view[i]) {
+          previous[i] = view[i];
+          changed = true;
+        }
+      }
+      if (!changed) return;
+
+      version++;
       for (let c = 0; c < maxChannels; c++)
         peaks[c] = view[HEADER + c * STRIDE];
     };
+
+    const slot = (channel: number) => HEADER + channel * STRIDE;
 
     // Hand-rolled rather than built with `createWorkletConstructor`: that helper
     // exists to wire `AudioParam`s from a `ParamInput` map, and the meter has no
@@ -159,6 +245,7 @@ export const LevelMeter = Object.assign(
         holdMs: options.holdMs,
         clipHoldMs: options.clipHoldMs,
         clipThreshold: options.clipThreshold,
+        rmsMs: options.rmsMs,
         postIntervalMs: options.postIntervalMs ?? DEFAULT_POST_INTERVAL_MS,
       },
     }) as LevelMeterWorkletNode;
@@ -174,6 +261,59 @@ export const LevelMeter = Object.assign(
       value: shared ? "shared" : "message",
       enumerable: true,
     });
+
+    // One object, reused. `truePeak`, `momentary` and `shortTerm` read NaN
+    // rather than -Infinity while their measurement is off: "not measured" and
+    // "silent" are different answers and a UI has to be able to tell them apart.
+    const levels: Levels = {
+      get channelCount() {
+        return view[1];
+      },
+      get version() {
+        return version;
+      },
+      get momentary() {
+        return NaN;
+      },
+      get shortTerm() {
+        return NaN;
+      },
+      get error() {
+        return error;
+      },
+      peak: (channel) => toDb(view[slot(channel)]),
+      hold: (channel) => toDb(view[slot(channel) + 1]),
+      rms: (channel) => toDb(view[slot(channel) + 2]),
+      truePeak: () => NaN,
+      clipped: (channel) => ((view[2] >>> channel) & 1) === 1,
+      clearClip() {
+        node.port.postMessage({ type: "CLEAR_CLIP" });
+        // The processor clears its own copy too; this is so a reader looking
+        // before the next frame arrives sees the click it just made.
+        view[2] = 0;
+      },
+      snapshot() {
+        const count = view[1];
+        const each = (read: (channel: number) => number) =>
+          Array.from({ length: count }, (_, c) => read(c));
+        return {
+          channelCount: count,
+          peak: each(levels.peak),
+          hold: each(levels.hold),
+          rms: each(levels.rms),
+          truePeak: each(levels.truePeak),
+          clipped: Array.from({ length: count }, (_, c) => levels.clipped(c)),
+          momentary: levels.momentary,
+          shortTerm: levels.shortTerm,
+          version,
+        };
+      },
+    };
+
+    node.getLevels = () => {
+      if (shared) readView();
+      return levels;
+    };
 
     node.getPeaks = () => {
       if (shared) readView();

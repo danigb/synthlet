@@ -19,6 +19,12 @@ const DEFAULT_HOLD_MS = 1500;
 const DEFAULT_CLIP_HOLD_MS = 1500;
 const DEFAULT_CLIP_THRESHOLD = 1;
 
+// K-Meter's average meter: 0.6 s to 99 % of a step. Peak and RMS answer
+// different questions and K-Meter gives them different numbers, so this is not
+// the peak's release coefficient reused. The one-pole runs on the *mean square*,
+// so 99 % is 99 % of the power - 0.04 dB short of the final reading.
+const DEFAULT_RMS_MS = 600;
+
 // Below this the reading is zero, so `20*log10(peak)` prints -Infinity rather
 // than -200 dB and no UI has to special-case a floor that should not exist.
 // This is a correctness fix, not a performance one: V8's denormal penalty was
@@ -59,6 +65,9 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
   ht: Int32Array; // per channel, blocks left before the hold marker falls
   cl: Int32Array; // per channel, blocks left on the clip latch
   bp: Float32Array; // per channel, this block's raw maximum
+  ms: Float64Array; // per channel, the smoothed mean square
+  ra: number; // rms one-pole coefficient, per sample
+  rb: number; // the same coefficient over a whole block
   n: number; // channel capacity of the buffer
   cc: number; // channels most recently seen on the input
   d: number; // release, as a per-block multiplier
@@ -104,9 +113,18 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
       : Math.max(1, Math.round(postInterval / 1000 / blockSeconds));
     this.pc = 0;
 
+    // rms^2 = rms^2*a + x^2*(1-a), with `a` derived from `sampleRate` for the
+    // same reason the release is. `rb` is `a` over a whole block, which is what
+    // a channel with no input this block gets - exactly equivalent to feeding it
+    // 128 zeros, without the loop.
+    const rmsSeconds = (o.rmsMs ?? DEFAULT_RMS_MS) / 1000;
+    this.ra = Math.pow(0.01, 1 / Math.max(1, rmsSeconds * sampleRate));
+    this.rb = Math.pow(this.ra, BLOCK);
+
     this.ht = new Int32Array(n);
     this.cl = new Int32Array(n);
     this.bp = new Float32Array(n);
+    this.ms = new Float64Array(n);
 
     this.port.onmessage = (event) => {
       switch (event.data.type) {
@@ -144,18 +162,26 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
     // chose. Anything above that is passed through unmetered rather than
     // written past the end of the view.
     const bp = this.bp;
+    const ms = this.ms;
+    const a = this.ra;
+    const b = 1 - a;
     const measured = Math.min(input.length, bp.length);
     for (let channel = 0; channel < measured; channel++) {
       const chIn = input[channel];
       let blockPeak = 0;
+      let square = ms[channel];
       for (let i = 0; i < chIn.length; i++) {
-        const x = chIn[i] < 0 ? -chIn[i] : chIn[i];
+        const sample = chIn[i];
+        const x = sample < 0 ? -sample : sample;
         if (x > blockPeak) blockPeak = x;
+        square = square * a + sample * sample * b;
       }
       bp[channel] = blockPeak;
+      ms[channel] = square;
     }
     for (let channel = measured; channel < bp.length; channel++) {
       bp[channel] = 0;
+      ms[channel] *= this.rb;
     }
 
     // Decay: every slot, every block, whatever the channel count is - including
@@ -188,6 +214,15 @@ export class LevelMeterProcessor extends AudioWorkletProcessor {
         if (hold < SILENCE) hold = 0;
       }
       v[slot + 1] = hold;
+
+      // One square root per block per channel, not per sample. Flushed to zero
+      // for the same reason the peak is: silence must read -Infinity.
+      let square = ms[channel];
+      if (square < SILENCE * SILENCE) {
+        square = 0;
+        ms[channel] = 0;
+      }
+      v[slot + 2] = Math.sqrt(square);
 
       // `blockPeak` is already the largest |x| in the block, so one compare
       // says whether any sample in it reached the threshold.

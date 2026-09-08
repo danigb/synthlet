@@ -47,18 +47,44 @@ draw();
 
 ## Configuration
 
-The meter has **no `AudioParam`s** — `LevelMeter.descriptors` is empty. It takes
-one construction option:
+The meter has **no `AudioParam`s** — `LevelMeter.descriptors` is empty.
+Ballistics are properties of the instrument, so they are construction options:
 
-| Option        | Default | Meaning                      |
-| ------------- | ------- | ---------------------------- |
-| `maxChannels` | 16      | Sizes the shared peak buffer |
+| Option               | Default | Meaning                                        |
+| -------------------- | ------- | ---------------------------------------------- |
+| `maxChannels`        | 16      | Slots in the level buffer, 1 to 24             |
+| `releaseDbPerSecond` | 8.7     | Peak fall rate — K-Meter's 26 dB / 3 s         |
+| `holdMs`             | 1500    | How long the hold marker parks at a maximum    |
+| `clipHoldMs`         | 1500    | How long the clip latch stays lit              |
+| `clipThreshold`      | 1       | Linear magnitude that counts as a clip         |
+| `rmsMs`              | 600     | RMS time to 99 % of a step — K-Meter's average |
+| `postIntervalMs`     | 16      | Post cadence when the transport is `"message"` |
 
-`getPeaks()` returns the same `Float32Array` every call — a live view of the
-shared buffer, not a snapshot. Entry `i` is channel `i`'s peak as a linear
-magnitude, smoothed by a one-pole at the block rate (`peak × 0.9 + block × 0.1`)
-so a meter driven from `requestAnimationFrame` falls at a readable speed. The
-processor meters **at most 8 channels** whatever `maxChannels` is set to.
+Attack is instantaneous, release is exponential at `releaseDbPerSecond`, and
+both are derived from `sampleRate` — the same signal meters the same at 44.1,
+48 and 96 kHz.
+
+`getLevels()` returns the same object every call and allocates nothing, so a
+renderer can read it once per animation frame:
+
+```ts
+const levels = meter.getLevels();
+levels.channelCount; // 2 - from the source, not from you
+levels.peak(0); // dBFS, -Infinity for silence
+levels.hold(0); // the hold marker
+levels.rms(0);
+levels.clipped(0); // boolean
+levels.clearClip();
+levels.snapshot(); // a plain object, when you need to keep one
+```
+
+Everything is in dB, because every consumer converted anyway. Silence reads
+`-Infinity`, not a floor. `truePeak()`, `momentary` and `shortTerm` read `NaN`
+while their measurement is off: "not measured" and "silent" are different
+answers.
+
+`getPeaks()` is **deprecated** and still returns what it always did — one linear
+peak per slot, the same `Float32Array` every call.
 
 `LevelMeterUI` is an optional canvas renderer: `new LevelMeterUI({ minDb, maxDb })`
 (defaults −40 and 0), then `setCanvas(canvas)` and `render(peaks, channels)`
