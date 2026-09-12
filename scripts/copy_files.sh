@@ -2,18 +2,20 @@
 
 # scripts/_worklet.ts goes to every package: it is the module contract, and
 # every package needs it. scripts/_gate.ts, scripts/_blep.ts, scripts/_delay.ts,
-# scripts/_spectrum.ts and scripts/_voices.ts go only to the packages that
-# already carry a copy - the ones that produce or consume a gate, the ones that
-# band-limit a discontinuity, the ones that need a circular buffer, the ones
-# whose tests measure a spectrum, and the ones that hand notes to voices - so
-# adding a package does not silently give it an unused file. A package opts in
-# by copying the file once by hand; from then on this script keeps it current.
+# scripts/_spectrum.ts, scripts/_voices.ts and scripts/_traversal.ts go only to
+# the packages that already carry a copy - the ones that produce or consume a
+# gate, the ones that band-limit a discontinuity, the ones that need a circular
+# buffer, the ones whose tests measure a spectrum, the ones that hand notes to
+# voices, and the ones that walk a sequence of them - so adding a package does
+# not silently give it an unused file. A package opts in by copying the file
+# once by hand; from then on this script keeps it current.
 SOURCE_FILE="scripts/_worklet.ts"
 GATE_FILE="scripts/_gate.ts"
 BLEP_FILE="scripts/_blep.ts"
 DELAY_FILE="scripts/_delay.ts"
 SPECTRUM_FILE="scripts/_spectrum.ts"
 VOICES_FILE="scripts/_voices.ts"
+TRAVERSAL_FILE="scripts/_traversal.ts"
 
 # Define the target directory for each package
 TARGET_DIR="src/"
@@ -62,6 +64,15 @@ for PACKAGE in packages/*; do
       if [ -f "$TARGET_PATH/_voices.ts" ]; then
         cp "$VOICES_FILE" "$TARGET_PATH"
         echo "Copied $VOICES_FILE to $TARGET_PATH"
+      fi
+
+      # And the traversal, under the same rule. Two packages arpeggiate: one
+      # over a scale it is told, one over the notes a player is holding. They
+      # share the index math and nothing else - in particular not the mode
+      # enum's spelling at their own surfaces.
+      if [ -f "$TARGET_PATH/_traversal.ts" ]; then
+        cp "$TRAVERSAL_FILE" "$TARGET_PATH"
+        echo "Copied $TRAVERSAL_FILE to $TARGET_PATH"
       fi
     else
       echo "Warning: $TARGET_PATH does not exist. Skipping."
