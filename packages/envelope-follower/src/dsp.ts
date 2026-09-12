@@ -8,7 +8,15 @@
  * asymmetric one-pole on a rectified input, and it is what `createFollower`
  * is - kept a small closure rather than fused into the processor, so a bank of
  * them is reachable later (the vocoder is Part 15's second half).
+ *
+ * `attack` and `release` are the time to cover **99 % of a step**, which is the
+ * library's one meaning for a time in seconds. The coefficient that implements
+ * it lives in `_smooth.ts`, shared with `slew-limiter` - see that file's header
+ * for why the *definition* rather than the arithmetic is the thing being kept
+ * in one place, and `slew-limiter`'s README for the decision that put it there.
  */
+
+import { smoothCoefficient } from "./_smooth";
 
 export enum EnvelopeFollowerType {
   /**
@@ -22,31 +30,6 @@ export enum EnvelopeFollowerType {
    * height. Two stages - see `createFollower`.
    */
   Rms = 1,
-}
-
-/**
- * `ln(100)`. The library's one meaning for a time in seconds, fixed by the
- * envelopes folder's ticket 02: **the number is how long the move takes**, and
- * "the move" is 99 % of a step.
- *
- * Analogue followers, and most plugin ones, label their attack and release as
- * *time constants* - 63.2 % of a step, τ. Adopting that here would put two
- * meanings of "seconds" in one library. To port a setting from a plugin that
- * means τ, multiply it by this: `t = τ × 4.605`.
- */
-export const NINETY_NINE_PERCENT = Math.log(100);
-
-/**
- * The pole of a one-pole that covers 99 % of a step in `seconds`.
- *
- * Derived from the sample rate, so 44.1 and 48 kHz behave identically rather
- * than differing by 8 %. `seconds <= 0` is instantaneous: the coefficient is 0
- * and the filter takes its input. (`exp(-x/0)` is already 0, but relying on
- * that is a puzzle for the next reader.)
- */
-export function followerCoefficient(seconds: number, sampleRate: number) {
-  if (seconds <= 0) return 0;
-  return Math.exp(-NINETY_NINE_PERCENT / (seconds * sampleRate));
 }
 
 export type FollowerParamInputs = {
@@ -133,11 +116,11 @@ export function createFollower(sampleRate: number) {
   function _update(attack: number, release: number) {
     if ($attack !== attack) {
       $attack = attack;
-      attackCoefficient = followerCoefficient(attack, sampleRate);
+      attackCoefficient = smoothCoefficient(attack, sampleRate);
     }
     if ($release !== release) {
       $release = release;
-      releaseCoefficient = followerCoefficient(release, sampleRate);
+      releaseCoefficient = smoothCoefficient(release, sampleRate);
     }
   }
 }

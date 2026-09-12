@@ -233,6 +233,41 @@ const levelsPackages = packages.filter((pkg) =>
   existsSync(join(root, "packages", pkg, "src/_levels.ts")),
 );
 
+// And the library's definition of a time in seconds, under the same rule. This
+// is the folder's extract-or-copy decision, made with two instances in hand
+// rather than one, and the argument for it is not the three lines of
+// arithmetic: it is that `0.1` has to mean the same thing in
+// `envelope-follower` as it does in `slew-limiter`. If the two drifted, a
+// caller moving a setting between them would get a different move, with no
+// error and no clue why - the same class of silence `_gate.ts` prevents.
+//
+// `karplus-strong` declined `_delay.ts` for a stated reason, and the reason was
+// that adopting it would have *changed its behaviour*. Nothing changed here:
+// the follower's `followerCoefficient` was renamed and its body left alone.
+//
+// `adsr` and `ad` are deliberately not on this list. `adsr` runs Pirkle's TCO
+// constants inside a stage machine and `ad` has its own variant; retrofitting
+// either is a behaviour change and belongs to its own ticket. So this covers
+// two of the library's four smoothers, which is the honest scope.
+const smoothSource = readFileSync(join(root, "scripts/_smooth.ts"), "utf8");
+const smoothPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_smooth.ts")),
+);
+
+describe("the definition of a time in seconds", () => {
+  it("is shared by every package that turns one into a coefficient", () => {
+    expect(smoothPackages).toEqual(["envelope-follower", "slew-limiter"]);
+  });
+});
+
+describe.each(smoothPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_smooth.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_smooth.ts"), "utf8"),
+    ).toBe(smoothSource);
+  });
+});
+
 describe("the levels transport", () => {
   it("is shared by every package that meters something", () => {
     expect(levelsPackages).toEqual(["level-meter", "lookahead-limiter"]);

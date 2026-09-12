@@ -13,6 +13,7 @@ import {
   PolyblepOscillatorType,
   RingModType,
   SampleHoldType,
+  SlewType,
   SvfType,
 } from "./index";
 
@@ -51,6 +52,7 @@ const EXPECTED = [
   "ReverbDelay",
   "RingMod",
   "SampleHold",
+  "SlewLimiter",
   "Svf",
   "TimestretchAudioSource",
   "VirtualAnalogFilter",
@@ -366,6 +368,12 @@ const ENUM_PARAMS = [
     param: "type",
   },
   {
+    name: "SlewLimiter.type",
+    values: SlewType,
+    factory: synthlet.SlewLimiter,
+    param: "type",
+  },
+  {
     // Its types are a const object attached to the factory, not an enum.
     name: "VirtualAnalogFilter.type",
     values: synthlet.VirtualAnalogFilter,
@@ -401,6 +409,7 @@ const ENUMS = {
   PolyblepOscillatorType,
   RingModType,
   SampleHoldType,
+  SlewType,
   SvfType,
 };
 

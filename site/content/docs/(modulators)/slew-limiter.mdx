@@ -1,0 +1,100 @@
+---
+title: Slew Limiter
+description: Rate-limit a control signal — portamento, and the smoother after an S&H
+package: slew-limiter
+---
+
+import SlewLimiterExample from "../../../examples/SlewLimiterExample";
+
+`@synthlet/slew-limiter`
+
+Synth Secrets Part 16: _"But if you insert a simple Slew Generator into the
+keyboard CV signal path, you smooth the transitions at the oscillator's CV
+input, thus making the pitch glide from one note to the next. This, of course,
+is portamento."_
+
+```ts
+import { registerSlewLimiterWorklet, SlewLimiter } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerSlewLimiterWorklet(audioContext);
+
+const glide = SlewLimiter(audioContext, { rise: 0.2, fall: 0.2 });
+pitchInCents.connect(glide).connect(osc.detune);
+```
+
+<SlewLimiterExample />
+
+`setTargetAtTime` is not this. It is host-side automation on a single
+`AudioParam`: it cannot be put in the middle of a signal path, and it cannot
+smooth a signal arriving from another node at all.
+
+## Parameters
+
+| Param  | Default | Range  | Rate   | Meaning                                             |
+| ------ | ------- | ------ | ------ | --------------------------------------------------- |
+| `type` | 0       | 0 … 1  | k-rate | `SlewType.Exponential` (0) or `SlewType.Linear` (1) |
+| `rise` | 0.1     | 0 … 10 | k-rate | Upward, in the units below                          |
+| `fall` | 0.1     | 0 … 10 | k-rate | Downward, same units                                |
+
+## Two laws, and two meanings for one parameter
+
+| `type`        | `rise` / `fall` mean                | A step arrives?          |
+| ------------- | ----------------------------------- | ------------------------ |
+| `Exponential` | seconds to cover **99 % of a step** | asymptotically           |
+| `Linear`      | seconds **per unit** of the signal  | exactly, at a known time |
+
+A _slew limiter_, strictly, caps the rate of change: the output moves toward the
+input at no more than R units per second, which turns a step into a straight
+ramp. That is what the name means and what Serge and Buchla build, and it is
+`Linear`. A rate limiter has no notion of a step — a 2-unit move takes twice as
+long as a 1-unit move, by definition — so there is no honest way to give it a
+step time.
+
+Two meanings for one parameter is a real wart. The alternative, a second
+parameter that is inert in the other mode, is worse.
+
+`rise: 0` and `fall: 0` are a bit-exact bypass in both modes.
+
+### Why exponential is the default
+
+Units, not taste. A linear rate is expressed per unit of the signal, so 1
+unit/second is a lifetime on a `[0,1]` CV and imperceptible on a frequency in
+hertz. An exponential move is proportional: its duration is the same whatever
+the step size and whatever the unit — which is also why it can share the
+[envelope follower](/docs/modulators/envelope-follower)'s definition of seconds
+unchanged. It is also what the book depicts, _"as it would be on most vintage
+synths"_.
+
+`rise` and `fall` are separate so Part 16's shark's tooth is reachable: an
+[S&H](/docs/modulators/sample-hold) staircase through `rise: 0.5, fall: 0.01`
+climbs slowly and snaps down.
+
+## Glide in cents, not in hertz
+
+An analogue portamento is an RC network on a 1 V/oct CV, so it is exponential
+_in volts_ and therefore linear in log-frequency: the glide is musically even.
+Synthlet's frequency parameters are in hertz, so a slew on a frequency signal
+glides evenly in Hz — **a fifth downward takes longer to traverse than a fifth
+upward**.
+
+For a true 1 V/oct glide, slew a `detune` in cents — `PolyblepOscillator`,
+`WavetableOscillator` and `KarplusStrong` all take one — or slew the note number
+before converting it to hertz. The example above takes the cents route.
+
+<Callout title="Never put one on a gate" type="warn">
+  Exponential mode approaches zero asymptotically, and a gate that closes 30 dB
+  late is a stuck note. `SlewType.Linear` is safe: it actually *reaches* its
+  target, so `createGateDetector`'s `<= 0` fires. See
+  [Gates and triggers](/docs/gates-and-triggers).
+</Callout>
+
+## Where the coefficient lives
+
+`scripts/_smooth.ts`, shared with the
+[envelope follower](/docs/modulators/envelope-follower): one function and one
+constant, the coefficient of a one-pole that covers 99 % of a step. What is
+shared is the library's **definition of a time in seconds** rather than the
+arithmetic — if the two drifted, `0.1` would mean one thing in one module and
+something else in the one next to it. The package README has the full decision
+and what is deliberately not shared.

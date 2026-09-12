@@ -21,6 +21,7 @@ import { registerPolyblepOscillatorWorklet } from "@synthlet/polyblep-oscillator
 import { registerReverbDelayWorklet } from "@synthlet/reverb-delay";
 import { registerRingModWorklet } from "@synthlet/ring-mod";
 import { registerSampleHoldWorklet } from "@synthlet/sample-hold";
+import { registerSlewLimiterWorklet } from "@synthlet/slew-limiter";
 import { registerSvfWorklet } from "@synthlet/state-variable-filter";
 import { registerTimestretchAudioSourceWorklet } from "@synthlet/timestretch-audio-source";
 import { registerVirtualAnalogFilterWorklet } from "@synthlet/virtual-analog-filter";
@@ -49,6 +50,7 @@ export * from "@synthlet/polyblep-oscillator";
 export * from "@synthlet/reverb-delay";
 export * from "@synthlet/ring-mod";
 export * from "@synthlet/sample-hold";
+export * from "@synthlet/slew-limiter";
 export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/timestretch-audio-source";
 export * from "@synthlet/virtual-analog-filter";
@@ -66,6 +68,7 @@ export { ParamScaleType } from "@synthlet/param";
 export { PolyblepOscillatorType } from "@synthlet/polyblep-oscillator";
 export { RingModType } from "@synthlet/ring-mod";
 export { SampleHoldType } from "@synthlet/sample-hold";
+export { SlewType } from "@synthlet/slew-limiter";
 export { SvfType } from "@synthlet/state-variable-filter";
 
 export { Compound, disposable } from "./_worklet";
@@ -110,6 +113,7 @@ export function registerAllWorklets(
     registerReverbDelayWorklet(context),
     registerRingModWorklet(context),
     registerSampleHoldWorklet(context),
+    registerSlewLimiterWorklet(context),
     registerSvfWorklet(context),
     registerTimestretchAudioSourceWorklet(context),
     registerVirtualAnalogFilterWorklet(context),

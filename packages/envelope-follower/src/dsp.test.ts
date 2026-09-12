@@ -1,9 +1,5 @@
-import {
-  createFollower,
-  EnvelopeFollowerType,
-  followerCoefficient,
-  NINETY_NINE_PERCENT,
-} from "./dsp";
+import { NINETY_NINE_PERCENT, smoothCoefficient } from "./_smooth";
+import { createFollower, EnvelopeFollowerType } from "./dsp";
 
 /**
  * The follower, driven directly. No worklet stub anywhere: `createFollower` is
@@ -14,15 +10,18 @@ import {
 const SAMPLE_RATE = 44100;
 const BLOCK = 128;
 
-describe("followerCoefficient", () => {
+// The coefficient is `scripts/_smooth.ts`, shared with `slew-limiter` - so
+// these three are a test of the library's definition of a second rather than of
+// this package's arithmetic.
+describe("smoothCoefficient", () => {
   it("is the pole that covers 99 % of a step in the time asked for", () => {
-    const c = followerCoefficient(0.05, SAMPLE_RATE);
+    const c = smoothCoefficient(0.05, SAMPLE_RATE);
     const samples = 0.05 * SAMPLE_RATE;
     expect(1 - c ** samples).toBeCloseTo(0.99, 6);
   });
 
   it("is instantaneous at zero rather than a division by it", () => {
-    expect(followerCoefficient(0, SAMPLE_RATE)).toBe(0);
+    expect(smoothCoefficient(0, SAMPLE_RATE)).toBe(0);
   });
 
   it("converts from a time constant by 4.605", () => {

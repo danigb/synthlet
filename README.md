@@ -201,7 +201,7 @@ ladder, Korg 35, diode ladder, Oberheim), `ClipAmp`, `AdsrAmp`, `AdAmp`,
 brickwall), `LevelMeter`
 
 **Modulators** — `AdsrEnv`, `AdEnv`, `Lfo`, `Param`, `SampleHold`,
-`EnvelopeFollower`
+`EnvelopeFollower`, `SlewLimiter` (portamento)
 
 **Sequencers** — `Clock`, `Euclid`, `Arp`
 

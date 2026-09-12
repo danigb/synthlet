@@ -42,6 +42,13 @@ comparator at 0 V behaves in modular.
   `setTargetAtTime`, and do not put a slew or a lowpass on a gate: those
   approach zero without ever arriving, so the gate would never close. The
   envelope is the smoother — that is its job.
+
+The module this warns about is
+[SlewLimiter](/docs/modulators/slew-limiter), and it has one safe mode:
+`SlewType.Linear` actually _reaches_ its target, so a gate through one still
+closes. `SlewType.Exponential` does not, and that is the whole of the
+difference.
+
 </Callout>
 
 ## Gate or trigger?

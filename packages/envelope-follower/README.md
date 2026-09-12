@@ -111,6 +111,16 @@ wobbles. The fix for the remainder is a
 [@synthlet/slew-limiter](https://www.npmjs.com/package/@synthlet/slew-limiter)
 after it, which is precisely the patch in the book.
 
+## Where the coefficient lives
+
+`attack` and `release` become a filter coefficient through
+`scripts/_smooth.ts`, which this package and
+[@synthlet/slew-limiter](https://www.npmjs.com/package/@synthlet/slew-limiter)
+both carry a copy of. What is shared is one function and one constant, and the
+reason is not the arithmetic — it is that `0.1` has to mean the same thing in
+both modules. The full decision, and what is deliberately _not_ shared, is in
+that package's README.
+
 ## Not `LevelMeter`, and neither replaces the other
 
 `@synthlet/level-meter` posts numbers to the main thread for a UI to draw. This
