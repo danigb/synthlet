@@ -627,6 +627,12 @@ describe("bounded at maximum resonance", () => {
         return seed / 2147483648 - 1;
       };
 
+      // The sweep reads 25,600 samples per model. Both facts it needs - the
+      // first non-finite sample and the largest magnitude - reduce over the
+      // render, so they are collected here and asserted once below rather
+      // than through 51,200 matcher calls per model.
+      let worst = 0;
+      let nonFinite = -1;
       for (let block = 0; block < length / 128; block++) {
         for (let n = 0; n < 128; n++) input[n] = noise();
         for (let n = 0; n < 128; n++) {
@@ -636,16 +642,25 @@ describe("bounded at maximum resonance", () => {
           filter.update(20 + 19980 * phase, 1.0, 1);
           filter.process(input, output, n, n + 1);
         }
-        for (const sample of output) {
-          expect(Number.isFinite(sample)).toBe(true);
-          // Deliberately loose: this asserts against divergence, not against
-          // loudness. A full-scale white noise at maximum resonance already
-          // carries 5x of makeup gain and 20-odd dB of resonant peak, so a
-          // peak in the hundreds is legitimate here and 1e21 - which is what
-          // an unbounded prewarp gave - is not.
-          expect(Math.abs(sample)).toBeLessThan(1e3);
+        for (let n = 0; n < output.length; n++) {
+          const sample = output[n];
+          if (!Number.isFinite(sample)) {
+            nonFinite = block * 128 + n;
+            break;
+          }
+          const magnitude = Math.abs(sample);
+          if (magnitude > worst) worst = magnitude;
         }
+        if (nonFinite >= 0) break;
       }
+
+      expect(nonFinite).toBe(-1);
+      // Deliberately loose: this asserts against divergence, not against
+      // loudness. A full-scale white noise at maximum resonance already
+      // carries 5x of makeup gain and 20-odd dB of resonant peak, so a
+      // peak in the hundreds is legitimate here and 1e21 - which is what
+      // an unbounded prewarp gave - is not.
+      expect(worst).toBeLessThan(1e3);
     },
   );
 });

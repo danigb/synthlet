@@ -50,6 +50,7 @@ limiter.latencySamples; // 102 at 48 kHz with 2 ms of lookahead
 | `release`   | `AudioParam` (k-rate) | ms (10-90% recovery) | 10 … 1000 | 168     |
 | `gain`      | `AudioParam` (a-rate) | dB (input drive)     | −12 … 24  | 0       |
 | `lookahead` | construction option   | ms                   | 0.5 … 5   | 2       |
+| `meter`     | construction option   | boolean              | —         | `false` |
 
 Three things the table cannot carry:
 
@@ -67,6 +68,44 @@ Three things the table cannot carry:
 Below the threshold the limiter is a bit-exact passthrough, delayed — not
 "almost unity". A channel that appears mid-stream starts from a zero-filled
 delay line, so it fades in over `latencySamples`.
+
+## Showing the gain reduction
+
+A limiter that is working well is one you cannot hear working, which makes the
+demo of one hard to read and the effect of `gain` hard to judge. `meter: true`
+publishes how hard it is working:
+
+```ts
+const limiter = LookaheadLimiter(ac, { threshold: -1, meter: true });
+
+limiter.getLevels().gainReduction; // dB: 0 doing nothing, -6 took 6 dB off
+const stop = limiter.subscribe((levels) => draw(levels.gainReduction));
+```
+
+The reading is the block's largest reduction — `20·log10` of the smallest gain
+applied in it — which is what "how hard is it working _now_" means at 60 Hz. The
+gain is already computed per sample, so the cost of exposing it is one compare
+per sample and one post per frame.
+
+**It is the same contract `@synthlet/level-meter` publishes**, from the same
+`scripts/_levels.ts` copied into both packages: a versioned slot layout, shared
+memory where the page allows it and `postMessage` where it does not, a
+monotonic `version`, and a `subscribe` that fires at most once per animation
+frame. So the meter's canvas renderer draws this with no adapter —
+
+```ts
+import { LevelMeterUI } from "@synthlet/level-meter";
+
+new LevelMeterUI({ mode: "reduction", minDb: -20 }).attach(canvas, limiter);
+```
+
+— and a React hook written with `useSyncExternalStore` against one reads the
+other unchanged.
+
+**Off by default.** Nearly free is not free, a limiter sits at the end of every
+master chain, and most of them have nothing attached to read this. With
+`meter: false` the processor allocates nothing for it and never touches the
+port.
 
 ## Latency
 

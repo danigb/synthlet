@@ -18,6 +18,30 @@
   "main": "dist/index.js",
   "module": "dist/index.mjs",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    },
+    "./dsp": {
+      "synthlet-source": "./src/dsp-entry.ts",
+      "import": {
+        "types": "./dist/dsp.d.mts",
+        "default": "./dist/dsp.mjs"
+      },
+      "require": {
+        "types": "./dist/dsp.d.ts",
+        "default": "./dist/dsp.js"
+      }
+    },
+    "./package.json": "./package.json"
+  },
   "files": [
     "dist"
   ],
@@ -25,6 +49,9 @@
   "license": "MIT",
   "publishConfig": {
     "access": "public"
+  },
+  "dependencies": {
+    "@synthlet/lookahead-limiter": "^0.2.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.13",
@@ -35,8 +62,9 @@
     "preset": "ts-jest"
   },
   "scripts": {
-    "worklet": "esbuild src/processor.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/_processor.ts",
-    "lib": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
-    "build": "npm run worklet && npm run lib"
+    "worklet": "esbuild src/worklet.ts --bundle --minify --conditions=synthlet-source | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/processor.ts",
+    "lib": "tsup --entry.index=src/index.ts --entry.dsp=src/dsp-entry.ts --sourcemap --dts --format esm,cjs",
+    "build": "npm run worklet && npm run lib",
+    "test": "jest"
   }
 }

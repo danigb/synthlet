@@ -21,6 +21,8 @@
     "preset": "ts-jest",
     "testEnvironment": "node",
     "moduleNameMapper": {
+      "^synthlet/dsp$": "<rootDir>/packages/synthlet/src/dsp-entry.ts",
+      "^@synthlet/([^/]+)/dsp$": "<rootDir>/packages/$1/src/dsp-entry.ts",
       "^@synthlet/(.*)$": "<rootDir>/packages/$1/src/index.ts"
     },
     "transform": {
@@ -38,7 +40,8 @@
     "format:check": "prettier --check .",
     "lint": "turbo lint",
     "check:rates": "node scripts/check-param-rates.mjs",
-    "test": "jest --coverage",
+    "test": "jest",
+    "test:coverage": "jest --coverage",
     "test:ci": "npm run build && npm run test",
     "processors": "find ./packages -name 'processor.ts' -exec wc -m {} +",
     "bump": "changeset version && npm run publish:prepare",

@@ -46,6 +46,104 @@ describe("LookaheadLimiterProcessor", () => {
     expect(peak).toBeLessThanOrEqual(Math.pow(10, -1 / 20));
   });
 
+  // Ticket 17: the gain reduction readout, over the shared levels transport.
+  describe("the gain reduction meter", () => {
+    const metered = (options: object = {}) =>
+      new Worklet({
+        processorOptions: { lookahead: 0.5, meter: true, ...options },
+      });
+
+    const hot = () => Float32Array.from({ length: 128 }, () => 1);
+
+    it("writes the header the reader checks", () => {
+      const processor = metered();
+      expect(processor.v[0]).toBe(1); // layout version
+      expect(processor.v[1]).toBe(1); // one slot
+      expect(processor.v).toHaveLength(4);
+    });
+
+    // Success criterion 1, against the DSP's own number rather than a
+    // reimplementation of it: `gainOut` is the gain the limiter actually
+    // applied, sample by sample.
+    it("reports 20*log10 of the smallest gain in the block", () => {
+      const processor = metered();
+      const outputs = [[new Float32Array(128)]];
+
+      processor.process([[hot()]], outputs, params());
+      processor.process([[hot()]], outputs, params());
+
+      const applied: Float32Array = processor.g.subarray(0, 128);
+      const min = Math.min(...Array.from(applied));
+      expect(min).toBeLessThan(1); // it really did reduce
+      // `Math.fround` because the slot is a Float32: exact equality against the
+      // DSP's own number, once it has been through the view it travels in.
+      expect(processor.v[3]).toBe(Math.fround(20 * Math.log10(min)));
+    });
+
+    it("reads 0 dB while the limiter is not working", () => {
+      const processor = metered();
+      const quiet = new Float32Array(128).fill(0.01);
+      const outputs = [[new Float32Array(128)]];
+
+      processor.process([[quiet]], outputs, params());
+      processor.process([[quiet]], outputs, params());
+
+      expect(processor.v[3]).toBe(0);
+    });
+
+    it("posts at the interval, not every block", () => {
+      // 16 ms at 48 kHz is six 128-frame blocks.
+      const processor = metered({ postIntervalMs: 16 });
+      const outputs = [[new Float32Array(128)]];
+      for (let i = 0; i < 6; i++)
+        processor.process([[hot()]], outputs, params());
+
+      expect(processor.port.postMessage).toHaveBeenCalledTimes(1);
+      expect(processor.port.postMessage).toHaveBeenCalledWith(processor.v);
+    });
+
+    it("posts nothing when the buffer is shared", () => {
+      const buffer = new ArrayBuffer(4 * 4);
+      const processor = metered({ levelsBuffer: buffer });
+      const outputs = [[new Float32Array(128)]];
+      for (let i = 0; i < 20; i++)
+        processor.process([[hot()]], outputs, params());
+
+      expect(processor.port.postMessage).not.toHaveBeenCalled();
+      // Written straight into the memory the reader already sees.
+      expect(new Float32Array(buffer)[3]).toBeLessThan(0);
+    });
+
+    // Success criterion 2.
+    it("neither writes nor posts with the meter off", () => {
+      const processor = new Worklet({
+        processorOptions: { lookahead: 0.5 },
+      });
+      const outputs = [[new Float32Array(128)]];
+      for (let i = 0; i < 20; i++)
+        processor.process([[hot()]], outputs, params());
+
+      expect(processor.v).toBeUndefined();
+      expect(processor.g).toBeUndefined();
+      expect(processor.port.postMessage).not.toHaveBeenCalled();
+    });
+
+    it("still limits identically with the meter on", () => {
+      const outputs = (n: number) => [[new Float32Array(n)]];
+      const off = new Worklet({ processorOptions: { lookahead: 0.5 } });
+      const on = metered();
+      const a = outputs(128);
+      const b = outputs(128);
+
+      for (let i = 0; i < 4; i++) {
+        off.process([[hot()]], a, params());
+        on.process([[hot()]], b, params());
+      }
+
+      expect(Array.from(b[0][0])).toEqual(Array.from(a[0][0]));
+    });
+  });
+
   it("stops running once disposed", () => {
     const processor = new Worklet({});
     processor.port.onmessage({ data: { type: "DISPOSE" } });

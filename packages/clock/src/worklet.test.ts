@@ -46,9 +46,14 @@ describe("ClockWorkletProcessor", () => {
 
     // Strictly increasing everywhere else, and never exactly 1.0: the phase is
     // `[0, 1)`, which is what `gatePulse` and `Euclid`'s wrap detector assume.
+    let notRising = -1;
     for (let i = 1; i < phase.length; i++) {
-      if (!wraps.includes(i)) expect(phase[i]).toBeGreaterThan(phase[i - 1]);
+      if (!wraps.includes(i) && !(phase[i] > phase[i - 1])) {
+        notRising = i;
+        break;
+      }
     }
+    expect(notRising).toBe(-1);
     expect(Math.max(...phase)).toBeLessThan(1);
   });
 

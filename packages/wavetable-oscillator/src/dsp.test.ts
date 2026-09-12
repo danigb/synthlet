@@ -1180,10 +1180,11 @@ describe("hard sync", () => {
           },
           { length: 4096, levels },
         );
-        for (const sample of signal) {
-          expect(Number.isFinite(sample)).toBe(true);
-          expect(Math.abs(sample)).toBeLessThanOrEqual(2);
-        }
+        // Reduced over the render and asserted once: `peak` already walks
+        // the signal for the bound, and `findIndex` reports *where* the
+        // first non-finite sample is rather than just that one exists.
+        expect(signal.findIndex((v) => !Number.isFinite(v))).toBe(-1);
+        expect(peak(signal)).toBeLessThanOrEqual(2);
         expect(peak(signal)).toBeGreaterThan(0);
       }
     },
@@ -1688,9 +1689,7 @@ describe("the stochastic mode", () => {
             },
             { levels: built.levels, pitchPerSegment },
           );
-          for (let i = 0; i < signal.length; i++) {
-            expect(Number.isFinite(signal[i])).toBe(true);
-          }
+          expect(signal.findIndex((v) => !Number.isFinite(v))).toBe(-1);
           expect(peak(signal)).toBeLessThanOrEqual(1);
         }
       });

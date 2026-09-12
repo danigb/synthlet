@@ -5,7 +5,14 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  # Everything that has to read the whole repo at once: formatting, the build,
+  # and the two generated-code checks that depend on it.
+  #
+  # This runs *beside* the test shards, not before them. Jest's
+  # moduleNameMapper points `@synthlet/*` at `packages/*/src`, so the tests
+  # import package sources and never touch `dist/` - there is nothing for them
+  # to wait for.
+  build:
     runs-on: ubuntu-latest
 
     steps:
@@ -49,5 +56,55 @@ jobs:
       - name: Check a-rate parameters are read per sample
         run: npm run check:rates
 
-      - name: Run tests
-        run: npm run test
+  # The suite is CPU-bound and a hosted runner has 4 cores, so the wall clock
+  # is set by how much work lands on one machine. Four shards split it four
+  # ways. Six were tried and were no faster: one package's test file is the
+  # long pole, and jest shards by file, so it cannot be split further.
+  #
+  # `fail-fast: false` so a failure in one shard still reports the others -
+  # with an audio DSP change, knowing whether one package broke or all four is
+  # most of the diagnosis.
+  shard:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      # No `--coverage`: there is no `coverageThreshold`, nothing uploads the
+      # report and nothing reads it, so instrumenting the run only spent time.
+      # `npm run test:coverage` still produces it on demand.
+      - name: Run tests (shard ${{ matrix.shard }} of 4)
+        run: npx jest --shard=${{ matrix.shard }}/4
+
+  # `test` is the required status check on main, so the name has to survive.
+  # It is now an aggregate: the shards report under their own names, and this
+  # passes only when every one of them - and the build - did.
+  test:
+    runs-on: ubuntu-latest
+    needs: [build, shard]
+    if: always()
+
+    steps:
+      - name: Check that every job passed
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "::error::build: ${{ needs.build.result }}, shards: ${{ needs.shard.result }}"
+          exit 1
+
+      - name: All green
+        run: echo "build and all 4 test shards passed"
