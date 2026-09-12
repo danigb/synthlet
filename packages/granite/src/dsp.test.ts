@@ -1134,10 +1134,16 @@ describe("createGranulator reverse", () => {
       levelSpread: 1,
     });
     let peak = 0;
-    for (const sample of rendered.left) {
-      expect(Number.isFinite(sample)).toBe(true);
+    let nonFinite = -1;
+    for (let i = 0; i < rendered.left.length; i++) {
+      const sample = rendered.left[i];
+      if (!Number.isFinite(sample)) {
+        nonFinite = i;
+        break;
+      }
       peak = Math.max(peak, Math.abs(sample));
     }
+    expect(nonFinite).toBe(-1);
     console.log(`everything up: peak ${peak.toFixed(3)}`);
     expect(peak).toBeLessThan(4);
   });

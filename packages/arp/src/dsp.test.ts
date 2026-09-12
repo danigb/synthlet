@@ -306,18 +306,23 @@ describe("the note range", () => {
     // The reason the fix is a fold and not a clamp: a clamped note is not a
     // member of the set the user chose. Read at the settings where the fold
     // actually fires, which is where a clamp would be indistinguishable.
-    for (const scale of SCALES) {
+    let failure: string | null = null;
+    sweep: for (const scale of SCALES) {
       const pitchClasses = getPitchClasses(scale);
       for (const baseNote of [120, 124, 127]) {
         const arp = createArpeggiator(xorshift32(scale + baseNote));
         for (let i = 0; i < 200; i++) {
           const note = freqToMidi(arp(1, baseNote, scale, 10, ArpMode.Random));
           arp(0, baseNote, scale, 10, ArpMode.Random);
-          expect(note).toBeLessThanOrEqual(127);
-          expect(pitchClasses).toContain((((note - baseNote) % 12) + 12) % 12);
+          const pitchClass = (((note - baseNote) % 12) + 12) % 12;
+          if (note > 127 || !pitchClasses.includes(pitchClass)) {
+            failure = `scale ${scale}, baseNote ${baseNote}, draw ${i}: note=${note}, pitch class ${pitchClass} not in [${pitchClasses}]`;
+            break sweep;
+          }
         }
       }
     }
+    expect(failure).toBeNull();
   });
 
   it("spans exactly as many octaves as the floor of the count", () => {
@@ -455,7 +460,8 @@ describe("the order", () => {
       ArpMode.UpDownInclusive,
       ArpMode.Random,
     ];
-    for (const mode of modes) {
+    let failure: string | null = null;
+    sweep: for (const mode of modes) {
       for (let len = 1; len <= 12; len++) {
         for (let octaves = 1; octaves <= 10; octaves++) {
           const arp = createArpeggiator(xorshift32(len * 13 + octaves));
@@ -463,14 +469,21 @@ describe("the order", () => {
           for (let step = 0; step < 500; step++) {
             const hz = arp(1, 24, scale, octaves, mode);
             arp(0, 24, scale, octaves, mode);
-            expect(Number.isFinite(hz)).toBe(true);
             const index = freqToMidi(hz) - 24;
-            expect(index).toBeGreaterThanOrEqual(0);
-            expect(index).toBeLessThan(len + 12 * octaves);
+            const size = len + 12 * octaves;
+            // Checked inline and reported once. The sweep is 300k steps, and
+            // a matcher call per step spends ~17 s inside jest's matchers to
+            // assert what `&&` decides in microseconds. Naming the failing
+            // corner here also reads better than a bare `expect(index)`.
+            if (!Number.isFinite(hz) || index < 0 || index >= size) {
+              failure = `mode ${mode}, len ${len}, octaves ${octaves}, step ${step}: hz=${hz}, index=${index} outside [0, ${size})`;
+              break sweep;
+            }
           }
         }
       }
     }
+    expect(failure).toBeNull();
   });
 
   it("plays every note of every octave exactly once per cycle", () => {
@@ -529,7 +542,9 @@ describe("the order", () => {
     // offset of a full cycle.
     const big = setOf(12);
     const small = ArpScale.TriadMinor;
-    for (let offset = 0; offset < 120; offset++) {
+    const smallClasses = getPitchClasses(small);
+    let failure: string | null = null;
+    sweep: for (let offset = 0; offset < 120; offset++) {
       for (const mode of [
         ArpMode.Up,
         ArpMode.Down,
@@ -545,11 +560,15 @@ describe("the order", () => {
         for (let i = 0; i < 24; i++) {
           const hz = arp(1, 60, small, 1, mode);
           arp(0, 60, small, 1, mode);
-          expect(Number.isFinite(hz)).toBe(true);
-          expect(getPitchClasses(small)).toContain(freqToMidi(hz) - 60);
+          const pitchClass = freqToMidi(hz) - 60;
+          if (!Number.isFinite(hz) || !smallClasses.includes(pitchClass)) {
+            failure = `offset ${offset}, mode ${mode}, step ${i}: hz=${hz}, pitch class ${pitchClass} not in [${smallClasses}]`;
+            break sweep;
+          }
         }
       }
     }
+    expect(failure).toBeNull();
   });
 
   it("plays a minor triad with nothing but a trigger", () => {
@@ -718,7 +737,11 @@ describe("the octave mapping", () => {
   it("never hangs and never reads out of range, either way", () => {
     // Ticket 03's exhaustive sweep, re-run with both mappings: 5 modes x 12
     // set sizes x 10 octave counts x 2 mappings.
-    for (const octaveMode of [ArpOctaveMode.Serial, ArpOctaveMode.Repeat]) {
+    let failure: string | null = null;
+    sweep: for (const octaveMode of [
+      ArpOctaveMode.Serial,
+      ArpOctaveMode.Repeat,
+    ]) {
       for (const mode of [
         ArpMode.Up,
         ArpMode.Down,
@@ -734,15 +757,19 @@ describe("the octave mapping", () => {
             for (let step = 0; step < 200; step++) {
               const hz = arp(1, 24, scale, octaves, mode, octaveMode);
               arp(0, 24, scale, octaves, mode, octaveMode);
-              expect(Number.isFinite(hz)).toBe(true);
               const offset = freqToMidi(hz) - 24;
-              expect(offset).toBeGreaterThanOrEqual(0);
-              expect(offset).toBeLessThan(len + 12 * octaves);
+              const size = len + 12 * octaves;
+              // Reported once, as in ticket 03's sweep above.
+              if (!Number.isFinite(hz) || offset < 0 || offset >= size) {
+                failure = `octaveMode ${octaveMode}, mode ${mode}, len ${len}, octaves ${octaves}, step ${step}: hz=${hz}, offset=${offset} outside [0, ${size})`;
+                break sweep;
+              }
             }
           }
         }
       }
     }
+    expect(failure).toBeNull();
   });
 
   it("reinterprets the position rather than restarting it", () => {

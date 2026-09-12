@@ -192,9 +192,14 @@ it("recovers monotonically to exact unity", () => {
   for (let i = 1; i < length; i++) if (gains[i] < gains[lowest]) lowest = i;
   expect(gains[lowest]).toBeLessThan(0.5);
 
+  let notMonotonic = -1;
   for (let i = lowest + 1; i < length; i++) {
-    expect(gains[i]).toBeGreaterThanOrEqual(gains[i - 1]);
+    if (!(gains[i] >= gains[i - 1])) {
+      notMonotonic = i;
+      break;
+    }
   }
+  expect(notMonotonic).toBe(-1);
 
   // Exactly 1, not 0.9999999: this is what UNITY_SNAP buys, and it is what
   // makes the bit-exact passthrough recoverable after a burst.
