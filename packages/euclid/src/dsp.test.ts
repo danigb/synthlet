@@ -826,16 +826,25 @@ describe("wrapPhase", () => {
   // intermediate `x - k` is exactly representable, so repeated subtraction and
   // one subtraction of the floor give bit-identical doubles.
   it("agrees with the subtraction loop it replaced, over the declared range", () => {
-    for (let subdivision = 1; subdivision <= 20; subdivision++) {
+    // 20,000 comparisons, reported once: the first disagreement is the whole
+    // failure, and naming its input beats a bare pair of numbers.
+    let disagreement: string | null = null;
+    sweep: for (let subdivision = 1; subdivision <= 20; subdivision++) {
       for (let i = 0; i < 1000; i++) {
         const scaled = (i / 1000) * subdivision;
         let loop = scaled;
         while (loop > 1) loop -= 1;
         // The one disagreement, and the point of the change: the loop stops at
         // 1.0, which `gatePulse` reads as low.
-        expect(wrapPhase(scaled)).toBe(loop === 1 ? 0 : loop);
+        const expected = loop === 1 ? 0 : loop;
+        const actual = wrapPhase(scaled);
+        if (actual !== expected) {
+          disagreement = `subdivision ${subdivision}, i ${i}: wrapPhase(${scaled}) = ${actual}, subtraction loop = ${expected}`;
+          break sweep;
+        }
       }
     }
+    expect(disagreement).toBeNull();
   });
 
   it("reads a phase of exactly 1 as the bottom of the next step", () => {
@@ -847,13 +856,17 @@ describe("wrapPhase", () => {
   });
 
   it("stays in [0, 1) across the whole declared range", () => {
-    for (let subdivision = 1; subdivision <= 20; subdivision++) {
+    let outOfRange: string | null = null;
+    sweep: for (let subdivision = 1; subdivision <= 20; subdivision++) {
       for (let i = 0; i <= 1000; i++) {
         const p = wrapPhase((i / 1000) * subdivision);
-        expect(p).toBeGreaterThanOrEqual(0);
-        expect(p).toBeLessThan(1);
+        if (!(p >= 0) || !(p < 1)) {
+          outOfRange = `subdivision ${subdivision}, i ${i}: wrapPhase = ${p}`;
+          break sweep;
+        }
       }
     }
+    expect(outOfRange).toBeNull();
   });
 
   it("does not go silent on a clock pinned at 1", () => {

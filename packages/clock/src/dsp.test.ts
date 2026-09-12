@@ -68,9 +68,17 @@ describe("createClock", () => {
       // distinct values in a beat, not the 172 the block fill produced.
       const beat = phase.slice(0, wraps[0]);
       expect(new Set(beat).size).toBe(beat.length);
+      // Scanned rather than asserted per sample: a beat is 22,050 samples at
+      // 44.1 kHz, and the index of the first sample that fails to rise is
+      // what a failure needs to report anyway.
+      let notRising = -1;
       for (let i = 1; i < beat.length; i++) {
-        expect(beat[i]).toBeGreaterThan(beat[i - 1]);
+        if (!(beat[i] > beat[i - 1])) {
+          notRising = i;
+          break;
+        }
       }
+      expect(notRising).toBe(-1);
 
       // `[0, 1)`: nothing emits exactly 1.0. The old `> 1` wrap let it through
       // for a whole block, and that plateau is what `Euclid` failed to see as
@@ -686,9 +694,14 @@ describe("bars", () => {
     );
 
     // `downbeat > 0` implies `gate > 0`, at every sample.
+    let unbacked = -1;
     for (let i = 0; i < downbeat.length; i++) {
-      if (downbeat[i] > 0) expect(gate[i]).toBeGreaterThan(0);
+      if (downbeat[i] > 0 && !(gate[i] > 0)) {
+        unbacked = i;
+        break;
+      }
     }
+    expect(unbacked).toBe(-1);
   });
 
   it("starts on a downbeat, and a reset returns it to one", () => {
@@ -745,9 +758,14 @@ describe("bars", () => {
 
     // Monotonic between wraps, and `[0, 1)`.
     expect(bar.every((v) => v >= 0 && v < 1)).toBe(true);
+    let notRising = -1;
     for (let i = 1; i < wraps[0]; i++) {
-      expect(bar[i]).toBeGreaterThan(bar[i - 1]);
+      if (!(bar[i] > bar[i - 1])) {
+        notRising = i;
+        break;
+      }
     }
+    expect(notRising).toBe(-1);
     // One bar is `beatsPerBar` beats long.
     expect(wraps[1] - wraps[0]).toBe(4 * ((sampleRate * 60) / 120));
   });
