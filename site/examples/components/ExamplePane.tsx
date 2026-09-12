@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { MasterMeter } from "./MasterMeter";
+import { SynthSlotProvider, useSynthSlot } from "./SynthSlot";
 
 export function ExamplePane({
   label,
@@ -12,23 +14,29 @@ export function ExamplePane({
   children: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  // The pane owns the chrome, and the output level is chrome. `useSynth` fills
+  // this slot from inside `children`; `MasterMeter` taps whatever lands in it.
+  const slot = useSynthSlot();
 
   return open ? (
-    <div className="bg-fd-card text-fd-foreground p-2 border rounded">
-      <div className="flex">
-        <div className="text-xl mb-4 flex-grow">{label} example</div>
-        {header}
-        <button
-          className="border px-2 py-1 rounded bg-fd-secondary"
-          onClick={() => {
-            setOpen(false);
-          }}
-        >
-          Close
-        </button>
+    <SynthSlotProvider value={slot}>
+      <div className="bg-fd-card text-fd-foreground p-2 border rounded">
+        <div className="flex">
+          <div className="text-xl mb-4 flex-grow">{label} example</div>
+          <MasterMeter slot={slot} />
+          {header}
+          <button
+            className="border px-2 py-1 rounded bg-fd-secondary"
+            onClick={() => {
+              setOpen(false);
+            }}
+          >
+            Close
+          </button>
+        </div>
+        {children}
       </div>
-      {children}
-    </div>
+    </SynthSlotProvider>
   ) : (
     <div className="flex items-center gap-4">
       <button

@@ -2,7 +2,8 @@
 
 # scripts/_worklet.ts goes to every package: it is the module contract, and
 # every package needs it. scripts/_gate.ts, scripts/_blep.ts, scripts/_delay.ts
-# and scripts/_spectrum.ts go only to the packages that already carry a copy -
+# scripts/_spectrum.ts and scripts/_levels.ts go only to the packages that
+# already carry a copy -
 # the ones that produce or consume a gate, the ones that band-limit a
 # discontinuity, the ones that need a circular buffer, and the ones whose tests
 # measure a spectrum - so adding a package does not silently give it an unused
@@ -13,6 +14,7 @@ GATE_FILE="scripts/_gate.ts"
 BLEP_FILE="scripts/_blep.ts"
 DELAY_FILE="scripts/_delay.ts"
 SPECTRUM_FILE="scripts/_spectrum.ts"
+LEVELS_FILE="scripts/_levels.ts"
 
 # Define the target directory for each package
 TARGET_DIR="src/"
@@ -53,6 +55,14 @@ for PACKAGE in packages/*; do
       if [ -f "$TARGET_PATH/_spectrum.ts" ]; then
         cp "$SPECTRUM_FILE" "$TARGET_PATH"
         echo "Copied $SPECTRUM_FILE to $TARGET_PATH"
+      fi
+
+      # And the levels transport, under the same rule: the packages that show
+      # the main thread a number the audio thread computed, and whose readings
+      # one renderer has to be able to draw.
+      if [ -f "$TARGET_PATH/_levels.ts" ]; then
+        cp "$LEVELS_FILE" "$TARGET_PATH"
+        echo "Copied $LEVELS_FILE to $TARGET_PATH"
       fi
     else
       echo "Warning: $TARGET_PATH does not exist. Skipping."

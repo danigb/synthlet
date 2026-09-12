@@ -223,7 +223,12 @@ export function Compound<N extends AudioNode, E extends object = {}>(options: {
 }
 
 export function createRegistrar(processorName: string, processor: string) {
-  return function (context: AudioContext): Promise<void> {
+  // `BaseAudioContext`, not `AudioContext`: `audioWorklet` is declared on the
+  // base, an `OfflineAudioContext` registers the same way, and a module that
+  // takes its context from a node it was handed - `LevelMeter.tap(source)`,
+  // which reads `source.context` - only has the base type to give. A widening,
+  // so every existing caller still compiles.
+  return function (context: BaseAudioContext): Promise<void> {
     const key = "__" + processorName + "__";
     if (key in context) return (context as any)[key];
 
@@ -233,7 +238,19 @@ export function createRegistrar(processorName: string, processor: string) {
 
     const blob = new Blob([processor], { type: "application/javascript" });
     const url = URL.createObjectURL(blob);
-    const promise = context.audioWorklet.addModule(url);
+    // The promise is cached before it settles, so concurrent callers share one
+    // `addModule`. A rejection must not be cached with it: a CSP that blocks
+    // `blob:`, a context that was closed, a dev-server hiccup - any of them
+    // would otherwise make every later call on that context return the same
+    // failure forever, with no way to retry.
+    //
+    // That was tolerable while registration was an explicit call a developer
+    // could watch fail. It is not once registration is implicit, as it is
+    // behind `LevelMeter.tap`, where a cached failure is invisible.
+    const promise = context.audioWorklet.addModule(url).catch((error) => {
+      delete (context as any)[key];
+      throw error;
+    });
     (context as any)[key] = promise;
     return promise;
   };

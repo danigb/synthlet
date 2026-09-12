@@ -204,3 +204,32 @@ describe.each(spectrumPackages)("%s", (pkg) => {
     ).toBe(spectrumSource);
   });
 });
+
+// And the levels transport, under the same rule - but the strongest case for it
+// yet, because here the thing that has to line up is the *reader*. One
+// `LevelMeterUI`, one React hook and one `subscribe` are meant to draw every
+// package's meter; two packages writing their own transports would leave the
+// renderer able to draw only one of them. `level-meter` wrote it and
+// `lookahead-limiter` is the proof it is shared rather than one package's
+// private buffer with a public name: the limiter reports a single number,
+// gain reduction in dB, and needed no change to the primitive. The instrument
+// module is the intended next consumer - one slot per voice - and opts in the
+// same way, one `cp` and one entry in the list below.
+const levelsSource = readFileSync(join(root, "scripts/_levels.ts"), "utf8");
+const levelsPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_levels.ts")),
+);
+
+describe("the levels transport", () => {
+  it("is shared by every package that meters something", () => {
+    expect(levelsPackages).toEqual(["level-meter", "lookahead-limiter"]);
+  });
+});
+
+describe.each(levelsPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_levels.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_levels.ts"), "utf8"),
+    ).toBe(levelsSource);
+  });
+});

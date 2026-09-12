@@ -254,8 +254,10 @@ export function createLimiter(sampleRate: number, lookaheadMs: number) {
 }
 
 /**
- * Exported for `dsp.test.ts` only - `index.ts` does not re-export it, so it
- * stays inside the package and out of the published surface.
+ * Published at `@synthlet/lookahead-limiter/dsp`, where `@synthlet/level-meter`
+ * picks it up: sharing it is what makes the limiter and the meter agree about
+ * dBTP by construction rather than by inspection. Two detectors disagreeing by
+ * 0.2 dB is a worse outcome than 48 multiply-accumulates.
  *
  * BS.1770-style 4x true-peak detection: an oversampled reconstruction of the
  * sample TP_DELAY inputs ago, taken as the max over all channels.
@@ -267,6 +269,23 @@ export function createLimiter(sampleRate: number, lookaheadMs: number) {
  * The interpolator is not the ITU reference coefficient table - see the file
  * header for what is and is not claimed.
  */
+/**
+ * The limiter's levels layout: `_levels.ts`'s shared header, then one slot.
+ *
+ * A gain-reduction meter answers one question - how hard is it working *now* -
+ * and at 60 Hz "now" is the block. The slot carries the block's largest
+ * reduction, `20·log10` of the smallest gain applied in it: 0 dB when the
+ * limiter is doing nothing, -6 dB when it took 6 dB off.
+ *
+ * Here rather than in `worklet.ts` because the main thread reads the same slot,
+ * and importing it from the worklet would evaluate `AudioWorkletProcessor`
+ * outside a worklet.
+ */
+export const LEVELS_LAYOUT_VERSION = 1;
+/** Index of the gain-reduction slot: the first word after the header. */
+export const GAIN_REDUCTION = 3;
+export const LEVELS_LENGTH = 4;
+
 export function createTruePeakDetector() {
   const history: Float64Array[] = []; // one TP_HISTORY ring per channel
   let pos = 0;
@@ -308,7 +327,8 @@ export function createTruePeakDetector() {
 }
 
 /**
- * Exported for `dsp.test.ts` only, like `createTruePeakDetector` above.
+ * Exported for `dsp.test.ts` only: `index.ts` does not re-export it and
+ * `dsp-entry.ts` does not publish it, so it stays inside the package.
  *
  * Monotonic deque: O(1) amortised sliding minimum over the last `window`
  * pushes, including the current one.
