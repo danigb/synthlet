@@ -6,10 +6,14 @@ import {
   ArpOctaveMode,
   ArpScale,
   ClipType,
+  EnvelopeFollowerType,
   LfoType,
   NoiseType,
   ParamScaleType,
   PolyblepOscillatorType,
+  RingModType,
+  SampleHoldType,
+  SlewType,
   SvfType,
 } from "./index";
 
@@ -32,6 +36,7 @@ const EXPECTED = [
   "Clock",
   "DattorroReverb",
   "DigitalDelay",
+  "EnvelopeFollower",
   "Euclid",
   "Gain",
   "Granite",
@@ -45,6 +50,9 @@ const EXPECTED = [
   "Param",
   "PolyblepOscillator",
   "ReverbDelay",
+  "RingMod",
+  "SampleHold",
+  "SlewLimiter",
   "Svf",
   "TimestretchAudioSource",
   "VirtualAnalogFilter",
@@ -117,6 +125,10 @@ describe("descriptors", () => {
       // depth ramp, and delayed vibrato on a free-running LFO needs both to be
       // separately reachable.
       ["Lfo", "gate", "a-rate"],
+      // The module the rule was written for. Everywhere else a quantised
+      // trigger is a *late* event; here it is a different one - fed noise, the
+      // 2.9 ms decides which random value is held.
+      ["SampleHold", "trigger", "a-rate"],
       ["PolyblepOscillator", "sync", "a-rate"],
       ["WavetableOscillator", "sync", "a-rate"],
     ];
@@ -335,6 +347,33 @@ const ENUM_PARAMS = [
     param: "type",
   },
   {
+    // One member, so it spans 0...0 - which is the point: the diode ring
+    // (Parker, DAFx-11) is a different function rather than a further point
+    // on a continuum, and this is the seam it lands on.
+    name: "RingMod.type",
+    values: RingModType,
+    factory: synthlet.RingMod,
+    param: "type",
+  },
+  {
+    name: "EnvelopeFollower.type",
+    values: EnvelopeFollowerType,
+    factory: synthlet.EnvelopeFollower,
+    param: "type",
+  },
+  {
+    name: "SampleHold.type",
+    values: SampleHoldType,
+    factory: synthlet.SampleHold,
+    param: "type",
+  },
+  {
+    name: "SlewLimiter.type",
+    values: SlewType,
+    factory: synthlet.SlewLimiter,
+    param: "type",
+  },
+  {
     // Its types are a const object attached to the factory, not an enum.
     name: "VirtualAnalogFilter.type",
     values: synthlet.VirtualAnalogFilter,
@@ -363,10 +402,14 @@ const ENUMS = {
   ArpOctaveMode,
   ArpScale,
   ClipType,
+  EnvelopeFollowerType,
   LfoType,
   NoiseType,
   ParamScaleType,
   PolyblepOscillatorType,
+  RingModType,
+  SampleHoldType,
+  SlewType,
   SvfType,
 };
 

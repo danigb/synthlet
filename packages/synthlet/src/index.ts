@@ -7,6 +7,7 @@ import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
 import { registerDigitalDelayWorklet } from "@synthlet/digital-delay";
+import { registerEnvelopeFollowerWorklet } from "@synthlet/envelope-follower";
 import { registerEuclidWorklet } from "@synthlet/euclid";
 import { registerGraniteWorklet } from "@synthlet/granite";
 import { registerImpulseWorklet } from "@synthlet/impulse";
@@ -18,6 +19,9 @@ import { registerNoiseWorklet } from "@synthlet/noise";
 import { registerParamWorklet } from "@synthlet/param";
 import { registerPolyblepOscillatorWorklet } from "@synthlet/polyblep-oscillator";
 import { registerReverbDelayWorklet } from "@synthlet/reverb-delay";
+import { registerRingModWorklet } from "@synthlet/ring-mod";
+import { registerSampleHoldWorklet } from "@synthlet/sample-hold";
+import { registerSlewLimiterWorklet } from "@synthlet/slew-limiter";
 import { registerSvfWorklet } from "@synthlet/state-variable-filter";
 import { registerTimestretchAudioSourceWorklet } from "@synthlet/timestretch-audio-source";
 import { registerVirtualAnalogFilterWorklet } from "@synthlet/virtual-analog-filter";
@@ -32,6 +36,7 @@ export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
 export * from "@synthlet/dattorro-reverb";
 export * from "@synthlet/digital-delay";
+export * from "@synthlet/envelope-follower";
 export * from "@synthlet/euclid";
 export * from "@synthlet/granite";
 export * from "@synthlet/impulse";
@@ -44,6 +49,9 @@ export * from "@synthlet/noise";
 export * from "@synthlet/param";
 export * from "@synthlet/polyblep-oscillator";
 export * from "@synthlet/reverb-delay";
+export * from "@synthlet/ring-mod";
+export * from "@synthlet/sample-hold";
+export * from "@synthlet/slew-limiter";
 export * from "@synthlet/state-variable-filter";
 export * from "@synthlet/timestretch-audio-source";
 export * from "@synthlet/virtual-analog-filter";
@@ -54,11 +62,15 @@ export * from "@synthlet/wavetable-oscillator";
 export { AnalogDelayMode } from "@synthlet/analog-delay";
 export { ArpMode, ArpOctaveMode, ArpScale } from "@synthlet/arp";
 export { ClipType } from "@synthlet/clip-amp";
+export { EnvelopeFollowerType } from "@synthlet/envelope-follower";
 export { LfoType } from "@synthlet/lfo";
 export { NoiseType } from "@synthlet/noise";
 export { NotePriority } from "@synthlet/instrument";
 export { ParamScaleType } from "@synthlet/param";
 export { PolyblepOscillatorType } from "@synthlet/polyblep-oscillator";
+export { RingModType } from "@synthlet/ring-mod";
+export { SampleHoldType } from "@synthlet/sample-hold";
+export { SlewType } from "@synthlet/slew-limiter";
 export { StealMode } from "@synthlet/instrument";
 export { SvfType } from "@synthlet/state-variable-filter";
 
@@ -91,6 +103,7 @@ export function registerAllWorklets<C extends BaseAudioContext>(
     registerClockWorklet(context),
     registerDattorroReverbWorklet(context),
     registerDigitalDelayWorklet(context),
+    registerEnvelopeFollowerWorklet(context),
     registerEuclidWorklet(context),
     registerGraniteWorklet(context),
     registerImpulseWorklet(context),
@@ -102,6 +115,9 @@ export function registerAllWorklets<C extends BaseAudioContext>(
     registerParamWorklet(context),
     registerPolyblepOscillatorWorklet(context),
     registerReverbDelayWorklet(context),
+    registerRingModWorklet(context),
+    registerSampleHoldWorklet(context),
+    registerSlewLimiterWorklet(context),
     registerSvfWorklet(context),
     registerTimestretchAudioSourceWorklet(context),
     registerVirtualAnalogFilterWorklet(context),

@@ -1,0 +1,121 @@
+---
+title: Envelope Follower
+description: Audio in, a control signal out — the auto-wah, and the sidechain
+package: envelope-follower
+---
+
+import EnvelopeFollowerExample from "../../../examples/EnvelopeFollowerExample";
+
+`@synthlet/envelope-follower`
+
+Rectify, then charge and discharge at different rates. Synth Secrets Part 15's
+module: _"a circuit that measures the amplitude of the positive peaks of the
+waveform … If successive peaks of the input signal are of increasing amplitude,
+the capacitor is charged up, and if the peaks are decreasing in amplitude the
+capacitor discharges at a rate determined by the value of the variable
+resistor."_
+
+```ts
+import { registerEnvelopeFollowerWorklet, EnvelopeFollower } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerEnvelopeFollowerWorklet(audioContext);
+
+const follower = EnvelopeFollower(audioContext, {
+  attack: 0.01,
+  release: 0.1,
+});
+const depth = new GainNode(audioContext, { gain: 4000 });
+
+source.connect(follower).connect(depth).connect(filter.frequency);
+source.connect(filter);
+```
+
+<EnvelopeFollowerExample />
+
+That patch is Part 15's Figure 9 — _"the loudness of the input is controlling
+the cutoff frequency of a VCF and the gain of a VCA. The envelope follower is,
+therefore, replacing the contour generators that you would find in a
+conventional configuration."_
+
+## Parameters
+
+| Param     | Default | Range   | Rate   | Meaning                                       |
+| --------- | ------- | ------- | ------ | --------------------------------------------- |
+| `type`    | 0       | 0 … 1   | k-rate | `EnvelopeFollowerType.Peak` (0) or `.Rms` (1) |
+| `gain`    | 1       | 0 … 100 | k-rate | Input gain, Part 15's Input Gain Control      |
+| `attack`  | 0.01    | 0 … 10  | k-rate | Seconds to cover 99 % of a rise               |
+| `release` | 0.1     | 0 … 10  | k-rate | Seconds to cover 99 % of a fall               |
+
+## What "seconds" means here
+
+**The time to cover 99 % of a step** — the rule this library has used for every
+time parameter since `AdsrEnv`. `attack: 0.05` on a step from silence reaches
+0.99 at exactly 50 ms, at 44.1 and 48 kHz alike.
+
+Analogue followers, and most plugin ones, label their attack and release as
+**time constants**: τ, 63.2 % of a step. To port a setting from one of those:
+
+```
+t = τ × 4.605          τ = t / 4.605
+```
+
+One library should not have two meanings for "seconds", and the one that loses
+is the one that is not already public API. `attack: 0` and `release: 0` are
+instantaneous, not a division by zero.
+
+## Peak and RMS
+
+`Peak` is the book's. A one-pole attack only covers a fraction of the gap per
+sample, so a follower is never faster than its attack: on a 1 kHz unit sine,
+`attack: 0.01` settles at **0.952**, not 1.0. Set `attack: 0` for a true peak
+detector.
+
+`Rms` reads **0.707** for that sine and **1.0** for a square of the same height
+— which is the reason to have it, since `Peak` reports 1.0 for both. It is built
+as an RMS window (symmetric, from `release`) followed by the same asymmetric
+envelope, because the obvious one-stage version is not a mean: a fast attack on
+a squared signal ratchets up towards the peak instead of averaging it. The cost
+is that an RMS follower is always slower than a peak one.
+
+## Ripple
+
+A rectified signal ripples at twice its frequency, and a follower fast enough to
+be useful follows some of it — the "bumps" Part 15's Figure 8 smooths. At 100 Hz
+with the defaults the settled output ripples by **0.6 dB**; at `release: 0.5` it
+is under 0.2 dB.
+
+The floor is physical rather than a defect: at 50 Hz the ripple period is 10 ms,
+so any release much under that produces a follower that wobbles. The fix for the
+remainder is a [slew limiter](/docs/modulators/slew-limiter) after it, which is
+exactly what Reid puts there — _"again adding an Input Gain Control and a slew
+generator to improve its performance. The latter of these will smooth out the
+'bumps'."_
+
+## One mono output
+
+Whatever the input's channel count. A stereo control signal would only mean two
+inconsistently timed copies of the same decision, so the channels fold into the
+detector: `Peak` by maximum, `Rms` by mean square. A stereo input gives one
+envelope that responds to whichever channel is loudest, which is what a sidechain
+wants.
+
+<Callout title="Not the level meter">
+  [LevelMeter](/docs/modifiers/level-meter) posts numbers to the main thread for
+  a UI to draw. This produces a control signal at audio rate for an `AudioParam`
+  inside the graph. The names are close; the difference is which side of the
+  fence the number comes out on.
+</Callout>
+
+## Why Web Audio cannot already do this
+
+An `AnalyserNode` polled from `requestAnimationFrame` gives you a number at
+60 Hz on the main thread — one to two orders of magnitude too slow, and on the
+wrong side of the fence to be connected to anything. A `WaveShaperNode` with an
+`abs` curve into a `BiquadFilterNode` lowpass gets closer, but a follower's
+defining feature is that it rises and falls at _different_ rates, and a biquad
+has one time constant.
+
+There is deliberately **no lookahead**. A follower that can see the future is a
+limiter's detector, and [LookaheadLimiter](/docs/effects/lookahead-limiter)
+already has one, with a delay line to pay for it.

@@ -42,6 +42,13 @@ comparator at 0 V behaves in modular.
   `setTargetAtTime`, and do not put a slew or a lowpass on a gate: those
   approach zero without ever arriving, so the gate would never close. The
   envelope is the smoother — that is its job.
+
+The module this warns about is
+[SlewLimiter](/docs/modulators/slew-limiter), and it has one safe mode:
+`SlewType.Linear` actually _reaches_ its target, so a gate through one still
+closes. `SlewType.Exponential` does not, and that is the whole of the
+difference.
+
 </Callout>
 
 ## Gate or trigger?
@@ -52,6 +59,10 @@ Both words mean the same signal; they describe what the reader does with it.
   caring what the signal does next. [AD](/docs/modulators/ad),
   [Impulse](/docs/sources/impulse), [Karplus-Strong](/docs/sources/ks) and
   [Arp](/docs/sequencers/arp) take triggers.
+- [Sample and hold](/docs/modulators/sample-hold) takes **both**, and is the one
+  module where the distinction is a parameter: `SampleHoldType.SampleHold` reads
+  the edge, `SampleHoldType.Track` reads the level and is transparent while it
+  is high.
 - A **gate** is held: the module does one thing while it is high and another
   when it goes low. [ADSR](/docs/modulators/adsr) takes a gate — it sustains
   while the gate is open and releases when it closes.

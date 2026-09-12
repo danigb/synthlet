@@ -82,6 +82,13 @@ describe("the gate contract", () => {
       // arithmetic that turns that instant into a phase stays in each
       // package's own `dsp.ts`.
       "polyblep-oscillator",
+      // The first *consumer* of a trigger that is neither an envelope nor a
+      // voice: the edge does not start anything, it decides which sample of
+      // the input becomes the output for the next however-long. Both of its
+      // modes come from this one file - `Track` reads the detector's open
+      // state rather than comparing to zero itself - which is the whole
+      // reason the copy is here rather than two lines in its `worklet.ts`.
+      "sample-hold",
       "wavetable-oscillator",
     ]);
   });
@@ -191,6 +198,12 @@ describe("the measuring instrument", () => {
       "digital-delay",
       "granite",
       "lfo",
+      // The one whose numbers *are* the module's argument for existing. A ring
+      // modulator is told from a VCA by what is missing from its spectrum -
+      // Part 11's "the Modulator has completely disappeared" - so the test
+      // that matters reads two peaks and a floor at the two input
+      // frequencies, and it has to read them the same way `lfo` does.
+      "ring-mod",
       "virtual-analog-filter",
       "wavetable-oscillator",
     ]);
@@ -281,6 +294,41 @@ const levelsSource = readFileSync(join(root, "scripts/_levels.ts"), "utf8");
 const levelsPackages = packages.filter((pkg) =>
   existsSync(join(root, "packages", pkg, "src/_levels.ts")),
 );
+
+// And the library's definition of a time in seconds, under the same rule. This
+// is the folder's extract-or-copy decision, made with two instances in hand
+// rather than one, and the argument for it is not the three lines of
+// arithmetic: it is that `0.1` has to mean the same thing in
+// `envelope-follower` as it does in `slew-limiter`. If the two drifted, a
+// caller moving a setting between them would get a different move, with no
+// error and no clue why - the same class of silence `_gate.ts` prevents.
+//
+// `karplus-strong` declined `_delay.ts` for a stated reason, and the reason was
+// that adopting it would have *changed its behaviour*. Nothing changed here:
+// the follower's `followerCoefficient` was renamed and its body left alone.
+//
+// `adsr` and `ad` are deliberately not on this list. `adsr` runs Pirkle's TCO
+// constants inside a stage machine and `ad` has its own variant; retrofitting
+// either is a behaviour change and belongs to its own ticket. So this covers
+// two of the library's four smoothers, which is the honest scope.
+const smoothSource = readFileSync(join(root, "scripts/_smooth.ts"), "utf8");
+const smoothPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_smooth.ts")),
+);
+
+describe("the definition of a time in seconds", () => {
+  it("is shared by every package that turns one into a coefficient", () => {
+    expect(smoothPackages).toEqual(["envelope-follower", "slew-limiter"]);
+  });
+});
+
+describe.each(smoothPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_smooth.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_smooth.ts"), "utf8"),
+    ).toBe(smoothSource);
+  });
+});
 
 describe("the levels transport", () => {
   it("is shared by every package that meters something", () => {

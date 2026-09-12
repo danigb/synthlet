@@ -2,20 +2,22 @@
 
 # scripts/_worklet.ts goes to every package: it is the module contract, and
 # every package needs it. scripts/_gate.ts, scripts/_blep.ts, scripts/_delay.ts,
-# scripts/_spectrum.ts, scripts/_levels.ts, scripts/_voices.ts and
-# scripts/_traversal.ts go only to the packages that already carry a copy - the
-# ones that produce or consume a gate, the ones that band-limit a discontinuity,
-# the ones that need a circular buffer, the ones whose tests measure a spectrum,
-# the ones that show the main thread a level, the ones that hand notes to
-# voices, and the ones that walk a sequence of them - so adding a package does
-# not silently give it an unused file. A package opts in by copying the file
-# once by hand; from then on this script keeps it current.
+# scripts/_spectrum.ts, scripts/_levels.ts, scripts/_smooth.ts,
+# scripts/_voices.ts and scripts/_traversal.ts go only to the packages that
+# already carry a copy - the ones that produce or consume a gate, the ones that
+# band-limit a discontinuity, the ones that need a circular buffer, the ones
+# whose tests measure a spectrum, the ones that show the main thread a level,
+# the ones that turn a time in seconds into a one-pole coefficient, the ones
+# that hand notes to voices, and the ones that walk a sequence of them - so
+# adding a package does not silently give it an unused file. A package opts in
+# by copying the file once by hand; from then on this script keeps it current.
 SOURCE_FILE="scripts/_worklet.ts"
 GATE_FILE="scripts/_gate.ts"
 BLEP_FILE="scripts/_blep.ts"
 DELAY_FILE="scripts/_delay.ts"
 SPECTRUM_FILE="scripts/_spectrum.ts"
 LEVELS_FILE="scripts/_levels.ts"
+SMOOTH_FILE="scripts/_smooth.ts"
 VOICES_FILE="scripts/_voices.ts"
 TRAVERSAL_FILE="scripts/_traversal.ts"
 
@@ -58,6 +60,13 @@ for PACKAGE in packages/*; do
       if [ -f "$TARGET_PATH/_spectrum.ts" ]; then
         cp "$SPECTRUM_FILE" "$TARGET_PATH"
         echo "Copied $SPECTRUM_FILE to $TARGET_PATH"
+      fi
+
+      # And the definition of a time in seconds, under the same rule: the
+      # packages that turn one into a one-pole coefficient.
+      if [ -f "$TARGET_PATH/_smooth.ts" ]; then
+        cp "$SMOOTH_FILE" "$TARGET_PATH"
+        echo "Copied $SMOOTH_FILE to $TARGET_PATH"
       fi
 
       # And the levels transport, under the same rule: the packages that show
