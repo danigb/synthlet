@@ -6,6 +6,7 @@ import { registerChorusWorklet } from "@synthlet/chorus";
 import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
+import { registerDecimatorWorklet } from "@synthlet/decimator";
 import { registerDigitalDelayWorklet } from "@synthlet/digital-delay";
 import { registerEnvelopeFollowerWorklet } from "@synthlet/envelope-follower";
 import { registerEuclidWorklet } from "@synthlet/euclid";
@@ -35,6 +36,7 @@ export * from "@synthlet/chorus";
 export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
 export * from "@synthlet/dattorro-reverb";
+export * from "@synthlet/decimator";
 export * from "@synthlet/digital-delay";
 export * from "@synthlet/envelope-follower";
 export * from "@synthlet/euclid";
@@ -102,6 +104,7 @@ export function registerAllWorklets<C extends BaseAudioContext>(
     registerClipAmpWorklet(context),
     registerClockWorklet(context),
     registerDattorroReverbWorklet(context),
+    registerDecimatorWorklet(context),
     registerDigitalDelayWorklet(context),
     registerEnvelopeFollowerWorklet(context),
     registerEuclidWorklet(context),

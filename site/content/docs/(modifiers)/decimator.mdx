@@ -1,0 +1,144 @@
+---
+title: Decimator
+description: Sample-rate and bit-depth reduction, with the anti-alias and reconstruction filters as switches
+package: decimator
+---
+
+import DecimatorExample from "../../../examples/DecimatorExample";
+
+`@synthlet/decimator`
+
+A sample-and-hold clocked fast, followed by a quantiser — which is to say an
+analogue-to-digital converter, which is exactly what Synth Secrets Part 17 says
+an ADC is. Drop the rate and a 10 kHz sine comes back as a 3.33 kHz one. Drop
+the bits and you get the crunch.
+
+```ts
+import { registerDecimatorWorklet, Decimator } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerDecimatorWorklet(audioContext);
+
+const crush = Decimator(audioContext, { rate: 8000, bits: 8 });
+source.connect(crush).connect(audioContext.destination);
+```
+
+<DecimatorExample />
+
+## The whole of Part 17, in three switches
+
+Reid's chapter is three claims, each with a figure. Each one is a preset button
+on the example above.
+
+| Patch                             | What you hear                      | The book  |
+| --------------------------------- | ---------------------------------- | --------- |
+| 10 kHz sine, `rate: 50000`        | a 10 kHz sine. Nothing happens     | Figure 15 |
+| 10 kHz sine, `rate: 13333`        | a **3.33 kHz** tone                | Figure 17 |
+| 10 kHz sine, `rate: 11111`        | a **1.11 kHz** tone                | Figure 18 |
+| … either of those, `antialias: 1` | silence. The fold is 44 dB down    | "filter"  |
+| 1 kHz sine, `rate: 22050`         | a staircase, with images at 21 kHz | Figure 19 |
+| … and `reconstruct: 1`            | a 1 kHz sine again                 | Table 2   |
+
+**Claim 1 — it folds.** _"Any frequencies above the Nyquist frequency 'fold
+over' and appear an equal distance below the Nyquist frequency."_ At
+`rate: 13333` the Nyquist is 6.67 kHz, the input is 10 kHz, and 10 − 6.67
+subtracted from 6.67 is 3.33. Watch the `Spectrum`: the peak is not where you
+put it.
+
+**Claim 2 — you filter before, not after.** _"Unfortunately, you can't remove
+aliasing once it has been introduced, so we have to ensure that it never
+occurs… by sticking a low-pass filter in the signal path."_ That is
+`antialias`, and it sits **before** the hold because that is the only place it
+can work. Turn it on with `rate: 13333` and the 3.33 kHz tone is gone.
+Turning it on cannot bring back the 10 kHz.
+
+**Claim 3 — the samples are not the sound.** The `Scope` at `rate: 22050`
+shows a staircase, and the paragraph everyone remembers is about people who
+conclude something from that picture: _"'audio stored digitally sounds
+horrible because it's a series of steps, not like real music' bullshit. But
+that's exactly what it is: bullshit."_ Switch `reconstruct` on. The staircase
+becomes the sine it always was, with its RMS within 0.03 dB of the original.
+
+<Callout title="The test aliases too, and that is not a bug">
+  At `rate: 22050` on a 44.1 kHz context the staircase's two images sit at 21.05
+  and 23.05 kHz — but 23.05 kHz is above the *context's* own 22.05 kHz Nyquist,
+  so it folds down onto 21.05 kHz and the two add. On a 48 kHz context, where
+  Nyquist is 24 kHz, you see both. The module's own lesson happening to the
+  measurement of the module is a good sign that the lesson is true.
+</Callout>
+
+## Parameters
+
+| Param         | Default | Range        | Rate   | Meaning                                                    |
+| ------------- | ------- | ------------ | ------ | ---------------------------------------------------------- |
+| `rate`        | 44100   | 100 … 192000 | k-rate | The new sample rate in Hz. At or above the context's, none |
+| `bits`        | 24      | 1 … 24       | k-rate | Bit depth. 24 is transparent; fractional values allowed    |
+| `antialias`   | 0       | 0 … 1        | k-rate | 1 puts the lowpass at `0.45 × rate` **before** the hold    |
+| `reconstruct` | 0       | 0 … 1        | k-rate | 1 puts the same lowpass **after** the quantiser            |
+
+`rate` defaults to 44100 rather than to the context's rate because an
+`AudioParamDescriptor` cannot read the context it will be used in. So the
+default is a **bypass** on a 44.1 kHz context and a 44.1 kHz hold on a 48 kHz
+one. With `rate` at or above the context's, `bits: 24` and both switches off,
+the module is bit-exact — equal sample for sample, not merely close.
+
+## Two things the module does that look like defects
+
+**The hold clock jitters by a sample.** `13333 / 44100` is not an integer, so
+the hold period alternates between three and four samples, and that shows up as
+low-level sidebands. It is what a real free-running converter clock does against
+a fixed one. Snapping `rate` to integer divisors would remove it and would also
+make the slider jump — and would put the book's own numbers out of reach, since
+13.33 kHz and 11.11 kHz are divisors of nothing.
+
+**`bits: 1` has three levels.** Quantisation is mid-tread, `round(x · q) / q`
+with `q = 2^(bits−1)`, so zero is a **level** rather than a band edge: silence
+stays silence and a signal crossing zero does not chatter between two codes.
+The price is one extra code at the top — `bits: 6` takes 65 values rather than
+Reid's 64, and `bits: 1` gives −1, 0 and 1 rather than just ±1.
+
+## Why not a WaveShaperNode
+
+A `WaveShaperNode` with a staircase curve reduces bit depth, and that is the
+easy half. It has no notion of time, so it cannot reduce a sample rate — and
+neither can anything else in Web Audio. A `BaseAudioContext` has one rate,
+fixed at construction; no node holds a sample, and there is no way to run part
+of a graph slower than the rest.
+
+That gap is why this exists, and why it is a `Decimator` rather than a
+`Bitcrusher`: Part 17 is about the sample rate, and the bits are the second
+parameter.
+
+## The filters
+
+Both are the same 8th-order Butterworth lowpass at `0.45 × rate` — four
+cascaded biquads, 48 dB/octave, coefficients recomputed only when `rate`
+changes, so the per-sample cost is eight biquads with both on and none with both
+off. The corner tracks `min(rate, sampleRate)`, so it is the same clock the hold
+uses and is never asked for a frequency above the host's Nyquist.
+
+Four sections rather than two because the lesson needs them. At `rate: 13333`
+the corner is 6 kHz and the 10 kHz input sits 1.67× above it, where a
+24 dB/octave filter takes only about 14 dB off — enough to leave an alias you
+can still see. This cascade takes 44.5 dB off at 44.1 kHz, and 42.8 at 48 kHz.
+
+Every channel is held on **one clock**, because a converter has two inputs and
+one crystal, and each channel keeps its own filter state. A stereo image
+survives rather than being decorrelated by two accumulators drifting apart.
+
+## The other half of the aliasing lesson
+
+A naive sawtooth aliases because of its **edges**; a band-limited one through
+this module aliases because of the **hold**. Both are energy above Nyquist
+folding down, and they are worth hearing next to each other — see
+[PolyblepOscillator](/docs/polyblep-oscillator), whose spectrum is the same
+linear-axis picture for the same reason.
+
+## Not in this module
+
+**No noise, no wow, no `mix`.** Tape hiss is [Noise](/docs/noise), tape age is
+[AnalogDelay](/docs/analog-delay)'s `age`, and a dry path is a `GainNode`.
+
+**No dither.** Dither and noise shaping are a second lesson — why 16 bits is
+enough — and they need a listening pass of their own. `bits` is the seam they
+will land on.

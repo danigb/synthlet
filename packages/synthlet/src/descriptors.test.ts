@@ -35,6 +35,7 @@ const EXPECTED = [
   "ClipAmp",
   "Clock",
   "DattorroReverb",
+  "Decimator",
   "DigitalDelay",
   "EnvelopeFollower",
   "Euclid",

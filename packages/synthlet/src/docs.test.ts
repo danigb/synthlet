@@ -54,6 +54,20 @@ const INSTRUMENT_PAGE = readFileSync(
   "utf8",
 );
 
+// The fourth entry, and the first one added by the package that introduced it
+// rather than retrofitted. `decimator`'s numbers are the *point* of the module
+// - "10 kHz at 13.33 kHz reads 3.33 kHz" - so a parameter table that has
+// drifted from the descriptors is not a cosmetic error there: it is a wrong
+// answer to the lesson the page exists to teach.
+const DECIMATOR_README = readFileSync(
+  join(root, "packages/decimator/README.md"),
+  "utf8",
+);
+const DECIMATOR_PAGE = readFileSync(
+  join(root, "site/content/docs/(modifiers)/decimator.mdx"),
+  "utf8",
+);
+
 /**
  * The whole markdown table whose header contains `marker`, verbatim.
  *
@@ -268,5 +282,59 @@ describe("the held-note arpeggiator's config table", () => {
     }
     expect(INSTRUMENT_README).not.toContain("NotePriority.");
     expect(INSTRUMENT_PAGE).not.toContain("NotePriority.");
+  });
+});
+
+describe("the decimator's parameter table", () => {
+  const descriptors = synthlet.Decimator
+    .descriptors as readonly ParamDescriptor[];
+
+  const sources: [string, string][] = [
+    ["packages/decimator/README.md", DECIMATOR_README],
+    ["site/content/docs/(modifiers)/decimator.mdx", DECIMATOR_PAGE],
+  ];
+
+  it.each(sources)("in %s names exactly the parameters that exist", (_w, s) => {
+    const named = tableRows(s, "| Default |").map(([param]) =>
+      param.replace(/`/g, ""),
+    );
+    expect(named).toEqual(descriptors.map((d) => d.name));
+  });
+
+  it.each(sources)("in %s reports the declared range and rate", (_w, s) => {
+    for (const [param, , declared, rate] of tableRows(s, "| Default |")) {
+      const name = param.replace(/`/g, "");
+      const descriptor = descriptors.find((d) => d.name === name)!;
+      expect([name, range(declared)]).toEqual([
+        name,
+        [descriptor.minValue, descriptor.maxValue],
+      ]);
+      expect([name, rate]).toEqual([name, descriptor.automationRate]);
+    }
+  });
+
+  it.each(sources)("in %s reports the declared default", (_w, s) => {
+    for (const [param, declared] of tableRows(s, "| Default |")) {
+      const name = param.replace(/`/g, "");
+      const descriptor = descriptors.find((d) => d.name === name)!;
+      expect([name, Number(declared)]).toEqual([name, descriptor.defaultValue]);
+    }
+  });
+
+  it("agrees between the README and the docs page", () => {
+    expect(table(DECIMATOR_PAGE, "| Default |")).toBe(
+      table(DECIMATOR_README, "| Default |"),
+    );
+  });
+
+  it("records that 44100 is a default the processor may clamp", () => {
+    // The one parameter whose declared default is *not* the behaviour on every
+    // context: a descriptor cannot read the context, so 44100 is a bypass at
+    // 44.1 kHz and a real hold at 48 kHz. Both documents have to say so, or
+    // the table is honest and the page is still misleading.
+    for (const source of [DECIMATOR_README, DECIMATOR_PAGE]) {
+      expect(source).toContain("44100");
+      expect(source).toMatch(/48 kHz/);
+    }
   });
 });

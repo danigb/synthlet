@@ -195,6 +195,14 @@ describe("the measuring instrument", () => {
       // the rewrite fixed passed a test that only asked whether the output
       // was finite and non-zero.
       "chorus",
+      // The first package whose *subject* is aliasing rather than a package
+      // that has to avoid it. Part 17's Figures 17 and 18 are a 10 kHz sine
+      // reappearing at 3.33 kHz and at 1.11 kHz, and the test that proves the
+      // module is a converter reads those two peaks and then reads them again
+      // with the anti-alias filter on. Those readings have to be the same
+      // readings `ring-mod` and `lfo` are calibrated against, or "44.5 dB
+      // down" here and "60 dB down" there would be two instruments' numbers.
+      "decimator",
       "digital-delay",
       "granite",
       "lfo",
