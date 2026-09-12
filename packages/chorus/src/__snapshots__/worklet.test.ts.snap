@@ -4,21 +4,21 @@ exports[`ChorusProcessor has parameter descriptors 1`] = `
 [
   {
     "automationRate": "k-rate",
-    "defaultValue": 0.5,
-    "maxValue": 1,
+    "defaultValue": 0,
+    "maxValue": 2,
     "minValue": 0,
-    "name": "delay",
+    "name": "mode",
   },
   {
     "automationRate": "k-rate",
     "defaultValue": 0.5,
-    "maxValue": 1,
+    "maxValue": 7,
     "minValue": 0,
     "name": "rate",
   },
   {
     "automationRate": "k-rate",
-    "defaultValue": 0.5,
+    "defaultValue": 0.6,
     "maxValue": 1,
     "minValue": 0,
     "name": "depth",
@@ -28,7 +28,14 @@ exports[`ChorusProcessor has parameter descriptors 1`] = `
     "defaultValue": 0.5,
     "maxValue": 1,
     "minValue": 0,
-    "name": "deviation",
+    "name": "mix",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 1,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "width",
   },
 ]
 `;

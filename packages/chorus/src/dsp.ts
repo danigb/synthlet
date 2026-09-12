@@ -1,257 +1,706 @@
+import { createDelayLine, DelayLine } from "./_delay";
+
+/**
+ * A chorus: N taps on one delay line per channel, read fractionally at
+ * positions an LFO bank moves, summed through an output matrix.
+ *
+ * This replaces 257 lines of Faust output that carried its own 8192-sample
+ * bitmask ring and its own two-point linear interpolator, which is the one
+ * combination Dattorro (1997) 6.1 rules out by name:
+ *
+ * > "Linear interpolation is a time-varying low-pass filtering process.
+ * > Indeed, a multivoice (more than two) chorus design using linear
+ * > interpolation subjects the signal to significantly audible amounts of
+ * > low-pass filtering attributable to the interpolation."
+ *
+ * The read here is `_delay.ts`'s 4-point Hermite, and the three papers that
+ * look like they disagree about that reconcile once you notice Dattorro's
+ * objection is to *two-point* linear specifically. Valimaki (1995) 3.5 shows
+ * why plain allpass measures worse than linear under modulation - it is
+ * recursive, so every per-sample coefficient change elicits the filter's
+ * natural response - and Niemitalo (2001) 7 picks 4-point Hermite for
+ * un-oversampled audio by name. Hermite is FIR, so Valimaki's transient never
+ * arises, and it is 4-point, so Dattorro's warning does not apply.
+ */
+export enum ChorusMode {
+  Juno = 0,
+  Ensemble = 1,
+  Dimension = 2,
+}
+
+/**
+ * The longest base delay plus excursion any voicing asks for, in milliseconds.
+ *
+ * The lines are allocated for this once, in the factory, and never again: a
+ * mode change is a different row of a table, not a different buffer.
+ * `createDelayLine` rounds up to the next power of two at or above
+ * `maxSamples + 4`, so at 96 kHz this is 1920 samples in a 2048-sample line.
+ *
+ * Sized from the sample rate the engine is actually running at rather than
+ * from a hardcoded 96 kHz: the guarantee that matters is one allocation in the
+ * factory, and honouring it at the real rate costs a third fewer bytes at
+ * 44.1 kHz for the same promise.
+ */
+const MAX_DELAY_MS = 20;
+
+const TAU = 2 * Math.PI;
+
+/**
+ * The golden ratio, the real number worst approximated by any fraction.
+ *
+ * It is here because of what the old engine got wrong. Its eight LFOs ran at
+ * `rate x {1, 1/2, 1/3, 1/4, 1/6, 1/7, 1/8}` Hz, every one of them a rational
+ * fraction of every other, so the whole eight-voice pattern closed on a period
+ * of `8/rate` seconds - a sixteen-second loop at the default setting. That is
+ * the RS-101 construction, one clock divided 1:2:4:8, and the RS-101 is
+ * described as sounding correspondingly more regular than the RS-09, which
+ * used four *independent* LFOs. Mutable's `Ensemble` takes the other road with
+ * two accumulators at 0.75 Hz and 6.57 Hz.
+ *
+ * Those two are the numbers to steal, but their exact ratio is `219/25`, so
+ * the pair still closes after 25 slow cycles - 33 s at the default rate, and
+ * inside the 60 s this package holds itself to. `6*PHI - 1 = 8.7082` is
+ * irrational by construction, and it puts the fast LFO at 6.531 Hz against
+ * Plaits' 6.57: 0.6 % away, musically the same pair, and incommensurate for
+ * good rather than for 33 seconds.
+ */
+const PHI = (1 + Math.sqrt(5)) / 2;
+
+/** The `ENSEMBLE` fast/slow rate ratio. See `PHI`. */
+export const FAST_MULTIPLIER = 6 * PHI - 1;
+
+/**
+ * The deepest excursion that is still musical at a given LFO rate, in
+ * milliseconds.
+ *
+ * Martens & Marui (2006) tested 25 listeners across vibrato, flange and stereo
+ * chorus at 2/3/4/6/9 Hz with depths log-spaced over 0.04-1.0 ms, and found
+ * the useful-range boundaries substantially the same for all three effects.
+ * Regressed on modulation *period*, which linearises them, the upper bound -
+ * useful to "too extreme" - is `D(us) = 4800*(1/rate) - 350`, R^2 = 0.94. It
+ * could only be fitted at 4, 6 and 9 Hz: at 2 and 3 Hz nothing in the tested
+ * range ever became too extreme, which is why the voicing's own ceiling has to
+ * be the other half of the clamp.
+ *
+ * The shape is that faster LFOs need proportionally less depth, and it is what
+ * makes one `depth` knob musical across the whole `rate` range instead of at
+ * one setting. Exported so the coupling can be asserted against the derivation
+ * rather than only against a trend.
+ */
+export const usefulDepthMs = (rateHz: number) =>
+  rateHz > 0 ? (4800 / rateHz - 350) / 1000 : Infinity;
+
+/** Where a voice reads. The mid is both lines averaged, for a centred voice. */
+export enum Source {
+  Left = 0,
+  Right = 1,
+  Mid = 2,
+}
+
+/**
+ * One tap.
+ *
+ * A voice knows where it sits, how far it swings and what it contributes to
+ * each output channel. It does not know which voicing it belongs to, and that
+ * separation is what makes the three voicings a table rather than three code
+ * paths.
+ */
+export type Voice = {
+  /** Base delay in milliseconds, before modulation. */
+  delayMs: number;
+  /** Share of the voicing's excursion this voice takes, usually 1. */
+  modScale: number;
+  /** LFO phase offset in cycles, 0 to 1. */
+  phase: number;
+  /** Weight on the slow accumulator. */
+  slow: number;
+  /** Weight on the fast accumulator. */
+  fast: number;
+  source: Source;
+  gainL: number;
+  gainR: number;
+};
+
+/**
+ * How long a mode change takes to cross-fade, in milliseconds.
+ *
+ * A mode change is a topology change - a different voice count on different
+ * base delays through a different output matrix - so it cannot be stepped.
+ * `rune06` fades out, switches at the fade envelope's zero and fades back in,
+ * with `FADE_MS = 5.0`, and this is that.
+ */
+const FADE_MS = 5;
+
+/**
+ * Alternating sign, so it cannot accumulate as DC. Without it a wet path
+ * decaying towards zero eventually runs entirely in denormals, and a filter
+ * that never stops running never recovers from that. `digital-delay`'s
+ * constant, for the same reason.
+ */
+const DENORMAL = 1e-20;
+
+/** The most wet-path lowpass poles any voicing asks for. */
+const MAX_POLES = 4;
+
+/**
+ * How far the dry path ducks at full wet: Mutable's `Ensemble` rule,
+ * `dry = 1 - amount*0.5`, copied verbatim because it is tuned rather than
+ * derived.
+ *
+ * Note that dry is *not* `1 - amount`. The dry only drops to half at full wet,
+ * which is what keeps the effect from sucking the centre out as `mix` rises,
+ * and it is what makes the mono sum survivable: measured on pink noise at each
+ * voicing's defaults, the mono sum lands at -0.51 dB (`JUNO`), -0.70 dB
+ * (`ENSEMBLE`) and -1.02 dB (`DIMENSION`). With `dry = 1 - mix` the same three
+ * read -2.91, -3.18 and -4.54 dB.
+ *
+ * The cost is that `mix: 1` is not fully wet, so Dattorro's vibrato - blend 0,
+ * feedforward 1 - is not reachable from this knob. That is a deliberate trade:
+ * a chorus is an insert effect and a centre that ducks 4.5 dB is a defect a
+ * user finds out about from a mix engineer.
+ */
+const DRY_DUCK = 0.5;
+
+/** TPT one-pole coefficient for a cutoff in Hz, `g/(1+g)` with `g = tan(pi*fc/SR)`. */
+const onePoleG = (hz: number, sampleRate: number) => {
+  const clamped = Math.min(hz, 0.45 * sampleRate);
+  const g = Math.tan((Math.PI * clamped) / sampleRate);
+  return g / (1 + g);
+};
+
+/**
+ * A voicing: five tables and an output matrix.
+ *
+ * Every candidate topology in the survey - Juno, Solina, Dimension D, white
+ * chorus, the Hammond scanner - is the same computation. N taps on one line
+ * per channel, read with `readHermite`, moved by an LFO bank, combined by an
+ * output matrix. What separates one from another is voice count, LFO rate set,
+ * phase offsets, output matrix and wet EQ, and that is data rather than code.
+ * It is why "which algorithm" was the wrong question and why three of them fit
+ * inside `vision.md`'s `< ~10 KB` inline-processor budget.
+ */
+export type Voicing = {
+  voices: readonly Voice[];
+  /** Multiplier on `rate` for the slow accumulator. */
+  slowMul: number;
+  /** Multiplier on `rate` for the fast accumulator. See `FAST_MULTIPLIER`. */
+  fastMul: number;
+  /** This voicing's own excursion ceiling in ms, the other half of the clamp. */
+  maxDepthMs: number;
+  /**
+   * Wet-path lowpass cutoffs in Hz, cascaded. The single most audible thing an
+   * analog chorus does that a digital one does not is roll the wet path off,
+   * and it is what makes the delayed copies sit *behind* the dry instead of
+   * hissing on top of it.
+   */
+  wetLowpassHz: readonly number[];
+  /** Wet-path highpass in Hz, or 0. `DIMENSION` needs one; see its entry. */
+  wetHighpassHz: number;
+  /** Complementary dry low shelf, or `null`. Paired with `wetHighpassHz`. */
+  dryLowShelf: { hz: number; gain: number } | null;
+  /** What `Chorus(ac, { mode })` should set the other four knobs to. */
+  defaults: { rate: number; depth: number; mix: number; width: number };
+};
+
+const voice = (
+  delayMs: number,
+  phase: number,
+  source: Source,
+  gainL: number,
+  gainR: number,
+  slow = 1,
+  fast = 0,
+  modScale = 1,
+): Voice => ({ delayMs, modScale, phase, slow, fast, source, gainL, gainR });
+
+/**
+ * Plaits' `Ensemble` mixes its two accumulators `slow * 160 + fast * 16`
+ * samples, with the comment `// Max deviation: 176`. Those are the
+ * proportions; normalising them to 1 keeps `depth` meaning the same thing in
+ * every voicing.
+ */
+/**
+ * `rune06`'s CE-2 model, the most concrete inheritance in it from the
+ * schematic: a 4-pole cascade before the bucket brigade and another after, at
+ * these cutoffs. Huovilainen notes a BBD needs anti-alias and reconstruction
+ * filters, "typically 2nd to 4th order", and that the output filter also
+ * removes clock bleed.
+ *
+ * **Only the post-filter is here.** A BBD needs one before the line because
+ * the line is a sampler; a digital line is not, so that half's anti-alias role
+ * does not exist and what is left of it is a second helping of the same
+ * rolloff - which the post cascade can supply for half the poles.
+ *
+ * **Four poles rather than two, and here is where it stopped mattering.**
+ * Composite magnitudes at 48 kHz, against the two lower poles alone:
+ *
+ * | | -3 dB | 1 kHz | 2 kHz | 4 kHz | 8 kHz | 16 kHz |
+ * | --- | --- | --- | --- | --- | --- | --- |
+ * | 4 poles | 2931 Hz | -0.4 | -1.5 | -5.1 | -15.3 | -43.5 |
+ * | 7234 + 4020 | 3339 Hz | -0.3 | -1.2 | -4.0 | -11.0 | -27.2 |
+ *
+ * The two are within **0.3 dB below 2 kHz** and within **1.1 dB at 4 kHz**;
+ * they diverge by 4.2 dB at 8 kHz and 16.3 dB at 16 kHz. So two poles buy the
+ * whole audible body of the effect, and the other two buy the top two octaves
+ * - which is exactly the region that decides whether the wet copies sit
+ * behind the dry or hiss on top of them. Kept at four for `JUNO` and
+ * `DIMENSION`, at a cost of eight one-poles per channel pair; `ENSEMBLE` takes
+ * the two-pole version because a string machine wants the air.
+ */
+const CE2_POLES = [10620, 8830, 7234, 4020] as const;
+
+const ENSEMBLE_SLOW = 160 / 176;
+const ENSEMBLE_FAST = 16 / 176;
+
+/**
+ * The three voicings, with every number's source beside it. A number with no
+ * citation is a number nobody can re-derive.
+ *
+ * The output matrix is the pair of gains on each voice, and it is where
+ * `DIMENSION` differs from `JUNO`: the same two antiphase taps, combined as a
+ * difference instead of one to each channel. That is the whole of the SDD-320
+ * trick, and it is the argument for both voicings fitting rather than the
+ * argument against one of them.
+ */
+/**
+ * **No voicing has feedback, and that was measured rather than assumed.**
+ *
+ * Dattorro's Table 6 offers "white chorus" - blend 0.7071, feedforward 1.0,
+ * feedback 0.7071 from a *fixed* tap at the nominal centre, deliberately not
+ * modulated because "we prefer not to feed back a modulating signal because
+ * the modulation induces pitch change". The claim is that the circuit then
+ * approximates an allpass and the comb colouration of the summed troughs
+ * cancels.
+ *
+ * Measured here as peak-to-peak magnitude ripple over 100 Hz - 10 kHz, from
+ * the impulse response of one voice frozen at 3 ms + 2 ms (LTI, so the
+ * response is exact; rectangular FFT, because a window would zero the
+ * impulse):
+ *
+ * | structure | ripple |
+ * | --- | --- |
+ * | plain feedforward, blend 1.0 / ff 0.7071 | **15.31 dB** |
+ * | white chorus, fixed feedback tap | 30.62 dB |
+ * | white chorus, feedback from the moving tap | 22.63 dB |
+ *
+ * Every variant measures *more* coloured than the plain feedforward path, not
+ * less, so it is dropped. Two caveats worth stating: Dattorro's argument is
+ * about the summed response under modulation rather than one frozen tap, so
+ * this is evidence against carrying it here rather than a refutation of his
+ * design; and the real Juno has no feedback path at all, which is the other
+ * reason the answer came out this way.
+ */
+export const VOICINGS: readonly Voicing[] = [
+  {
+    // JUNO. Two lines modulated in antiphase from one LFO, one to each
+    // channel, dry summed. `rune06`'s CE-2 model centres at
+    // `CENTER_DELAY_MS = 3.0`; the Juno-60's three modes are 0.5 / 0.8 / 1 Hz
+    // and are reachable through `rate` rather than needing their own rows.
+    // 3 ms +/- 2 ms sits inside Dattorro Table 7's chorus range (1-30 ms,
+    // nominal 5) rather than his doubling range (10-100), which is where the
+    // engine this replaces had put its defaults.
+    // Phases at a quarter and three quarters rather than 0 and a half: still
+    // exactly antiphase, but it puts the two voices at opposite ends of their
+    // travel when the LFO is stopped, so `rate: 0` is a static two-tap comb
+    // rather than both voices landing on the same sample.
+    voices: [
+      voice(3, 0.25, Source.Left, 1, 0),
+      voice(3, 0.75, Source.Right, 0, 1),
+    ],
+    slowMul: 1,
+    fastMul: FAST_MULTIPLIER,
+    maxDepthMs: 2,
+    wetLowpassHz: CE2_POLES,
+    wetHighpassHz: 0,
+    dryLowShelf: null,
+    defaults: { rate: 0.5, depth: 0.6, mix: 0.5, width: 1 },
+  },
+  {
+    // ENSEMBLE. Three taps 120 degrees apart on a dual-rate LFO pair - the
+    // Solina and Roland string-machine construction, and the voicing that is
+    // unreachable from JUNO at any knob setting because it needs a third voice
+    // and incommensurate rates. Plaits' `Ensemble` is the known-good set of
+    // numbers: a 192-sample base at 48 kHz (4.0 ms), three phases at exact
+    // thirds, deviation `slow * 160 + fast * 16` with a maximum of 176 samples
+    // (3.67 ms). The centre voice reads the mid of both lines so a stereo
+    // source stays centred rather than leaning on whichever line it was given.
+    voices: [
+      voice(4, 0, Source.Left, 1, 0, ENSEMBLE_SLOW, ENSEMBLE_FAST),
+      voice(
+        4,
+        1 / 3,
+        Source.Mid,
+        Math.SQRT1_2,
+        Math.SQRT1_2,
+        ENSEMBLE_SLOW,
+        ENSEMBLE_FAST,
+      ),
+      voice(4, 2 / 3, Source.Right, 0, 1, ENSEMBLE_SLOW, ENSEMBLE_FAST),
+    ],
+    slowMul: 1,
+    fastMul: FAST_MULTIPLIER,
+    maxDepthMs: 3.67,
+    // Two poles rather than four: a string machine wants air, and the whole
+    // point of three taps is the density they add above the fundamental. The
+    // two lower poles of the CE-2 set.
+    wetLowpassHz: [7234, 4020],
+    wetHighpassHz: 0,
+    dryLowShelf: null,
+    // 0.75 Hz is Plaits' slow accumulator: `phase_1_ += 67289` is
+    // `67289/2^32 * 48000 = 0.752 Hz`. The frequency travels between sample
+    // rates; the increment does not.
+    defaults: { rate: 0.75, depth: 0.7, mix: 0.5, width: 1 },
+  },
+  {
+    // DIMENSION. Antiphase like JUNO, but the stereo output is formed as a
+    // difference: `L = d0 - d1`, `R = d1 - d0`. The common-mode pitch
+    // modulation cancels perceptually while the differential spatial motion
+    // survives - chorus without the vibrato, which is what makes it usable on
+    // sustained pads and on a bus where JUNO's wobble becomes seasickness.
+    // SDD-320 numbers: 7.5-10 ms base, +/- 1.5-2.5 ms, 0.25 or 0.5 Hz.
+    voices: [
+      voice(8.5, 0.25, Source.Left, 1, -1),
+      voice(8.5, 0.75, Source.Right, -1, 1),
+    ],
+    slowMul: 1,
+    fastMul: FAST_MULTIPLIER,
+    maxDepthMs: 2.5,
+    wetLowpassHz: CE2_POLES,
+    // The difference cancels the common-mode signal, and at low frequencies
+    // the two delayed copies are nearly identical, so the bass cancels with
+    // it. The SDD-320 high-passes the wet difference and gives the dry a
+    // complementary low boost; without that pair the mode is a thin phasey
+    // artefact rather than a wide one, and it reads as a broken mode rather
+    // than a missing filter.
+    wetHighpassHz: 150,
+    dryLowShelf: { hz: 150, gain: 1.4 },
+    defaults: { rate: 0.5, depth: 0.8, mix: 0.5, width: 1 },
+  },
+];
+
+/** What each voicing sets the other four knobs to. */
+export const CHORUS_MODE_DEFAULTS = VOICINGS.map((v) => v.defaults);
+
+/**
+ * A hand-written chorus engine.
+ *
+ * Pure: it touches no worklet globals, so the tests drive it directly through
+ * `render()`.
+ */
 export function createChorus(sampleRate: number) {
-  const ftbl0ChorusSIG0 = new Float32Array(65536);
-  const ftbl1ChorusSIG1 = new Float32Array(65536);
+  const msToSamples = sampleRate / 1000;
+  const maxSamples = Math.ceil(MAX_DELAY_MS * msToSamples);
+  const left = createDelayLine(maxSamples);
+  const right = createDelayLine(maxSamples);
 
-  const fSampleRate = sampleRate;
-  let fRec0 = new Float32Array(2);
-  let fRec1 = new Float32Array(2);
-  let fRec10 = new Float32Array(2);
-  let fRec11 = new Float32Array(2);
-  let fRec12 = new Float32Array(2);
-  let fRec2 = new Float32Array(2);
-  let fRec4 = new Float32Array(2);
-  let fRec5 = new Float32Array(2);
-  let fRec7 = new Float32Array(2);
-  let fRec8 = new Float32Array(2);
-  let fRec9 = new Float32Array(2);
-  let fVec1 = new Float32Array(8192);
-  let IOTA0 = 0;
-  let iVec0 = new Int32Array(2);
+  /**
+   * `readHermite` reads `delay - 1` through `delay + 2`, so the read has to
+   * stay clear of the write pointer at both ends. Clamped here, at the read
+   * site, rather than at the parameter - the same place `analog-delay` clamps,
+   * and for the same reason: the parameter is a musical quantity and the bound
+   * is a property of the buffer.
+   */
+  const limit = left.size - 4;
+  const clampDelay = (samples: number) =>
+    samples < 1 ? 1 : samples > limit ? limit : samples;
 
-  let fConst0 = Math.min(1.92e5, Math.max(1.0, fSampleRate));
-  let fConst1 = Math.exp(-(44.12234 / fConst0));
-  let fConst2 = 1.0 - fConst1;
-  let fConst3 = 0.33333334 / fConst0;
-  let fConst4 = 1.0 / fConst0;
-  let fConst5 = 0.14285715 / fConst0;
-  let fConst6 = 0.5 / fConst0;
-  let fConst7 = 0.25 / fConst0;
-  let fConst8 = 0.16666667 / fConst0;
-  let fConst9 = 0.125 / fConst0;
-  let fVslider0 = 0.5;
-  let fVslider1 = 0.5;
-  let fVslider2 = 0.5;
-  let fVslider3 = 0.5;
-  fillTable(ftbl0ChorusSIG0, sig0Fn);
-  fillTable(ftbl1ChorusSIG1, sig1Fn);
+  // Targets, set by `update` once per block.
+  let tMode = ChorusMode.Juno;
+  let tRate = 0.5;
+  let tDepth = 0.5;
+  let tMix = 0.5;
+  let tWidth = 1;
+
+  // The same values as they actually are right now, ramped towards the targets
+  // one sample at a time. Every parameter here is k-rate, so stepping them at
+  // block boundaries would put a 344 Hz staircase on anything modulating them
+  // - the argument `digital-delay/src/dsp.ts` makes, and it applies doubly
+  // here because the read position is what moves.
+  let rate = tRate;
+  let depth = tDepth;
+  let mix = tMix;
+  let width = tWidth;
+  let primed = false;
+
+  // `mode` is structural, so it is resolved here rather than in the inner
+  // loop: the loop branches on nothing `mode` decides.
+  let mode = ChorusMode.Juno;
+  let voicing = VOICINGS[mode];
+  // 1 fully in, 0 fully out. A mode change fades the wet path out, swaps the
+  // table at the envelope's zero, and fades back in.
+  let fade = 1;
+  let fadeDirection = 0;
+  const fadeStep = 1 / Math.max(1, Math.round((FADE_MS / 1000) * sampleRate));
+
+  // The wet path's filters. Allocated here and never again; the coefficients
+  // are recomputed when the voicing changes, which is once per block at most.
+  const lpG = new Float64Array(MAX_POLES);
+  const lpL = new Float64Array(MAX_POLES);
+  const lpR = new Float64Array(MAX_POLES);
+  let poles = 0;
+  let hpG = 0;
+  let hpL = 0;
+  let hpR = 0;
+  let shelfG = 0;
+  let shelfGain = 1;
+  let shelfL = 0;
+  let shelfR = 0;
+  let denormal = DENORMAL;
+  // Per-channel output normalisation. Not `1/voices`: a voice panned hard to
+  // one channel is the only thing in it, so dividing JUNO's two by two would
+  // halve an effect that never sums. What has to be normalised is what each
+  // channel actually receives, which is the sum of the gains that reach it -
+  // 1 for JUNO, 1.707 for ENSEMBLE's centre-plus-side pair, 2 for DIMENSION's
+  // difference.
+  let normL = 1;
+  let normR = 1;
+
+  function tune() {
+    let sumL = 0;
+    let sumR = 0;
+    for (const v of voicing.voices) {
+      sumL += Math.abs(v.gainL);
+      sumR += Math.abs(v.gainR);
+    }
+    normL = sumL > 0 ? 1 / sumL : 0;
+    normR = sumR > 0 ? 1 / sumR : 0;
+    poles = Math.min(voicing.wetLowpassHz.length, MAX_POLES);
+    for (let i = 0; i < poles; i++)
+      lpG[i] = onePoleG(voicing.wetLowpassHz[i], sampleRate);
+    hpG =
+      voicing.wetHighpassHz > 0
+        ? onePoleG(voicing.wetHighpassHz, sampleRate)
+        : 0;
+    const shelf = voicing.dryLowShelf;
+    shelfG = shelf ? onePoleG(shelf.hz, sampleRate) : 0;
+    shelfGain = shelf ? shelf.gain : 1;
+  }
+
+  // The LFO bank: two accumulators, and a voice reads whichever of them its
+  // weights ask for. `phase += inc; if (phase >= 1) phase -= 1` is the house
+  // idiom, and `Math.sin` rather than a wavetable is deliberate - the table is
+  // exactly what broke in the engine this replaces. `fillTable` there ignored
+  // its `fn` argument, so both of Faust's `os.oscp` tables held a cosine and
+  // the per-voice phase offsets did not compute: `table[0]` read 1.000000
+  // where `sin` gives 0.
+  let slowPhase = 0;
+  let fastPhase = 0;
+
+  tune();
+
+  function update(
+    modeIndex: number,
+    rateHz: number,
+    depthAmount: number,
+    mixAmount: number,
+    widthAmount: number,
+  ) {
+    const rounded = Math.round(modeIndex);
+    tMode = rounded >= 0 && rounded < VOICINGS.length ? rounded : mode;
+    tRate = rateHz;
+    tDepth = depthAmount;
+    tMix = mixAmount;
+    tWidth = widthAmount;
+  }
+
+  function reset() {
+    left.reset();
+    right.reset();
+    rate = tRate;
+    depth = tDepth;
+    mix = tMix;
+    width = tWidth;
+    primed = false;
+    slowPhase = 0;
+    fastPhase = 0;
+    mode = tMode;
+    voicing = VOICINGS[mode];
+    fade = 1;
+    fadeDirection = 0;
+    lpL.fill(0);
+    lpR.fill(0);
+    hpL = 0;
+    hpR = 0;
+    shelfL = 0;
+    shelfR = 0;
+    denormal = DENORMAL;
+    tune();
+  }
 
   function compute(
-    input0: Float32Array,
-    output0: Float32Array,
-    output1: Float32Array,
-  ): void {
-    let fSlow0 = fConst2 * fVslider0;
-    let fSlow1 = 4.096 * fVslider1;
-    let fSlow2 = 6.25e-5 * fVslider2;
-    let fSlow3 = fConst2 * fVslider3;
-    for (let i = 0; i < input0.length; i++) {
-      // Assume all necessary variables exist (fRec0, fRec1, fRec2, fRec4, fRec5, fRec7, fRec8, fVec1, ftbl0ChorusSIG0, ftbl1ChorusSIG1, IOTA0, etc.)
+    inL: Float32Array,
+    inR: Float32Array,
+    outL: Float32Array,
+    outR: Float32Array,
+  ) {
+    const n = outL.length;
+    if (n === 0) return;
 
-      let fTemp0 = input0[i]; // Assume input0 is an array and we're in a loop
-      iVec0[0] = 1;
-      fRec0[0] = fSlow0 + fConst1 * fRec0[1];
-      let fTemp1 = fTemp0 * fRec0[0];
-      fVec1[IOTA0 & 8191] = fTemp1;
+    if (!primed) {
+      // First block: adopt the constructed settings rather than ramping to
+      // them from the descriptor defaults.
+      primed = true;
+      rate = tRate;
+      depth = tDepth;
+      mix = tMix;
+      width = tWidth;
+      mode = tMode;
+      voicing = VOICINGS[mode];
+      tune();
+    }
 
-      fRec1[0] = fSlow1 + 0.999 * fRec1[1];
-      fRec2[0] = fSlow2 * fRec1[0] + 0.999 * fRec2[1];
-      let iTemp2 = 1 - iVec0[1];
-      fRec5[0] = fSlow3 + fConst1 * fRec5[1];
-      let fTemp3 = iTemp2 !== 0 ? 0.0 : fRec4[1] + fConst3 * fRec5[0];
-      fRec4[0] = fTemp3 - Math.floor(fTemp3);
-      let fTemp4 = Math.min(
-        4096.0,
-        0.375 * fRec1[0] +
-          fRec2[0] *
-            ftbl0ChorusSIG0[
-              Math.max(0, Math.min(Math.floor(65536.0 * fRec4[0]), 65535))
-            ],
-      );
-      let iTemp5 = Math.floor(fTemp4);
-      let fTemp6 = Math.floor(fTemp4);
-      let fTemp7 = iTemp2 !== 0 ? 0.0 : fRec7[1] + fConst4 * fRec5[0];
-      fRec7[0] = fTemp7 - Math.floor(fTemp7);
-      let fTemp8 = Math.min(
-        4096.0,
-        0.125 * fRec1[0] +
-          fRec2[0] *
-            ftbl1ChorusSIG1[
-              Math.max(0, Math.min(Math.floor(65536.0 * fRec7[0]), 65535))
-            ],
-      );
-      let fTemp9 = Math.floor(fTemp8);
-      let iTemp10 = Math.floor(fTemp8);
-      let fTemp11 = fTemp0 * (1.0 - fRec0[0]);
-      let fTemp12 = iTemp2 !== 0 ? 0.0 : fRec8[1] + fConst5 * fRec5[0];
-      fRec8[0] = fTemp12 - Math.floor(fTemp12);
-      let fTemp13 = Math.min(
-        4096.0,
-        0.875 * fRec1[0] -
-          fRec2[0] *
-            ftbl0ChorusSIG0[
-              Math.max(0, Math.min(Math.floor(65536.0 * fRec8[0]), 65535))
-            ],
-      );
-      let iTemp14 = Math.floor(fTemp13);
-      let fTemp15 = Math.floor(fTemp13);
+    // Structural, and resolved once per block. The wet path is already at zero
+    // when the swap happens, so the topology never changes under a live
+    // signal.
+    if (tMode !== mode && fadeDirection === 0) fadeDirection = -1;
+    if (fadeDirection < 0 && fade <= 0) {
+      mode = tMode;
+      voicing = VOICINGS[mode];
+      tune();
+      fadeDirection = 1;
+    }
 
-      output0[i] =
-        0.70710677 *
-          (fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp5))) & 8191] *
-            (fTemp6 + (1.0 - fTemp4)) +
-            (fTemp4 - fTemp6) *
-              fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp5 + 1))) & 8191]) +
-        (fTemp8 - fTemp9) *
-          fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp10 + 1))) & 8191] +
-        fTemp11 +
-        fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp10))) & 8191] *
-          (fTemp9 + (1.0 - fTemp8)) -
-        0.70710677 *
-          (fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp14))) & 8191] *
-            (fTemp15 + (1.0 - fTemp13)) +
-            (fTemp13 - fTemp15) *
-              fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp14 + 1))) & 8191]);
+    const step = 1 / n;
+    const dRate = (tRate - rate) * step;
+    const dDepth = (tDepth - depth) * step;
+    const dMix = (tMix - mix) * step;
+    const dWidth = (tWidth - width) * step;
+    const voices = voicing.voices;
+    const slowMul = voicing.slowMul;
+    const fastMul = voicing.fastMul;
+    const maxDepthMs = voicing.maxDepthMs;
 
-      let fTemp16 = iTemp2 !== 0 ? 0.0 : fRec9[1] + fConst6 * fRec5[0];
-      fRec9[0] = fTemp16 - Math.floor(fTemp16);
-      let iTemp17 = Math.max(
-        0,
-        Math.min(Math.floor(65536.0 * fRec9[0]), 65535),
-      );
-      let fTemp18 = Math.min(
-        4096.0,
-        0.25 * fRec1[0] +
-          fRec2[0] *
-            (0.70710677 * ftbl1ChorusSIG1[iTemp17] +
-              0.70710677 * ftbl0ChorusSIG0[iTemp17]),
-      );
-      let iTemp19 = Math.floor(fTemp18);
-      let fTemp20 = Math.floor(fTemp18);
-      let fTemp21 = iTemp2 !== 0 ? 0.0 : fRec10[1] + fConst7 * fRec5[0];
-      fRec10[0] = fTemp21 - Math.floor(fTemp21);
-      let iTemp22 = Math.max(
-        0,
-        Math.min(Math.floor(65536.0 * fRec10[0]), 65535),
-      );
-      let fTemp23 = Math.min(
-        4096.0,
-        0.5 * fRec1[0] +
-          fRec2[0] *
-            (0.70710677 * ftbl0ChorusSIG0[iTemp22] -
-              0.70710677 * ftbl1ChorusSIG1[iTemp22]),
-      );
-      let iTemp24 = Math.floor(fTemp23);
-      let fTemp25 = Math.floor(fTemp23);
-      let fTemp26 = iTemp2 !== 0 ? 0.0 : fRec11[1] + fConst8 * fRec5[0];
-      fRec11[0] = fTemp26 - Math.floor(fTemp26);
-      let iTemp27 = Math.max(
-        0,
-        Math.min(Math.floor(65536.0 * fRec11[0]), 65535),
-      );
-      let fTemp28 = Math.min(
-        4096.0,
-        0.75 * fRec1[0] -
-          fRec2[0] *
-            (0.70710677 * ftbl1ChorusSIG1[iTemp27] +
-              0.70710677 * ftbl0ChorusSIG0[iTemp27]),
-      );
-      let iTemp29 = Math.floor(fTemp28);
-      let fTemp30 = Math.floor(fTemp28);
-      let fTemp31 = iTemp2 !== 0 ? 0.0 : fRec12[1] + fConst9 * fRec5[0];
-      fRec12[0] = fTemp31 - Math.floor(fTemp31);
-      let iTemp32 = Math.max(
-        0,
-        Math.min(Math.floor(65536.0 * fRec12[0]), 65535),
-      );
-      let fTemp33 = Math.min(
-        4096.0,
-        fRec1[0] +
-          fRec2[0] *
-            (0.70710677 * ftbl1ChorusSIG1[iTemp32] -
-              0.70710677 * ftbl0ChorusSIG0[iTemp32]),
-      );
-      let iTemp34 = Math.floor(fTemp33);
-      let fTemp35 = Math.floor(fTemp33);
+    for (let i = 0; i < n; i++) {
+      rate += dRate;
+      depth += dDepth;
+      mix += dMix;
+      width += dWidth;
 
-      output1[i] =
-        fTemp11 -
-        (0.38268343 *
-          (fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp19))) & 8191] *
-            (fTemp20 + (1.0 - fTemp18)) +
-            (fTemp18 - fTemp20) *
-              fVec1[
-                (IOTA0 - Math.min(4097, Math.max(0, iTemp19 + 1))) & 8191
-              ]) +
-          0.9238795 *
-            (fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp24))) & 8191] *
-              (fTemp25 + (1.0 - fTemp23)) +
-              (fTemp23 - fTemp25) *
-                fVec1[
-                  (IOTA0 - Math.min(4097, Math.max(0, iTemp24 + 1))) & 8191
-                ]) +
-          0.9238795 *
-            (fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp29))) & 8191] *
-              (fTemp30 + (1.0 - fTemp28)) +
-              (fTemp28 - fTemp30) *
-                fVec1[
-                  (IOTA0 - Math.min(4097, Math.max(0, iTemp29 + 1))) & 8191
-                ]) +
-          0.38268343 *
-            (fVec1[(IOTA0 - Math.min(4097, Math.max(0, iTemp34))) & 8191] *
-              (fTemp35 + (1.0 - fTemp33)) +
-              (fTemp33 - fTemp35) *
-                fVec1[
-                  (IOTA0 - Math.min(4097, Math.max(0, iTemp34 + 1))) & 8191
-                ]));
+      // The phase increment follows the ramped rate rather than the target, so
+      // a jump in `rate` moves the speed and never the phase.
+      const slowInc = (rate * slowMul) / sampleRate;
+      const fastInc = (rate * fastMul) / sampleRate;
+      slowPhase += slowInc;
+      if (slowPhase >= 1) slowPhase -= 1;
+      fastPhase += fastInc;
+      if (fastPhase >= 1) fastPhase -= 1;
 
-      iVec0[1] = iVec0[0];
-      fRec0[1] = fRec0[0];
-      IOTA0 = (IOTA0 + 1) >>> 0; // Wrapping addition
-      fRec1[1] = fRec1[0];
-      fRec2[1] = fRec2[0];
-      fRec5[1] = fRec5[0];
-      fRec4[1] = fRec4[0];
-      fRec7[1] = fRec7[0];
-      fRec8[1] = fRec8[0];
-      fRec9[1] = fRec9[0];
-      fRec10[1] = fRec10[0];
-      fRec11[1] = fRec11[0];
-      fRec12[1] = fRec12[0];
+      // `rate: 0` leaves both increments at zero, so every phase holds where
+      // it is. That is a legitimate setting - a static comb - as well as what
+      // the tests need to read a base delay without chasing a moving tap.
+      const useful = usefulDepthMs(rate);
+      const excursion = depth * (useful < maxDepthMs ? useful : maxDepthMs);
+
+      if (fadeDirection < 0) {
+        fade -= fadeStep;
+        if (fade < 0) fade = 0;
+      } else if (fadeDirection > 0) {
+        fade += fadeStep;
+        if (fade >= 1) {
+          fade = 1;
+          fadeDirection = 0;
+        }
+      }
+
+      const dryL = inL[i];
+      const dryR = inR[i];
+      left.write(dryL);
+      right.write(dryR);
+
+      let wetL = 0;
+      let wetR = 0;
+      for (let v = 0; v < voices.length; v++) {
+        const voice = voices[v];
+        const modulation =
+          voice.slow * Math.sin(TAU * (slowPhase + voice.phase)) +
+          voice.fast * Math.sin(TAU * (fastPhase + voice.phase));
+        const delay = clampDelay(
+          (voice.delayMs + modulation * voice.modScale * excursion) *
+            msToSamples,
+        );
+        const sample = read(voice.source, delay);
+        wetL += sample * voice.gainL;
+        wetR += sample * voice.gainR;
+      }
+
+      // Mid/side width, applied to the wet path only: the dry is the anchor
+      // and narrowing the effect should not narrow the source.
+      wetL *= normL;
+      wetR *= normR;
+      const mid = 0.5 * (wetL + wetR);
+      const side = 0.5 * (wetL - wetR) * width;
+      denormal = -denormal;
+      let voicedL = mid + side + denormal;
+      let voicedR = mid - side + denormal;
+
+      for (let k = 0; k < poles; k++) {
+        const g = lpG[k];
+        const vL = (voicedL - lpL[k]) * g;
+        voicedL = vL + lpL[k];
+        lpL[k] = voicedL + vL;
+        const vR = (voicedR - lpR[k]) * g;
+        voicedR = vR + lpR[k];
+        lpR[k] = voicedR + vR;
+      }
+
+      let boostedL = dryL;
+      let boostedR = dryR;
+      if (hpG > 0) {
+        const vL = (voicedL - hpL) * hpG;
+        const lowL = vL + hpL;
+        hpL = lowL + vL;
+        voicedL -= lowL;
+        const vR = (voicedR - hpR) * hpG;
+        const lowR = vR + hpR;
+        hpR = lowR + vR;
+        voicedR -= lowR;
+
+        // The complementary half: what the wet difference cannot carry, the
+        // dry is given back.
+        const sL = (dryL - shelfL) * shelfG;
+        const dLow = sL + shelfL;
+        shelfL = dLow + sL;
+        boostedL = dryL + (shelfGain - 1) * dLow;
+        const sR = (dryR - shelfR) * shelfG;
+        const dRow = sR + shelfR;
+        shelfR = dRow + sR;
+        boostedR = dryR + (shelfGain - 1) * dRow;
+      }
+
+      // Mutable's law with the constant re-derived - see `DRY_DUCK`. The dry
+      // only falls to `1 - DRY_DUCK` at full wet, which is what keeps the
+      // effect from sucking the centre out as `mix` rises.
+      const dryGain = 1 - mix * DRY_DUCK;
+      const wet = mix * fade;
+      outL[i] = boostedL * dryGain + voicedL * wet;
+      outR[i] = boostedR * dryGain + voicedR * wet;
+    }
+
+    // A delay line flushes, so an input NaN clears itself. The wet path's
+    // filters do not: every one of them is `state = state + g * something`,
+    // and `NaN + anything` is `NaN`, so one poisoned sample would silence the
+    // effect for the lifetime of the graph. This is `vaf 05`'s finding and its
+    // answer - scan the block once, and if anything is non-finite, reset and
+    // zero it. A click, which is the honest response to a signal that was
+    // already broken.
+    for (let i = 0; i < n; i++) {
+      if (!Number.isFinite(outL[i]) || !Number.isFinite(outR[i])) {
+        reset();
+        outL.fill(0);
+        outR.fill(0);
+        return;
+      }
     }
   }
 
-  function update(
-    delay: number,
-    rate: number,
-    depth: number,
-    deviation: number,
-  ): void {
-    fVslider0 = delay;
-    fVslider1 = rate;
-    fVslider2 = depth;
-    fVslider3 = deviation;
+  function read(source: Source, delay: number) {
+    if (source === Source.Left) return left.readHermite(delay);
+    if (source === Source.Right) return right.readHermite(delay);
+    return 0.5 * (left.readHermite(delay) + right.readHermite(delay));
   }
 
-  return { update, compute };
+  return { update, compute, reset };
 }
 
-const sig0Fn = (x: number) => Math.cos(9.58738e-5 * x);
-const sig1Fn = (x: number) => Math.sin(9.58738e-5 * x);
-
-function fillTable(table: Float32Array, fn: (phase: number) => void) {
-  if (table.length !== 65536) {
-    throw new Error("Table must be 65536 samples long");
-  }
-  let iVec2A = 0;
-  let iVec2B = 0;
-  let iRec3A = 0;
-  let iRec3B = 0;
-  for (let i1 = 0; i1 < 65536; i1++) {
-    iVec2A = 1;
-    iRec3A = (iVec2B + iRec3B) % 65536;
-    table[i1] = Math.cos(9.58738e-5 * iRec3A);
-    iVec2B = iVec2A;
-    iRec3B = iRec3A;
-  }
-  return table;
-}
+export type Chorus = ReturnType<typeof createChorus>;
+export type { DelayLine };
