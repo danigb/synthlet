@@ -183,6 +183,32 @@ voice.dispose(); // every node above, in one call
 [mono.ts](https://github.com/danigb/synthlet/blob/main/packages/synthlet/src/synths/mono.ts)
 for the same shape at full size.
 
+## Offline rendering
+
+Every factory and every registrar takes a [BaseAudioContext](https://developer.mozilla.org/en-US/docs/Web/API/BaseAudioContext), not an `AudioContext`. Nothing in Synthlet calls `resume`, `suspend` or `baseLatency`, and `audioWorklet` lives on the base type - so an [OfflineAudioContext](https://developer.mozilla.org/en-US/docs/Web/API/OfflineAudioContext) registers and renders the same graph, faster than real time and into a buffer:
+
+```js
+import { registerMonoSynth, MonoSynth } from "synthlet";
+
+// 1 mono channel, 2 seconds at 48 kHz
+const ctx = new OfflineAudioContext(1, 2 * 48000, 48000);
+
+await registerMonoSynth(ctx);
+
+const synth = MonoSynth(ctx, { frequency: 220 });
+synth.connect(ctx.destination);
+synth.gate.setValueAtTime(1, 0.1);
+synth.gate.setValueAtTime(0, 0.4);
+
+const buffer = await ctx.startRendering();
+```
+
+`AudioContext` is a subtype of `BaseAudioContext`, so the live code above is the offline code: nothing changes but the context you pass in.
+
+Rendering offline is how you verify a patch without listening to it. **Two renders of the same graph produce identical samples** - the spec makes an `OfflineAudioContext` deterministic, and Synthlet asserts it in [offline.test.ts](https://github.com/danigb/synthlet/blob/main/packages/synthlet/src/offline.test.ts), which renders a worklet graph and a whole `MonoSynth` under [node-web-audio-api](https://github.com/ircam-ismm/node-web-audio-api) in CI. So a rendered buffer is a reference you can diff against, not just a preview.
+
+Synthlet does not ship a `renderOffline` helper. Constructing the context is the three lines above and it belongs to you, and a WAV encoder is not a synthesis module - if you want that convenience, [smplr's `renderOffline`](https://github.com/danigb/smplr) has it, and it takes any `BaseAudioContext` too.
+
 ## Installing individual modules
 
 If you want to optimize for bundle size, you can use the individual module packages and register each module individually.

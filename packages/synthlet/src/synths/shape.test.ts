@@ -61,6 +61,7 @@ describe("MonoSynth", () => {
       "amp",
       "filter",
       "filterEnv",
+      "frequency",
       "gate",
       "osc",
       "vibrato",
@@ -68,6 +69,10 @@ describe("MonoSynth", () => {
     ]);
     expect(synth.gate).toBeInstanceOf(AudioParamMock);
     expect(synth.volume).toBeInstanceOf(AudioParamMock);
+    // The note, flat beside the gate: what `Instrument` writes into a voice,
+    // and `osc.frequency` seen from outside.
+    expect(synth.frequency).toBeInstanceOf(AudioParamMock);
+    expect(synth.frequency).toBe(synth.osc.frequency);
     // Modules are nodes, and their own params are reachable through them -
     // the site's MonoExample binds sliders to synth.osc.frequency.
     expect(synth.osc.frequency).toBeInstanceOf(AudioParamMock);

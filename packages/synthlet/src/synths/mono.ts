@@ -16,10 +16,14 @@ export type MonoSynthInputs = {
   vibrato?: LfoInputs;
   osc?: PolyblepOscillatorInputs;
   filter?: SvfInputs;
+  filterEnv?: AdsrInputs;
   amp?: AdsrInputs;
 };
 
-export function MonoSynth(context: AudioContext, inputs: MonoSynthInputs = {}) {
+export function MonoSynth(
+  context: BaseAudioContext,
+  inputs: MonoSynthInputs = {},
+) {
   // Params: the inlets. Each is a Param node because it has to be scaled
   // (volume, in decibels) or fanned out (gate, to two envelopes).
   const gate = Param(context, { input: inputs.gate });
@@ -45,7 +49,16 @@ export function MonoSynth(context: AudioContext, inputs: MonoSynthInputs = {}) {
     gate,
     ...inputs.vibrato,
   });
-  const filterEnv = AdsrEnv(context, { gate, gain: 3000, offset: 2000 });
+  // The filter envelope's floor and its travel: 2000 Hz, plus 3000 Hz at the
+  // peak. They were unreachable constants and are now *defaults* - the spread
+  // comes last, so `MonoSynth(ctx)` still builds exactly this envelope, and a
+  // caller (`monoVoice` is one) can reach the whole ADSR through `filterEnv`.
+  const filterEnv = AdsrEnv(context, {
+    gate,
+    gain: 3000,
+    offset: 2000,
+    ...inputs.filterEnv,
+  });
   const filter = Svf(context, { frequency: filterEnv, ...inputs.filter });
   const amp = AdsrAmp(context, { gate, ...inputs.amp });
   const out = Gain(context, { gain: volume });
@@ -60,6 +73,11 @@ export function MonoSynth(context: AudioContext, inputs: MonoSynthInputs = {}) {
       // Params are flat AudioParams: the performance surface.
       gate: gate.input,
       volume: volume.input,
+      // The note. `inputs.frequency` is connected to `osc.frequency` above, so
+      // this is the same `AudioParam` seen from outside - writable as long as
+      // nothing is connected to it, which is the case whenever the compound is
+      // built as a voice rather than patched into a generative graph.
+      frequency: osc.frequency,
       // MonoSynth is a kit, so it exposes the modules it's made of.
       osc,
       vibrato,

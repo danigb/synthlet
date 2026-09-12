@@ -44,7 +44,7 @@ const LEGACY_DECAY = 0.1 * Math.log(1000); // 0.6908
  * from decibels) or fanned out to several modules (`trigger`, to every
  * envelope), so a plain AudioParam won't do: the inlet has to be a node.
  */
-function toParams(context: AudioContext, inputs: DrumInputs = {}) {
+function toParams(context: BaseAudioContext, inputs: DrumInputs = {}) {
   const decay = Param(context, { input: inputs.decay ?? 0.5 });
   return {
     trigger: Param(context, { input: inputs.trigger }),
@@ -85,7 +85,7 @@ function drum(
 
 /** A percussive amplifier: the input, shaped by an attack-decay envelope. */
 const perc = (
-  context: AudioContext,
+  context: BaseAudioContext,
   params: DrumParams,
   attack: number,
   decay: ParamInput = params.decayTime,
@@ -99,7 +99,7 @@ const perc = (
 const OSC_BANK_FREQUENCIES = [263, 400, 421, 474, 587, 845];
 
 /** The bank of squares that gives cymbals and hi-hats their metallic noise. */
-function oscBank(context: AudioContext) {
+function oscBank(context: BaseAudioContext) {
   const oscs = OSC_BANK_FREQUENCIES.map((frequency) =>
     Oscillator(context, { type: "square", frequency }),
   );
@@ -109,7 +109,7 @@ function oscBank(context: AudioContext) {
 }
 
 export const KickDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -140,7 +140,7 @@ export const KickDrum = (
 };
 
 export const SnareDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -166,7 +166,7 @@ export const SnareDrum = (
 };
 
 export const ClaveDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -187,7 +187,7 @@ export const ClaveDrum = (
 };
 
 export const HiHatDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -206,7 +206,7 @@ export const HiHatDrum = (
 };
 
 export const CowBellDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -235,7 +235,7 @@ export const CowBellDrum = (
 };
 
 export const CymbalDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -276,7 +276,7 @@ export const CymbalDrum = (
 };
 
 export const MaracasDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -293,7 +293,7 @@ export const MaracasDrum = (
 };
 
 export const HandclapDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -321,7 +321,7 @@ export const HandclapDrum = (
 };
 
 export const TomDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -351,7 +351,7 @@ export const TomDrum = (
 };
 
 export const CongaDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);
@@ -404,7 +404,7 @@ export const CongaDrum = (
  * is 1 for the same reason: nothing here is a pluck.
  */
 export const MembraneDrum = (
-  context: AudioContext,
+  context: BaseAudioContext,
   inputs: DrumInputs = {},
 ): DrumNode => {
   const params = toParams(context, inputs);

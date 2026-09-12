@@ -1,6 +1,8 @@
+import { Instrument } from "@synthlet/instrument";
 import { AudioNodeMock, createAudioContextMock } from "../test-utils";
 import * as drums from "./drums";
 import { MonoSynth } from "./mono";
+import { monoVoice } from "./mono-voice";
 
 // Every teardown path in `disposable` ends in a disconnect(): a dependency with
 // a dispose() is disposed (which disconnects it), one without is disconnected
@@ -10,6 +12,14 @@ const leaked = (nodes: AudioNodeMock[]) =>
 
 const compounds = [
   { name: "MonoSynth", build: MonoSynth },
+  // An instrument is a compound too, and a bigger one: three of the compound
+  // above, three per-voice gains, sixteen fan-out nodes and an output. It is
+  // built asynchronously, so `build` may return something with a `ready` on it.
+  {
+    name: "Instrument(monoVoice)",
+    build: (context: BaseAudioContext) =>
+      Instrument(context, monoVoice, { voices: 3 }),
+  },
   // Every drum: a compound that forgets to own one of its sources leaks it,
   // and only running all ten catches the one that does.
   ...Object.entries(drums)
@@ -21,9 +31,10 @@ const compounds = [
 ];
 
 describe.each(compounds)("$name", ({ build }) => {
-  it("disposes every node it created", () => {
+  it("disposes every node it created", async () => {
     const { context, nodes } = createAudioContextMock();
     const synth = build(context);
+    await (synth as { ready?: Promise<void> }).ready;
 
     // Guard against the assertion below passing vacuously.
     expect(nodes.length).toBeGreaterThan(5);
@@ -33,9 +44,10 @@ describe.each(compounds)("$name", ({ build }) => {
     expect(leaked(nodes)).toEqual([]);
   });
 
-  it("dispose is idempotent", () => {
+  it("dispose is idempotent", async () => {
     const { context, nodes } = createAudioContextMock();
     const synth = build(context);
+    await (synth as { ready?: Promise<void> }).ready;
 
     synth.dispose();
     const counts = nodes.map((node) => node.disconnectCount);

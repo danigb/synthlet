@@ -130,7 +130,7 @@ const create = createWorkletConstructor<
  * requires of every module factory.
  */
 export const PolyblepOscillator = Object.assign(
-  (context: AudioContext, inputs: PolyblepOscillatorInputs = {}) =>
+  (context: BaseAudioContext, inputs: PolyblepOscillatorInputs = {}) =>
     create(context, inputs),
   { descriptors: PARAMS },
 );

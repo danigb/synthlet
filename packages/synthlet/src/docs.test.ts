@@ -41,6 +41,19 @@ const ARP_PAGE = readFileSync(
   "utf8",
 );
 
+// The *other* arpeggiator's tables, checked the same way. `instrument` is the
+// third entry here and it arrived for a new reason: its field values are
+// string unions, so a stale name in a published table is not a type error
+// anywhere - it is a documented mode that throws the moment a reader tries it.
+const INSTRUMENT_README = readFileSync(
+  join(root, "packages/instrument/README.md"),
+  "utf8",
+);
+const INSTRUMENT_PAGE = readFileSync(
+  join(root, "site/content/docs/(instruments)/instrument.mdx"),
+  "utf8",
+);
+
 /**
  * The whole markdown table whose header contains `marker`, verbatim.
  *
@@ -190,5 +203,70 @@ describe("the arpeggiator's mode tables", () => {
     );
     const members = Object.keys(values()).filter((key) => isNaN(Number(key)));
     expect(listed.sort()).toEqual(members.sort());
+  });
+});
+
+describe("the held-note arpeggiator's config table", () => {
+  /** The `Values` cell of one field's row, as the names it lists. */
+  const listed = (source: string, field: string) =>
+    tableRows(source, "| Field ")
+      .find(([name]) => name === `\`${field}\``)![1]
+      .split("·")
+      .map((cell) => cell.trim().replace(/[`"]/g, ""));
+
+  it("agrees between the README and the docs page", () => {
+    expect(table(INSTRUMENT_PAGE, "| Field ")).toBe(
+      table(INSTRUMENT_README, "| Field "),
+    );
+  });
+
+  it("names every field ArpConfig has, and only those", () => {
+    const fields = tableRows(INSTRUMENT_README, "| Field ").map(([name]) =>
+      name.replace(/`/g, ""),
+    );
+    expect(fields.sort()).toEqual(Object.keys(synthlet.ArpConfig("Up")).sort());
+  });
+
+  it.each([
+    ["mode", () => synthlet.ARP_MODE_NAMES],
+    ["order", () => synthlet.ARP_ORDERS],
+    ["octaveMode", () => synthlet.ARP_OCTAVE_MODE_NAMES],
+  ])("lists every %s exactly once", (field, values) => {
+    // Both directions, as the parameter tables above: a name that is not a
+    // value cannot appear, and a value that exists cannot be left out. A
+    // documented `"UpDown"` would throw for the life of the package otherwise.
+    expect(listed(INSTRUMENT_README, field).sort()).toEqual(
+      [...values()].sort(),
+    );
+  });
+
+  it("reports the default ArpConfig fills in", () => {
+    const defaults = synthlet.ArpConfig("Up") as Record<string, unknown>;
+    for (const [field, , declared] of tableRows(
+      INSTRUMENT_README,
+      "| Field ",
+    )) {
+      const name = field.replace(/`/g, "");
+      if (declared === "required") {
+        expect([name, declared]).toEqual(["mode", "required"]);
+        continue;
+      }
+      expect([name, declared.replace(/[`"]/g, "")]).toEqual([
+        name,
+        String(defaults[name]),
+      ]);
+    }
+  });
+
+  it("documents every priority name, and only those", () => {
+    // `priority: "low"` in the usage example is the one that used to be an
+    // enum member, and the one a stale README would get wrong first.
+    for (const source of [INSTRUMENT_README, INSTRUMENT_PAGE]) {
+      for (const name of synthlet.PRIORITY_NAMES) {
+        expect(source).toContain(`"${name}"`);
+      }
+    }
+    expect(INSTRUMENT_README).not.toContain("NotePriority.");
+    expect(INSTRUMENT_PAGE).not.toContain("NotePriority.");
   });
 });

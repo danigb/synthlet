@@ -159,7 +159,8 @@ const create = createWorkletConstructor<LfoWorklet, LfoParams>({
  * every module factory.
  */
 export const Lfo = Object.assign(
-  (context: AudioContext, inputs: LfoInputs = {}) => create(context, inputs),
+  (context: BaseAudioContext, inputs: LfoInputs = {}) =>
+    create(context, inputs),
   { descriptors: PARAMS },
 );
 

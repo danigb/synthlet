@@ -62,6 +62,7 @@
     "@synthlet/euclid": "^0.2.0",
     "@synthlet/granite": "^0.2.0",
     "@synthlet/impulse": "^0.2.0",
+    "@synthlet/instrument": "^0.0.0",
     "@synthlet/karplus-strong": "^0.2.0",
     "@synthlet/level-meter": "^0.2.0",
     "@synthlet/lfo": "^0.2.0",

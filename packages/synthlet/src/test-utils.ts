@@ -2,11 +2,42 @@
 // audio-rate: enough to build a compound and check that dispose() reaches every
 // node the context created.
 
+/** One scheduled automation call, in the order it was made. */
+export type AutomationEvent = { method: string; value?: number; time: number };
+
 export class AudioParamMock {
   value = 0;
+  /**
+   * Every automation call, in order.
+   *
+   * A note is automation on a param that already exists - `Instrument` never
+   * connects anything to start a note, it writes `setValueAtTime` at a time -
+   * so the log *is* the audible behaviour, and asserting on it is how a test
+   * says "the gate rose after the frequency was in place".
+   */
+  readonly events: AutomationEvent[] = [];
 
   setValueAtTime(value: number, time: number) {
+    this.events.push({ method: "setValueAtTime", value, time });
+    // `value` still tracks a write at time 0 only: that is what the compound
+    // tests read to see a construction-time default.
     if (time === 0) this.value = value;
+    return this;
+  }
+
+  linearRampToValueAtTime(value: number, time: number) {
+    this.events.push({ method: "linearRampToValueAtTime", value, time });
+    return this;
+  }
+
+  exponentialRampToValueAtTime(value: number, time: number) {
+    this.events.push({ method: "exponentialRampToValueAtTime", value, time });
+    return this;
+  }
+
+  cancelScheduledValues(time: number) {
+    this.events.push({ method: "cancelScheduledValues", time });
+    return this;
   }
 }
 
@@ -119,6 +150,9 @@ export class ConstantSourceNodeMock extends AudioNodeMock {
 export function createAudioContextMock() {
   const context = {
     sampleRate: 48000,
+    // Mutable, unlike the real read-only one: a test that wants "now" to have
+    // moved sets it.
+    currentTime: 0,
     nodes: [] as AudioNodeMock[],
     // createRegistrar() adds each processor as a module, once per context.
     addedModules: [] as string[],

@@ -35,6 +35,7 @@ export * from "@synthlet/digital-delay";
 export * from "@synthlet/euclid";
 export * from "@synthlet/granite";
 export * from "@synthlet/impulse";
+export * from "@synthlet/instrument";
 export * from "@synthlet/karplus-strong";
 export * from "@synthlet/level-meter";
 export * from "@synthlet/lfo";
@@ -55,8 +56,10 @@ export { ArpMode, ArpOctaveMode, ArpScale } from "@synthlet/arp";
 export { ClipType } from "@synthlet/clip-amp";
 export { LfoType } from "@synthlet/lfo";
 export { NoiseType } from "@synthlet/noise";
+export { NotePriority } from "@synthlet/instrument";
 export { ParamScaleType } from "@synthlet/param";
 export { PolyblepOscillatorType } from "@synthlet/polyblep-oscillator";
+export { StealMode } from "@synthlet/instrument";
 export { SvfType } from "@synthlet/state-variable-filter";
 
 export { Compound, disposable } from "./_worklet";
@@ -71,12 +74,13 @@ export type {
 
 export * from "./synths/drums";
 export * from "./synths/mono";
+export * from "./synths/mono-voice";
 export { registerDrums, registerMonoSynth } from "./synths/registrars";
 export * from "./waa";
 
-export function registerAllWorklets(
-  context: AudioContext,
-): Promise<AudioContext> {
+export function registerAllWorklets<C extends BaseAudioContext>(
+  context: C,
+): Promise<C> {
   return Promise.all([
     registerAdsrWorklet(context),
     registerAdWorklet(context),
