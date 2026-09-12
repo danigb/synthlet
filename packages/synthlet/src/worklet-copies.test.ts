@@ -191,6 +191,12 @@ describe("the measuring instrument", () => {
       "digital-delay",
       "granite",
       "lfo",
+      // The one whose numbers *are* the module's argument for existing. A ring
+      // modulator is told from a VCA by what is missing from its spectrum -
+      // Part 11's "the Modulator has completely disappeared" - so the test
+      // that matters reads two peaks and a floor at the two input
+      // frequencies, and it has to read them the same way `lfo` does.
+      "ring-mod",
       "virtual-analog-filter",
       "wavetable-oscillator",
     ]);

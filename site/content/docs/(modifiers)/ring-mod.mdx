@@ -1,0 +1,107 @@
+---
+title: Ring Modulator
+description: Ring and amplitude modulation, with both inputs AC-coupled
+package: ring-mod
+---
+
+import RingModExample from "../../../examples/RingModExample";
+
+`@synthlet/ring-mod`
+
+`carrier × (offset + modulator)`, with a DC blocker on each input. The only
+cheap route to inharmonic, metallic and clangorous timbres in a subtractive
+library — every bell, gong and Dalek starts here.
+
+```ts
+import { registerRingModWorklet, RingMod } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerRingModWorklet(audioContext);
+
+const modulator = new OscillatorNode(audioContext, { frequency: 200 });
+modulator.start();
+
+const ring = RingMod(audioContext, { modulator, offset: 0 });
+carrier.connect(ring);
+```
+
+<RingModExample />
+
+## One knob from RM to AM
+
+A 300 Hz carrier against a 200 Hz modulator, both unit sines:
+
+| `offset` | 100 Hz | 300 Hz | 500 Hz | What it is                         |
+| -------- | ------ | ------ | ------ | ---------------------------------- |
+| `0`      | ½      | —      | ½      | Ring modulation. The inputs vanish |
+| `1`      | ½      | 1      | ½      | Amplitude modulation               |
+
+Synth Secrets Part 11, Figure 10: at `offset: 0` _"the Modulator has completely
+disappeared"_, and so has the carrier — what comes out is the sum and the
+difference and nothing else. Neither frequency is a harmonic of the other, which
+is exactly why it sounds like a bell rather than like a note.
+
+`offset` is the DC the modulator is given back _after_ AC coupling, so the two
+rows above are the same module with one number changed. The ARP 2600 had a
+switch labelled AC/DC for it.
+
+## Parameters
+
+| Param       | Default | Range    | Rate   | Meaning                                          |
+| ----------- | ------- | -------- | ------ | ------------------------------------------------ |
+| `type`      | 0       | 0 … 0    | k-rate | `RingModType.Ideal` (0)                          |
+| `modulator` | 0       | −10 … 10 | a-rate | The modulating signal                            |
+| `offset`    | 0       | −1 … 1   | k-rate | DC added back after coupling: 0 is RM, 1 is AM   |
+| `coupling`  | 1       | 0 … 1    | k-rate | 1 blocks DC on both inputs, 0 is the "lesser RM" |
+
+## Why not just a GainNode?
+
+Because the ideal multiply is the easy half:
+
+```ts
+const vca = new GainNode(audioContext, { gain: 0 });
+carrier.connect(vca);
+modulator.connect(vca.gain);
+```
+
+That is genuine amplitude modulation, and with `gain: 1` it is Part 11's
+Equation 6 exactly. What it is not is a ring modulator, because a `GainNode`
+multiplies whatever it is given, DC and all — and **DC on either input leaks the
+other signal straight through**. Put a 0.5 offset on the modulator and the
+carrier walks out of the output at half amplitude. Part 11's closing section is
+about precisely this, which is why many hardware RMs are AC-coupled and why this
+module is one by default.
+
+Set `coupling: 0` to get the other behaviour deliberately.
+
+## The modulator is a parameter, not a second input
+
+[connectParams](/docs/guide) wires parameters and nothing else, and no module in
+the library declares `numberOfInputs: 2`. So the second audio signal arrives as
+an a-rate `AudioParam`, and two costs come with that:
+
+- **It is down-mixed to mono.** A stereo modulator is summed before it is seen.
+  The carrier keeps its channels.
+- **It is clamped** to `−10 … 10`. The range is ten rather than one so a hot
+  signal modulates rather than squaring off, but above ±10 it squares off.
+
+<Callout title="The output keeps its DC, on purpose">
+  When the carrier and the modulator share a frequency, the difference tone
+  lands at 0 Hz — Reid's Case 1, _"this manifests itself as an offset in the
+  signal"_. That offset is signal. This module AC-couples its **inputs**, and a
+  DC blocker on the output would be removing something you asked for.
+</Callout>
+
+## The passband cost
+
+The blockers are one-pole highpasses at 5 Hz, computed from the sample rate so
+44.1 and 48 kHz block the same corner. Their gain is 0.958 at 20 Hz, 0.999 at
+100 Hz and 1.0003 at 300 Hz. So `offset: 1` with nothing connected to
+`modulator` is a _near_-bypass; `coupling: 0` makes it bit-exact.
+
+## Not yet: the diode ring
+
+A real ring modulator is four diodes and a pair of transformers, and the reason
+it sounds like itself is that the multiply is _imperfect_. `RingModType` ships
+with `Ideal` alone and has room for `Diode` (Parker, "A Simple Digital Model of
+the Diode-Based Ring Modulator", DAFx-11).

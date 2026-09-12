@@ -10,6 +10,7 @@ import {
   NoiseType,
   ParamScaleType,
   PolyblepOscillatorType,
+  RingModType,
   SvfType,
 } from "./index";
 
@@ -45,6 +46,7 @@ const EXPECTED = [
   "Param",
   "PolyblepOscillator",
   "ReverbDelay",
+  "RingMod",
   "Svf",
   "TimestretchAudioSource",
   "VirtualAnalogFilter",
@@ -335,6 +337,15 @@ const ENUM_PARAMS = [
     param: "type",
   },
   {
+    // One member, so it spans 0...0 - which is the point: the diode ring
+    // (Parker, DAFx-11) is a different function rather than a further point
+    // on a continuum, and this is the seam it lands on.
+    name: "RingMod.type",
+    values: RingModType,
+    factory: synthlet.RingMod,
+    param: "type",
+  },
+  {
     // Its types are a const object attached to the factory, not an enum.
     name: "VirtualAnalogFilter.type",
     values: synthlet.VirtualAnalogFilter,
@@ -367,6 +378,7 @@ const ENUMS = {
   NoiseType,
   ParamScaleType,
   PolyblepOscillatorType,
+  RingModType,
   SvfType,
 };
 

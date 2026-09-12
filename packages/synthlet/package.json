@@ -70,6 +70,7 @@
     "@synthlet/param": "^0.2.0",
     "@synthlet/polyblep-oscillator": "^0.3.0",
     "@synthlet/reverb-delay": "^0.2.0",
+    "@synthlet/ring-mod": "^0.1.0",
     "@synthlet/state-variable-filter": "^0.3.0",
     "@synthlet/timestretch-audio-source": "^0.1.0",
     "@synthlet/virtual-analog-filter": "^0.2.0",

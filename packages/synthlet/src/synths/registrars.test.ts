@@ -106,7 +106,7 @@ describe("registration is cached", () => {
 
     // And registerAllWorklets afterwards only adds what is still missing.
     await registerAllWorklets(context);
-    expect(addedModules.length).toBe(24);
-    expect(registered(context)).toHaveLength(24);
+    expect(addedModules.length).toBe(25);
+    expect(registered(context)).toHaveLength(25);
   });
 });

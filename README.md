@@ -197,7 +197,8 @@ time and pitch)
 
 **Modifiers** — `Svf` (state variable filter), `VirtualAnalogFilter` (Moog
 ladder, Korg 35, diode ladder, Oberheim), `ClipAmp`, `AdsrAmp`, `AdAmp`,
-`LookaheadLimiter` (true-peak brickwall), `LevelMeter`
+`RingMod` (ring and amplitude modulation), `LookaheadLimiter` (true-peak
+brickwall), `LevelMeter`
 
 **Modulators** — `AdsrEnv`, `AdEnv`, `Lfo`, `Param`
 
