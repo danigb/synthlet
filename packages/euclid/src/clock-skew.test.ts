@@ -190,7 +190,9 @@ describe("two Euclids on one clock", () => {
       steps: [8],
       beats: [3],
       subdivision: [4],
+      swing: [1],
       rotation: [0],
+      spread: [0],
       pulseWidth: [0.5],
       reset,
     });
@@ -264,7 +266,9 @@ describe("a Euclid on the clock's bar phase", () => {
       steps: [steps],
       beats: [steps],
       subdivision: [steps],
+      swing: [1],
       rotation: [0],
+      spread: [0],
       pulseWidth: [0.5],
       reset: NO_RESET,
     };
@@ -315,7 +319,9 @@ function render(
     steps: [params.steps ?? 1],
     beats: [params.beats ?? 1],
     subdivision: [params.subdivision ?? 1],
+    swing: [1],
     rotation: [0],
+    spread: [0],
     pulseWidth: [params.pulseWidth ?? 0.5],
     reset: params.reset ?? NO_RESET,
   };
