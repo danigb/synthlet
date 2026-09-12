@@ -22,15 +22,22 @@ import type { ParamDescriptor } from "./_worklet";
  * cannot be left out. `worklet-copies.test.ts` reads files off disk for the
  * same reason and this borrows its `root`.
  *
- * `lfo` is the only module with an entry here today. The helpers are written so
- * a second one is a row rather than a rewrite - the cost of adding one is
- * reading its two tables.
+ * `arp` is the second entry, and it arrived because the class of silence above
+ * bit it too: two of its tickets edited the README's parameter table by string
+ * replacement, Prettier had realigned the columns since, and the `mode` range
+ * and the whole `octaveMode` row were silently never written.
  */
 const root = resolve(__dirname, "../../..");
 
 const README = readFileSync(join(root, "packages/lfo/README.md"), "utf8");
 const PAGE = readFileSync(
   join(root, "site/content/docs/(modulators)/lfo.mdx"),
+  "utf8",
+);
+
+const ARP_README = readFileSync(join(root, "packages/arp/README.md"), "utf8");
+const ARP_PAGE = readFileSync(
+  join(root, "site/content/docs/(sequencers)/arp.mdx"),
   "utf8",
 );
 
@@ -123,6 +130,65 @@ describe("the LFO's shape tables", () => {
     const members = Object.keys(synthlet.LfoType).filter((key) =>
       isNaN(Number(key)),
     );
+    expect(listed.sort()).toEqual(members.sort());
+  });
+});
+
+describe("the arpeggiator's parameter table", () => {
+  const descriptors = synthlet.Arp.descriptors as readonly ParamDescriptor[];
+
+  it.each([
+    ["packages/arp/README.md", ARP_README],
+    ["site/content/docs/(sequencers)/arp.mdx", ARP_PAGE],
+  ])("in %s names exactly the parameters that exist", (_where, source) => {
+    const rows = tableRows(source, "| Default |");
+    const named = rows.map(([param]) => param.replace(/`/g, ""));
+    expect(named).toEqual(descriptors.map((d) => d.name));
+  });
+
+  it.each([
+    ["packages/arp/README.md", ARP_README],
+    ["site/content/docs/(sequencers)/arp.mdx", ARP_PAGE],
+  ])("in %s reports the declared range and rate", (_where, source) => {
+    for (const [param, , declared, rate] of tableRows(source, "| Default |")) {
+      const name = param.replace(/`/g, "");
+      const descriptor = descriptors.find((d) => d.name === name)!;
+      expect([name, range(declared)]).toEqual([
+        name,
+        [descriptor.minValue, descriptor.maxValue],
+      ]);
+      expect([name, rate]).toEqual([name, descriptor.automationRate]);
+    }
+  });
+
+  it.each([
+    ["packages/arp/README.md", ARP_README],
+    ["site/content/docs/(sequencers)/arp.mdx", ARP_PAGE],
+  ])("in %s reports the declared default", (_where, source) => {
+    for (const [param, declared] of tableRows(source, "| Default |")) {
+      const name = param.replace(/`/g, "");
+      const descriptor = descriptors.find((d) => d.name === name)!;
+      expect([name, Number(declared)]).toEqual([name, descriptor.defaultValue]);
+    }
+  });
+});
+
+describe("the arpeggiator's mode tables", () => {
+  it.each([
+    ["the traversals", "| `ArpMode` "],
+    ["the octave mappings", "| `ArpOctaveMode` "],
+  ])("agree between the README and the docs page: %s", (_what, marker) => {
+    expect(table(ARP_PAGE, marker)).toBe(table(ARP_README, marker));
+  });
+
+  it.each([
+    ["ArpMode", "| `ArpMode` ", () => synthlet.ArpMode],
+    ["ArpOctaveMode", "| `ArpOctaveMode` ", () => synthlet.ArpOctaveMode],
+  ])("lists every %s member exactly once", (_name, marker, values) => {
+    const listed = tableRows(ARP_README, marker).map(([mode]) =>
+      mode.replace(/`/g, ""),
+    );
+    const members = Object.keys(values()).filter((key) => isNaN(Number(key)));
     expect(listed.sort()).toEqual(members.sort());
   });
 });
