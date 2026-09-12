@@ -223,6 +223,13 @@ export function createTraversal(
       // it rebuilds its pattern when `steps` changes but only wraps its cursor
       // when a gate fires, so it indexes past the end for up to 122 ms.
       if (flat >= size) flat = size - 1;
+      // And the other end, which only an empty set can reach: `size - 1` is
+      // -1 at `size === 0`, and a negative index reads a note that is not
+      // there. `@synthlet/arp` cannot present one - a scale is at least its
+      // root - but a set of *held* notes empties every time a player lets go.
+      // Callers are expected to stop before reading an empty sequence rather
+      // than to rely on this; it is here so the primitive is total.
+      if (flat < 0) flat = 0;
     },
 
     setMode(next: ArpMode): void {
