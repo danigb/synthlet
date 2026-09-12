@@ -52,6 +52,10 @@ Both words mean the same signal; they describe what the reader does with it.
   caring what the signal does next. [AD](/docs/modulators/ad),
   [Impulse](/docs/sources/impulse), [Karplus-Strong](/docs/sources/ks) and
   [Arp](/docs/sequencers/arp) take triggers.
+- [Sample and hold](/docs/modulators/sample-hold) takes **both**, and is the one
+  module where the distinction is a parameter: `SampleHoldType.SampleHold` reads
+  the edge, `SampleHoldType.Track` reads the level and is transparent while it
+  is high.
 - A **gate** is held: the module does one thing while it is high and another
   when it goes low. [ADSR](/docs/modulators/adsr) takes a gate — it sustains
   while the gate is open and releases when it closes.

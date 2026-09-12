@@ -82,6 +82,13 @@ describe("the gate contract", () => {
       // arithmetic that turns that instant into a phase stays in each
       // package's own `dsp.ts`.
       "polyblep-oscillator",
+      // The first *consumer* of a trigger that is neither an envelope nor a
+      // voice: the edge does not start anything, it decides which sample of
+      // the input becomes the output for the next however-long. Both of its
+      // modes come from this one file - `Track` reads the detector's open
+      // state rather than comparing to zero itself - which is the whole
+      // reason the copy is here rather than two lines in its `worklet.ts`.
+      "sample-hold",
       "wavetable-oscillator",
     ]);
   });

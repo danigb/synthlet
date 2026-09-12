@@ -200,7 +200,7 @@ ladder, Korg 35, diode ladder, Oberheim), `ClipAmp`, `AdsrAmp`, `AdAmp`,
 `RingMod` (ring and amplitude modulation), `LookaheadLimiter` (true-peak
 brickwall), `LevelMeter`
 
-**Modulators** — `AdsrEnv`, `AdEnv`, `Lfo`, `Param`
+**Modulators** — `AdsrEnv`, `AdEnv`, `Lfo`, `Param`, `SampleHold`
 
 **Sequencers** — `Clock`, `Euclid`, `Arp`
 

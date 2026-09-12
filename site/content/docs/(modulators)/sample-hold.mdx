@@ -1,0 +1,88 @@
+---
+title: Sample and Hold
+description: Latch a signal on a trigger and hold it, with a track-and-hold mode
+package: sample-hold
+---
+
+import SampleHoldExample from "../../../examples/SampleHoldExample";
+
+`@synthlet/sample-hold`
+
+The module that turns a continuous signal into a stepped one. Two lines of DSP,
+and the oldest random-voltage source in synthesis:
+
+```ts
+import { registerSampleHoldWorklet, SampleHold, Clock, Noise } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerSampleHoldWorklet(audioContext);
+
+const clock = Clock(audioContext, { bpm: 480 });
+const sh = SampleHold(audioContext, { trigger: clock.gate });
+
+noise.connect(sh).connect(filter.frequency);
+```
+
+<SampleHoldExample />
+
+That patch is Part 16's Figure 6, and Reid's note on it is that _"this
+combination of clock, S&H and noise is so deeply routed in synthesis that some
+synthesizers combine them in a single module"_. It is also the key to
+_"humanising many digital sounds"_ — a small amount of it on pitch or cutoff is
+the waver a real instrument has and a sampled one does not.
+
+## Parameters
+
+| Param     | Default | Range | Rate   | Meaning                                         |
+| --------- | ------- | ----- | ------ | ----------------------------------------------- |
+| `type`    | 0       | 0 … 1 | k-rate | `SampleHoldType.SampleHold` (0) or `.Track` (1) |
+| `trigger` | 0       | 0 … 1 | a-rate | The clock. A rising edge samples                |
+
+<Callout title="clock.gate, not clock" type="warn">
+  The `Clock` node itself is a **phase ramp** — positive from the first beat
+  onward and never falling back — so it would sample once and latch forever. See
+  [Gates and triggers](/docs/gates-and-triggers).
+</Callout>
+
+## Two modes, one latch
+
+| `SampleHoldType` | Samples on       | While the trigger is high |
+| ---------------- | ---------------- | ------------------------- |
+| `SampleHold`     | the rising edge  | holding                   |
+| `Track`          | the falling edge | transparent               |
+
+Part 16 spends four paragraphs on the second, and names the two instruments: the
+Buchla Model 264 and _"one of the most common patchable analogue synthesizers of
+them all"_, the Korg MS20. What it is for is the duty cycle — _"you can use the
+duty cycle of your clock pulse to determine the proportion of time that the
+output tracks the input"_ — and both `Clock` and `Euclid` have a `pulseWidth`,
+so that is one parameter away.
+
+A pulse one sample wide makes `Track` behave exactly as `SampleHold`, which the
+book says too.
+
+## The trigger is a-rate, and here that matters
+
+Everywhere else in the library a trigger quantised to the 128-frame render
+quantum is up to 2.9 ms late — inaudible on an envelope. Here it is not a late
+sample, it is a **different** sample: fed white noise, the quantisation decides
+_which_ random value you hold. So `trigger` is a-rate by default, and a signal
+scheduled at an exact frame is sampled at that frame.
+
+## No droop, on purpose
+
+An analogue S&H leaks: _"the impedance is never truly infinite, so the voltage
+will decay slowly, and one measure of the quality of an S&H module is the
+slowness of the rate at which this decay occurs."_ This one does not — the held
+value is bit-identical after a minute. If you want the decay, that is a
+[slew limiter](/docs/modulators/slew-limiter) pointing the other way, and it
+exists.
+
+One held value **per channel**, all sampled at the same frame.
+
+## Coming later: the quantiser
+
+Part 17's Figure 15 is S&H → programmable scale generator → oscillator, which
+Reid calls _"a random arpeggiator — one of my favourite effects"_. The scale
+tables already exist, in [Arp](/docs/sequencers/arp); the quantiser that snaps a
+held voltage to them does not yet, and this is the module it will sit after.

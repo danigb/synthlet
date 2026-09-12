@@ -11,6 +11,7 @@ import {
   ParamScaleType,
   PolyblepOscillatorType,
   RingModType,
+  SampleHoldType,
   SvfType,
 } from "./index";
 
@@ -47,6 +48,7 @@ const EXPECTED = [
   "PolyblepOscillator",
   "ReverbDelay",
   "RingMod",
+  "SampleHold",
   "Svf",
   "TimestretchAudioSource",
   "VirtualAnalogFilter",
@@ -119,6 +121,10 @@ describe("descriptors", () => {
       // depth ramp, and delayed vibrato on a free-running LFO needs both to be
       // separately reachable.
       ["Lfo", "gate", "a-rate"],
+      // The module the rule was written for. Everywhere else a quantised
+      // trigger is a *late* event; here it is a different one - fed noise, the
+      // 2.9 ms decides which random value is held.
+      ["SampleHold", "trigger", "a-rate"],
       ["PolyblepOscillator", "sync", "a-rate"],
       ["WavetableOscillator", "sync", "a-rate"],
     ];
@@ -346,6 +352,12 @@ const ENUM_PARAMS = [
     param: "type",
   },
   {
+    name: "SampleHold.type",
+    values: SampleHoldType,
+    factory: synthlet.SampleHold,
+    param: "type",
+  },
+  {
     // Its types are a const object attached to the factory, not an enum.
     name: "VirtualAnalogFilter.type",
     values: synthlet.VirtualAnalogFilter,
@@ -379,6 +391,7 @@ const ENUMS = {
   ParamScaleType,
   PolyblepOscillatorType,
   RingModType,
+  SampleHoldType,
   SvfType,
 };
 
