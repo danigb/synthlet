@@ -7,6 +7,7 @@ import { registerClipAmpWorklet } from "@synthlet/clip-amp";
 import { registerClockWorklet } from "@synthlet/clock";
 import { registerDattorroReverbWorklet } from "@synthlet/dattorro-reverb";
 import { registerDigitalDelayWorklet } from "@synthlet/digital-delay";
+import { registerEnvelopeFollowerWorklet } from "@synthlet/envelope-follower";
 import { registerEuclidWorklet } from "@synthlet/euclid";
 import { registerGraniteWorklet } from "@synthlet/granite";
 import { registerImpulseWorklet } from "@synthlet/impulse";
@@ -34,6 +35,7 @@ export * from "@synthlet/clip-amp";
 export * from "@synthlet/clock";
 export * from "@synthlet/dattorro-reverb";
 export * from "@synthlet/digital-delay";
+export * from "@synthlet/envelope-follower";
 export * from "@synthlet/euclid";
 export * from "@synthlet/granite";
 export * from "@synthlet/impulse";
@@ -57,6 +59,7 @@ export * from "@synthlet/wavetable-oscillator";
 export { AnalogDelayMode } from "@synthlet/analog-delay";
 export { ArpMode, ArpOctaveMode, ArpScale } from "@synthlet/arp";
 export { ClipType } from "@synthlet/clip-amp";
+export { EnvelopeFollowerType } from "@synthlet/envelope-follower";
 export { LfoType } from "@synthlet/lfo";
 export { NoiseType } from "@synthlet/noise";
 export { ParamScaleType } from "@synthlet/param";
@@ -93,6 +96,7 @@ export function registerAllWorklets(
     registerClockWorklet(context),
     registerDattorroReverbWorklet(context),
     registerDigitalDelayWorklet(context),
+    registerEnvelopeFollowerWorklet(context),
     registerEuclidWorklet(context),
     registerGraniteWorklet(context),
     registerImpulseWorklet(context),

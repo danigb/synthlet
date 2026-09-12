@@ -41,6 +41,12 @@ The convenience argument is real too: `AnalyserNode` hands you a whole
 time-domain buffer to reduce yourself, on every frame, in JavaScript. This hands
 you the numbers.
 
+**Not `@synthlet/envelope-follower`, and neither replaces the other.** This
+posts numbers to the main thread for a UI to draw; the follower produces a
+control signal at audio rate for an `AudioParam` inside the graph. The names are
+close enough to confuse; the difference is which side of the fence the number
+comes out on.
+
 ## Install
 
 ```bash
