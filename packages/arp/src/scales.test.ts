@@ -78,34 +78,34 @@ describe("ArpScale", () => {
 });
 
 describe("createArpeggiator", () => {
-  function collectNotes(scale: number, octaves: number, cycles = 400) {
+  // Since ticket 03 the traversal has an order, so this reads the sequence
+  // rather than collecting a `Set` over 400 cycles: the old helper could
+  // assert that a note belonged to the scale, but never that note 3 follows
+  // note 2, which is the only interesting thing about an arpeggiator.
+  function playNotes(scale: number, octaves: number, steps: number) {
     const arp = createArpeggiator();
-    const notes = new Set<number>();
-    for (let i = 0; i < cycles; i++) {
-      notes.add(freqToMidi(arp(1, 60, scale, octaves)));
+    const notes: number[] = [];
+    for (let i = 0; i < steps; i++) {
+      notes.push(freqToMidi(arp(1, 60, scale, octaves)));
       arp(0, 60, scale, octaves);
     }
     return notes;
   }
 
-  it("plays only notes from the selected scale", () => {
-    const notes = collectNotes(ArpScale.Major, 1);
-    const pitchClasses = new Set<number>();
-    for (const note of notes) {
-      const pc = (note - 60) % 12;
-      expect(EXPECTED.Major).toContain(pc);
-      pitchClasses.add(pc);
-    }
-    expect(pitchClasses.size).toBeGreaterThanOrEqual(5);
+  it("plays the scale in order, and nothing else", () => {
+    const expected = EXPECTED.Major.map((pc) => 60 + pc);
+    // Two full cycles: the pattern repeats, which is the claim.
+    expect(playNotes(ArpScale.Major, 1, 14)).toEqual([
+      ...expected,
+      ...expected,
+    ]);
   });
 
-  it("spans the requested number of octaves", () => {
-    const notes = collectNotes(ArpScale.TriadMajor, 2);
-    const max = Math.max(...notes);
-    const min = Math.min(...notes);
-    expect(min).toBe(60);
-    expect(max).toBeGreaterThanOrEqual(72);
-    expect(max).toBeLessThan(60 + 12 * 2);
+  it("spans the requested number of octaves, one after the other", () => {
+    // Serial traversal: the whole set, then the same set an octave up.
+    expect(playNotes(ArpScale.TriadMajor, 2, 7)).toEqual([
+      60, 64, 67, 72, 76, 79, 60,
+    ]);
   });
 
   it("holds the note until the trigger is released", () => {
