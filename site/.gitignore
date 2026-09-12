@@ -5,6 +5,15 @@
 .map.ts
 .contentlayer
 .content-collections
+# fumadocs' source index. `postinstall` writes the types and `next build`
+# writes `index.js`, so a clean checkout regenerates all of it - verified by
+# deleting the directory and building. It was tracked, and it should not have
+# been: every entry carries the *absolute* path of whoever generated it, so
+# two worktrees produce two different files and every merge between them
+# conflicts on all of them at once. The entry order and the path count also
+# move with the fumadocs version, which makes the committed copy wrong for
+# anyone who did not generate it.
+.source
 
 # test & build
 /coverage
