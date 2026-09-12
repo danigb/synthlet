@@ -69,6 +69,17 @@ export type {
   NotePriorityName,
   StealModeName,
 } from "./names";
+// The name lists, for a UI that has to build a picker - and for the docs test,
+// which checks the published tables against them in both directions. They are
+// the user-zone equivalent of `Object.keys(ArpMode)`, which is what the same
+// test uses for `@synthlet/arp`.
+export {
+  ARP_MODE_NAMES,
+  ARP_OCTAVE_MODE_NAMES,
+  ARP_ORDERS,
+  PRIORITY_NAMES,
+  STEAL_NAMES,
+} from "./names";
 export { toFrequency, toMidi } from "./notes";
 export { fromDescriptor } from "./presets";
 export type {

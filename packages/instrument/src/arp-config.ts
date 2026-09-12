@@ -33,6 +33,7 @@ import {
   ArpOctaveModeName,
   ARP_MODE_NAMES,
   ARP_OCTAVE_MODE_NAMES,
+  ARP_ORDERS,
   ArpOrder,
   isArpModeName,
 } from "./names";
@@ -62,8 +63,6 @@ const DEFAULTS: Omit<ArpConfig, "mode"> = {
 };
 
 const OPTION_KEYS = Object.keys(DEFAULTS) as (keyof typeof DEFAULTS)[];
-
-const ORDERS: ArpOrder[] = ["pitch", "played"];
 
 /** 1...4. Four octaves is every surveyed hardware arpeggiator's maximum. */
 const MIN_OCTAVES = 1;
@@ -103,8 +102,10 @@ export function ArpConfig(
   }
 
   const order = options.order ?? DEFAULTS.order;
-  if (!ORDERS.includes(order)) {
-    throw Error(`Unknown arp order "${order}"; known: ${ORDERS.join(", ")}`);
+  if (!ARP_ORDERS.includes(order)) {
+    throw Error(
+      `Unknown arp order "${order}"; known: ${ARP_ORDERS.join(", ")}`,
+    );
   }
 
   const octaveMode = options.octaveMode ?? DEFAULTS.octaveMode;

@@ -71,6 +71,7 @@ sees them, and they are settable live:
 ```ts
 const lead = Instrument(ac, monoVoice, {
   voices: 1,
+  priority: "low", // "last" (default) | "low" | "high" | "first"
   glide: 0.08,
   legato: true,
 });
@@ -81,6 +82,12 @@ lead.hold = true; // the sustain pedal: releases are remembered until it lifts
 `voices: 1` is a monosynth rather than a pool of one: notes go through a note stack, so
 releasing the top key returns to the one underneath, and `priority` picks which held note
 sounds.
+
+These are **names rather than enum members** - and so is `steal`, which takes `"protect"`
+(the default), `"lru"`, `"mru"` or `"drop"`. A preset is JSON somebody stores and reads, so
+it carries `priority: "low"` rather than a number, and an unknown name throws saying what it
+got. `NotePriority` and `StealMode` are still exported: they are what the lower-level
+`createVoiceAllocator` and `createNoteStack` take, which is code destined for a worklet.
 
 ## Presets
 
@@ -100,7 +107,68 @@ ones the preset names with its values and the rest with their declared defaults.
 The definition's parameter keys are its schema. An unknown key throws and names itself; a
 value outside the parameter's range is clamped silently, because a saved 1.2 on a 0-1
 parameter is a stale file rather than a mistake. `glide`, `legato` and `priority` are reserved
-keys a preset may carry: a lead sound _is_ its glide.
+keys a preset may carry: a lead sound _is_ its glide. So is `arp`, which carries a whole
+arpeggiator pattern as one value; `latch` is not, because it is performance state rather than
+part of a sound.
+
+## An arpeggiator over the held notes
+
+Hold a chord and call `arpStep` on the beat. The instrument breaks the chord across its own
+allocator, each note with the velocity it was played at:
+
+```ts
+import { ArpConfig } from "synthlet";
+
+// A config is a value: name it, store it, share it, put it in a preset.
+const CLASSIC = ArpConfig("UpDownExclusive", { octaves: 2 });
+
+synth.arp = CLASSIC;
+synth.latch = true; // hold the arpeggio without holding the keys
+
+synth.start({ note: "C4", velocity: 40 });
+synth.start({ note: "E4", velocity: 120 }); // held, not sounded
+synth.start({ note: "G4" });
+
+// The host's clock, standing in for a transport. Synthlet does not own one:
+// `arpStep` generates notes, never time.
+setInterval(() => synth.arpStep(), 125);
+
+synth.arpReset(); // back to the first step of the mode
+synth.arp = null; // plain poly again, and the held chord sounds
+```
+
+| Field        | Values                                                                                     | Default    |
+| ------------ | ------------------------------------------------------------------------------------------ | ---------- |
+| `mode`       | `Up` · `Down` · `UpDownExclusive` · `UpDownInclusive` · `Random` · `RandomOther` · `Chord` | required   |
+| `order`      | `"pitch"` · `"played"`                                                                     | `"pitch"`  |
+| `octaves`    | 1-4, clamped                                                                               | `1`        |
+| `octaveMode` | `"serial"` · `"repeat"`                                                                    | `"serial"` |
+
+`order` is the press order, and it is **orthogonal to the mode**: press order downward is as
+meaningful a figure as press order upward. `"Chord"` sounds every held note on every step and
+ignores the other three - there is no position to read, so they have nothing to say.
+
+An assignment takes effect **at the next step**. The position, the held set and the sounding
+notes live on the instrument rather than in the config, so a pattern edit -
+`synth.arp = { ...synth.arp, octaves: 3 }` - never restarts the pattern. Switching to `null`
+sounds the held chord through the normal path; switching back silences it and resumes where the
+pattern was.
+
+`latch` sits beside `hold` rather than inside the config because the two are one mechanism:
+both defer note-offs through a single set, so they cannot disagree about a release. Latch's one
+extra rule is the Juno-60 manual's - a key pressed while nothing is physically down replaces
+the chord rather than adding to it. It is inert while `arp` is `null`.
+
+### The two arpeggiators
+
+[`Arp`](/docs/arp) arpeggiates a chord you **declare** - a root and a scale mask - and
+self-plays in the graph off a clock, as a worklet. This one arpeggiates a chord you **hold**,
+and the host drives it. They share the index math and nothing else.
+
+They also deliberately do not share the spelling of a mode. `Arp`'s is an `AudioParam` carrying
+a number, so there it is an enum; here it is a string, because a preset is JSON somebody reads.
+That is also why `order` and `"Chord"` exist only here: only a **held** set has a press order,
+and only a polyphonic output can sound a whole chord on one step.
 
 ## A voice definition
 
@@ -142,12 +210,12 @@ the same `params` and the same presets; only `create` changes.
 
 ## What it does not do
 
-- **No internal clock or rate.** Nothing schedules itself; the host does. That is the
-  transport this library declines to own.
+- **No internal clock or rate.** Nothing schedules itself; the host does, `arpStep` included.
+  That is the transport this library declines to own.
 - **No auto-connect.** `synth.connect(destination)`, always.
 - **No `addEffect`.** The instrument is a node; effects are `connect()`.
 - **No `onStart` / `onEnded` yet.** They wait on `onended` for the envelope modules.
-- **No arpeggiator over the held notes yet.**
+- **No latch on a plain poly.** `latch` is inert while `arp` is `null`.
 - **Allocation happens at call time**, not at the note's time: schedule two notes out of
   order into the future and the allocator's least-recently-used state follows the order of the
   calls. A host that schedules in order inside a lookahead window never sees it.

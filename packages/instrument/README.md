@@ -64,7 +64,7 @@ note stack:
 ```ts
 const lead = Instrument(ac, monoVoice, {
   voices: 1,
-  priority: NotePriority.Low, // Last (default) | Low | High | First
+  priority: "low", // "last" (default) | "low" | "high" | "first"
   legato: true, // leave the envelopes running between notes
   glide: 0.08, // portamento, in seconds
 });
@@ -112,10 +112,76 @@ queued notes are flushed, so a note started before `ready` sounds with it. A
 
 ### An arpeggiator over the held notes
 
-Not in this release. The instrument keeps a note stack and a deferred-off set,
-which is everything an arpeggiator needs, and the design — `arp.step(time)`
-called by the host, never an internal timer — is written down in the project's
-ticket folder along with the rest of [what is deferred](#what-it-does-not-do).
+Hold a chord and call `arpStep` on the beat. The instrument breaks the chord
+across its own allocator, with each note's own velocity:
+
+```ts
+import { ArpConfig, Instrument, monoVoice } from "synthlet";
+
+// A config is a value: name it, store it, share it, put it in a preset.
+const CLASSIC = ArpConfig("UpDownExclusive", { octaves: 2 });
+
+synth.arp = CLASSIC;
+synth.latch = true; // hold the arpeggio without holding the keys
+
+synth.start({ note: "C4", velocity: 40 });
+synth.start({ note: "E4", velocity: 120 }); // held, not sounded
+synth.start({ note: "G4" });
+
+// The host's clock, standing in for a transport. Synthlet does not own one:
+// `arpStep` generates notes, never time.
+setInterval(() => synth.arpStep(), 125);
+
+synth.arpReset(); // back to the first step of the mode
+synth.arp = null; // plain poly again, and the held chord sounds
+```
+
+| Field        | Values                                                                                     | Default    |
+| ------------ | ------------------------------------------------------------------------------------------ | ---------- |
+| `mode`       | `Up` · `Down` · `UpDownExclusive` · `UpDownInclusive` · `Random` · `RandomOther` · `Chord` | required   |
+| `order`      | `"pitch"` · `"played"`                                                                     | `"pitch"`  |
+| `octaves`    | 1-4, clamped                                                                               | `1`        |
+| `octaveMode` | `"serial"` · `"repeat"`                                                                    | `"serial"` |
+
+`order` is the press order, and it is **orthogonal to the mode**: press order
+downward is as meaningful a figure as press order upward. `"Chord"` sounds every
+held note on every step and ignores the other three — there is no position to
+read, so they have nothing to say. `octaveMode: "repeat"` leaps each chord tone
+through the octaves instead of stacking the whole set: a completely different
+figure from an identical chord.
+
+An assignment takes effect **at the next step**. The position, the held set and
+the sounding notes live on the instrument rather than in the config, so a
+pattern edit — `synth.arp = { ...synth.arp, octaves: 3 }` — never restarts the
+pattern. Switching to `null` sounds the held chord through the normal path;
+switching back silences it and resumes where the pattern was.
+
+`latch` is a performance control, not part of the pattern, which is why it sits
+beside `hold` rather than inside the config: both defer note-offs through one
+set, so the two cannot disagree about a release. Latch's one extra rule is the
+Juno-60 manual's — a key pressed while nothing is physically down replaces the
+chord rather than adding to it. It is inert while `arp` is `null`.
+
+`arp` is a reserved preset key, so a pattern travels with a sound as one JSON
+value. `latch` is not: nobody says a lead sound is its latch.
+
+#### The two arpeggiators
+
+`@synthlet/arp` arpeggiates a chord you **declare** — a root and a 12-bit scale
+mask — and self-plays in the graph off a clock, as a worklet. This one
+arpeggiates a chord you **hold**, and the host drives it. They share
+`scripts/_traversal.ts`, the index math, and nothing else.
+
+What that sharing is really for is one line of it: `advance`'s `size === 1`
+guard. Without it `UpDownExclusive` on a one-note set loops forever, and on the
+audio thread that is a render quantum that never returns. A held-note
+arpeggiator meets a one-note set whenever a player has one finger down.
+
+What they deliberately do not share is the spelling. `@synthlet/arp`'s mode is
+an `AudioParam` carrying a number, so it is an enum there; here it is a string,
+because a preset is JSON somebody reads. That is also why `order` and `"Chord"`
+exist only here: only a **held** set has a press order, and only a polyphonic
+output can sound a whole chord on one step.
 
 ## The surface, next to smplr's
 
@@ -281,8 +347,11 @@ takes this same definition, with the same `params` and the same presets. Only
 
 ## What it does not do
 
-- **No internal clock or rate.** Nothing here schedules itself; the host does.
-  An internal timer would be the transport this library declines to own.
+- **No internal clock or rate.** Nothing here schedules itself; the host does,
+  `arpStep` included. An internal timer would be the transport this library
+  declines to own. A `Clock` or a `Euclid` in the graph will drive the
+  arpeggiator with exact rhythm through a signal-to-event bridge, which is its
+  own package and not yet written.
 - **No auto-connect.** `synth.connect(destination)`, always: the instrument is a
   node and the host owns the graph.
 - **No `addEffect`.** Same reason. An effect is `connect()`, and a send bus is
@@ -290,8 +359,11 @@ takes this same definition, with the same `params` and the same presets. Only
 - **No `onStart` / `onEnded` yet.** They wait on `onended` for `AdsrAmp` and
   `AdAmp`, which is a separate piece of work. Disposing idle voices waits on the
   same thing.
-- **No arpeggiator, no unison or detune spread, no MPE.** The definition shape
-  allows each of them and nothing here needs them yet.
+- **No unison or detune spread, no MPE.** The definition shape allows each of
+  them and nothing here needs them yet.
+- **No latch on a plain poly.** `latch` is inert while `arp` is `null`.
+  Deferred releases and a new press replacing the set is a coherent feature on
+  a plain poly; it is not one this module has been asked for.
 - **Allocation happens at call time**, not at the note's time: two notes
   scheduled into the future out of order get the allocator's least-recently-used
   state in call order. A host that schedules in order inside a lookahead window
@@ -307,7 +379,7 @@ where they are implemented, in [`src/_voices.ts`](src/_voices.ts).
   `algorithms/voice_allocator.h`, MIT, © 2012 Emilie Gillet. The algorithm is
   followed; the data structure is not copied. See
   [THIRD-PARTY-LICENSES.md](https://github.com/danigb/synthlet/blob/main/THIRD-PARTY-LICENSES.md).
-- `StealMode.Protect`, the default — the lowest and highest sounding notes are
+- `steal: "protect"`, the default — the lowest and highest sounding notes are
   protected and the oldest of the rest is taken — is JUCE's
   `Synthesiser::findVoiceToSteal`, described from its documentation.
 - The four mono priorities, and the claim that they are not reducible to each

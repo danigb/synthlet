@@ -73,6 +73,9 @@ export type ArpModeName =
  */
 export type ArpOrder = "pitch" | "played";
 
+/** Both, in the order an error message lists them. */
+export const ARP_ORDERS: ArpOrder[] = ["pitch", "played"];
+
 const NOTE_PRIORITIES: Record<NotePriorityName, NotePriority> = {
   last: NotePriority.Last,
   low: NotePriority.Low,
