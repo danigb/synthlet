@@ -131,6 +131,12 @@ describe.each(blepPackages)("%s", (pkg) => {
 // third read strategy over the same storage, a cloud of up to 64 independent
 // playheads, and it needed no change either: a grain playhead is a *moving
 // delay*, which is what the masked wrap and the Hermite read already are.
+// `chorus` is the fourth, and the one this file's header was written for: it
+// carried a Faust bitmask ring and a two-point linear read across eight
+// voices, which is the one combination Dattorro rules out by name. It needed
+// no change to the primitive either - a chorus voice is a delay whose read
+// position an LFO moves, which the masked wrap and the Hermite read already
+// are.
 // Six packages grew their own before it existed and none of them adopt it
 // retroactively for free: `karplus-strong` is next, and swapping its linear
 // interpolator removes the accidental lowpass that is currently its only
@@ -142,7 +148,12 @@ const delayPackages = packages.filter((pkg) =>
 
 describe("the delay line", () => {
   it("is shared by every package that needs a circular buffer", () => {
-    expect(delayPackages).toEqual(["analog-delay", "digital-delay", "granite"]);
+    expect(delayPackages).toEqual([
+      "analog-delay",
+      "chorus",
+      "digital-delay",
+      "granite",
+    ]);
   });
 });
 
@@ -172,6 +183,11 @@ const spectrumPackages = packages.filter((pkg) =>
 describe("the measuring instrument", () => {
   it("is shared by every package whose tests measure a spectrum", () => {
     expect(spectrumPackages).toEqual([
+      // `chorus` reads it for delay in milliseconds, LFO rate in hertz and
+      // L/R correlation, none of which its old suite could see: every defect
+      // the rewrite fixed passed a test that only asked whether the output
+      // was finite and non-zero.
+      "chorus",
       "digital-delay",
       "granite",
       "lfo",

@@ -23,9 +23,6 @@ which are permissive and both of which require the copyright and permission
 notice to be preserved. That preservation — not copyleft — is what this file is
 for. No synthlet package needs to change its own licence.
 
-One exception is `packages/chorus/dsp/chorus.dsp`, which contains hand-copied
-Faust *example* source rather than compiler output. See its entry below.
-
 ---
 
 ## Derivations
@@ -92,29 +89,6 @@ declare greyhole license "MIT";
 ```
 
 Notice required. See [Greyhole (MIT)](#greyhole-mit) below.
-
-### @synthlet/chorus
-
-The compiled DSP in `src/` is Faust compiler output and is covered by the note
-above.
-
-`packages/chorus/dsp/chorus.dsp` is different: its `chorus_mono` definition is
-copied verbatim from the Faust distribution's
-`examples/SAM/chorus/chorusForBrowser.dsp`. The Faust distribution is licensed
-under the GNU Lesser General Public License, version 2.1 or later:
-
-```
-FAUST compiler
-Copyright (C) 2003-2024 GRAME, Centre National de Creation Musicale
-Copyright (C) 2023-2024 INRIA
-```
-
-That one file is therefore **not** covered by synthlet's MIT licence. It is not
-published to npm — the package ships `dist` only — so this is a repository-level
-notice. The `chorus_mono` function has no equivalent in `faustlibraries`
-(`phaflangers.lib` declares only `flanger_mono`, `flanger_stereo`,
-`vibrato2_mono`, `phaser2_mono` and `phaser2_stereo`), so the copy cannot simply
-be replaced with a library reference.
 
 ### @synthlet/state-variable-filter
 

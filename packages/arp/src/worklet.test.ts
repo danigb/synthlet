@@ -3,8 +3,10 @@
 // two triggers inside one quantum advance the arpeggiator twice. At k-rate the
 // second one was invisible.
 //
-// The arpeggiator picks a random note, so what these assert is *where* the
-// output changes, not what it changes to.
+// Since ticket 03 of the arp folder the traversal is deterministic, so these
+// assert *what* the output changes to as well as where. The 40-try loop that
+// used to be in "advances twice for two triggers in one block" is gone with
+// it: it existed only because two random notes can repeat.
 
 describe("ArpProcessor", () => {
   let Worklet: any;
@@ -29,16 +31,22 @@ describe("ArpProcessor", () => {
   it("fills the block with one note when nothing is automated", () => {
     const out = run(new Worklet(), [1]);
     expect(new Set(out).size).toBe(1);
-    expect(out[0]).toBeGreaterThan(0);
+    // The first trigger sounds the root: MIDI 60, middle C.
+    expect(out[0]).toBeCloseTo(261.63, 2);
   });
 
   describe("a-rate", () => {
     const EDGE = 40;
 
     it("changes the note at the trigger's sample", () => {
-      // The first block opens the gate at sample 0 so the arpeggiator has a
-      // note; the second one closes it and re-fires mid-block.
+      // The first block fires a step and the second closes the gate, so the
+      // arpeggiator is sitting on a note with somewhere to go; the third
+      // re-fires mid-block. Two blocks and not one, because the engine emits
+      // the note it is sitting on and *then* advances - the very first
+      // trigger sounds the note the module was already holding, which is the
+      // root, and this test is about *where* the output changes.
       const worklet = new Worklet();
+      run(worklet, filled(1));
       run(worklet, filled(0));
       const out = run(worklet, edgeAt(EDGE));
 
@@ -49,18 +57,17 @@ describe("ArpProcessor", () => {
     });
 
     it("advances twice for two triggers in one block", () => {
-      // Over 40 tries, because two random notes can repeat. What is asserted
-      // is that *some* run produces three distinct values in one block, which
-      // one trigger per block cannot do.
-      let sawTwo = false;
-      for (let attempt = 0; attempt < 40 && !sawTwo; attempt++) {
-        const gate = new Float32Array(128);
-        gate.fill(1, 20, 30);
-        gate.fill(1, 80, 90);
-        const out = run(new Worklet(), gate);
-        if (new Set(out).size === 3) sawTwo = true;
-      }
-      expect(sawTwo).toBe(true);
+      // Three notes in one block, which one trigger per block cannot produce:
+      // the note held from construction, then the first two steps of a
+      // chromatic run up from middle C.
+      const gate = new Float32Array(128);
+      gate.fill(1, 20, 30);
+      gate.fill(1, 80, 90);
+      const out = run(new Worklet(), gate);
+
+      const midi = (hz: number) => Math.round(69 + 12 * Math.log2(hz / 440));
+      expect([out[0], out[20], out[80]].map(midi)).toEqual([60, 60, 61]);
+      expect(new Set(out).size).toBe(2);
     });
 
     it("does not advance while the trigger is held across a block", () => {
@@ -82,6 +89,8 @@ describe("ArpProcessor", () => {
   function params(trigger: ArrayLike<number>) {
     return {
       trigger,
+      mode: [0], // ArpMode.Up
+      octaveMode: [0], // ArpOctaveMode.Serial
       baseNote: [60],
       scale: [CHROMATIC],
       octaves: [4],
