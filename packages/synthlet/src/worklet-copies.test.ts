@@ -218,6 +218,68 @@ describe.each(spectrumPackages)("%s", (pkg) => {
   });
 });
 
+// And the voice allocator and note stack, under the same rule: the packages
+// that have to decide which voice plays a note. `instrument` is the only one
+// today, and the file is written for a second - a native poly worklet would
+// run it on the audio thread, which is why it is pure, allocates nothing in
+// its hot path, and lives in `scripts/` rather than inside the package.
+const voicesSource = readFileSync(join(root, "scripts/_voices.ts"), "utf8");
+const voicesPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_voices.ts")),
+);
+
+describe("the voice allocator", () => {
+  it("is shared by every package that hands notes to voices", () => {
+    expect(voicesPackages).toEqual(["instrument"]);
+  });
+});
+
+describe.each(voicesPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_voices.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_voices.ts"), "utf8"),
+    ).toBe(voicesSource);
+  });
+});
+
+// And the traversal, under the same rule: the packages that walk a sequence of
+// notes. There are two arpeggiators in the library and they are different
+// instruments - `arp` walks a scale it is *told*, as a worklet that self-plays
+// in the graph; `instrument` walks the notes a player is *holding*, driven by
+// the host's scheduler - but the index math is the same math, and one line of
+// it is load-bearing: `advance`'s `size === 1` guard. Without that guard
+// `UpDownExclusive` on a one-note set is an unbounded loop on the audio
+// thread, and a held-note arpeggiator meets a one-note set whenever a player
+// has one finger down. This test is what stops the second copy rediscovering
+// it the hard way.
+//
+// What they deliberately do *not* share is the spelling at their surfaces:
+// `@synthlet/arp` takes `ArpMode.UpDownExclusive` because it is a worklet and
+// its mode is an `AudioParam`, while `@synthlet/instrument` takes
+// `"UpDownExclusive"` because a preset is JSON somebody reads. See
+// `arp-enums.test.ts` for the guard on that.
+const traversalSource = readFileSync(
+  join(root, "scripts/_traversal.ts"),
+  "utf8",
+);
+const traversalPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_traversal.ts")),
+);
+
+describe("the traversal", () => {
+  it("is shared by every package that walks a sequence of notes", () => {
+    expect(traversalPackages).toEqual(["arp", "instrument"]);
+  });
+});
+
+describe.each(traversalPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_traversal.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_traversal.ts"), "utf8"),
+    ).toBe(traversalSource);
+  });
+});
+
 // And the levels transport, under the same rule - but the strongest case for it
 // yet, because here the thing that has to line up is the *reader*. One
 // `LevelMeterUI`, one React hook and one `subscribe` are meant to draw every

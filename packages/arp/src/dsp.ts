@@ -1,4 +1,18 @@
 import { createGateDetector } from "./_gate";
+import {
+  ArpMode,
+  ArpOctaveMode,
+  createTraversal,
+  type Traversal,
+} from "./_traversal";
+
+// The traversal - the two mode enums and the index math - lives in
+// `scripts/_traversal.ts` and is copied into this package and into
+// `@synthlet/instrument`, which walks the same modes over a stack of *held*
+// notes. It moved out of this file when the second consumer arrived; the
+// header of `createArpeggiator` below said it would.
+export { ArpMode, ArpOctaveMode } from "./_traversal";
+export type { Traversal, TraversalPosition } from "./_traversal";
 
 /**
  * Scales encoded as 12-bit pitch-class masks: bit `i` set means pitch class
@@ -39,77 +53,22 @@ export enum ArpScale {
 }
 
 /**
- * How the sequence is traversed. An index into a bank of traversal functions,
- * not a quantity - see `params.ts` for why it is k-rate.
- *
- * Both `UpDown` variants are spelled out rather than merged behind an
- * `inclusive` flag because Arturia, u-he and PolyBrute all ship the two as
- * separate menu entries, and a bare `UpDown` makes the user guess which one
- * they got. The index sequences in the comments are the KeyStep Pro manual's,
- * over a four-note set, and `dsp.test.ts` asserts them verbatim.
- */
-export enum ArpMode {
-  /** 1,2,3,4 · 1,2,3,4 … */
-  Up = 0,
-  /** 4,3,2,1 · 4,3,2,1 … */
-  Down = 1,
-  /** 1,2,3,4,3,2,1 · 2,3,4,3,2,1 …  the turnaround notes play once */
-  UpDownExclusive = 2,
-  /** 1,2,3,4,4,3,2,1 · 1,2,3,4,4,3,2,1 …  the turnaround notes play twice */
-  UpDownInclusive = 3,
-  /**
-   * Uniform over the set, but never the note just played. It wanders, and it
-   * can dwell on a region of the set - which is what people reach for when
-   * they want an arpeggiator to sound unpredictable.
-   */
-  Random = 4,
-  /**
-   * Every note of the set once per pass, in a fresh order each pass. It
-   * covers: a pass is always a complete statement of the chord, which is much
-   * closer to "an arpeggio" and much less likely to sound aimless over a long
-   * pattern. Ableton ships both for this reason.
-   */
-  RandomOther = 5,
-}
-
-/**
- * How a position in the sequence becomes a note and an octave. Two mappings
- * over the same `len * octaves` rectangle, and they are transposes of each
- * other - which is why both visit every (note, octave) pair exactly once per
- * cycle, and why the traversal does not know this parameter exists.
- *
- * A minor triad over three octaves, `Up`:
- *
- * ```
- * Serial   60 63 67 · 72 75 79 · 84 87 91
- * Repeat   60 72 84 · 63 75 87 · 67 79 91
- * ```
- *
- * The second is a completely different figure - octave leaps on each chord
- * tone rather than three stacked arpeggios - from an identical chord and an
- * identical direction. u-he's Hive is the only surveyed product that separates
- * the two; everything else, Mutable included, hardcodes `Serial`.
- */
-export enum ArpOctaveMode {
-  /** The whole set, then up an octave and the whole set again. Note-fast. */
-  Serial = 0,
-  /** Each note in every octave, then the next note. Octave-fast. */
-  Repeat = 1,
-}
-
-/**
  * The engine: one note per rising edge of `trigger`, held on the output as a
  * frequency in Hz until the next one.
  *
- * **It stores a position, not a note.** `flat` is one integer walking the
- * `len * octaves` sequence, and `readNote()` turns it into a MIDI note when the
- * note is read. Three things follow, and all three are the reason for the
- * shape: `baseNote` becomes a live transposition inlet rather than something
- * that only applies to the next pick; the value held before the first trigger
- * is the note about to be played, with no special case; and the traversal
- * refers to nothing but a flat index and its length, so it lifts out of this
- * file unchanged the day the polyphonic voice module wants the same modes over
- * a stack of held notes.
+ * **It stores a position, not a note.** The traversal holds one integer
+ * walking the `len * octaves` sequence, and `readNote()` turns it into a MIDI
+ * note when the note is read. Three things follow, and all three are the
+ * reason for the shape: `baseNote` becomes a live transposition inlet rather
+ * than something that only applies to the next pick; the value held before the
+ * first trigger is the note about to be played, with no special case; and the
+ * traversal refers to nothing but a flat index and its length, which is what
+ * let it lift out of this file unchanged into `scripts/_traversal.ts` when the
+ * polyphonic voice module wanted the same modes over a stack of held notes.
+ *
+ * What is left here is everything that is about *notes* rather than about
+ * positions: the scale mask, the transposition, the MIDI fold, the gate
+ * detector and the note-to-frequency memoisation.
  *
  * @param random the source of randomness. It is an argument so the tests can
  *   assert a *sequence* rather than a distribution - without it every
@@ -129,22 +88,13 @@ export function createArpeggiator(random: () => number = Math.random) {
 
   let scaleNotes = [0];
   let len = 1;
-  /** How many entries the sequence has: every note, in every octave. */
-  let size = 1;
-
-  /** Where in that sequence we are, and which way we are going. */
-  let flat = 0;
-  let direction = 1;
-  let seeded = false;
 
   /**
-   * `RandomOther`'s shuffle bag, preallocated at the largest sequence the
-   * parameters can declare - twelve pitch classes over ten octaves - so a
-   * refill writes in place and nothing allocates on a trigger.
+   * Where in the sequence we are. Sized at the largest sequence the parameters
+   * can declare - twelve pitch classes over ten octaves - so its shuffle bag
+   * refills in place and nothing allocates on a trigger.
    */
-  const bag = new Int32Array(120);
-  /** How far the bag has been drained. `>= size` means "refill before drawing". */
-  let bagIndex = 0;
+  const traversal: Traversal = createTraversal(120, random);
 
   const detectGate = createGateDetector();
   // Resolved on the first call to the note the sequence is sitting on. It used
@@ -172,10 +122,15 @@ export function createArpeggiator(random: () => number = Math.random) {
     octaveMode: ArpOctaveMode = ArpOctaveMode.Serial,
   ): number {
     $note = baseNote;
-    // Structural, but it does not change `size` - it only changes which pair a
-    // position names - so it is read here rather than in the rebuild branch,
-    // and it cannot invalidate the shuffle bag.
-    $octaveMode = octaveMode;
+    // Structural, but it does not change the size of the sequence - it only
+    // changes which pair a position names - so it is read here rather than in
+    // the rebuild branch, and it cannot invalidate the shuffle bag. The local
+    // copy exists only to keep this off the traversal on every sample: the
+    // mapping itself lives there now.
+    if ($octaveMode !== octaveMode) {
+      $octaveMode = octaveMode;
+      traversal.setOctaveMode(octaveMode);
+    }
     // A count, and floored once per call rather than per use: an `AudioParam`
     // hands over a fractional value from any ramp or from any node patched
     // into it, and `octaves: 2.5` used to span three. `Math.max` because the
@@ -188,55 +143,24 @@ export function createArpeggiator(random: () => number = Math.random) {
       $octaves = octaveCount;
       scaleNotes = getPitchClasses(scale);
       len = scaleNotes.length;
-      size = len * octaveCount;
-      // The bag is a permutation of the old sequence, so a set change
-      // invalidates it. Marked drained here, next to the index clamp, rather
-      // than rebuilt eagerly: the refill costs a shuffle and this branch can
-      // fire on a mode nobody is using.
-      bagIndex = size;
-      // Clamp *here*, where `size` is recomputed, and not on the next gate
-      // edge. `euclid` has a measured `NaN` from doing it the other way round:
-      // it rebuilds its pattern when `steps` changes but only wraps its cursor
-      // when a gate fires, so it indexes past the end for up to 122 ms.
-      if (flat >= size) flat = size - 1;
+      // Which invalidates the shuffle bag and clamps the position, both of
+      // which belong to the position rather than to the scale.
+      traversal.resize(len, octaveCount);
     }
 
     if ($mode !== mode) {
       $mode = mode;
-      // A mode change re-derives the *direction* and leaves the position
-      // alone, which is what Yarns does. Restarting the pattern here would
-      // make a modulated `mode` - a slow LFO patched into it, an arpeggiator
-      // whose direction is itself sequenced - unusable.
-      if (mode === ArpMode.Up) direction = 1;
-      else if (mode === ArpMode.Down) direction = -1;
-    }
-
-    if (!seeded) {
-      // `Down` starts at the top, as Yarns does. Seeded on the first call and
-      // not at construction, because `mode` is a parameter and is not known
-      // until one arrives.
-      seeded = true;
-      if (mode === ArpMode.Down) {
-        flat = size - 1;
-        direction = -1;
-      } else if (mode === ArpMode.RandomOther) {
-        // Enter the bag rather than stepping into it: the engine emits the
-        // note it is sitting on and *then* advances, so without this the
-        // starting index would sound once before the first pass and once
-        // inside it, and the first pass would not be a permutation.
-        // `-1` because nothing has been played yet, so the boundary swap has
-        // nothing to avoid.
-        refill(-1);
-        flat = bag[bagIndex++];
-      }
+      traversal.setMode(mode);
     }
 
     // Emit, then advance: the first trigger sounds the note the sequence is
     // already sitting on, which for `Up` is the root. rune06's Juno
-    // arpeggiator asserts the same thing of its own first note.
+    // arpeggiator asserts the same thing of its own first note. The traversal
+    // seeds itself on that first read, which is why `Down` starts at the top
+    // without this function knowing that it does.
     if (detectGate(trigger) === true) {
       current = readNote();
-      advance();
+      traversal.advance();
     } else if (Number.isNaN(current)) {
       current = readNote();
     }
@@ -251,15 +175,7 @@ export function createArpeggiator(random: () => number = Math.random) {
 
   /** The position, read as a note. */
   function readNote() {
-    let noteIndex: number;
-    let octaveIndex: number;
-    if ($octaveMode === ArpOctaveMode.Repeat) {
-      noteIndex = Math.floor(flat / $octaves) % len;
-      octaveIndex = flat % $octaves;
-    } else {
-      noteIndex = flat % len;
-      octaveIndex = Math.floor(flat / len) % $octaves;
-    }
+    const { noteIndex, octaveIndex } = traversal.read();
     let note = $note + scaleNotes[noteIndex] + octaveIndex * 12;
     // Fold, don't clamp. `baseNote` and `octaves` are declared 0...127 and
     // 1...10, and at both maxima this sum reaches MIDI 246 - 12.1 MHz - which
@@ -274,92 +190,6 @@ export function createArpeggiator(random: () => number = Math.random) {
     // keyboard.
     while (note > 127) note -= 12;
     return note;
-  }
-
-  /**
-   * One position drawn uniformly. The octave first and the note second, which
-   * is the order the memoryless pick drew them in before the sequence had an
-   * order; `flat` packs the two, so drawing the pair and drawing the index are
-   * the same draw. Under `ArpOctaveMode.Repeat` the packing names a different
-   * pair, which changes nothing: it is still uniform over the whole sequence,
-   * which is all either random mode promises.
-   */
-  function drawFlat() {
-    return Math.floor(random() * $octaves) * len + Math.floor(random() * len);
-  }
-
-  /**
-   * Fisher-Yates over the whole sequence, written into the preallocated bag.
-   * `avoid` is the position just played, or -1 if nothing has been.
-   */
-  function refill(avoid: number) {
-    for (let i = 0; i < size; i++) bag[i] = i;
-    for (let i = size - 1; i > 0; i--) {
-      const j = Math.floor(random() * (i + 1));
-      const t = bag[i];
-      bag[i] = bag[j];
-      bag[j] = t;
-    }
-    // Without this the boundary between two passes can repeat a note, which is
-    // the one thing this mode promises cannot happen. A plain Fisher-Yates
-    // gets it wrong once every `size` passes.
-    if (size > 1 && bag[0] === avoid) {
-      const j = 1 + Math.floor(random() * (size - 1));
-      const t = bag[0];
-      bag[0] = bag[j];
-      bag[j] = t;
-    }
-    bagIndex = 0;
-  }
-
-  /** One step along the sequence, in whatever direction the mode implies. */
-  function advance() {
-    // Required, not defensive. Without it `UpDownExclusive` on a one-note set
-    // loops forever - the exclusive turnaround sets `flat = size - 2 = -1`,
-    // which immediately re-wraps - and that is an unbounded loop on the audio
-    // thread, where the render quantum never returns and the context dies. It
-    // was reachable from the shipped defaults until this ticket changed them:
-    // `scale: 1` is the root alone. Plaits carries the same guard and calls it
-    // "a corner case for the Up/down pattern code".
-    if (size === 1) {
-      flat = 0;
-      return;
-    }
-
-    if ($mode === ArpMode.Random) {
-      // Draw until it differs, which is what Plaits does. Bounded by the guard
-      // above: with more than one entry in the sequence there is always
-      // something else to draw, and the expected number of draws is
-      // `size / (size - 1)` - 2.0 on a two-note set, 1.17 on a seven-note one.
-      // It runs on triggers, not on samples.
-      let next = drawFlat();
-      while (next === flat) next = drawFlat();
-      flat = next;
-      return;
-    }
-
-    if ($mode === ArpMode.RandomOther) {
-      if (bagIndex >= size) refill(flat);
-      flat = bag[bagIndex++];
-      return;
-    }
-
-    if ($mode === ArpMode.Up) direction = 1;
-    else if ($mode === ArpMode.Down) direction = -1;
-    flat += direction;
-
-    while (flat >= size || flat < 0) {
-      if ($mode === ArpMode.Up || $mode === ArpMode.Down) {
-        flat = (flat + size) % size;
-        break;
-      }
-      // The turnaround, at the ends of the *whole* sequence and not of each
-      // octave: the octave is inside the traversal, not outside it.
-      direction = -direction;
-      const inclusive = $mode === ArpMode.UpDownInclusive;
-      flat =
-        direction > 0 ? (inclusive ? 0 : 1) : inclusive ? size - 1 : size - 2;
-    }
   }
 }
 

@@ -120,7 +120,7 @@ const create = createWorkletConstructor<
  */
 export const TimestretchAudioSource = Object.assign(
   (
-    context: AudioContext,
+    context: BaseAudioContext,
     inputs: TimestretchAudioSourceInputs = {},
   ): TimestretchAudioSourceWorkletNode => {
     const node = create(context, inputs);

@@ -2,10 +2,17 @@
 // use ./scripts/copy_files.ts to copy this file to the right place
 // the goal is to avoid external dependencies on packages
 
-// A Connector defers construction of a node until it has a context: given an
-// AudioContext it returns the node. Anywhere a module takes a ParamInput you
-// can pass a number, a live AudioNode, or a Connector.
-export type Connector<N extends AudioNode> = (context: AudioContext) => N;
+// A Connector defers construction of a node until it has a context: given a
+// BaseAudioContext it returns the node. Anywhere a module takes a ParamInput
+// you can pass a number, a live AudioNode, or a Connector.
+//
+// `BaseAudioContext`, not `AudioContext`, everywhere a factory or a registrar
+// names a context: nothing in this library calls `resume`, `suspend`,
+// `baseLatency` or `outputLatency`, and `audioWorklet` is on the base type -
+// so an `OfflineAudioContext` builds and renders the same graph, which is how
+// a host verifies audio without listening to it. `AudioContext` is a subtype,
+// so every existing call site still compiles.
+export type Connector<N extends AudioNode> = (context: BaseAudioContext) => N;
 
 export type ParamInput = number | Connector<AudioNode> | AudioNode;
 
@@ -80,7 +87,7 @@ export function createWorkletConstructor<
 >(options: CreateWorkletOptions<N, P>) {
   const paramNames = options.descriptors.map((d) => d.name);
   const create = (
-    audioContext: AudioContext,
+    audioContext: BaseAudioContext,
     inputs: Partial<P> = {},
   ): Disposable<N> => {
     const node = new AudioWorkletNode(

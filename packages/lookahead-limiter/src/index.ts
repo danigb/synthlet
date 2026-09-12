@@ -139,7 +139,7 @@ const create = createWorkletConstructor<
  * ```
  */
 export const LookaheadLimiter = Object.assign(
-  (context: AudioContext, inputs: LookaheadLimiterInputs = {}) => {
+  (context: BaseAudioContext, inputs: LookaheadLimiterInputs = {}) => {
     // The transport from `scripts/_levels.ts` - the same file
     // `@synthlet/level-meter` reads, which is what lets one renderer and one
     // hook draw both without adaptation.

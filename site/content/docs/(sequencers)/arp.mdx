@@ -138,5 +138,19 @@ only the first two are here.
 
 **It does not take notes you hold.** `Arp` walks a pitch-class set you declare,
 so as-played order, latch and velocity are not available here and cannot be: a
-worklet cannot receive `noteOn`. Those belong to the arpeggiator mode of the
-polyphonic voice module, where the note stack and the velocity already exist.
+worklet cannot receive `noteOn`.
+
+Those live in the other arpeggiator: [`Instrument`](/docs/instrument)'s `arp`,
+which walks the notes a player is **holding** and is driven by the host's
+scheduler rather than self-playing in the graph. Press order, per-note velocity
+and a `"Chord"` mode are all free there, because the instrument owns a note
+stack and a polyphonic output.
+
+The two share `scripts/_traversal.ts` - the index math, the turnaround
+arithmetic and the guard that keeps a one-note set from hanging the audio
+thread - and nothing else. In particular they do not share the spelling of a
+mode: here it is `ArpMode.UpDownExclusive`, because the mode is an `AudioParam`
+carrying a number; there it is `"UpDownExclusive"`, because a preset is JSON
+somebody reads. Growing this enum to cover that one would be worse than a
+duplicate name: `mode` declares `maxValue: 5`, so a seventh member would be
+clamped to `RandomOther` and say nothing about it.

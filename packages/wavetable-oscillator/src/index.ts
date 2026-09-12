@@ -404,7 +404,7 @@ const create = createWorkletConstructor<
  * wrapper: `workletOptions` does see them.)
  */
 export const WavetableOscillator = Object.assign(
-  (context: AudioContext, options: WavetableOscillatorOptions = {}) => {
+  (context: BaseAudioContext, options: WavetableOscillatorOptions = {}) => {
     const node = create(context, options);
     if (options.catalog !== undefined)
       node.catalog = toCatalog(options.catalog);
