@@ -2,6 +2,8 @@ import * as synthlet from "./index";
 import type { ParamDescriptor } from "./_worklet";
 import {
   AnalogDelayMode,
+  ArpMode,
+  ArpOctaveMode,
   ArpScale,
   ClipType,
   LfoType,
@@ -306,6 +308,13 @@ const ENUM_PARAMS = [
     param: "type",
   },
   { name: "Lfo.type", values: LfoType, factory: synthlet.Lfo, param: "type" },
+  { name: "Arp.mode", values: ArpMode, factory: synthlet.Arp, param: "mode" },
+  {
+    name: "Arp.octaveMode",
+    values: ArpOctaveMode,
+    factory: synthlet.Arp,
+    param: "octaveMode",
+  },
   {
     name: "ClipAmp.type",
     values: ClipType,
@@ -350,6 +359,8 @@ describe.each(ENUM_PARAMS)("$name", ({ values, factory, param }) => {
 // stops being exported at all.
 const ENUMS = {
   AnalogDelayMode,
+  ArpMode,
+  ArpOctaveMode,
   ArpScale,
   ClipType,
   LfoType,

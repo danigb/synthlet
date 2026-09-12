@@ -52,7 +52,7 @@ export * from "@synthlet/wavetable-oscillator";
 // tsup's dts bundler drops enums from the `export *` re-exports above, so the
 // umbrella names them: without this they exist at runtime but not in the types.
 export { AnalogDelayMode } from "@synthlet/analog-delay";
-export { ArpScale } from "@synthlet/arp";
+export { ArpMode, ArpOctaveMode, ArpScale } from "@synthlet/arp";
 export { ClipType } from "@synthlet/clip-amp";
 export { LfoType } from "@synthlet/lfo";
 export { NoiseType } from "@synthlet/noise";

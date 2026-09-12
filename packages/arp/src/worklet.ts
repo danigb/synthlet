@@ -26,6 +26,8 @@ export class ArpProcessor extends AudioWorkletProcessor {
     const baseNote = params.baseNote[0];
     const scale = params.scale[0];
     const octaves = params.octaves[0];
+    const mode = params.mode[0];
+    const octaveMode = params.octaveMode[0];
 
     if (trigger.length > 1) {
       // The split write, one sample at a time: the previous note up to the
@@ -33,10 +35,19 @@ export class ArpProcessor extends AudioWorkletProcessor {
       // the note-to-frequency conversion, so the 127 samples that change
       // nothing cost a comparison each.
       for (let i = 0; i < output.length; i++) {
-        output[i] = this.a(trigger[i], baseNote, scale, octaves);
+        output[i] = this.a(
+          trigger[i],
+          baseNote,
+          scale,
+          octaves,
+          mode,
+          octaveMode,
+        );
       }
     } else {
-      output.fill(this.a(trigger[0], baseNote, scale, octaves));
+      output.fill(
+        this.a(trigger[0], baseNote, scale, octaves, mode, octaveMode),
+      );
     }
 
     return this.r;
