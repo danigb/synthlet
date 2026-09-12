@@ -27,28 +27,41 @@
 // saved 1.2 on a 0-1 parameter is a stale file, not a mistake, so it is clamped
 // silently.
 
-import { NotePriority } from "./_voices";
+import { ArpConfig } from "./arp-config";
 import { ParamDescriptor } from "./_worklet";
 import { ParamSpec } from "./fanout";
+import { NotePriorityName } from "./names";
 
 /**
  * The instrument options a preset may carry, under keys no definition may use
  * for a parameter of its own.
  *
- * A lead sound *is* its glide, and a bass preset with `priority: Low` is a
+ * A lead sound *is* its glide, and a bass preset with `priority: "low"` is a
  * different instrument from the same voice, so these travel with the sound.
  * They are applied by the allocator, never by the definition - see
  * `03-one-voice-at-a-time`.
+ *
+ * `latch` is deliberately **not** here. `glide`, `legato` and `priority` are
+ * reserved because a lead sound is its glide; nobody says a lead sound is its
+ * latch. It is performance state, exactly as `hold` is, and it lives on the
+ * instrument.
  */
 export type PresetOptions = {
   /** Seconds. */
   glide?: number;
   legato?: boolean;
-  priority?: NotePriority;
+  /** `"last"`, `"low"`, `"high"` or `"first"`. */
+  priority?: NotePriorityName;
+  /**
+   * The arpeggiator's pattern, or `null` for a plain poly. One value, already
+   * JSON, and validated on the same path as a direct assignment - so a stale
+   * saved sound cannot smuggle an unknown mode past the setter.
+   */
+  arp?: ArpConfig | null;
 };
 
 /** The reserved keys, in the order the rejection message lists them. */
-export const RESERVED = ["glide", "legato", "priority"] as const;
+export const RESERVED = ["glide", "legato", "priority", "arp"] as const;
 
 export type ReservedKey = (typeof RESERVED)[number];
 

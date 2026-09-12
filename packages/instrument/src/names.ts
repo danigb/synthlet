@@ -152,3 +152,22 @@ export const ARP_OCTAVE_MODE_NAMES = Object.keys(
 /** Whether a name is one of the seven. The `"Chord"` case `ARP_MODES` omits. */
 export const isArpModeName = (name: string): name is ArpModeName =>
   name === "Chord" || name in ARP_MODES;
+
+/**
+ * Back the other way, for `getPreset`: a stored sound holds names, so the
+ * member the allocator is actually using has to be spelled before it is saved.
+ * The only reverse direction anything needs - `steal` is fixed at
+ * construction and the arp keeps its config as a value already.
+ */
+export function priorityName(priority: NotePriority): NotePriorityName {
+  const found = PRIORITY_NAMES.find(
+    (name) => NOTE_PRIORITIES[name] === priority,
+  );
+  if (found === undefined) {
+    throw Error(
+      `No name for note priority ${priority}; known: ` +
+        `${PRIORITY_NAMES.join(", ")}`,
+    );
+  }
+  return found;
+}

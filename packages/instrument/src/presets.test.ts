@@ -2,7 +2,6 @@ import {
   AudioParamMock,
   createAudioContextMock,
 } from "../../synthlet/src/test-utils";
-import { NotePriority } from "./_voices";
 import { disposable } from "./_worklet";
 import { Instrument, InstrumentOptions, Voice, VoiceDefinition } from "./index";
 import {
@@ -112,12 +111,12 @@ describe("resolvePreset", () => {
       params: { cutoff: 900 },
       glide: 0.05,
       legato: true,
-      priority: NotePriority.Low,
+      priority: "low",
     });
     expect(fromObject.options).toEqual({
       glide: 0.05,
       legato: true,
-      priority: NotePriority.Low,
+      priority: "low",
     });
   });
 

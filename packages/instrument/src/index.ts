@@ -1,10 +1,22 @@
 import {
   Allocation,
+  createNoteStack,
   createVoiceAllocator,
   NotePriority,
   StealMode,
 } from "./_voices";
 import { ConnectedUnit, Disposable, disposable } from "./_worklet";
+import {
+  arpClear,
+  ArpEvent,
+  arpSilence,
+  arpSoundHeld,
+  arpStart,
+  arpStep as stepArp,
+  arpStop,
+  createArpState,
+} from "./arp";
+import { ArpConfig, toArpConfig } from "./arp-config";
 import { createFanouts, ParamSpec } from "./fanout";
 import {
   createMonoState,
@@ -13,6 +25,13 @@ import {
   monoStop,
   monoStopAll,
 } from "./mono";
+import {
+  NotePriorityName,
+  priorityName,
+  resolvePriority,
+  resolveStealMode,
+  StealModeName,
+} from "./names";
 import { toFrequency, toMidi } from "./notes";
 import {
   assertNoReservedParams,
@@ -37,7 +56,19 @@ export type {
   VoiceAllocator,
   VoiceAllocatorOptions,
 } from "./_voices";
+export { ArpConfig, toArpConfig } from "./arp-config";
 export type { ParamSpec } from "./fanout";
+// The user-zone names. Deliberately no arp *enum*: the instrument's mode is a
+// string union, so there is exactly one `ArpMode` in the library and the
+// umbrella's `export *` has no collision to resolve. `arp-enums.test.ts`
+// guards that, and `names.ts` explains the rule.
+export type {
+  ArpModeName,
+  ArpOctaveModeName,
+  ArpOrder,
+  NotePriorityName,
+  StealModeName,
+} from "./names";
 export { toFrequency, toMidi } from "./notes";
 export { fromDescriptor } from "./presets";
 export type {
@@ -124,16 +155,16 @@ export type InstrumentOptions<P extends string = string> = {
   preset?: string | Preset<P>;
   /** dB at construction. Default 0. */
   volume?: number;
-  /** Default `StealMode.Protect`. */
-  steal?: StealMode;
+  /** `"protect"`, `"lru"`, `"mru"` or `"drop"`. Default `"protect"`. */
+  steal?: StealModeName;
   /** Seconds. Default 0.005. */
   stealFade?: number;
   /**
-   * Which held note sounds. `voices: 1` only - a pool picks a voice, not a
-   * note. Default `NotePriority.Last`, the only one that always speaks on the
-   * beat.
+   * Which held note sounds: `"last"`, `"low"`, `"high"` or `"first"`.
+   * `voices: 1` only - a pool picks a voice, not a note. Default `"last"`,
+   * the only one that always speaks on the beat.
    */
-  priority?: NotePriority;
+  priority?: NotePriorityName;
   /**
    * `voices: 1` only. `false` (the default) retriggers the envelopes on every
    * note change - multi triggering, the ARP way. `true` leaves the gate high
@@ -167,6 +198,44 @@ export type InstrumentNode<
    * adapter's business.
    */
   hold: boolean;
+  /**
+   * The arpeggiator's pattern, or `null` for a plain poly. Assign to change.
+   *
+   * ```ts
+   * synth.arp = ArpConfig("UpDownExclusive", { octaves: 2 });
+   * ```
+   *
+   * A config is a value, so a pattern edit is a new value rather than a
+   * mutation: `synth.arp = { ...synth.arp, octaves: 3 }`. An assignment takes
+   * effect **at the next step** - the position, the held set and the sounding
+   * notes live on the instrument rather than in the config, so a new value
+   * never restarts the pattern. Switching to `null` sounds the held chord;
+   * switching back silences it and resumes at the preserved position.
+   */
+  arp: ArpConfig | null;
+  /**
+   * Hold the arpeggio without holding the keys. The sustain pedal's twin -
+   * both defer note-offs through one set, so the two cannot disagree - with
+   * one extra rule: a key pressed while nothing is physically down replaces
+   * the chord rather than adding to it. That is the Juno-60 manual's
+   * behaviour and Arturia's.
+   *
+   * Inert while `arp` is `null`. A latch on a plain poly is a coherent
+   * feature and not one this module has been asked for.
+   */
+  latch: boolean;
+  /**
+   * One step, from the host's scheduler. `duration` shortens the gate;
+   * without it a note lasts until the next step releases it.
+   *
+   * Never an internal timer: `arpStep` generates notes, never time. That is
+   * the transport this library declines to own, and it is what makes a
+   * `Clock` or a `Euclid` in the graph - through the deferred `EdgeTap`
+   * bridge - the thing that drives this with exact rhythm.
+   */
+  arpStep(time?: number, duration?: number): void;
+  /** Back to the first step of the current mode, at the next call. */
+  arpReset(): void;
   /** Portamento in seconds. The next note uses whatever it says. */
   glide: number;
   /** The definition's bank, in declaration order. `[]` without one. */
@@ -244,7 +313,13 @@ export function Instrument<P extends string, V extends Voice = Voice>(
   // covered here, because a steal fades the voice's gain before it is rewritten
   // and a plain reuse writes a new ramp start point at the note's own time.
   const allocator = createVoiceAllocator(size, {
-    steal: options.steal ?? StealMode.Protect,
+    // A name at the surface, a member inside: `_voices.ts` is written to be
+    // copied into a worklet, so the enum stays on that side of the boundary.
+    // `names.ts` has the rule.
+    steal:
+      options.steal === undefined
+        ? StealMode.Protect
+        : resolveStealMode(options.steal),
     sameNoteReuse: definition.sameNoteReuse ?? true,
   });
 
@@ -261,6 +336,8 @@ export function Instrument<P extends string, V extends Voice = Voice>(
   let disposed = false;
   let glide = options.glide ?? 0;
   let holding = false;
+  let latching = false;
+  let arp: ArpConfig | null = null;
 
   /**
    * `voices: 1` is a monosynth, not a pool of one: it routes through the note
@@ -268,12 +345,39 @@ export function Instrument<P extends string, V extends Voice = Voice>(
    */
   const mono = size === 1 ? createMonoState() : null;
   const monoOptions = {
-    priority: options.priority ?? NotePriority.Last,
+    priority:
+      options.priority === undefined
+        ? NotePriority.Last
+        : resolvePriority(options.priority),
     legato: options.legato ?? false,
   };
 
-  /** Note-offs swallowed by the sustain pedal, applied when it lifts. */
+  /** Note-offs swallowed by the sustain pedal or the latch, applied when it lifts. */
   const deferred = new Set<number>();
+
+  /**
+   * Every key down, at **every voice count and whether or not an arp is
+   * running**.
+   *
+   * The arpeggiator reads this set, and criterion 9 is what makes it
+   * unconditional: switching the arp on mid-chord has to find the chord
+   * already there, and switching it off has to hand the chord back. Before
+   * this ticket a held-note set existed only at `voices: 1`, inside
+   * `mono.ts` - which is the one thing the ticket got wrong about the code
+   * when it said this adds no new state.
+   *
+   * Deliberately not mono's own stack: in arp mode that one holds exactly the
+   * note the arp is sounding, so sharing them would make `priority: "low"`
+   * pick the lowest of the notes the arp had accumulated.
+   */
+  const held = createNoteStack(16);
+
+  /**
+   * The arpeggiator, over that set and the **same** `deferred` set the pedal
+   * owns - by reference, so `hold` and `latch` cannot hold different sets.
+   * Sized at the stack's capacity times the octave maximum.
+   */
+  const arpState = createArpState(held, deferred, 64);
 
   /** The last note each voice sounded, or -1. What glide ramps from. */
   const previous: number[] = [];
@@ -345,6 +449,97 @@ export function Instrument<P extends string, V extends Voice = Voice>(
     }
   }
 
+  /**
+   * Turn `arp.ts`'s answer into automation - the counterpart to `applyMono`.
+   *
+   * In mono a `stop` whose note the batch immediately replaces is a **silent
+   * stack removal**, never a `monoStop`: that would set `sounding = -1`, and
+   * the `monoStart` after it would then see a closed gate and write a pitch
+   * *step* with no retrigger dip - which loses the glide between steps and
+   * the retrigger both. Removing the note directly leaves `monoStart` to do
+   * the whole job. A `stop` that ends the arpeggio, with no start after it,
+   * has to close the gate itself.
+   *
+   * `arpStep` emits its stops before its starts, so one pass is enough.
+   */
+  function applyArp(events: ArpEvent[]) {
+    const replaced = events.some((event) => event.kind === "start");
+    for (const event of events) {
+      if (event.kind === "stop") {
+        if (mono) {
+          mono.stack.remove(event.note);
+          if (!replaced) applyMono(monoStopAll(mono, event.time));
+        } else {
+          noteOff(event.note, event.time);
+        }
+        continue;
+      }
+      if (mono) {
+        applyMono(
+          monoStart(mono, monoOptions, {
+            note: event.note,
+            velocity: event.velocity,
+            time: event.time,
+          }),
+        );
+        if (event.duration !== undefined) {
+          applyMono(
+            monoStop(mono, monoOptions, {
+              note: event.note,
+              time: event.time + event.duration,
+            }),
+          );
+        }
+      } else {
+        schedule(event.note, event.velocity, event.time, event.duration);
+      }
+    }
+  }
+
+  /**
+   * Every release the pedal or the latch swallowed, applied now - at
+   * `currentTime`, not at the time each release was asked for, because that
+   * moment has passed.
+   *
+   * In arp mode nothing is written: the note leaves the held set and the
+   * *next step* stops it, which is what "the arpeggio stops at the next step"
+   * means.
+   */
+  function applyDeferred() {
+    const at = context.currentTime;
+    for (const midi of deferred) {
+      held.remove(midi);
+      if (!arp) noteOff(midi, at);
+    }
+    deferred.clear();
+  }
+
+  /**
+   * `synth.arp = …`. Only the two transitions through `null` write anything;
+   * a change from one config to another is picked up at the next step, which
+   * is what keeps a pattern edit from restarting the pattern.
+   */
+  function assignArp(value: ArpConfig | Partial<ArpConfig> | null | undefined) {
+    const next = toArpConfig(value);
+    const previous = arp;
+    arp = next;
+    // Before `ready` there is no pool to write to and nothing is held.
+    if (queued) return;
+    const at = context.currentTime;
+    if (previous === null && next !== null) {
+      // A plain poly becomes an arpeggio: what is sounding through the normal
+      // path stops, and the held set is already the set the arp will read -
+      // nothing needs seeding.
+      if (mono) applyMono(monoStopAll(mono, at));
+      else for (let i = 0; i < held.size; i++) noteOff(held.sorted(i).note, at);
+    } else if (previous !== null && next === null) {
+      // And back: the arp's note stops and the whole held chord sounds, each
+      // note with its own velocity. One batch, so in mono the stop is the
+      // silent removal `applyArp` describes rather than a closed gate.
+      applyArp([...arpSilence(arpState, at), ...arpSoundHeld(arpState, at)]);
+    }
+  }
+
   function noteOff(midi: number, time: number) {
     if (mono) {
       applyMono(monoStop(mono, monoOptions, { note: midi, time }));
@@ -360,8 +555,11 @@ export function Instrument<P extends string, V extends Voice = Voice>(
 
   function stopAll(time: number) {
     // A panic is a panic: the pedal does not defer it, and it takes the
-    // deferred notes with it.
+    // deferred notes with it. The held set, the keys the latch was watching
+    // and the arp's position go too - "`stop()` with no argument clears
+    // everything, arp position included".
     deferred.clear();
+    arpClear(arpState);
     if (mono) {
       applyMono(monoStopAll(mono, time));
       voices[0].gate.cancelScheduledValues(time);
@@ -442,8 +640,22 @@ export function Instrument<P extends string, V extends Voice = Voice>(
         { voice: null },
       );
     }
+    if (arp) {
+      // A press changes the set the next step will read and sounds nothing
+      // now: a step is what sounds. Criterion 8, and Arturia's
+      // quantise-to-step behaviour. `arpStart` owns the held set here,
+      // because the latch's "new chord" rule has to clear it *before* the
+      // press is recorded.
+      applyArp(arpStart(arpState, { note: midi, velocity }, latching));
+      return Object.assign(
+        ((when?: number) => stop({ note: midi, time: when })) as StopFn,
+        { voice: null },
+      );
+    }
+
     // The key is down again, so a swallowed release for it is void.
     deferred.delete(midi);
+    held.push(midi, velocity);
 
     if (mono) {
       applyMono(monoStart(mono, monoOptions, { note: midi, velocity, time }));
@@ -494,13 +706,22 @@ export function Instrument<P extends string, V extends Voice = Voice>(
       stopAll(at);
       return;
     }
+    if (arp) {
+      // One boolean, which is what makes the pedal and the latch impossible
+      // to disagree about a release. The note the arp is sounding runs until
+      // the next step releases it.
+      applyArp(arpStop(arpState, midi, holding || latching));
+      return;
+    }
     if (holding) {
-      // The pedal is down: remember the release rather than writing it.
-      // rune06's `set_hold` and Mutable's `ignore_note_off_messages_` are the
-      // same one line, and it is what ticket 05's latch will reuse.
+      // The pedal is down: remember the release rather than writing it, and
+      // the key is still held, so it stays in the set. rune06's `set_hold`
+      // and Mutable's `ignore_note_off_messages_` are the same one line, and
+      // `latch` is now its twin.
       deferred.add(midi);
       return;
     }
+    held.remove(midi);
     noteOff(midi, at);
   }
 
@@ -512,7 +733,16 @@ export function Instrument<P extends string, V extends Voice = Voice>(
   function applyOptions(values: PresetOptions) {
     if (values.glide !== undefined) glide = values.glide;
     if (values.legato !== undefined) monoOptions.legato = values.legato;
-    if (values.priority !== undefined) monoOptions.priority = values.priority;
+    if (values.priority !== undefined) {
+      // A name in the saved JSON, validated here. Before this it was only
+      // TypeScript checking, which is no help to a preset read from a file.
+      monoOptions.priority = resolvePriority(values.priority);
+    }
+    // Through the same setter a direct assignment uses, so a preset loaded
+    // from JSON is validated on one path and gets the same two transitions.
+    // Applied only when present, as the other three are: a preset written
+    // before this ticket must not silently stop a running arp.
+    if (values.arp !== undefined) assignArp(values.arp);
   }
 
   function applyPreset(preset: string | Preset<P>, time?: number) {
@@ -552,7 +782,11 @@ export function Instrument<P extends string, V extends Voice = Voice>(
       params: values,
       glide,
       legato: monoOptions.legato,
-      priority: monoOptions.priority,
+      // A name, not a member: a preset is JSON somebody reads and shares.
+      priority: priorityName(monoOptions.priority),
+      // One value, already JSON, already complete. `latch` is deliberately
+      // absent: it is performance state, as `hold` is, not part of a sound.
+      arp,
     };
   }
 
@@ -599,6 +833,23 @@ export function Instrument<P extends string, V extends Voice = Voice>(
       }
       // Late on arrival: dropped, silently, the way smplr drops one.
       if (event.time < context.currentTime) continue;
+      if (arp) {
+        // An arp was configured before `ready` - by an option, a preset, or a
+        // direct assignment - so these queued notes are the chord it will
+        // arpeggiate, not notes to sound. A step is what sounds, which is the
+        // same rule a press after `ready` gets.
+        applyArp(
+          arpStart(
+            arpState,
+            { note: event.note, velocity: event.velocity },
+            latching,
+          ),
+        );
+        continue;
+      }
+      // The held set is maintained for notes that arrived early too, so an
+      // arp switched on after `ready` finds them. A dropped note is not held.
+      held.push(event.note, event.velocity);
       schedule(event.note, event.velocity, event.time, event.duration);
     }
   })();
@@ -614,6 +865,24 @@ export function Instrument<P extends string, V extends Voice = Voice>(
     getPreset,
     start,
     stop,
+    arpStep(time = context.currentTime, duration?: number) {
+      // A step before `ready` is dropped rather than queued: a step is a
+      // musical instant, not an event with a time worth keeping.
+      if (queued || !arp) return;
+      applyArp(
+        // The release lands one sample before the note, which is the idiom
+        // `schedule` and `mono.ts` already use. Two `setValueAtTime` calls at
+        // one instant are not an edge the audio thread can see, so without it
+        // a repeated note - or a note landing on the voice just released -
+        // gets no gate fall and no retrigger.
+        stepArp(arpState, arp, time, time - 1 / context.sampleRate, duration),
+      );
+    },
+    arpReset() {
+      // The next step reads the first position *for the current mode*: the
+      // root for `Up`, the top for `Down`, a fresh bag for `RandomOther`.
+      arpState.traversal.reset();
+    },
     dispose() {
       disposed = true;
       cascade.call(node);
@@ -621,19 +890,30 @@ export function Instrument<P extends string, V extends Voice = Voice>(
   });
 
   Object.defineProperties(node, {
+    // `hold` and `latch` are one mechanism through one set, so they are two
+    // symmetric three-line setters: either one going false applies the
+    // swallowed releases, but only if the other is not still holding them.
+    // That is criterion 10, and it falls out rather than being arranged.
     hold: {
       enumerable: true,
       get: () => holding,
       set(value: boolean) {
         holding = value;
-        if (value) return;
-        // The pedal lifts: every key that came up while it was down comes up
-        // now. `currentTime`, not the time each release was asked for - that
-        // moment has passed.
-        const at = context.currentTime;
-        for (const midi of deferred) noteOff(midi, at);
-        deferred.clear();
+        if (!value && !latching) applyDeferred();
       },
+    },
+    latch: {
+      enumerable: true,
+      get: () => latching,
+      set(value: boolean) {
+        latching = value;
+        if (!value && !holding) applyDeferred();
+      },
+    },
+    arp: {
+      enumerable: true,
+      get: () => arp,
+      set: assignArp,
     },
     glide: {
       enumerable: true,
