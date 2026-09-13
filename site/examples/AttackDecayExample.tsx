@@ -3,7 +3,7 @@
 import { Slider } from "@/examples/components/Slider";
 import { useState } from "react";
 import { AdEnv, Compound, Gain, Oscillator, Param } from "synthlet";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 const AttackDecaySynth = (ac: AudioContext) => {
   const trigger = Param(ac);

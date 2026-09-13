@@ -7,7 +7,7 @@ import {
   TriggerButton,
 } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 function DattorroSynth(ac: AudioContext) {
   const clave = ClaveDrum(ac);

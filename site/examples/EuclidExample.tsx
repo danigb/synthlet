@@ -13,9 +13,9 @@ import {
   TomDrum,
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
-import { PatternView } from "./components/PatternView";
+import { PatternView } from "@/components/audio/PatternView";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 /**
  * The settings the nodes are built with, and the seed for the drawing above

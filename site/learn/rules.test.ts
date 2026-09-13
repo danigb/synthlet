@@ -130,6 +130,16 @@ const SPECIFIER = /\bfrom\s*["']([^"']+)["']|\bimport\s*["']([^"']+)["']/g;
 /** The registry's own files. They map ids to modules; they are not patches. */
 const isRegistryFile = (path: string) => path.endsWith(`${sep}index.ts`);
 
+/**
+ * A test sitting beside the patch it checks.
+ *
+ * It is not a patch - it is not registered, its path is not an id, and it may
+ * import whatever a test needs, including the kit it is rendering. Excluded
+ * from both halves of this rule rather than from one, because "is this file a
+ * patch" has one answer.
+ */
+const isTestFile = (path: string) => /\.test\.tsx?$/.test(path);
+
 function forbiddenImport(specifier: string): string | undefined {
   // `./harmonics.ts?raw` is the source the kit shows under "View the code"
   // (ticket 03). The query says how to load the file, not what it is.
@@ -143,7 +153,9 @@ function forbiddenImport(specifier: string): string | undefined {
 }
 
 describe("rule 2: a patch is synthlet code and a manifest", () => {
-  const files = walk(PATCHES, [".ts"]);
+  const files = walk(PATCHES, [".ts", ".tsx"]).filter(
+    (file) => !isTestFile(file),
+  );
 
   it("imports nothing that knows what anything looks like", () => {
     const violations: string[] = [];

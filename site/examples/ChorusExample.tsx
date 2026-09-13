@@ -13,7 +13,7 @@ import {
 } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 // A detuned saw stack, not the single 440 Hz sine this demo used to have. A
 // chorus on one oscillator demonstrates nothing: the effect is about what

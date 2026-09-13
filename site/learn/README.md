@@ -142,14 +142,116 @@ last node is a gain at 0 that the kit's Play toggle opens, on the click that
 also resumes the context. Put the analyser _before_ that gain, so a silent
 widget is still drawing.
 
+## The kit
+
+One widget, every lesson. `<Patch id="sound/harmonics" show={[...]} />` resolves
+the patch in the registry, filters its controls, and hands both to
+`kit/LessonWidget.tsx`, which is the only file in the section that decides what
+a widget looks like.
+
+| File                     | What                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------- |
+| `kit/LessonWidget.tsx`   | The frame: header (label, meter, Play), the views, the controls, the code                 |
+| `kit/PlayToggle.tsx`     | The gate. A `button` with `aria-pressed`; opens the output gain and resumes the context   |
+| `kit/useLessonPatch.ts`  | Build, gate, read, write, dispose — the widget's whole relationship with the audio thread |
+| `kit/scale.ts`           | The four tapers: `lin`, `log`, `time`, `db`. `scale.test.ts` states them as arithmetic    |
+| `kit/controls/*`         | One renderer per `Control.kind`, plus `Field.tsx`, the row they all sit in                |
+| `kit/views/*`            | One per `View.kind`, plus `ViewFrame.tsx`                                                 |
+| `kit/CodeView.tsx`       | The `?raw` source, manifest folded                                                        |
+| `kit/useTokenColors.tsx` | The two cable colours, for the canvases                                                   |
+| `kit/test-hooks.ts`      | `window.__learn__`, in non-production builds only                                         |
+
+### Nothing is built until the reader touches it
+
+The docs' rule is that a page must not arrive making a sound. The tutorial's is
+one step stronger: **a lesson page arrives having built nothing at all** — no
+`AudioContext`, no graph, no worklet. The first interaction with a widget builds
+it, silently, because the patch ends in a gain at 0; Play, a key or a gate opens
+that gain and resumes the context in the same gesture.
+
+Two consequences worth knowing:
+
+- A widget draws nothing before its first interaction. There is no analyser yet.
+- A write that arrives before the build has finished is **queued**, not dropped,
+  so dragging a slider the instant the page loads does what it looks like it
+  does.
+
+A patch whose compound is not usable the moment `build` returns — `Instrument`,
+whose `params` are empty until its worklets register — exposes a `ready`
+promise. The kit awaits it and reads no accessor before it resolves.
+
+### The view options
+
+| View       | Option                                    | What it does                                                                       |
+| ---------- | ----------------------------------------- | ---------------------------------------------------------------------------------- |
+| `scope`    | `window: "wave" \| "contour"`, `seconds?` | `wave` is a few cycles; `contour` is a rolling peak history, which is an envelope  |
+| `spectrum` | `marks: number[] \| (synth) => number[]`  | Frequencies ruled over the trace: the prediction beside the measurement, per frame |
+| `spectrum` | `minDb`, `maxDb`                          | Written onto the analyser; they are its display range                              |
+| `meter`    | `show: ("peak" \| "rms" \| "lufs")[]`     | Defaults to `["peak"]`. `lufs` turns on the `LevelMeter`'s loudness path           |
+| `keyboard` | `octaves`, `from`                         | A view as well as a control, so a lesson's `show` cannot take the keys away        |
+| `diagram`  | `compact`                                 | Renders nothing yet — ticket 07                                                    |
+
+A patch may also set `code: { lines: [from, to] }` to open "View the code" on a
+slice of its file rather than the whole of it.
+
+### "View the code"
+
+`next.config.mjs` pushes one webpack rule — `resourceQuery: /raw/`,
+`type: "asset/source"` — so a chapter index can import its own patch twice:
+
+```ts
+import harmonics from "./harmonics";
+import harmonicsSource from "./harmonics.ts?raw";
+```
+
+The registry keeps the second beside the first and `getPatchSource(id)` returns
+it. There is no second copy of any patch anywhere, which is the point: editing
+`sound/harmonics.ts` changes both what plays and what is shown.
+
+**It is a plain `<pre>`, not highlighted.** The site's shiki pipeline runs at
+build time inside `fumadocs-mdx` and the widget is a client component; reaching
+it would mean shipping a highlighter to the browser. If that becomes worth it,
+the change is `kit/CodeView.tsx` alone.
+
+### Colours on a canvas
+
+A canvas cannot be styled, and rule 4 forbids the kit from writing a colour. So
+`kit/useTokenColors.tsx` renders two zero-size markers carrying
+`text-learn-audio` and `text-learn-control`, reads their resolved `color`, and
+re-reads it when `class` or `data-learn-theme` changes anywhere above — which is
+both the dark switch and `?theme=ink`. No literal, and a running scope restyles.
+
+### The test hooks
+
+In any build where `process.env.NODE_ENV !== "production"` the kit publishes:
+
+```ts
+window.__learn__.level(); // dBFS of the loudest mounted widget; -Infinity when silent
+window.__learn__.live(); // built synths plus live meter taps; 0 is a clean page
+```
+
+Webpack inlines `NODE_ENV`, so the deployed export ships neither. Ticket 15's
+headless pass reads them; so can you, in `next dev`.
+
+### The shared audio components
+
+`site/components/audio/` holds the parts both sections use: `Scope`,
+`Spectrum`, `Keyboard`, `MasterMeter`, `SynthSlot`, `PatternView` and
+`useSynth`. The docs' `Slider`, `Selector` and `ExamplePane` stay with the docs;
+the kit's controls are its own. Where the kit needed something of them the docs
+did not have — a trace colour, key colours, spectrum marks — it is an optional
+prop whose default is exactly what the documentation rendered before.
+
 ## The manifest
 
 `patches/define.ts` is the whole type surface, and it imports nothing.
 
 - `Control.kind`: `slider | select | toggle | xy | gate | keyboard | button`
-- `scale`: `lin | log | db`; `unit` is a string the kit prints
-- `View.kind`: `scope | spectrum | meter | pattern | diagram`, each with its own
-  optional `options` bag (`scope.window`, `spectrum.marks`, `meter.show`, …)
+- `scale`: `lin | log | db | time`; `unit` is a string the kit prints
+- `View.kind`: `scope | spectrum | meter | keyboard | pattern | diagram`, each
+  with its own optional `options` bag (`scope.window`, `spectrum.marks`,
+  `meter.show`, …) — see "The view options" above
+- `code`: `{ lines: [from, to] }`, the slice "View the code" opens on
 - `Diagram`: `"auto"` — reserved for `graph()` — or `{ nodes, edges }`
 - `resolveControls(patch, show)` filters by `show` in **manifest** order;
   `unknownControls(patch, show)` is what rule 3 reports
@@ -164,13 +266,13 @@ oscillators). The kit never needs to know which it was handed.
 `learn/rules.test.ts`, run by `npm --prefix site test` and by CI (a step in the
 `build` job of `.github/workflows/test.yml`).
 
-| #   | What it checks                                                                                                                                                                                          | Where                                         |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| 1   | No `import`/`export` at line start, no `className`, no `style=`, and no tag outside the vocabulary. Code fences and inline code are stripped first, so prose _about_ an import is fine                  | `content/learn/**/*.mdx`                      |
-| 2   | No import of `react`, `react-dom`, `next`, or anything under `kit/` or `app/` (a `?raw` query is ignored); every patch on disk is registered; key, `id` and path agree; control ids are unique          | `learn/patches/**/*.ts`                       |
-| 3   | Every `<Patch id>` resolves in the registry and every name in `show` is one of that patch's controls. When the registry gains a `voice` id, every `preset` is checked against `learn/voice`'s two banks | content ↔ registry                            |
-| 4   | No `#hex`, `rgb(`, `hsl(`, no Tailwind palette class (`bg-sky-500` and the other twenty-one palettes), no `fd-` class. `theme/*.css` are the token files and are exempt                                 | `learn/kit`, `learn/theme/*.tsx`, `app/learn` |
-| 5   | Frontmatter passes `learn/frontmatter.ts`; every `book` part is 1–63; every lesson carries `core`, `book`, `hear` and `status`                                                                          | `content/learn/**/*.mdx`                      |
+| #   | What it checks                                                                                                                                                                                                                                            | Where                                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| 1   | No `import`/`export` at line start, no `className`, no `style=`, and no tag outside the vocabulary. Code fences and inline code are stripped first, so prose _about_ an import is fine                                                                    | `content/learn/**/*.mdx`                      |
+| 2   | No import of `react`, `react-dom`, `next`, or anything under `kit/` or `app/` (a `?raw` query is ignored); every patch on disk is registered; key, `id` and path agree; control ids are unique. A `*.test.ts` beside a patch is not a patch and is exempt | `learn/patches/**/*.ts`                       |
+| 3   | Every `<Patch id>` resolves in the registry and every name in `show` is one of that patch's controls. When the registry gains a `voice` id, every `preset` is checked against `learn/voice`'s two banks                                                   | content ↔ registry                            |
+| 4   | No `#hex`, `rgb(`, `hsl(`, no Tailwind palette class (`bg-sky-500` and the other twenty-one palettes), no `fd-` class. `theme/*.css` are the token files and are exempt                                                                                   | `learn/kit`, `learn/theme/*.tsx`, `app/learn` |
+| 5   | Frontmatter passes `learn/frontmatter.ts`; every `book` part is 1–63; every lesson carries `core`, `book`, `hear` and `status`                                                                                                                            | `content/learn/**/*.mdx`                      |
 
 Each violation names the file and the rule. They are collected rather than
 thrown, so four mistakes are four lines and not four runs.

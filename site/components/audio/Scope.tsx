@@ -35,11 +35,19 @@ export function Scope({
   label,
   color = "#0ea5e9",
   className,
+  canvasClassName = "w-full rounded border border-fd-border",
 }: {
   analyser: AnalyserNode | null;
   label: string;
+  /**
+   * The trace. The docs pass nothing and get the blue they always had; the
+   * tutorial kit passes its `--learn-audio` token, resolved, so a scope restyles
+   * with the rest of the section.
+   */
   color?: string;
   className?: string;
+  /** The canvas's own frame. Defaults to the documentation's. */
+  canvasClassName?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
@@ -105,7 +113,7 @@ export function Scope({
         ref={canvasRef}
         width={WIDTH}
         height={HEIGHT}
-        className="w-full rounded border border-fd-border"
+        className={canvasClassName}
       />
     </div>
   );

@@ -4,10 +4,10 @@ import { useState } from "react";
 import { Compound, Decimator, Gain, Oscillator, Param } from "synthlet";
 import { CheckboxParam } from "./components/CheckboxParam";
 import { ExamplePane } from "./components/ExamplePane";
-import { Scope } from "./components/Scope";
+import { Scope } from "@/components/audio/Scope";
 import { Slider } from "./components/Slider";
-import { Spectrum } from "./components/Spectrum";
-import { useSynth } from "./useSynth";
+import { Spectrum } from "@/components/audio/Spectrum";
+import { useSynth } from "@/components/audio/useSynth";
 
 // Synth Secrets Part 17 as a patch you can turn: one sine, one converter, and
 // the two filters the chapter spends its second half on.

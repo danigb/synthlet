@@ -14,7 +14,7 @@ import {
 } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 /** The table the oscillator generates for itself, and the initial selection. */
 const BUILT_IN = "Built-in";

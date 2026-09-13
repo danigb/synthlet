@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /*
@@ -13,6 +14,18 @@ import { defineConfig } from "vitest/config";
  * `/site/`, so the two runners never see each other's files.
  */
 export default defineConfig({
+  // Next compiles JSX with the automatic runtime and the site's files are
+  // written for it - no `import React` anywhere. Without this, a `.tsx` test
+  // transpiles to `React.createElement` and fails on a name nothing declares.
+  esbuild: { jsx: "automatic" },
+  resolve: {
+    // The same `@/*` Next and `tsconfig.json` give the site. The kit reaches the
+    // shared audio components through it, so a test that renders the kit has to
+    // resolve it the same way the browser will.
+    alias: {
+      "@": fileURLToPath(new URL(".", import.meta.url)),
+    },
+  },
   test: {
     include: ["learn/**/*.test.ts", "learn/**/*.test.tsx"],
     environment: "node",

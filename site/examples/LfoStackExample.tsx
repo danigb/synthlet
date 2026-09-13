@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { Compound, Gain, Lfo, LfoType } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
-import { Scope } from "./components/Scope";
-import { useSynth } from "./useSynth";
+import { Scope } from "@/components/audio/Scope";
+import { useSynth } from "@/components/audio/useSynth";
 
 /**
  * Slow enough that two of them at the same rate stay visibly locked for as long

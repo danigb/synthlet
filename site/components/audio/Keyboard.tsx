@@ -59,8 +59,33 @@ const COMPUTER_KEYS: Record<string, number> = {
   u: 23,
 };
 
-const noteName = (midi: number) =>
+/** `60` is `C4`, the convention every DAW displays. Exported because the
+ * tutorial kit speaks scientific pitch names to its patches and the keys speak
+ * MIDI numbers; the translation has to be the same one in both places. */
+export const noteName = (midi: number) =>
   NOTE_NAMES[((midi % 12) + 12) % 12] + (Math.floor(midi / 12) - 1);
+
+/**
+ * What a key looks like, in four classes.
+ *
+ * The keys are shared between the documentation and the tutorial, and the two
+ * sections do not agree about colour: one draws in fumadocs' tokens, the other
+ * may write nothing but its own. So the colours are a prop with the docs' own
+ * values as the default - every existing caller renders exactly as it did.
+ */
+export type KeyboardClasses = {
+  white: string;
+  whiteHeld: string;
+  black: string;
+  blackHeld: string;
+};
+
+const DOCS_KEYS: KeyboardClasses = {
+  white: "border border-fd-border bg-white text-neutral-500",
+  whiteHeld: "border border-fd-border bg-fd-primary text-fd-primary-foreground",
+  black: "border border-neutral-900 bg-neutral-900",
+  blackHeld: "border border-neutral-900 bg-fd-primary",
+};
 
 /**
  * A playable keyboard: pointer events and the computer keyboard turned into
@@ -74,6 +99,7 @@ export function Keyboard({
   baseNote = 48,
   octaves = 2,
   computerKeys = true,
+  classes,
   onNoteOn,
   onNoteOff,
 }: {
@@ -83,9 +109,13 @@ export function Keyboard({
   octaves?: number;
   /** Whether the `z`/`q` rows play. Default true. */
   computerKeys?: boolean;
+  /** Override the key colours. The docs pass nothing; the tutorial kit passes
+   * its own tokens, so the same keys follow whichever section drew them. */
+  classes?: Partial<KeyboardClasses>;
   onNoteOn: (note: number) => void;
   onNoteOff: (note: number) => void;
 }) {
+  const skin = { ...DOCS_KEYS, ...classes };
   const [held, setHeld] = useState<ReadonlySet<number>>(() => new Set());
   const heldRef = useRef(new Set<number>());
 
@@ -185,10 +215,8 @@ export function Keyboard({
             key={note}
             aria-label={noteName(note)}
             className={
-              "flex-1 border border-fd-border rounded-b flex items-end justify-center pb-1 text-[10px] " +
-              (held.has(note)
-                ? "bg-fd-primary text-fd-primary-foreground"
-                : "bg-white text-neutral-500")
+              "flex-1 rounded-b flex items-end justify-center pb-1 text-[10px] " +
+              (held.has(note) ? skin.whiteHeld : skin.white)
             }
             {...keyProps(note)}
           >
@@ -202,8 +230,8 @@ export function Keyboard({
             key={note}
             aria-label={noteName(note)}
             className={
-              "absolute top-0 h-2/3 rounded-b border border-neutral-900 pointer-events-auto " +
-              (held.has(note) ? "bg-fd-primary" : "bg-neutral-900")
+              "absolute top-0 h-2/3 rounded-b pointer-events-auto " +
+              (held.has(note) ? skin.blackHeld : skin.black)
             }
             style={{
               left: `${position * width}%`,

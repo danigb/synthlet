@@ -1,6 +1,6 @@
 import { createSynthAudioContext } from "@/app/audio-context";
 import { useEffect, useState } from "react";
-import { useEnclosingSynthSlot } from "./components/SynthSlot";
+import { useEnclosingSynthSlot } from "./SynthSlot";
 
 export type CreateSynth<T extends Synth> = (context: AudioContext) => T;
 export type Synth = {

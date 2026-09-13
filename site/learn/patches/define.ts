@@ -35,9 +35,12 @@ export type ParamRef<S> = (synth: S) => ValueRef;
  *
  * `lin` is the default. `log` is for anything measured in Hz, where the ear
  * hears ratios and a linear knob spends four fifths of its travel above 4 kHz.
- * `db` is for levels: the control writes a gain and prints decibels.
+ * `db` is for levels: the control writes a gain and prints decibels. `time` is
+ * a squared taper for a duration: every envelope stage starts at 0, which has
+ * no logarithm, and a linear second spends its first third on the whole of a
+ * plucked note.
  */
-export type ControlScale = "lin" | "log" | "db";
+export type ControlScale = "lin" | "log" | "db" | "time";
 
 export type ControlKind =
   "slider" | "select" | "toggle" | "xy" | "gate" | "keyboard" | "button";
@@ -111,13 +114,17 @@ export interface GateControl<S> extends ControlCommon {
 /** `note` is a scientific pitch name, the form `Instrument.start` takes. */
 export type NoteFn = (note: string, velocity: number) => void;
 
-export interface KeyboardControl<S> extends ControlCommon {
-  kind: "keyboard";
+/** What the kit needs to draw keys, wherever they are declared. */
+export interface KeyboardSource<S> {
   noteOn: (synth: S) => NoteFn;
   noteOff: (synth: S) => NoteFn;
   octaves?: number;
   /** Leftmost key, scientific pitch notation. Defaults to `C3`. */
   from?: string;
+}
+
+export interface KeyboardControl<S> extends ControlCommon, KeyboardSource<S> {
+  kind: "keyboard";
 }
 
 export interface ButtonControl<S> extends ControlCommon {
@@ -134,7 +141,8 @@ export type Control<S = any> =
   | KeyboardControl<S>
   | ButtonControl<S>;
 
-export type ViewKind = "scope" | "spectrum" | "meter" | "pattern" | "diagram";
+export type ViewKind =
+  "scope" | "spectrum" | "meter" | "keyboard" | "pattern" | "diagram";
 
 /**
  * The analyser a drawing view reads.
@@ -191,6 +199,12 @@ export interface MeterOptions {
   show?: ("peak" | "rms" | "lufs")[];
 }
 
+export interface KeyboardViewOptions {
+  octaves?: number;
+  /** Leftmost key, scientific pitch notation. Defaults to `C3`. */
+  from?: string;
+}
+
 export interface PatternOptions {
   /** Draw the grid even where the pattern is empty. */
   grid?: boolean;
@@ -220,6 +234,21 @@ export type View<S = any> =
       source?: NodeRef<S>;
       options?: MeterOptions;
     }
+  /*
+   * Keys, as a view.
+   *
+   * There is a `keyboard` *control* too, and the difference is not cosmetic: a
+   * lesson's `show` filters controls, so a widget whose whole job is to be
+   * played would lose its keys the moment a lesson narrowed the knobs down to
+   * one. A view is never filtered. `learn/voice/README.md` decided it this way
+   * for the voice patch; a patch whose keyboard is one control among several -
+   * an arpeggiator's, say - still declares the control kind.
+   */
+  | ({
+      kind: "keyboard";
+      label?: string;
+      options?: KeyboardViewOptions;
+    } & Pick<KeyboardSource<S>, "noteOn" | "noteOff">)
   | {
       kind: "pattern";
       label?: string;
@@ -261,6 +290,15 @@ export interface PatchBuildOptions {
   voices?: number;
 }
 
+/** What "View the code" shows, when the whole file is not the answer. */
+export interface CodeOptions {
+  /**
+   * A slice of the source, 1-based and inclusive, for a patch whose interesting
+   * part is one function in a long file.
+   */
+  lines?: [number, number];
+}
+
 export interface LessonPatch<S = any> {
   /**
    * The patch's path under `learn/patches/`, without the extension. It is the
@@ -278,11 +316,19 @@ export interface LessonPatch<S = any> {
    * everything you created so `dispose()` tears it down, and arrive **silent** -
    * the last node is a gain at 0 that the kit's Play toggle opens, on the click
    * that also resumes the context.
+   *
+   * `build` is synchronous, because a `Compound` is. A compound that is not
+   * usable the instant it exists - `Instrument`, whose `params` are empty until
+   * its worklets are registered - exposes a `ready` promise, and the kit waits
+   * for it before it reads a single accessor. That is `InstrumentExample.tsx`'s
+   * `await synth.ready`, moved one layer up so no patch has to remember it.
    */
   build: (ac: AudioContext, options?: PatchBuildOptions) => S;
   controls: Control<S>[];
   views: View<S>[];
   diagram?: Diagram;
+  /** Which part of the file "View the code" opens on. The whole of it by default. */
+  code?: CodeOptions;
 }
 
 /**

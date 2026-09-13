@@ -14,7 +14,7 @@ import {
 import { ExamplePane } from "./components/ExamplePane";
 import { SelectorParam } from "./components/Selector";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 /** Every `ArpMode`, in enum order, so the index *is* the parameter value. */
 const MODES = [

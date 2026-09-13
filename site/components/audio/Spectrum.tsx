@@ -26,13 +26,36 @@ export function Spectrum({
   label,
   color = "#0ea5e9",
   className,
+  canvasClassName = "w-full rounded border border-fd-border",
+  marks,
+  markColor = "#0ea5e9",
 }: {
   analyser: AnalyserNode | null;
   label: string;
+  /**
+   * The trace. The docs pass nothing and get the blue they always had; the
+   * tutorial kit passes its `--learn-audio` token, resolved.
+   */
   color?: string;
   className?: string;
+  /** The canvas's own frame. Defaults to the documentation's. */
+  canvasClassName?: string;
+  /**
+   * Frequencies to rule a vertical line at, read **once per frame**: where the
+   * theory says a partial should be, drawn over where it actually is. The
+   * tutorial uses it to put a prediction and a measurement on one picture; the
+   * docs pass nothing and get no lines.
+   */
+  marks?: () => number[];
+  markColor?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // The marks are recomputed per frame from a control that is moving, so the
+  // function changes identity on every render of the page above. A ref keeps
+  // the draw loop from being torn down and rebuilt sixty times a second.
+  const marksRef = useRef(marks);
+  marksRef.current = marks;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -84,11 +107,28 @@ export function Spectrum({
       ctx.fill();
       ctx.strokeStyle = color;
       ctx.stroke();
+
+      // Over the measurement, not under it: the point is to see the two
+      // disagree, and a line hidden behind a peak proves nothing.
+      const predicted = marksRef.current?.();
+      if (predicted?.length) {
+        ctx.strokeStyle = markColor;
+        ctx.setLineDash([2, 3]);
+        for (const hz of predicted) {
+          if (hz <= 0 || hz >= nyquist) continue;
+          const x = Math.round((hz / nyquist) * WIDTH) + 0.5;
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, HEIGHT);
+          ctx.stroke();
+        }
+        ctx.setLineDash([]);
+      }
     };
 
     frame = requestAnimationFrame(draw);
     return () => cancelAnimationFrame(frame);
-  }, [analyser, color]);
+  }, [analyser, color, markColor]);
 
   return (
     <div className={className}>
@@ -99,7 +139,7 @@ export function Spectrum({
         ref={canvasRef}
         width={WIDTH}
         height={HEIGHT}
-        className="w-full rounded border border-fd-border"
+        className={canvasClassName}
       />
     </div>
   );

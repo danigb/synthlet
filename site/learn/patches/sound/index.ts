@@ -1,4 +1,5 @@
 import harmonics from "./harmonics";
+import harmonicsSource from "./harmonics.ts?raw";
 
 /*
  * Chapter 1's patches.
@@ -15,4 +16,17 @@ import harmonics from "./harmonics";
  */
 export const soundPatches = {
   "sound/harmonics": harmonics,
+};
+
+/*
+ * The same files again, as text.
+ *
+ * `?raw` is the whole of "View the code": the widget shows the module it is
+ * running, so there is no second copy to fall out of step with the first. The
+ * import sits beside the module's own on purpose - adding a patch is still one
+ * line, and it is impossible to register a patch and forget its source without
+ * the line above it looking wrong.
+ */
+export const soundSources: Record<string, string> = {
+  "sound/harmonics": harmonicsSource,
 };

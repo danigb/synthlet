@@ -10,7 +10,7 @@ import {
 } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 const SyncSynth = (ac: AudioContext) => {
   const gate = Param(ac);

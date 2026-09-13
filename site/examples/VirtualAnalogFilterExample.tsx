@@ -12,7 +12,7 @@ import {
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 const createSynth = (ac: AudioContext) => {
   // A 110 Hz sawtooth, not the 5 kHz one this demo used to have. A source that

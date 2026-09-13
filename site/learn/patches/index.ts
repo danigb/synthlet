@@ -1,5 +1,7 @@
 import type { LessonPatch } from "./define";
-import { soundPatches } from "./sound";
+import { soundPatches, soundSources } from "./sound";
+import voice from "./voice";
+import voiceSource from "./voice.ts?raw";
 
 /**
  * Every patch in the tutorial, by id.
@@ -16,9 +18,23 @@ import { soundPatches } from "./sound";
  */
 export const patches: Record<string, LessonPatch> = {
   ...soundPatches,
+  // The tutorial voice, which belongs to no chapter: every chapter that teaches
+  // a parameter rather than a module reaches for it, with a preset and a `show`.
+  voice,
+};
+
+/** The same files as text, for "View the code". Keyed exactly as above. */
+const sources: Record<string, string> = {
+  ...soundSources,
+  voice: voiceSource,
 };
 
 /** The patch a lesson asked for, or `undefined` - never a throw at render. */
 export function getPatch(id: string): LessonPatch | undefined {
   return patches[id];
+}
+
+/** The text of the file that patch lives in, or `undefined`. */
+export function getPatchSource(id: string): string | undefined {
+  return sources[id];
 }

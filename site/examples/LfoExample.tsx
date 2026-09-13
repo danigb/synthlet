@@ -12,10 +12,10 @@ import {
 } from "synthlet";
 import { CheckboxParam } from "./components/CheckboxParam";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
-import { Scope } from "./components/Scope";
+import { Scope } from "@/components/audio/Scope";
 import { SelectorParam } from "./components/Selector";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 /** Every `LfoType`, in enum order, so the index *is* the parameter value. */
 const SHAPES = [

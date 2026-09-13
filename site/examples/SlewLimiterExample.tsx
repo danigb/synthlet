@@ -12,7 +12,7 @@ import {
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 // Portamento, and the reason the glide is on `detune` rather than on
 // `frequency`: an analogue portamento is an RC network on a 1 V/oct CV, so it

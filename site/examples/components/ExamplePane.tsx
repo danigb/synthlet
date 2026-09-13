@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { MasterMeter } from "./MasterMeter";
-import { SynthSlotProvider, useSynthSlot } from "./SynthSlot";
+import { MasterMeter } from "@/components/audio/MasterMeter";
+import { SynthSlotProvider, useSynthSlot } from "@/components/audio/SynthSlot";
 
 export function ExamplePane({
   label,

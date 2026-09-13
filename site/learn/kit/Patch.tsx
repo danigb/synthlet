@@ -1,12 +1,8 @@
 "use client";
 
-import {
-  resolveControls,
-  unknownControls,
-  type Control,
-  type LessonPatch,
-} from "../patches/define";
+import { resolveControls, type LessonPatch } from "../patches/define";
 import { getPatch } from "../patches";
+import { LessonWidget } from "./LessonWidget";
 
 export interface PatchProps {
   /** The patch's id, which is its path under `learn/patches`. */
@@ -17,24 +13,16 @@ export interface PatchProps {
   preset?: string;
 }
 
-/** A short, readable summary of a control, for the placeholder. */
-function describe(control: Control): string {
-  return `${control.label} (${control.kind})`;
-}
-
 /**
  * The lesson's widget.
  *
  * A lesson never imports a component, so this resolves its patch from the
- * registry by id and hands the definition on. Today "hands it on" means a box
- * that says what the widget will be; [03](thoughts/tickets/learning-synthlet/03-the-kit.md)
- * replaces the body of this component with
- * `<LessonWidget patch={patch} controls={controls} preset={preset} />` and
- * nothing else moves - not a lesson, not a patch, not this file's props.
+ * registry by id and hands the definition to the one frame every lesson shares.
+ * That is the whole of the indirection, and it is what lets `show` be pedagogy
+ * - which knobs this lesson reveals - while the order they sit in stays the
+ * patch's and the way they look stays the kit's.
  *
- * A client component from the first day for the same reason: the widget builds
- * audio, so the moment it is real it has to run in the browser, and finding
- * that out later would mean a content edit.
+ * A client component, because the widget builds audio.
  */
 export function Patch({ id, show, preset }: PatchProps) {
   const patch: LessonPatch | undefined = getPatch(id);
@@ -51,52 +39,11 @@ export function Patch({ id, show, preset }: PatchProps) {
     );
   }
 
-  const controls = resolveControls(patch, show);
-  const missing = unknownControls(patch, show);
-
   return (
-    <figure className="my-6 max-w-learn rounded-learn border border-learn-border bg-learn-surface p-learn text-learn-ink">
-      <figcaption className="font-learn-text text-sm font-medium">
-        {patch.label ?? patch.id}
-        {preset ? (
-          <span className="text-learn-ink-muted"> · preset {preset}</span>
-        ) : null}
-      </figcaption>
-
-      <p className="mt-1 font-learn-mono text-xs text-learn-ink-muted">
-        {patch.id}
-      </p>
-
-      <dl className="mt-learn grid gap-2 font-learn-text text-sm">
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-learn-ink-muted">
-            Controls
-          </dt>
-          <dd className="mt-1">
-            {controls.map(describe).join(", ") || "none"}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-learn-ink-muted">
-            Views
-          </dt>
-          <dd className="mt-1">
-            {patch.views.map((view) => view.kind).join(", ") || "none"}
-          </dd>
-        </div>
-        {missing.length > 0 ? (
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-learn-ink-muted">
-              Not in this patch
-            </dt>
-            <dd className="mt-1 font-learn-mono">{missing.join(", ")}</dd>
-          </div>
-        ) : null}
-      </dl>
-
-      <p className="mt-learn font-learn-text text-xs text-learn-ink-muted">
-        The playable widget arrives with the kit.
-      </p>
-    </figure>
+    <LessonWidget
+      patch={patch}
+      controls={resolveControls(patch, show)}
+      preset={preset}
+    />
   );
 }

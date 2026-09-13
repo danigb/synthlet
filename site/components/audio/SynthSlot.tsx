@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useContext, useState } from "react";
-import type { Synth } from "../useSynth";
+import type { Synth } from "./useSynth";
 
 /**
  * How the pane finds the synth its children built.

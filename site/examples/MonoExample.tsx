@@ -4,7 +4,7 @@ import { MonoSynth } from "synthlet";
 import { AdsrControls } from "./components/AdsrControls";
 import { ExamplePane, GateButton, ModulePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 function Example() {
   const synth = useSynth((ac) => MonoSynth(ac));

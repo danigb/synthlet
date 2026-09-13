@@ -3,7 +3,7 @@
 import { Compound, Gain, Oscillator, Param, RingMod } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 // Reid's Figure 10 as a patch you can turn: a carrier, a modulator, and the
 // one slider the ARP 2600 had as a switch. At `offset: 0` the two inputs are
