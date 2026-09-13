@@ -3,6 +3,26 @@
 This is a Next.js application generated with
 [Create Fumadocs](https://github.com/fuma-nama/fumadocs).
 
+## Two sections
+
+The site serves two fumadocs collections, declared side by side in
+`source.config.ts` and loaded separately:
+
+| Section           | Content         | Loader                | Routes         |
+| ----------------- | --------------- | --------------------- | -------------- |
+| Documentation     | `content/docs`  | `app/source.ts`       | `app/docs/**`  |
+| Learning Synthlet | `content/learn` | `app/learn-source.ts` | `app/learn/**` |
+
+They share the root layout, the theme provider, the search and
+`app/audio-context.ts`; nothing else is duplicated.
+
+The tutorial's chapters are plain folders — `content/learn/sound/…` is served at
+`/learn/sound/…`. They must not be route groups: `fumadocs-core` drops a
+`(group)` segment from the slug, which is why thirty `/docs/…` links 404 today.
+
+`npm run check:links` reads the export in `out/` and fails if any `/learn/` link
+points at a page that was not built. Run it after `deploy:build`.
+
 Run development server:
 
 ```bash

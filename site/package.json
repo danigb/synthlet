@@ -7,6 +7,7 @@
     "dev": "next dev",
     "start": "next start",
     "postinstall": "fumadocs-mdx",
+    "check:links": "node scripts/check-learn-links.mjs",
     "deploy": "npm run deploy:build && npm run deploy:push",
     "deploy:build": "DEPLOY=true next build && npm run deploy:fix",
     "deploy:fix": "cp out/docs/quick-start.html out/docs/index.html",
