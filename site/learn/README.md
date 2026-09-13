@@ -182,14 +182,14 @@ promise. The kit awaits it and reads no accessor before it resolves.
 
 ### The view options
 
-| View       | Option                                    | What it does                                                                       |
-| ---------- | ----------------------------------------- | ---------------------------------------------------------------------------------- |
-| `scope`    | `window: "wave" \| "contour"`, `seconds?` | `wave` is a few cycles; `contour` is a rolling peak history, which is an envelope  |
-| `spectrum` | `marks: number[] \| (synth) => number[]`  | Frequencies ruled over the trace: the prediction beside the measurement, per frame |
-| `spectrum` | `minDb`, `maxDb`                          | Written onto the analyser; they are its display range                              |
-| `meter`    | `show: ("peak" \| "rms" \| "lufs")[]`     | Defaults to `["peak"]`. `lufs` turns on the `LevelMeter`'s loudness path           |
-| `keyboard` | `octaves`, `from`                         | A view as well as a control, so a lesson's `show` cannot take the keys away        |
-| `diagram`  | `compact`                                 | Renders nothing yet — ticket 07                                                    |
+| View       | Option                                    | What it does                                                                           |
+| ---------- | ----------------------------------------- | -------------------------------------------------------------------------------------- |
+| `scope`    | `window: "wave" \| "contour"`, `seconds?` | `wave` is a few cycles; `contour` is a rolling peak history, which is an envelope      |
+| `spectrum` | `marks: number[] \| (synth) => number[]`  | Frequencies ruled over the trace: the prediction beside the measurement, per frame     |
+| `spectrum` | `minDb`, `maxDb`                          | Written onto the analyser; they are its display range                                  |
+| `meter`    | `show: ("peak" \| "rms" \| "lufs")[]`     | Defaults to `["peak"]`. `lufs` turns on the `LevelMeter`'s loudness path               |
+| `keyboard` | `octaves`, `from`                         | A view as well as a control, so a lesson's `show` cannot take the keys away            |
+| `diagram`  | `compact`                                 | Drops the parameter port labels, for a diagram beside a narrow widget — see "Diagrams" |
 
 A patch may also set `code: { lines: [from, to] }` to open "View the code" on a
 slice of its file rather than the whole of it.
@@ -252,7 +252,8 @@ prop whose default is exactly what the documentation rendered before.
   with its own optional `options` bag (`scope.window`, `spectrum.marks`,
   `meter.show`, …) — see "The view options" above
 - `code`: `{ lines: [from, to] }`, the slice "View the code" opens on
-- `Diagram`: `"auto"` — reserved for `graph()` — or `{ nodes, edges }`
+- `Diagram`: `"auto"` — reserved for `graph()` — or `{ nodes, edges }`; see
+  "Diagrams" below for the declared form
 - `resolveControls(patch, show)` filters by `show` in **manifest** order;
   `unknownControls(patch, show)` is what rule 3 reports
 
@@ -260,6 +261,99 @@ A control's `param` is any `{ value: number }`: an `AudioParam`, or a plain
 accessor on the compound's `exposes` for something that is not one (a harmonic
 count that rebuilds a table, a waveform index that has to reach two
 oscillators). The kit never needs to know which it was handed.
+
+## Diagrams
+
+Every figure in Synth Secrets is a block diagram — blue cables for audio, black
+for control (Part 41) — and the `diagram` view is the tutorial's. It is drawn
+layered left to right: sources, modifiers, the output, with controllers hanging
+underneath and their cables running up into a **named parameter port**.
+
+### Declaring one
+
+```ts
+diagram: {
+  nodes: [
+    { id: "osc", label: "PolyblepOscillator", kind: "source", exposedAs: "osc" },
+    {
+      id: "amp",
+      label: "AdsrAmp",
+      kind: "modifier",
+      exposedAs: "amp",
+      controls: ["attack"],
+    },
+    { id: "out", label: "out", kind: "output" },
+    { id: "keys", label: "keyboard", kind: "controller" },
+  ],
+  edges: [
+    { from: "osc", to: "amp" },
+    { from: "amp", to: "out" },
+    // A control edge: it names the port it arrives at, and is drawn in the
+    // other colour.
+    { from: "keys", to: "amp", param: "gate" },
+  ],
+},
+```
+
+| Field           | Meaning                                                                                                                                                                                                |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`            | Unique in the diagram. Edges use it; nothing else does                                                                                                                                                 |
+| `label`         | **The library's name for the module** — `PolyblepOscillator`, `Svf`, `AdsrAmp`. A box the reader can search the docs for                                                                               |
+| `kind`          | `source`, `modifier`, `controller`, `output`. Optional: without it the edges decide (nothing feeds it → source, it feeds nothing → output). `controller` and `output` are the two that are not modules |
+| `exposedAs`     | The key, or keys, on the compound's `exposes` this box is. Required on a `source` or a `modifier`, and checked                                                                                         |
+| `controls`      | Control ids marked on the box, for the ones a name cannot tie                                                                                                                                          |
+| `edges[].param` | Set on a control edge: the parameter it arrives at. Absent on an audio edge                                                                                                                            |
+
+**How a control reaches its box.** A control is marked on the box whose
+`exposedAs` contains the control's **id** — `harmonics` and `strip` in
+`sound/harmonics` are exposes keys _and_ control ids, so nothing declares them
+twice — and `controls: [...]` names the rest: `cutoff` writes
+`s.filter.frequency`, whose key is `filter`, so the filter's box names it. An
+accessor is a function and cannot be read, which is why the tie is declared.
+
+That tie is also the hover link: pointing at a knob outlines its box, pointing
+at a box outlines its knobs, and tabbing to a knob does the same as pointing at
+it.
+
+### What the test checks
+
+`learn/diagrams.test.ts` **builds every patch that declares a diagram** on an
+`OfflineAudioContext` (`node-web-audio-api`, the harness the voice tests use)
+and asks the compound. Each failure names the patch and the box:
+
+- every node id unique, every edge endpoint declared, no edge to itself, no box
+  with no cable
+- every capitalised label on a `source` or `modifier` is a name that patch
+  **imports from synthlet**
+- every `source` and `modifier` carries `exposedAs`, and every key in it is
+  really on the built compound
+- every `param` edge arrives at a real `AudioParam` or `{ value }` accessor
+- every id in `controls` is really one of the patch's controls
+
+An environment with no `OfflineAudioContext` falls back to parsing `exposes` out
+of the source, and the suite's own describe title says which of the two ran.
+
+### `"auto"`, and what it is waiting for
+
+`diagram: "auto"` asks the library to enumerate the running compound. That is
+`graph()` — `thoughts/tickets/graph-introspection.md` — and it has not landed,
+so `kit/views/auto-graph.ts` looks for the export and a patch that asks for
+`"auto"` today draws **nothing**: no picture, no error. The renderer is already
+the one both forms feed (`layout.ts` converts either into one `DiagramGraph`),
+so the day `graph()` ships, a declared diagram can be replaced by `"auto"` one
+patch at a time.
+
+### The drawing
+
+`kit/views/layout.ts` is a pure layering pass — longest path over the audio
+edges, controllers in the column of what they control, a row underneath — and no
+library. `kit/views/DiagramView.tsx` turns it into SVG: cables in
+`--learn-audio` and `--learn-control`, boxes in `--learn-bg` outlined in
+`--learn-border` with `--learn-radius` corners, so `?theme=ink` changes the
+cable colours and squares the boxes and moves nothing. A diagram wider than the
+widget scrolls sideways inside it — the one place the site allows a horizontal
+scroll container, because a diagram scaled to fit 400 px is a diagram nobody can
+read.
 
 ## The rules
 

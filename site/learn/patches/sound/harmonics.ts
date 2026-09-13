@@ -141,15 +141,32 @@ export default definePatch({
     { kind: "scope", label: "Waveform", source: (s) => s.analyser },
     { kind: "diagram" },
   ],
+  /*
+   * The patch as Reid would draw it: two boxes and the speaker they end at.
+   *
+   * `exposedAs` is every key on `exposes` the box is published under, and
+   * `diagrams.test.ts` builds this patch and checks each one is real - which is
+   * what stops the picture drifting from the code above it. It doubles as the
+   * cheap half of the tie to the control panel: `harmonics` and `strip` are
+   * control ids *and* exposes keys, so those two knobs need no second
+   * declaration. `cutoff` writes `s.filter.frequency`, whose key is `filter`,
+   * so the filter's box names it.
+   */
   diagram: {
     nodes: [
       {
         id: "osc",
         label: "WavetableOscillator",
         kind: "source",
-        exposedAs: "osc",
+        exposedAs: ["osc", "harmonics"],
       },
-      { id: "filter", label: "Svf", kind: "modifier", exposedAs: "filter" },
+      {
+        id: "filter",
+        label: "Svf",
+        kind: "modifier",
+        exposedAs: ["filter", "strip"],
+        controls: ["cutoff"],
+      },
       { id: "out", label: "out", kind: "output" },
     ],
     edges: [

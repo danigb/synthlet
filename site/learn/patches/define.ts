@@ -265,8 +265,27 @@ export interface DiagramNode {
   /** The library's name for the module: `PolyblepOscillator`, `Svf`. */
   label: string;
   kind?: DiagramNodeKind;
-  /** The key on `exposes` this box is, so a test can check it is real. */
-  exposedAs?: string;
+  /**
+   * The keys on `exposes` this box is, so a test can check they are real.
+   *
+   * A list, because one module is often published twice: the oscillator in
+   * `sound/harmonics` is `osc` and it is `harmonics`, the accessor that rebuilds
+   * its table. `graph()`'s `exposedAs` is a list for the same reason, so the
+   * declared form and the drawn-from-the-graph form agree on the day it lands.
+   *
+   * It is also the cheap half of the tie between a control and its box: a
+   * control whose id is one of these keys is marked on this node without anyone
+   * declaring it twice. `controls` below is the other half.
+   */
+  exposedAs?: string | string[];
+  /**
+   * The ids of the controls this box owns, for the ones whose id is not a key
+   * on `exposes`: `cutoff` writes `s.filter.frequency`, so its box is `filter`
+   * and no name connects the two. An accessor is a function and cannot be read,
+   * which is why the tie is declared - and why `diagrams.test.ts` checks that
+   * every id here is a control the patch actually has.
+   */
+  controls?: string[];
 }
 
 export interface DiagramEdge {

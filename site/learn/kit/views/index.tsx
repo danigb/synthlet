@@ -73,6 +73,10 @@ export function renderView(
           diagram={diagram}
           label={view.label}
           options={view.options}
+          // The runtime, for `diagram: "auto"` alone: a graph read from the
+          // running compound needs the compound. A declared diagram never
+          // touches it.
+          runtime={runtime}
         />
       );
     case "meter":
@@ -86,9 +90,15 @@ export { MeterView };
  * Which views want the whole width.
  *
  * A keyboard and a pattern are read left to right and break in a column; a
- * scope and a spectrum are pictures and pair up on a wide screen. Layout, so it
- * lives here.
+ * scope and a spectrum are pictures and pair up on a wide screen. A diagram is
+ * a chain read left to right like the first two, and it is the one view that
+ * may be wider than the widget - half a widget would put it in a scroll
+ * container on a desktop. Layout, so it lives here.
  */
 export function isWideView(view: View): boolean {
-  return view.kind === "keyboard" || view.kind === "pattern";
+  return (
+    view.kind === "keyboard" ||
+    view.kind === "pattern" ||
+    view.kind === "diagram"
+  );
 }
