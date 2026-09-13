@@ -89,6 +89,9 @@ export default definePatch({
     },
     { kind: "diagram" },
   ],
+  // From the imports, past the header paragraph: thirty lines of hiss and a
+  // filter is the whole patch, and it fits on a screen when it starts here.
+  code: { lines: [12, 120] },
   diagram: {
     nodes: [
       {

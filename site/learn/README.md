@@ -203,7 +203,10 @@ promise. The kit awaits it and reads no accessor before it resolves.
 | `diagram`  | `compact`                                 | Drops the parameter port labels, for a diagram beside a narrow widget — see "Diagrams" |
 
 A patch may also set `code: { lines: [from, to] }` to open "View the code" on a
-slice of its file rather than the whole of it.
+slice of its file rather than the whole of it. The numbers are the file's own
+line numbers, 1-based and inclusive, and `to` is the file's last line: the range
+is for skipping a header paragraph, not for cutting the manifest off, which the
+panel folds on its own.
 
 ### "View the code"
 
@@ -218,6 +221,27 @@ import harmonicsSource from "./harmonics.ts?raw";
 The registry keeps the second beside the first and `getPatchSource(id)` returns
 it. There is no second copy of any patch anywhere, which is the point: editing
 `sound/harmonics.ts` changes both what plays and what is shown.
+
+The rule has a second half, and it is the reason the first half works. Webpack
+has no "last rule wins": every rule whose conditions match a request applies to
+it, and Next's own rule for `/\.(tsx|ts|js|mjs|jsx)$/` carries no `resourceQuery`
+guard — so `./harmonics.ts?raw` matched both, `next-swc-loader` ran, and
+`asset/source` stringified **its output**. The panels showed compiled
+JavaScript, `code: { lines }` sliced a text whose line numbers belonged to
+nobody, and because the client bundle lowers `??` and the server bundle does
+not, the two `<pre>`s disagreed and React reported a hydration mismatch. So the
+`webpack(config)` callback walks `config.module.rules` — recursing into the
+`oneOf` arrays Next nests them in — and adds `resourceQuery: { not: [/raw/] }`
+to every rule that tests a `.ts`, leaving `asset/source` alone with the request.
+Reading a rule's `test` is the fiddly part: Next writes its own as
+`{ or: [/\.(tsx|ts|js|cjs|mjs|jsx)$/, /__barrel_optimize__/] }`, not as a bare
+regexp, and a walk that only understands regexps guards nothing that matters —
+without failing. So the callback counts the rules it guarded that actually run
+SWC, and throws when that count is zero: the failure it is preventing is silent,
+the site still builds, and only the reader sees it.
+`learn/kit/code-view.test.tsx` holds the other end of the contract, in vitest,
+by asserting the registry's text still contains an annotation
+(`ac: AudioContext`) that any compiler would have removed.
 
 **It is a plain `<pre>`, not highlighted.** The site's shiki pipeline runs at
 build time inside `fumadocs-mdx` and the widget is a client component; reaching

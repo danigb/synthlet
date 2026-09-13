@@ -113,6 +113,10 @@ export default definePatch({
     },
     { kind: "diagram" },
   ],
+  // The panel opens on the imports and `build`. The paragraph at the top of the
+  // file is written for someone reading the file; someone reading the page has
+  // the lesson instead, and the twelve lines are twelve lines of their screen.
+  code: { lines: [13, 139] },
   diagram: {
     nodes: [
       {

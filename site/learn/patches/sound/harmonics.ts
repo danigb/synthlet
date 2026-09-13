@@ -141,6 +141,11 @@ export default definePatch({
     { kind: "scope", label: "Waveform", source: (s) => s.analyser },
     { kind: "diagram" },
   ],
+  // The two functions. The constants above them are readable from the lines
+  // that use them, and this file's `build` is long - it carries both halves of
+  // the lesson, the table that is rebuilt and the filter that undoes it - so
+  // the panel spends what room it has on the code that makes the sound.
+  code: { lines: [24, 182] },
   /*
    * The patch as Reid would draw it: two boxes and the speaker they end at.
    *

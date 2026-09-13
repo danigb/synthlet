@@ -100,6 +100,9 @@ export default definePatch({
     { kind: "scope", label: "Waveform", source: (s) => s.analyser },
     { kind: "diagram" },
   ],
+  // From the imports, so the panel opens on `build` rather than on the
+  // paragraph the lesson has already said in its own words.
+  code: { lines: [13, 119] },
   diagram: {
     nodes: [
       {

@@ -15,7 +15,10 @@ import type { CodeOptions } from "../patches/define";
  * The manifest half is folded by default. A reader who opens this wants to see
  * `build` - the oscillator, the filter, the connection - and the list of
  * controls underneath it is the part they already have in front of them as
- * knobs.
+ * knobs. A patch narrows it further with `code: { lines }`, a slice of its own
+ * file counted in the file's own line numbers - which is a thing a patch can
+ * only count on because the text here is the file, not a compiler's rendering
+ * of it. That is `next.config.mjs`'s job, and it was once a bug.
  *
  * **It is a plain `<pre>`, not highlighted.** The site's shiki pipeline runs at
  * build time inside `fumadocs-mdx`, and this is a client component: reaching it
@@ -24,8 +27,22 @@ import type { CodeOptions } from "../patches/define";
  * whose subject is sound. If a later ticket wants it, the change is here alone.
  */
 
-/** Where the manifest starts. Everything from this line is folded. */
-const MANIFEST = /^export default definePatch\(/;
+/**
+ * Where the manifest starts. Everything from this line is folded.
+ *
+ * `definePatch<Voice>({` as well as `definePatch({`: a patch whose `build`
+ * returns a named type writes the parameter out, and a fold that missed it put
+ * the whole manifest - fifty lines of controls - in front of a reader who had
+ * asked to see the code that makes the sound.
+ */
+const MANIFEST = /^export default definePatch[<(]/;
+
+/** The same lines without the empty ones at the end. */
+function trimBlank(lines: string[]): string[] {
+  let end = lines.length;
+  while (end > 0 && lines[end - 1].trim() === "") end--;
+  return lines.slice(0, end);
+}
 
 export function CodeView({
   id,
@@ -47,7 +64,10 @@ export function CodeView({
   }
 
   const fold = lines.findIndex((line) => MANIFEST.test(line));
-  const head = fold === -1 ? lines : lines.slice(0, fold);
+  // The head stops at the blank line a file leaves before `export default`, and
+  // a blank line at the bottom of a code panel is a line of the reader's screen
+  // spent on the fold rather than on the patch.
+  const head = trimBlank(fold === -1 ? lines : lines.slice(0, fold));
   const tail = fold === -1 ? [] : lines.slice(fold);
 
   return (
