@@ -16,6 +16,7 @@ import { registerKarplusStrongWorklet } from "@synthlet/karplus-strong";
 import { registerLevelMeterWorklet } from "@synthlet/level-meter";
 import { registerLfoWorklet } from "@synthlet/lfo";
 import { registerLookaheadLimiterWorklet } from "@synthlet/lookahead-limiter";
+import { registerModalResonatorWorklet } from "@synthlet/modal-resonator";
 import { registerNoiseWorklet } from "@synthlet/noise";
 import { registerParamWorklet } from "@synthlet/param";
 import { registerPolyblepOscillatorWorklet } from "@synthlet/polyblep-oscillator";
@@ -48,6 +49,7 @@ export * from "@synthlet/karplus-strong";
 export * from "@synthlet/level-meter";
 export * from "@synthlet/lfo";
 export * from "@synthlet/lookahead-limiter";
+export * from "@synthlet/modal-resonator";
 export * from "@synthlet/noise";
 export * from "@synthlet/param";
 export * from "@synthlet/polyblep-oscillator";
@@ -123,6 +125,7 @@ export function registerAllWorklets<C extends BaseAudioContext>(
     registerLevelMeterWorklet(context),
     registerLfoWorklet(context),
     registerLookaheadLimiterWorklet(context),
+    registerModalResonatorWorklet(context),
     registerNoiseWorklet(context),
     registerParamWorklet(context),
     registerPolyblepOscillatorWorklet(context),

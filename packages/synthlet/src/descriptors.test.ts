@@ -48,6 +48,7 @@ const EXPECTED = [
   "LevelMeter",
   "Lfo",
   "LookaheadLimiter",
+  "ModalResonator",
   "Noise",
   "Oscillator",
   "Param",

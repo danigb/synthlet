@@ -206,6 +206,13 @@ describe("the measuring instrument", () => {
       "digital-delay",
       "granite",
       "lfo",
+      // The one whose numbers are the book's tables read back. Part 32 hands
+      // over a kettle drum as four ratios, four levels and four decays, and
+      // the test that proves the module plays it finds the four peaks at 150,
+      // 225, 297 and 366 Hz, and the decays in the ratio 45 : 73 : 91 : 84.
+      // Those peaks have to be found the way `decimator` finds its alias, or
+      // "within one bin" would mean two different bins.
+      "modal-resonator",
       // The one whose numbers *are* the module's argument for existing. A ring
       // modulator is told from a VCA by what is missing from its spectrum -
       // Part 11's "the Modulator has completely disappeared" - so the test
