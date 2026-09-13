@@ -1,0 +1,62 @@
+---
+title: No big red button
+description: There is no control that makes a sound good. There is a shelf of parts, and knowing what each of them does.
+book: [63]
+---
+
+Somewhere in most people's idea of a synthesiser there is a button that makes it
+sound good. A preset, a knob marked _warmth_, a thing the people who can do this
+know about and you do not.
+
+There isn't one. There is a shelf of parts, and knowing what each of them does.
+
+## The three shelves, one last time
+
+Every patch in this tutorial, and every patch you will ever build, is made of the
+same three kinds of thing.
+
+- A **source** makes a sound out of nothing: an oscillator, a noise generator, a
+  sample. It is the only thing here that is loud on its own.
+- A **modifier** changes a sound that already exists: a filter, an amplifier, a
+  delay. Hand it silence and it gives you silence back.
+- A **controller** makes no sound at all. An envelope, an LFO, a keyboard. It
+  moves something else, and what it moves is a parameter of a source or of a
+  modifier.
+
+That is the whole taxonomy, and the reason it is worth memorising is what follows
+from it: **a synthesiser is not its modules, it is the way they are patched.**
+The same oscillator, filter and envelope are a bass, a string section and a
+thunderclap depending only on what is connected to what and how fast the
+controllers move. You have now built all three out of one voice.
+
+## What you have
+
+A vocabulary, mostly. _Attack_ is a length of time, not a feeling. _Resonance_ is
+a peak at the cutoff frequency, and it is why a filter sweep whistles. _Tremolo_
+is on the amplifier and _vibrato_ is on the pitch, and confusing them is the
+oldest mistake in the manual.
+
+And a habit: when a sound is wrong, ask which of the three shelves is wrong
+before you touch anything. Too dull is a modifier. Too flat is a controller. Too
+thin is usually a source.
+
+## Where to go next
+
+Make something. The [Playground](/learn/playground) is the whole voice with a
+link you can send; every sound in the gallery started as a paragraph in
+[Synth Secrets](https://www.soundonsound.com/series/synth-secrets) and ended as
+thirty-one numbers.
+
+Then build it yourself, in your own page. The
+[documentation](/docs/quick-start) is the same modules this tutorial is made of,
+one page each, every one of them with a running example — and the
+[guide](/docs/guide) is the half this tutorial did not cover: scheduling,
+offline rendering, and what to do when the audio thread is late.
+
+The library is on [GitHub](https://github.com/danigb/synthlet), and it is
+small enough to read. If what you want is to play notes rather than to build the
+instrument that plays them, [smplr](https://github.com/danigb/smplr) is the
+sibling project: sampled instruments, the same audio context, no synthesis
+required.
+
+<Book part={63} />

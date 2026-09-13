@@ -3,6 +3,16 @@
 
 export { learnVoice, type LearnVoice } from "./learn-voice";
 export {
+  bindingPosition,
+  bindingValue,
+  DEFAULT_PAD_MAPPING,
+  PAD_MAPPINGS,
+  padMapping,
+  type PadAxis,
+  type PadBinding,
+  type PadMapping,
+} from "./mappings";
+export {
   FILTER_TYPE_NAMES,
   INDEX_OPTIONS,
   LEARN_VOICE_GROUPS,

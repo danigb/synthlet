@@ -1,4 +1,6 @@
 import type { LessonPatch } from "./define";
+import playground from "./playground";
+import playgroundSource from "./playground.ts?raw";
 import { soundPatches, soundSources } from "./sound";
 import voice from "./voice";
 import voiceSource from "./voice.ts?raw";
@@ -21,12 +23,17 @@ export const patches: Record<string, LessonPatch> = {
   // The tutorial voice, which belongs to no chapter: every chapter that teaches
   // a parameter rather than a module reaches for it, with a preset and a `show`.
   voice,
+  // The same voice with nothing hidden, which is `/learn/playground`. It is a
+  // patch and not a page's private component so that it is rendered by the kit,
+  // held to the same rules, and readable under "View the code" like every other.
+  playground,
 };
 
 /** The same files as text, for "View the code". Keyed exactly as above. */
 const sources: Record<string, string> = {
   ...soundSources,
   voice: voiceSource,
+  playground: playgroundSource,
 };
 
 /** The patch a lesson asked for, or `undefined` - never a throw at render. */

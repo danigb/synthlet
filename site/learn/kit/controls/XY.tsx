@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ControlAxis, XYControl } from "../../patches/define";
 import { formatValue, toPosition, toValue, type ScaleSpec } from "../scale";
 import type { PatchRuntime } from "../useLessonPatch";
@@ -17,6 +17,21 @@ import { Field } from "./Field";
  *
  * Keyboard-nudgeable, because a pad that only a pointer can reach is a control
  * some readers do not have.
+ *
+ * **Two things that are not obvious.**
+ *
+ * A drag is tracked by *pointer id*, captured on the way down, so that a finger
+ * or a mouse that leaves the pad mid-sweep keeps moving it and a second pointer
+ * cannot take it over. `buttons` alone cannot tell those apart, and a touch that
+ * slid off the edge and stopped responding was the bug this replaced.
+ *
+ * And a sweep's writes are coalesced to one per animation frame. A pointer
+ * reports tens to hundreds of positions a second and a screen redraws sixty
+ * times; the ones in between are two parameter writes and a React render each,
+ * for a picture nobody sees. The *ramp* that keeps a sweep from zippering is not
+ * here - it belongs to whatever the axis is bound to, because only a patch has
+ * the context's clock. `learn/patches/playground.ts` does it with
+ * `setTargetAtTime`.
  */
 
 const spec = (axis: ControlAxis<any>): ScaleSpec => ({
@@ -29,32 +44,80 @@ const spec = (axis: ControlAxis<any>): ScaleSpec => ({
 /** One arrow key. Fine enough to hear a step, coarse enough to cross the pad. */
 const NUDGE = 0.02;
 
+interface Position {
+  x: number;
+  y: number;
+}
+
+const clamp01 = (value: number) => Math.min(1, Math.max(0, value));
+
 export function XY({
   control,
   runtime,
+  onGesture,
 }: {
   control: XYControl<any>;
   runtime: PatchRuntime;
+  /**
+   * A drag started, or finished. The Playground uses the end of one to re-read
+   * the sliders the pad has been moving underneath them; a lesson passes
+   * nothing and never notices.
+   */
+  onGesture?: (phase: "start" | "end") => void;
 }) {
   const pad = useRef<HTMLDivElement>(null);
-  const [position, setPosition] = useState(() => ({
+  const [position, setPosition] = useState<Position>(() => ({
     x: toPosition(spec(control.x), control.x.default ?? control.x.min),
     // Up is more, the way every pad in every synth works, so the stored
     // position is the value's and the drawing inverts it.
     y: toPosition(spec(control.y), control.y.default ?? control.y.min),
   }));
 
-  const move = (next: { x: number; y: number }) => {
-    const x = Math.min(1, Math.max(0, next.x));
-    const y = Math.min(1, Math.max(0, next.y));
-    setPosition({ x, y });
-    runtime.write(control.x.param, toValue(spec(control.x), x));
-    runtime.write(control.y.param, toValue(spec(control.y), y));
-  };
+  // The live position, and the frame that will write it. A ref rather than the
+  // state, because a pointer can move three times between two renders and each
+  // of them has to start from where the last one left off.
+  const latest = useRef<Position>(position);
+  const frame = useRef(0);
+  const dragging = useRef<number | null>(null);
+
+  const commit = useCallback(
+    (next: Position) => {
+      latest.current = next;
+      setPosition(next);
+      runtime.write(control.x.param, toValue(spec(control.x), next.x));
+      runtime.write(control.y.param, toValue(spec(control.y), next.y));
+    },
+    // The manifest's accessors are closures declared once, at module scope.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [runtime],
+  );
+
+  const flush = useCallback(() => {
+    frame.current = 0;
+    commit(latest.current);
+  }, [commit]);
+
+  const schedule = useCallback(
+    (next: Position) => {
+      latest.current = next;
+      if (frame.current) return;
+      frame.current = requestAnimationFrame(flush);
+    },
+    [flush],
+  );
+
+  // A pad left mid-drag must not leave a frame queued against an unmounted
+  // component, and must not leave a pointer captured either.
+  useEffect(
+    () => () => {
+      if (frame.current) cancelAnimationFrame(frame.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!runtime.synth) return;
-    setPosition({
+    const next = {
       x: toPosition(
         spec(control.x),
         runtime.read(control.x.param, control.x.default ?? control.x.min),
@@ -63,22 +126,37 @@ export function XY({
         spec(control.y),
         runtime.read(control.y.param, control.y.default ?? control.y.min),
       ),
-    });
+    };
+    latest.current = next;
+    setPosition(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [runtime.synth]);
 
-  const track = (event: React.PointerEvent) => {
+  const at = (event: React.PointerEvent): Position | undefined => {
     const box = pad.current?.getBoundingClientRect();
-    if (!box) return;
-    move({
-      x: (event.clientX - box.left) / box.width,
-      y: 1 - (event.clientY - box.top) / box.height,
-    });
+    if (!box || box.width === 0 || box.height === 0) return undefined;
+    return {
+      x: clamp01((event.clientX - box.left) / box.width),
+      y: clamp01(1 - (event.clientY - box.top) / box.height),
+    };
   };
 
   const values =
     `${control.x.label} ${formatValue(spec(control.x), toValue(spec(control.x), position.x))}, ` +
     `${control.y.label} ${formatValue(spec(control.y), toValue(spec(control.y), position.y))}`;
+
+  const end = (event: React.PointerEvent) => {
+    if (dragging.current !== event.pointerId) return;
+    dragging.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    if (frame.current) {
+      cancelAnimationFrame(frame.current);
+      flush();
+    }
+    onGesture?.("end");
+  };
 
   return (
     <Field label={control.label} value={values} help={control.help}>
@@ -88,17 +166,24 @@ export function XY({
         tabIndex={0}
         aria-label={`${control.label}: ${control.x.label} across, ${control.y.label} up`}
         aria-valuetext={values}
-        className="relative aspect-[2/1] w-full touch-none rounded-learn border border-learn-border bg-learn-bg"
+        className="relative aspect-[2/1] w-full touch-none rounded-learn border border-learn-border bg-learn-bg focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-learn-accent"
         onPointerDown={(event) => {
+          if (dragging.current !== null) return;
           event.preventDefault();
+          dragging.current = event.pointerId;
           event.currentTarget.setPointerCapture(event.pointerId);
           runtime.ensure();
-          track(event);
+          onGesture?.("start");
+          const next = at(event);
+          if (next) commit(next);
         }}
         onPointerMove={(event) => {
-          if (event.buttons === 0) return;
-          track(event);
+          if (dragging.current !== event.pointerId) return;
+          const next = at(event);
+          if (next) schedule(next);
         }}
+        onPointerUp={end}
+        onPointerCancel={end}
         onKeyDown={(event) => {
           const step =
             event.key === "ArrowLeft"
@@ -111,8 +196,16 @@ export function XY({
                     ? { x: 0, y: NUDGE }
                     : undefined;
           if (!step) return;
+          // The page's own `←`/`→` turn the page, and a pad that let them
+          // through would move and navigate on one key press.
           event.preventDefault();
-          move({ x: position.x + step.x, y: position.y + step.y });
+          runtime.ensure();
+          const from = latest.current;
+          commit({
+            x: clamp01(from.x + step.x),
+            y: clamp01(from.y + step.y),
+          });
+          onGesture?.("end");
         }}
       >
         <span

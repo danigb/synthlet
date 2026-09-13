@@ -31,8 +31,24 @@ export interface PlaygroundState {
   glide?: number;
 }
 
-/** The Playground's route. It does not exist until learning-synthlet 06. */
+/** The Playground's route. */
 export const PLAYGROUND_PATH = "/learn/playground";
+
+/**
+ * How large the voice pool may be.
+ *
+ * A link is user input, so a `voices: 400` in one is a request to build four
+ * hundred voices' worth of worklets from a string somebody typed. The Playground
+ * patch declares the same range on its own control and
+ * `learn/playground/playground.test.ts` keeps the two numbers equal.
+ */
+export const VOICE_RANGE = { min: 1, max: 8 };
+
+/** How much glide a link may ask for. The control's range, and the patch's. */
+const GLIDE_MAX = 1;
+
+const clamp = (value: number, low: number, high: number) =>
+  Math.min(high, Math.max(low, value));
 
 /** The fragment's one key, so that a future second one can be added beside it. */
 const KEY = "p";
@@ -94,13 +110,53 @@ function clean(value: unknown): PlaygroundState {
     raw.xy.length === 2 &&
     raw.xy.every(isFiniteNumber)
   ) {
-    state.xy = [raw.xy[0], raw.xy[1]];
+    // A pad position is a fraction of the pad. Anything else is a link that has
+    // been hand-edited, and the corner is the nearest true answer to it.
+    state.xy = [clamp(raw.xy[0], 0, 1), clamp(raw.xy[1], 0, 1)];
   }
 
-  if (isFiniteNumber(raw.voices)) state.voices = raw.voices;
-  if (isFiniteNumber(raw.glide)) state.glide = raw.glide;
+  // The two that cost something. A pool is worklets and a glide is a ramp, and
+  // both of them come out of a string somebody could have typed.
+  if (isFiniteNumber(raw.voices)) {
+    state.voices = Math.round(
+      clamp(raw.voices, VOICE_RANGE.min, VOICE_RANGE.max),
+    );
+  }
+  if (isFiniteNumber(raw.glide)) state.glide = clamp(raw.glide, 0, GLIDE_MAX);
 
   return state;
+}
+
+/**
+ * The parameters that differ from the sound the link already names.
+ *
+ * A preset is complete - it writes all thirty-one - so a link that repeated
+ * every one of them would be four hundred characters saying what its own first
+ * field already said. Only the departures travel, which is also what makes a
+ * link readable when the reader has moved two knobs.
+ *
+ * The tolerance is there because a value that went out through JSON and came
+ * back is not always the bit pattern it left as, and a parameter that was never
+ * touched must not reappear as "changed" on every reload.
+ */
+export function changedParams(
+  values: Record<string, number>,
+  base: Record<string, number>,
+): Record<string, number> {
+  const changed: Record<string, number> = {};
+
+  for (const [name, value] of Object.entries(values)) {
+    const was = base[name];
+    if (was === undefined) {
+      changed[name] = value;
+      continue;
+    }
+    // Relative, because these span 0…1 and −10000…10000 in the same table.
+    const tolerance = Math.max(Math.abs(was), 1) * 1e-9;
+    if (Math.abs(value - was) > tolerance) changed[name] = value;
+  }
+
+  return changed;
 }
 
 /** Whether there is anything worth putting in a link. */
