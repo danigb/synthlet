@@ -1,0 +1,45 @@
+---
+title: Play a synth
+description: A finished synthesiser, before any of it comes apart. Press a key.
+core: true
+book: []
+hear: A note when you press a key, a chord when you press three. That is the whole synth; the rest of the course opens it.
+status: ready
+---
+
+This is a synthesiser. It has thirty-one knobs and you cannot see one of them,
+which is on purpose: you are going to take this instrument apart a knob at a
+time for the next ten chapters, and it is worth hearing it whole first.
+
+<Patch id="voice" preset="Init" show={[]} />
+
+<Try>
+
+Press **Play**, then press a key — with the pointer, or with the letter keys on
+your computer keyboard. Hold one down and let go, and listen to the two ends of
+the note: how it arrives, and how long it takes to leave. Then press three keys
+at once.
+
+</Try>
+
+Nothing in what you just heard is complicated. One part of it makes a raw,
+buzzy tone. Another takes the top off that tone, which is what decides whether
+it sounds bright or dull. A third decides how loud the note is at each instant,
+which is why it faded instead of stopping dead. The chapters after this one are
+those three parts, in that order, one idea and one or two knobs at a time.
+
+The three keys at once are worth a moment. Each key you press takes a whole
+copy of that chain for itself, and there are eight copies waiting. That is all
+the word <Term>polyphonic</Term> means.
+
+## The code is the lesson
+
+Under every widget here there is a line that says **View the code**. Open it.
+What you get is not a sketch of the patch: it is the file running in your
+browser at this moment, imports and `connect()` calls and all, and you can paste
+it into a page of your own. That is the one thing this tutorial has that the
+two it is built on do not — [where the ideas come from](/learn/about) says whose
+they are.
+
+At the foot of this page is a link to the Playground: the same synth with every
+knob showing. It will make no sense yet. It will by chapter 5.

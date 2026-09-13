@@ -8,7 +8,7 @@ Three layers, three directories, one direction of dependency:
 
 | Layer       | Where                                                          | May contain                                                                                                                                              | May not                                                                           |
 | ----------- | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| **Content** | `site/content/learn/**/*.mdx` and `site/learn/patches/**/*.ts` | Prose, the seven-word vocabulary below, and patches: synthlet code plus a manifest of controls and views                                                 | `import`, `className`, `style`, raw HTML, React — anything that says how it looks |
+| **Content** | `site/content/learn/**/*.mdx` and `site/learn/patches/**/*.ts` | Prose, the eight-word vocabulary below, and patches: synthlet code plus a manifest of controls and views                                                 | `import`, `className`, `style`, raw HTML, React — anything that says how it looks |
 | **Kit**     | `site/learn/kit/**`                                            | The components the vocabulary maps to, the control and view renderers, the widget frame. Props are semantic: a control has a `kind`, a `label`, a `unit` | Colour, font, radius or spacing literals. Tokens only                             |
 | **Theme**   | `site/learn/theme/**`                                          | Design tokens as CSS custom properties, bound into Tailwind under a `learn-` prefix, one file per theme                                                  | Anything content-specific                                                         |
 
@@ -33,11 +33,16 @@ defined in `kit/vocabulary.tsx` and handed to MDX by
 | `<Figure src alt caption>` | `src` is a file name under `site/public/learn/figures/` | A static picture. Rare — the widget is the figure                                                                                    |
 | `<Book part>`              | `part: number \| number[]`                              | "Synth Secrets, Part 17", linked. The citation                                                                                       |
 | `<Term>`                   | children                                                | A word being defined, marked up as `<dfn>` for the glossary page that does not exist yet                                             |
+| `<Map />`                  | none                                                    | The picture of the catalogue: Part 63's three shelves. `/learn` draws the same component                                             |
 
 Plus markdown: headings, paragraphs, lists, emphasis, links, code fences.
 
-A lesson that wants an eighth component is a conversation about whether the need
-is content or design. The answer is usually a change in `kit/` with no new tag.
+A lesson that wants a ninth component is a conversation about whether the need is
+content or design. The answer is usually a change in `kit/` with no new tag; the
+eighth, `<Map />`, is what the answer looks like when it is not. The section has
+exactly one picture of the catalogue, two pages draw it, and a static copy under
+`public/` would have kept its colours through a theme swap — so the drawing
+became a word rather than a file.
 
 ## The tokens
 
@@ -108,7 +113,10 @@ monochrome, serif, square, wider.
    order.
 
 3. If the chapter is new, create `content/learn/<chapter>/meta.json`
-   (`{ "title": …, "pages": [ … ] }`). **Its folder name is already in
+   (`{ "title": …, "pages": [ … ] }`). A chapter intro — `<chapter>/index.mdx` —
+   is **not** listed in `pages`: `fumadocs-core` reads it off the folder and
+   hangs it on `folder.index`, and naming it in `pages` would put it in the
+   lesson list as well. **Its folder name is already in
    `content/learn/meta.json`'s `pages`**: all eleven chapters are listed there
    in reading order, and entries naming folders that do not exist yet are
    silently dropped, so writing the folder is the whole of publishing the
@@ -414,13 +422,13 @@ patch a second time in frontmatter. The preset travels in the URL fragment, so
 the Playground arrives sounding like the lesson did.
 
 The format is `learn/playground/state.ts` — `#p=<base64url JSON>` of
-`{ preset, params, xy, voices, glide }` — shared with the Playground itself
-(ticket 06), which writes it back on every knob move. `decodePlaygroundState`
+`{ preset, params, xy, voices, glide }` — shared with the Playground itself,
+which writes it back on every knob move. See "The Playground" below. `decodePlaygroundState`
 never throws: a broken link opens a Playground at its defaults.
 
-`/learn/playground` does not exist yet, so it is the one entry in
-`scripts/check-learn-links.mjs`'s `ALLOWLIST`. Delete that line the day the
-route lands.
+`/learn/playground` was the one entry in `scripts/check-learn-links.mjs`'s
+`ALLOWLIST` until the route landed. The list is empty again, which is where it
+should stay.
 
 ### A blocked lesson
 
@@ -456,16 +464,107 @@ including the XY pad, which nudges by 0.02 per arrow press of its own.
 
 ### The map figure
 
-`learn/chrome/MapFigure.tsx` is the one drawing in the section: Part 63's three
+`learn/kit/MapFigure.tsx` is the one drawing in the section: Part 63's three
 shelves — sources, modifiers, controllers — with two arrows saying that the
 shelf is the patching and not the module. Inline SVG rather than a file under
 `public/`, because an `<img>` cannot see the tokens and a figure that keeps its
 colours through a theme swap is the one thing this section is built not to have.
 Every colour in it is `currentColor` under a `learn-` class.
 
-Lesson 1.5 explains this figure. Reaching it from content needs either a copy in
-`public/learn/figures/` or an eighth word in the vocabulary; that is a decision
-for the chapter that wants it.
+It lives in the **kit** rather than the chrome because it has two callers and
+one of them is a lesson: `app/learn/index-page.tsx` draws it on the map and
+`sound/sources-modifiers-controllers.mdx` writes `<Map />`. That decision was
+04c's and it is made — the vocabulary is eight words and the eighth is this
+drawing.
+
+## The Playground
+
+`/learn/playground` is the tutorial voice with nothing hidden: all thirty-one
+parameters in the voice's own five groups, the voice count, the glide, the
+sixteen-sound gallery, an XY pad, and a link you can send someone. It is what
+every voice lesson's "Open in Playground" points at, and it is the section's
+last playable page.
+
+It is **a patch, rendered by the kit** (`learn/patches/playground.ts`), so it is
+held to rule 2 and looks like every widget. What it is not is a `LessonWidget`:
+a lesson shows two or three controls and one flat grid is right for that, and
+thirty-five knobs in one grid is a preset list with the names taken off. The
+frame is `learn/playground/PlaygroundRig.tsx`, and every control and view inside
+it is drawn by the kit's own `renderControl` and `renderView`.
+
+| File                                 | What                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------- |
+| `learn/patches/playground.ts`        | The synth: the thirty-one derived as `voice.ts` derives them, the pad, the pool |
+| `learn/voice/mappings.ts`            | What the pad moves, per preset. Data, and one taper                             |
+| `learn/playground/state.ts`          | The link format, shared with the lesson chrome                                  |
+| `learn/playground/values.ts`         | A preset as thirty-one numbers, and the diff a link carries                     |
+| `learn/playground/pad.ts`            | A mapping as a control the kit can render, and where its dot starts             |
+| `learn/playground/Playground.tsx`    | The wrapper, which exists only to re-key the rig when the voice count changes   |
+| `learn/playground/PlaygroundRig.tsx` | The frame: gallery, views, pad, the five groups, "Copy link", the code          |
+| `app/learn/playground/page.tsx`      | The route. Deliberately not a page in `content/learn` — see the file's comment  |
+
+### The link is the state
+
+```
+/learn/playground#p=<base64url JSON { preset, params, xy, voices, glide }>
+```
+
+`params` carries **only what differs from the preset**, `xy` only if the pad was
+moved off the sound's own position, `voices` and `glide` only if they are not the
+defaults — so a Playground nobody has touched has a clean URL and a Playground
+with two knobs moved has a short one. Every change rewrites the fragment with
+`history.replaceState`, which is why "Copy link" is `location.href` and there is
+no second store to keep in step.
+
+`decodePlaygroundState` never throws and clamps what it reads: a pad position to
+0…1, the pool to 1…8, the glide to 0…1 s. A link is user input, and a
+`voices: 400` in one is four hundred voices' worth of worklets from a string
+somebody typed.
+
+**The link is applied after `ready`**, in the rig's one seeding effect, by
+writing all thirty-one parameters with `ref.value = x`. Not `setPreset`: a
+scheduled value does not reach a `.value` read in the same tick, and a gallery
+tile has to move thirty-one sliders now. `playground.test.ts` builds an
+instrument with every preset in both banks and checks the page's own resolution
+against the library's, because two resolvers that disagree would be a page whose
+knobs lie about the sound.
+
+### The pad
+
+Each gallery preset names one or two parameters per axis in
+`learn/voice/mappings.ts`; a preset with no mapping — every lesson preset — gets
+cutoff across and resonance up. The patch's `padX`/`padY` are positions, 0…1, and
+writing one sweeps everything bound to that axis with `setTargetAtTime` and a
+10 ms constant, so a fast gesture across the whole cutoff range does not zipper.
+The ramp is in the patch because only a patch has the context's clock;
+`kit/controls/XY.tsx` knows where a finger is and coalesces its writes to one per
+animation frame.
+
+Loading a preset **places** the dot rather than sweeping to it
+(`synth.placePad`): the thirty-one parameters are already the sound, and an axis
+with two bindings has no position that satisfies both, so a sweep would undo half
+of what was just written. The pad takes over the moment it is touched.
+
+**To add a gallery preset**: add it to `galleryPresets` in `learn/voice/presets.ts`
+and a mapping under the same key in `learn/voice/mappings.ts`. The tile and the
+pad appear; `mappings.test.ts` fails if the two lists disagree or if a binding
+asks for a value its parameter will not take.
+
+### Voices rebuilds
+
+The pool is built once and its size is fixed, so a different count is a different
+instrument — `site/examples/InstrumentExample.tsx` has done it that way since the
+module shipped. A patch cannot rebuild itself, so the `voices` accessor records
+what was asked for and calls whoever is listening; the rig writes the fragment
+and asks `Playground.tsx` to re-key it, and the rebuilt rig reads the sound back
+out of the URL it just wrote. Play resumes with it.
+
+### One rule this directory is outside of
+
+Rule 4 walks `learn/kit`, `learn/chrome`, `learn/theme/*.tsx` and `app/learn`.
+`learn/playground` is a design directory that is in none of those lists, so
+`learn/playground/playground.test.ts` applies the same patterns to it. Folding it
+into rule 4 is ticket 06b.
 
 ## The rules
 

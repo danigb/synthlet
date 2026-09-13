@@ -14,7 +14,14 @@
  * around it changes theme is the one thing this section is built not to have.
  * Every colour below is `currentColor` under a `learn-` class, so the figure
  * restyles with the rest and `rules.test.ts` rule 4 reads it like any other
- * file in the chrome.
+ * file in the kit.
+ *
+ * It lives in the kit rather than the chrome because it has two callers and one
+ * of them is a lesson: `app/learn/index-page.tsx` draws it on the map, and
+ * lesson 1.5 writes `<Map />`, which is the eighth word of the vocabulary. A
+ * lesson may not import a component, and a static copy under `public/` would
+ * keep its colours through a theme swap - so the drawing became a word. That
+ * was `thoughts/tickets/learning-synthlet/04c-...`'s decision, option 1.
  */
 
 interface Shelf {

@@ -1,5 +1,11 @@
 import harmonics from "./harmonics";
 import harmonicsSource from "./harmonics.ts?raw";
+import noise from "./noise";
+import noiseSource from "./noise.ts?raw";
+import tone from "./tone";
+import toneSource from "./tone.ts?raw";
+import waveforms from "./waveforms";
+import waveformsSource from "./waveforms.ts?raw";
 
 /*
  * Chapter 1's patches.
@@ -16,6 +22,9 @@ import harmonicsSource from "./harmonics.ts?raw";
  */
 export const soundPatches = {
   "sound/harmonics": harmonics,
+  "sound/tone": tone,
+  "sound/waveforms": waveforms,
+  "sound/noise": noise,
 };
 
 /*
@@ -29,4 +38,7 @@ export const soundPatches = {
  */
 export const soundSources: Record<string, string> = {
   "sound/harmonics": harmonicsSource,
+  "sound/tone": toneSource,
+  "sound/waveforms": waveformsSource,
+  "sound/noise": noiseSource,
 };

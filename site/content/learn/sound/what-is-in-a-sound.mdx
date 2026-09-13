@@ -14,14 +14,14 @@ harmonics contained within them.
 
 </Epigraph>
 
-A sound is air pressure changing over time. Any change you can hear — a violin,
-a voice, a door — can be written as a stack of sine waves: one at the pitch you
-hear, and a series of quieter ones above it at whole-number multiples of it.
-Those upper ones are the <Term>harmonics</Term>, and which of them are present,
-and how loud each one is, is the whole of what we call <Term>timbre</Term>.
+A sound is air pressure changing over time, and any change you can hear — a
+violin, a voice, a door — is a stack of sine waves: one at the pitch you hear,
+and quieter ones above it at whole-number multiples of it. Those upper ones are
+the <Term>harmonics</Term>, and which are present, and how loud each is, is the
+whole of what we call <Term>timbre</Term>.
 
-A sawtooth is the honest case: every harmonic present, the nth one at 1/n of the
-fundamental's amplitude. Nothing missing, nothing favoured.
+A sawtooth is the honest case: every harmonic present, the nth at 1/n of the
+fundamental.
 
 <Figure
   src="harmonic-series.svg"
@@ -29,20 +29,16 @@ fundamental's amplitude. Nothing missing, nothing favoured.
   caption="The first eight harmonics of a sawtooth. The ninth, the tenth and the rest carry on to the right, getting quieter and never quite stopping."
 />
 
-## Build one
+The widget rebuilds its oscillator's wavetable from that list every time you
+move the first knob. At 1 it is a single sine: a tuning fork and nothing else.
 
-The widget below is an oscillator whose wavetable is rebuilt from that list
-every time you move the first knob. At 1 it is a single sine: one frequency, no
-harmonics, the sound a tuning fork makes and nothing else. Every step up adds
-the next one at 1/n.
-
-<Patch id="sound/harmonics" show={["harmonics", "cutoff", "strip"]} />
+<Patch id="sound/harmonics" show={["harmonics", "strip"]} />
 
 <Try>
 
-Start at 1 and go up one harmonic at a time. Listen for the point where it stops
-sounding like a tone and starts sounding like an instrument — for most people it
-is somewhere around 4 or 5, long before the knob runs out.
+Start at 1 and climb one harmonic at a time. Listen for where it stops sounding
+like a tone and starts sounding like an instrument — for most people around 4 or
+5, long before the knob runs out.
 
 </Try>
 
@@ -50,55 +46,37 @@ is somewhere around 4 or 5, long before the knob runs out.
 
 Harmonics are not a convention of music, they are a property of things that
 vibrate. A string fixed at both ends can only hold waves with a node at each
-end, which means half a wavelength, or one, or one and a half — the whole-number
-series and nothing in between. A column of air in a tube is the same argument
-with different boundaries. That is why the series is whole numbers everywhere,
-and why two instruments playing the same note share a skeleton.
+end — half a wavelength, or one, or one and a half — which is the whole-number
+series and nothing in between. A tube of air is the same argument with different
+boundaries, which is why two instruments playing the same note share a
+skeleton.
 
 </Aside>
 
-## Take it apart again
-
-Now the other direction. The Cutoff knob is a filter: it passes what is below it
-and removes what is above. Put the harmonics back up to 16, then bring the
-cutoff down.
+Now the other direction. **Strip harmonics** is a filter: it keeps what is below
+it and removes what is above, set here to cut above the fifth.
 
 <Try>
 
-Sweep the cutoff from the top to the bottom and back. Nothing about the pitch
-changes — the fundamental is there the whole time — but the sound goes from
-bright to dull to almost a sine again. Then switch on **Strip harmonics**, which
-is the same move made as a switch: everything above the fifth, gone.
+Put the harmonics up to 16, then switch **Strip harmonics** on and off. The
+pitch does not change — the fundamental is there throughout — but the sound goes
+from bright to dull, and the eleven marks above the fifth lose what stood under
+them.
 
 </Try>
 
-You have now done both halves of the course. Adding harmonics to build a tone is
-
-<Term>additive synthesis</Term>; starting with all of them and taking some away
-is <Term>subtractive synthesis</Term>, which is what almost every synthesiser
-you will ever meet does, and what the rest of these chapters are about.
+You have now done both halves of the course. Building a tone by adding harmonics
+is <Term>additive synthesis</Term>; starting with all of them and taking some
+away is <Term>subtractive synthesis</Term>, which is what the rest of these
+chapters are about.
 
 <Aside kind="history">
 
-The two were rival architectures for a decade. Additive won the argument on
-paper — any sound at all, given enough oscillators — and lost it on cost: a
-convincing tone wanted dozens of them with their own envelopes, and the Hammond
-organ's ninety-one tonewheels are what that costs in 1935. One oscillator and
-one filter gets most of the way there for the price of two modules, which is why
-subtractive is the shape of the Minimoog, the Prophet, and the synth in your
-browser.
-
-</Aside>
-
-<Aside kind="note">
-
-The spectrum view draws vertical marks where the theory says each harmonic
-should be. Move the Harmonics knob and the marks move with it, so the prediction
-and the measurement are on screen together.
+Additive won the argument on paper — any sound at all, given enough oscillators —
+and lost it on cost: the Hammond organ's ninety-one tonewheels are what "enough"
+meant in 1935. One oscillator and one filter get most of the way there for the
+price of two, which is the shape of almost every synth since.
 
 </Aside>
 
 <Book part={1} />
-
-Back to the [map](/learn). The next lessons — pitch, loudness and timbre, the
-waveforms, noise — arrive with the first chapter's full content.

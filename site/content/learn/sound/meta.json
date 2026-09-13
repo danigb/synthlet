@@ -1,4 +1,10 @@
 {
   "title": "Sound",
-  "pages": ["what-is-in-a-sound"]
+  "pages": [
+    "what-is-in-a-sound",
+    "pitch-loudness-timbre",
+    "waveforms-you-can-hear",
+    "noise",
+    "sources-modifiers-controllers"
+  ]
 }

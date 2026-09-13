@@ -61,7 +61,7 @@ describe("the index over content/learn", () => {
       {
         id: "sound/harmonics",
         preset: undefined,
-        show: ["harmonics", "cutoff", "strip"],
+        show: ["harmonics", "strip"],
       },
     ]);
   });

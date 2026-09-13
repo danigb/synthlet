@@ -8,7 +8,7 @@ import { learnVocabulary, type PatchProps } from "@/learn/kit/vocabulary";
  * A lesson never imports a component - that is the rule the whole section is
  * built around - so this map is the only place a name in an `.mdx` file can
  * come from. Two halves: fumadocs' renderers for plain markdown (headings,
- * paragraphs, lists, code fences), and the tutorial's own seven-word
+ * paragraphs, lists, code fences), and the tutorial's own eight-word
  * vocabulary, which is where anything with a shape comes from.
  *
  * The vocabulary goes last, so a name it defines wins.

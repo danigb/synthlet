@@ -70,7 +70,14 @@ function prose(source: string): string {
 // Rule 1
 // ---------------------------------------------------------------------------
 
-/** The seven, taken from the map itself so the two can never disagree. */
+/**
+ * The eight, taken from the map itself so the two can never disagree.
+ *
+ * There is no list of allowed tags here on purpose: `<Map />` became the eighth
+ * word (04c) with one line in `learnVocabulary` and no edit to this file, which
+ * is the property worth keeping - a tag a lesson can write and a tag this rule
+ * allows are the same set by construction.
+ */
 const VOCABULARY = new Set(Object.keys(learnVocabulary));
 
 /**

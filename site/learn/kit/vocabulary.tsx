@@ -1,16 +1,18 @@
 import type { ReactNode } from "react";
+import { MapFigure } from "./MapFigure";
 import { Patch } from "./Patch";
 
 /*
  * Everything a lesson is allowed to say, and the only place it is decided what
  * any of it looks like.
  *
- * Seven components with semantic props. A lesson writes `<Aside kind="why">`
+ * Eight components with semantic props. A lesson writes `<Aside kind="why">`
  * and means "this is the physics"; whether that is a tinted box, a margin note
  * or a footnote is this file's business and a theme's, and changing it changes
- * every lesson at once. There is no eighth: a lesson that wants one is a
- * conversation about whether the need is content or design, and the answer is
- * almost always a change here with no new tag.
+ * every lesson at once. There is no ninth without the same conversation the
+ * eighth had: whether the need is content or design, and the answer is almost
+ * always a change here with no new tag. `<Map />` earned its place because the
+ * section has exactly one picture of the catalogue and two pages draw it.
  *
  * No colour, no font, no radius and no spacing literal appears below - only
  * `learn-` classes bound to the tokens in `../theme`, plus layout utilities
@@ -190,6 +192,15 @@ export function Term({ children }: TermProps) {
   );
 }
 
+/**
+ * The picture of the catalogue: Part 63's three shelves.
+ *
+ * The one drawing in the section, and the only vocabulary word that renders
+ * fixed content rather than the lesson's own. `MapFigure` is the component's
+ * name everywhere else; `Map` is what a lesson writes, because in a lesson it
+ * is "the map" and there is only one.
+ */
+export { MapFigure };
 export { Patch };
 export type { PatchProps } from "./Patch";
 
@@ -208,4 +219,5 @@ export const learnVocabulary = {
   Figure,
   Book,
   Term,
+  Map: MapFigure,
 };

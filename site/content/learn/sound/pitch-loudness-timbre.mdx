@@ -1,0 +1,61 @@
+---
+title: Pitch, loudness, timbre
+description: Three knobs that change three different things, and one picture in which you can watch each of them do it.
+core: true
+book: [3]
+hear: Three knobs, three different things. Frequency moves the peaks apart, volume moves them up, waveform changes how many there are.
+status: ready
+---
+
+Almost every book on synthesis opens by saying that a sound has three
+qualities — <Term>pitch</Term>, <Term>loudness</Term> and <Term>timbre</Term> —
+and that a synthesiser has an oscillator for the first, an amplifier for the
+second and a filter for the third. Reid spends sixty-three parts complicating that, and he is
+right to. But it is a useful simplification, and this page is where you can
+check it: one oscillator, three knobs, and each knob moves exactly one thing.
+
+<Patch id="sound/tone" show={["frequency", "volume", "waveform"]} />
+
+The dashed lines on the spectrum are a prediction — the nth harmonic is at n
+times the fundamental — drawn over the measurement so you can watch the two
+agree.
+
+<Try>
+
+Sweep **Frequency**. The lines and the peaks climb together and spread apart as
+they go, because the gap between harmonics _is_ the fundamental and it is
+growing. The shape on the scope never changes; it only gets narrower.
+
+</Try>
+
+<Try>
+
+Sweep **Volume**. Now nothing moves sideways at all: the whole spectrum slides
+up and down, and the scope's trace gets taller and shorter. Loudness is the one
+quality of the three that changes no frequency.
+
+</Try>
+
+<Try>
+
+Step through **Waveform** with the other two left alone. Sine puts a peak under
+the first line and leaves the other seven bare. Triangle and square fill the
+odd-numbered lines and skip the even ones. Sawtooth fills all of them. Same
+pitch, same loudness, four different instruments.
+
+</Try>
+
+<Aside kind="note">
+
+The volume knob is marked in decibels because that is what your ear counts in:
+every 6 dB is a halving, so the quiet end of the travel is where most of the
+useful range lives. The parameter underneath is a plain multiplier — the control
+does the conversion, which is why a patch never has to.
+
+</Aside>
+
+That last one is the interesting knob, and it is the reason the next page exists:
+"waveform" is not a shape so much as a recipe, and the four names are four
+recipes worth knowing by ear.
+
+<Book part={3} />
