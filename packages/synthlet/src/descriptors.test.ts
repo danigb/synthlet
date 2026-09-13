@@ -11,8 +11,10 @@ import {
   NoiseType,
   ParamScaleType,
   PolyblepOscillatorType,
+  QuantizerOutput,
   RingModType,
   SampleHoldType,
+  Scale,
   SlewType,
   SvfType,
 } from "./index";
@@ -35,6 +37,7 @@ const EXPECTED = [
   "ClipAmp",
   "Clock",
   "DattorroReverb",
+  "Decimator",
   "DigitalDelay",
   "EnvelopeFollower",
   "Euclid",
@@ -45,10 +48,12 @@ const EXPECTED = [
   "LevelMeter",
   "Lfo",
   "LookaheadLimiter",
+  "ModalResonator",
   "Noise",
   "Oscillator",
   "Param",
   "PolyblepOscillator",
+  "Quantizer",
   "ReverbDelay",
   "RingMod",
   "SampleHold",
@@ -374,6 +379,18 @@ const ENUM_PARAMS = [
     param: "type",
   },
   {
+    // Two quantities, not two points on a continuum - hertz and semitones -
+    // so the range is the enum and nothing between. `Quantizer.scale` is
+    // deliberately *not* on this list: its range is 1...4095 and `Scale`'s
+    // members span 73...4095, exactly as `Arp.scale` already is. A mask is a
+    // set, and the declared range is every set there is rather than the
+    // twenty-eight this library happens to have named.
+    name: "Quantizer.output",
+    values: QuantizerOutput,
+    factory: synthlet.Quantizer,
+    param: "output",
+  },
+  {
     // Its types are a const object attached to the factory, not an enum.
     name: "VirtualAnalogFilter.type",
     values: synthlet.VirtualAnalogFilter,
@@ -407,8 +424,15 @@ const ENUMS = {
   NoiseType,
   ParamScaleType,
   PolyblepOscillatorType,
+  QuantizerOutput,
   RingModType,
   SampleHoldType,
+  // `arp`'s `ArpScale` and this are the same twenty-eight members under two
+  // names, from two copies of `scripts/_scales.ts`. They are distinct enum
+  // *objects* by construction, so the guard that they cannot drift is
+  // `worklet-copies.test.ts`'s byte-identity assertion on the file rather than
+  // a comparison here.
+  Scale,
   SlewType,
   SvfType,
 };

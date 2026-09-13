@@ -195,9 +195,24 @@ describe("the measuring instrument", () => {
       // the rewrite fixed passed a test that only asked whether the output
       // was finite and non-zero.
       "chorus",
+      // The first package whose *subject* is aliasing rather than a package
+      // that has to avoid it. Part 17's Figures 17 and 18 are a 10 kHz sine
+      // reappearing at 3.33 kHz and at 1.11 kHz, and the test that proves the
+      // module is a converter reads those two peaks and then reads them again
+      // with the anti-alias filter on. Those readings have to be the same
+      // readings `ring-mod` and `lfo` are calibrated against, or "44.5 dB
+      // down" here and "60 dB down" there would be two instruments' numbers.
+      "decimator",
       "digital-delay",
       "granite",
       "lfo",
+      // The one whose numbers are the book's tables read back. Part 32 hands
+      // over a kettle drum as four ratios, four levels and four decays, and
+      // the test that proves the module plays it finds the four peaks at 150,
+      // 225, 297 and 366 Hz, and the decays in the ratio 45 : 73 : 91 : 84.
+      // Those peaks have to be found the way `decimator` finds its alias, or
+      // "within one bin" would mean two different bins.
+      "modal-resonator",
       // The one whose numbers *are* the module's argument for existing. A ring
       // modulator is told from a VCA by what is missing from its spectrum -
       // Part 11's "the Modulator has completely disappeared" - so the test
@@ -277,6 +292,44 @@ describe.each(traversalPackages)("%s", (pkg) => {
     expect(
       readFileSync(join(root, "packages", pkg, "src/_traversal.ts"), "utf8"),
     ).toBe(traversalSource);
+  });
+});
+
+// And the scale masks, which left `arp` the day `quantizer` arrived - the same
+// event, one file later, that moved the traversal out of the same `dsp.ts`
+// when `instrument` arrived.
+//
+// The thing that has to line up here is not the decoder, which is a nine-line
+// loop either package could have written twice without anyone noticing. It is
+// that **2741 has to name the same seven notes in both**. `arp` walks the
+// notes of a mask and `quantizer` snaps a signal to them, `scale` is an
+// `AudioParam` on both, and Part 16's Figure 15 is the patch where one value -
+// or one node - feeds the two at once. Two tables that had drifted by one bit
+// would put those halves in different keys, with no error and nothing to say
+// so: the same class of silence `_gate.ts` and `_smooth.ts` exist to prevent.
+//
+// What they deliberately do *not* share is the spelling at their surfaces, for
+// the same reason the two arpeggiators do not: this enum is `ArpScale` in the
+// package that named it first and `Scale` in the one that adopted it, because
+// a shared file does not get to rename a published export. That is why this
+// file's byte-identity assertion is the guard rather than an enum comparison -
+// the two enum *objects* are distinct by construction.
+const scalesSource = readFileSync(join(root, "scripts/_scales.ts"), "utf8");
+const scalesPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_scales.ts")),
+);
+
+describe("the scale masks", () => {
+  it("are shared by every package that speaks in scales", () => {
+    expect(scalesPackages).toEqual(["arp", "quantizer"]);
+  });
+});
+
+describe.each(scalesPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_scales.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_scales.ts"), "utf8"),
+    ).toBe(scalesSource);
   });
 });
 

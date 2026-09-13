@@ -80,7 +80,10 @@ upward**.
 
 For a true 1 V/oct glide, slew a `detune` in cents — `PolyblepOscillator`,
 `WavetableOscillator` and `KarplusStrong` all take one — or slew the note number
-before converting it to hertz. The example above takes the cents route.
+and convert it to hertz with the
+[quantizer](/docs/modulators/quantizer), which with `Scale.Chromatic` and
+`hysteresis: 0` is exactly that converter and nothing else. The example above
+takes the cents route.
 
 <Callout title="Never put one on a gate" type="warn">
   Exponential mode approaches zero asymptotically, and a gate that closes 30 dB

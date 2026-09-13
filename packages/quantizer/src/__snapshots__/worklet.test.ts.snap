@@ -1,0 +1,41 @@
+// Jest Snapshot v1, https://goo.gl/fbAQLP
+
+exports[`QuantizerProcessor has parameter descriptors 1`] = `
+[
+  {
+    "automationRate": "a-rate",
+    "defaultValue": 60,
+    "maxValue": 127,
+    "minValue": 0,
+    "name": "input",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 4095,
+    "maxValue": 4095,
+    "minValue": 1,
+    "name": "scale",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 11,
+    "minValue": 0,
+    "name": "root",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0.1,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "hysteresis",
+  },
+  {
+    "automationRate": "k-rate",
+    "defaultValue": 0,
+    "maxValue": 1,
+    "minValue": 0,
+    "name": "output",
+  },
+]
+`;

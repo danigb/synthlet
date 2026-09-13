@@ -1,0 +1,128 @@
+---
+title: Modal Resonator
+description: A bank of tuned, decaying resonators played from a mode table — kettle drums, bells and cowbells as one node each
+package: modal-resonator
+---
+
+import ModalResonatorExample from "../../../examples/ModalResonatorExample";
+
+`@synthlet/modal-resonator`
+
+Every percussion chapter of Synth Secrets ends with a table: a ratio, a level
+and a decay for each partial of the instrument, followed by a struggle to play
+it with four oscillators and four contour generators. The kettle drum needs a
+DX7; the bell needs a Nord Modular's sine bank. This module plays the table.
+Strike it and every mode rings at once.
+
+```ts
+import {
+  registerModalResonatorWorklet,
+  Impulse,
+  ModalResonator,
+} from "synthlet";
+
+const audioContext = new AudioContext();
+await registerModalResonatorWorklet(audioContext);
+
+const strike = Impulse(audioContext, { trigger });
+const timp = ModalResonator(audioContext, {
+  frequency: 150,
+  decay: 2,
+  modes: ModalResonator.modes.kettleDrum(),
+});
+strike.connect(timp).connect(audioContext.destination);
+```
+
+<ModalResonatorExample />
+
+## A kettle drum is four numbers per mode
+
+Part 32 measures the kettle drum and hands over this — the four radial modes a
+timpanist favours, with the book's own amplitudes and decays:
+
+| Mode | Ratio | At 150 Hz | Level | Decay |
+| ---- | ----- | --------- | ----- | ----- |
+| 1,1  | 1.00  | 150 Hz    | 5     | 45 %  |
+| 2,1  | 1.50  | 225 Hz    | 4     | 73 %  |
+| 3,1  | 1.98  | 297 Hz    | 3     | 91 %  |
+| 4,1  | 2.44  | 366 Hz    | 1     | 84 %  |
+
+That is `ModalResonator.modes.kettleDrum()`, verbatim. Reid's reason for
+favouring those modes is a sentence about playing technique: the timpanist
+strikes _"almost precisely a quarter the way from the edge to the centre"_,
+which suppresses the enharmonic circular modes. Pick **Membrane** in the example
+to hear what striking the centre gives you — Part 31's twelve Bessel ratios,
+before the drum's air drags the radial ones towards harmonic.
+
+Watch the spectrum while you do it. A mode's peak there is proportional to its
+level _times_ its decay, so the drum's tallest line is mode 3, not the mode 1
+that is loudest at the strike. The spectrum and the strike are two different
+questions.
+
+## Parameters
+
+| Param        | Default | Range     | Rate   | Meaning                                                        |
+| ------------ | ------- | --------- | ------ | -------------------------------------------------------------- |
+| `frequency`  | 220     | 20 … 5000 | k-rate | Frequency of a ratio-1 mode in Hz; every mode is a ratio of it |
+| `decay`      | 1       | 0.01 … 10 | k-rate | Seconds for a mode whose table decay is 1 to fall 60 dB        |
+| `brightness` | 1       | 0 … 1     | k-rate | Mode n's level is scaled by `brightness^(n−1)`; 1 is the table |
+
+`frequency` and `decay` are read once per block and interpolated across it, so
+an envelope on `frequency` — every drum has one — neither zippers nor changes
+the loudness of the ring. `brightness` is the strike-hardness gesture of Parts
+35 and 42: a harder hit excites more of the upper modes, so velocity into it is
+how hard the stick lands.
+
+`decay` is the time of a mode whose _table_ decay is 1, not the time of mode 1:
+the kettle drum's mode 1 is the 45 %, and it goes in as written.
+
+Construction options: `maxModes` (default 32, at most 256) sizes the pool so a
+table swap never allocates, and `modes` is the starting table (default
+`harmonic(8)`).
+
+## The tables
+
+`node.setModes(table)` replaces the table on the next render quantum. Modes in
+both tables keep ringing; a table longer than `maxModes` is truncated with a
+warning.
+
+| Table               | From    | What it is                                                                   |
+| ------------------- | ------- | ---------------------------------------------------------------------------- |
+| `harmonic(n)`       | —       | Ratios 1 … n, each at `1/n`. `harmonic(1)` is claves: one mode               |
+| `membrane()`        | Part 31 | The twelve Bessel ratios of an ideal membrane                                |
+| `kettleDrum()`      | Part 32 | The table above                                                              |
+| `bell()`            | Part 40 | Strike partials 2 : 3 : 4, so you hear the missing 1; a beating pair; a hum  |
+| `cowbell()`         | Part 41 | 587 and 845 Hz at `frequency: 587`, each as a short impact and a longer tail |
+| `stiffString(B, n)` | —       | `k·√(1 + B·k²)`, the stretched partials of a stiff string                    |
+
+The bell is the book's best trick: its three loudest partials sit at 2, 3 and 4
+times a fundamental that is not there, and the ear supplies it — so
+`frequency` is the pitch you hear, not a frequency present in the sound. The
+near-degenerate pair at 2 and 2.01 is the _"boii-yoy-yoy-yoiinnnggg"_. Only the
+ratios are Reid's; the levels and decays are this library's.
+
+A table is a plain array, so a rule is a function: `stiffString` is the first,
+and anything that returns `{ ratio, level, decay }[]` is the next.
+
+## Driving it continuously
+
+Levels are normalised for a **strike**: a unit impulse puts each mode's envelope
+at its level. Anything longer is amplified by the resonance, and a long decay is
+a very narrow one — a unit sine held on a mode with `decay: 1` peaks at about
+3200 (+70 dB), and a 30 ms noise burst into `harmonic(8)` peaks at 2.57. Put a
+`Gain` in front of any exciter that is not an `Impulse`. The example's noise
+burst goes in at 0.05.
+
+## Mono, deliberately
+
+Input channels are summed and the output is one channel. A body is one object,
+and sixty-four resonators per channel would double the cost for a stereo image
+that a `StereoPannerNode` after the node gives for free.
+
+## Not here
+
+No `structure` or `position` knob yet — they are Rings' ways of filling the
+table without a table, and the table has to exist first. No exciter: `Impulse`,
+`Noise`, `AdAmp` and every oscillator already are one. And no chaos: Part 37's
+hard-hit cymbal couples its modes nonlinearly, which a linear bank cannot do;
+`Noise` under a velocity-scaled envelope is the book's own workaround.
