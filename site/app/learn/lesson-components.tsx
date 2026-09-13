@@ -1,5 +1,6 @@
 import defaultComponents from "fumadocs-ui/mdx";
-import { learnVocabulary } from "@/learn/kit/vocabulary";
+import { BlockedPatch } from "@/learn/chrome/lesson-chrome";
+import { learnVocabulary, type PatchProps } from "@/learn/kit/vocabulary";
 
 /**
  * Everything a lesson is allowed to say.
@@ -16,3 +17,19 @@ export const lessonComponents = {
   ...defaultComponents,
   ...learnVocabulary,
 };
+
+/**
+ * The same vocabulary, for a lesson whose module does not exist yet.
+ *
+ * A `blocked` lesson's prose is written and worth reading; what it cannot do is
+ * build a widget out of a module nobody has merged. Swapping `Patch` for a
+ * placeholder *here* is why neither the kit nor the lesson needs to know about
+ * blocking: which component a tag resolves to is already this file's decision,
+ * and whether a lesson is blocked is a fact the page reads off its frontmatter.
+ */
+export function blockedLessonComponents(what: string) {
+  return {
+    ...lessonComponents,
+    Patch: ({ id }: PatchProps) => <BlockedPatch id={id} what={what} />,
+  };
+}

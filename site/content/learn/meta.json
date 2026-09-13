@@ -1,4 +1,17 @@
 {
   "title": "Learning Synthlet",
-  "pages": ["sound", "about"]
+  "pages": [
+    "get-started",
+    "sound",
+    "envelopes",
+    "amplifiers",
+    "filters",
+    "modulation",
+    "time",
+    "voices",
+    "recipes",
+    "effects",
+    "beyond",
+    "about"
+  ]
 }

@@ -59,6 +59,22 @@ jobs:
         working-directory: site
         run: npm test
 
+      # The tutorial is a web of internal links - a lesson to the next lesson,
+      # the map to every chapter, a chapter back to the map - and a static
+      # export gives no warning at all when one of those targets was never
+      # built. The documentation half of the site has thirty such links today
+      # (`thoughts/roadmap.md`) precisely because nothing ever checked the URLs
+      # against the output. The check reads the export, so the export has to
+      # exist: `DEPLOY=true` is what `npm run deploy` uses, so this is the same
+      # build that ships.
+      - name: Build the site
+        working-directory: site
+        run: DEPLOY=true npm run build
+
+      - name: Check the tutorial's links
+        working-directory: site
+        run: npm run check:links
+
       # Rate bugs are silent: a k-rate read of an a-rate parameter does not throw,
       # does not warn, and produces audio that still sounds like audio. This reads
       # each package's params.ts and its processor together, which is the only

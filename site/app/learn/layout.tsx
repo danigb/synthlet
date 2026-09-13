@@ -25,9 +25,10 @@ const DEFAULT_THEME: "default" | "ink" = "default";
  *
  * Deliberately not `DocsLayout`: a documentation sidebar sorts alphabetically
  * for people who already know the words, and a tutorial is read in the order it
- * was written. The chrome that says where you are in that order - chapter,
- * position, previous and next - is a later ticket; until then the header is all
- * there is.
+ * was written. What says where you are in that order - the chapter line, the
+ * position, previous and next - is the page's own chrome (`learn/chrome`), read
+ * off the tree per lesson, because the order is the pedagogy and a sidebar
+ * would bury it.
  */
 export default function Layout({ children }: { children: ReactNode }) {
   return (

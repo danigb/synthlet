@@ -29,6 +29,7 @@ const SITE = join(LEARN, "..");
 const CONTENT = join(SITE, "content", "learn");
 const PATCHES = join(LEARN, "patches");
 const KIT = join(LEARN, "kit");
+const CHROME = join(LEARN, "chrome");
 const THEME = join(LEARN, "theme");
 const APP_LEARN = join(SITE, "app", "learn");
 
@@ -346,6 +347,7 @@ describe("rule 4: design is tokens, and only tokens", () => {
   // in the three design directories has to go through a `learn-` name.
   const files = [
     ...walk(KIT, [".ts", ".tsx"]),
+    ...walk(CHROME, [".ts", ".tsx"]),
     ...walk(THEME, [".ts", ".tsx"]),
     ...walk(APP_LEARN, [".ts", ".tsx"]),
   ];

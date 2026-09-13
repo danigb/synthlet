@@ -108,10 +108,13 @@ monochrome, serif, square, wider.
    order.
 
 3. If the chapter is new, create `content/learn/<chapter>/meta.json`
-   (`{ "title": …, "pages": [ … ] }`) and add the folder name to
-   `content/learn/meta.json`'s `pages`. Entries there naming folders that do not
-   exist yet are silently dropped and the order is kept, so the whole
-   table of contents can be listed before it is written.
+   (`{ "title": …, "pages": [ … ] }`). **Its folder name is already in
+   `content/learn/meta.json`'s `pages`**: all eleven chapters are listed there
+   in reading order, and entries naming folders that do not exist yet are
+   silently dropped, so writing the folder is the whole of publishing the
+   chapter. The number and the name the map shows for a chapter before its
+   folder exists are in `learn/chrome/chapters.ts`; once the folder is there,
+   the folder's own `meta.json` title wins.
 
 No route file is touched: `app/learn/[...slug]/page.tsx` enumerates the
 collection.
@@ -355,18 +358,127 @@ widget scrolls sideways inside it — the one place the site allows a horizontal
 scroll container, because a diagram scaled to fit 400 px is a diagram nobody can
 read.
 
+## The chrome
+
+The kit draws a widget; the chrome draws everything around it — where you are,
+where you go next, how far you have read. It lives in two places and is held to
+the kit's rule: tokens only, no literal, rule 4 walks it.
+
+| Where             | What                                                                                                                                                                                                                                       |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `app/learn/**`    | The routes. `page.tsx` (the map), `[chapter]/page.tsx` and `[chapter]/index/page.tsx` (a chapter, both ways), `[...slug]/page.tsx` (a lesson), plus `index-page.tsx`, `chapter-page.tsx` and `lesson-components.tsx`, which are not routes |
+| `learn/chrome/**` | Everything the routes are made of: the plan, the tree reader, the client pieces, the map figure                                                                                                                                            |
+
+### The navigation model
+
+`learn/chrome/tree.ts` is the only file that reads `learnTree`, and it reads it
+one way: **the tree is the order, the page is the data**. Order comes from the
+`meta.json` files, so where a chapter sits and where a lesson sits inside it are
+decided by content; title, description, `core`, `book`, `hear` and `status` come
+from `getLearnPage`. Nothing in `app/learn` knows any lesson's name.
+
+| Export                                   | What it gives                                                                                |
+| ---------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `builtChapters()`                        | The chapters that have a folder, in reading order                                            |
+| `allChapters()`                          | All eleven, written or not, for the map                                                      |
+| `lessonSequence()`                       | Every lesson, flat, in reading order. Chapter intros and `about.mdx` are not in it           |
+| `findLesson(slugs)`, `findChapter(slug)` | One of them                                                                                  |
+| `neighbours(slugs)`                      | `{ previous, next }`, across chapter boundaries; the map is the stop before the first lesson |
+| `coreLessonUrls()`                       | The core path that exists, for the progress bar                                              |
+
+`learn/chrome/chapters.ts` is the plan the tree is measured against: `CHAPTERS`
+(eleven `{ slug, title }`, and a chapter's **number is its index** — "Get
+started" is chapter 0) and `CORE_PATH_SIZE`, the progress bar's denominator.
+
+### What a lesson page shows, and where it comes from
+
+| On the page                  | From                                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------ |
+| "Chapter 1 · Sound · 3 of 6" | the tree                                                                       |
+| Title, description           | frontmatter                                                                    |
+| The body                     | the MDX                                                                        |
+| "What to listen for"         | `hear`                                                                         |
+| "From the book"              | `book`, rendered with the kit's own `<Book>` so there is one Synth Secrets URL |
+| "Open in Playground"         | a `<Patch id="voice">` in the body — see below                                 |
+| Previous / next              | the tree                                                                       |
+
+`<Book>` still works inline in a lesson, for a citation a paragraph makes rather
+than the page.
+
+### "Open in Playground"
+
+Only a lesson whose widget is the tutorial voice gets the link, and the page
+works that out by scanning its own `.mdx` for `<Patch id="voice" …>`
+(`learn/chrome/lesson-patches.ts`) rather than asking the lesson to declare its
+patch a second time in frontmatter. The preset travels in the URL fragment, so
+the Playground arrives sounding like the lesson did.
+
+The format is `learn/playground/state.ts` — `#p=<base64url JSON>` of
+`{ preset, params, xy, voices, glide }` — shared with the Playground itself
+(ticket 06), which writes it back on every knob move. `decodePlaygroundState`
+never throws: a broken link opens a Playground at its defaults.
+
+`/learn/playground` does not exist yet, so it is the one entry in
+`scripts/check-learn-links.mjs`'s `ALLOWLIST`. Delete that line the day the
+route lands.
+
+### A blocked lesson
+
+`status: "blocked: <what it waits for>"` means the prose is written and the
+module is not. The page renders the prose, a notice naming what it waits on, and
+a placeholder where the widget would be — and it does that by handing MDX a
+different `Patch`, from `app/learn/lesson-components.tsx`'s
+`blockedLessonComponents(what)`. Neither the kit nor the lesson knows about
+blocking: which component a tag resolves to is already the page's decision.
+
+### Progress
+
+`learn/chrome/progress.ts` keeps the set of visited lesson urls in
+`localStorage` under `learning-synthlet.visited`, and nothing else: no account,
+no server, no analytics. Two rules hold everywhere it is used:
+
+- **Nothing progress-related is in the export.** `useProgress().ready` is state
+  set in an effect, so `CoreProgress` and `VisitedMark` render `null` on the
+  server and on the first client render. A bar that shipped at 0% would flash
+  empty on every load for a reader who is halfway through.
+- **Every call is guarded.** `localStorage` throws in a private window.
+
+`MarkVisited` is what makes a lesson visited, and the lesson page is the only
+thing that renders it, so "visited" means "opened" in exactly one place.
+
+### The keys
+
+`LessonKeys` turns `←` and `→` into previous and next. It stands down for a
+modifier key and for anything focusable — `input`, `textarea`, `select`,
+`button`, `[contenteditable]`, `[role="application"]`, `[role="slider"]`,
+`[role="switch"]`, `[tabindex]` — which is every control the kit renders,
+including the XY pad, which nudges by 0.02 per arrow press of its own.
+
+### The map figure
+
+`learn/chrome/MapFigure.tsx` is the one drawing in the section: Part 63's three
+shelves — sources, modifiers, controllers — with two arrows saying that the
+shelf is the patching and not the module. Inline SVG rather than a file under
+`public/`, because an `<img>` cannot see the tokens and a figure that keeps its
+colours through a theme swap is the one thing this section is built not to have.
+Every colour in it is `currentColor` under a `learn-` class.
+
+Lesson 1.5 explains this figure. Reaching it from content needs either a copy in
+`public/learn/figures/` or an eighth word in the vocabulary; that is a decision
+for the chapter that wants it.
+
 ## The rules
 
 `learn/rules.test.ts`, run by `npm --prefix site test` and by CI (a step in the
 `build` job of `.github/workflows/test.yml`).
 
-| #   | What it checks                                                                                                                                                                                                                                            | Where                                         |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| 1   | No `import`/`export` at line start, no `className`, no `style=`, and no tag outside the vocabulary. Code fences and inline code are stripped first, so prose _about_ an import is fine                                                                    | `content/learn/**/*.mdx`                      |
-| 2   | No import of `react`, `react-dom`, `next`, or anything under `kit/` or `app/` (a `?raw` query is ignored); every patch on disk is registered; key, `id` and path agree; control ids are unique. A `*.test.ts` beside a patch is not a patch and is exempt | `learn/patches/**/*.ts`                       |
-| 3   | Every `<Patch id>` resolves in the registry and every name in `show` is one of that patch's controls. When the registry gains a `voice` id, every `preset` is checked against `learn/voice`'s two banks                                                   | content ↔ registry                            |
-| 4   | No `#hex`, `rgb(`, `hsl(`, no Tailwind palette class (`bg-sky-500` and the other twenty-one palettes), no `fd-` class. `theme/*.css` are the token files and are exempt                                                                                   | `learn/kit`, `learn/theme/*.tsx`, `app/learn` |
-| 5   | Frontmatter passes `learn/frontmatter.ts`; every `book` part is 1–63; every lesson carries `core`, `book`, `hear` and `status`                                                                                                                            | `content/learn/**/*.mdx`                      |
+| #   | What it checks                                                                                                                                                                                                                                            | Where                                                         |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| 1   | No `import`/`export` at line start, no `className`, no `style=`, and no tag outside the vocabulary. Code fences and inline code are stripped first, so prose _about_ an import is fine                                                                    | `content/learn/**/*.mdx`                                      |
+| 2   | No import of `react`, `react-dom`, `next`, or anything under `kit/` or `app/` (a `?raw` query is ignored); every patch on disk is registered; key, `id` and path agree; control ids are unique. A `*.test.ts` beside a patch is not a patch and is exempt | `learn/patches/**/*.ts`                                       |
+| 3   | Every `<Patch id>` resolves in the registry and every name in `show` is one of that patch's controls. When the registry gains a `voice` id, every `preset` is checked against `learn/voice`'s two banks                                                   | content ↔ registry                                            |
+| 4   | No `#hex`, `rgb(`, `hsl(`, no Tailwind palette class (`bg-sky-500` and the other twenty-one palettes), no `fd-` class. `theme/*.css` are the token files and are exempt                                                                                   | `learn/kit`, `learn/chrome`, `learn/theme/*.tsx`, `app/learn` |
+| 5   | Frontmatter passes `learn/frontmatter.ts`; every `book` part is 1–63; every lesson carries `core`, `book`, `hear` and `status`                                                                                                                            | `content/learn/**/*.mdx`                                      |
 
 Each violation names the file and the rule. They are collected rather than
 thrown, so four mistakes are four lines and not four runs.
@@ -391,3 +503,9 @@ npm --prefix site run check:links   # after a build: every /learn/ link resolves
 npx tsc --noEmit -p site
 npm run format:check                # at the repository root
 ```
+
+`check:links` reads the export, not the prose, so it needs a build first
+(`DEPLOY=true npm --prefix site run build`). CI runs both, in the `build` job.
+A link to a page a later ticket builds goes in the script's `ALLOWLIST` with its
+reason; a link to a page nobody is building is a dead link, not an allowlisted
+one.

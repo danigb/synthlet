@@ -38,7 +38,12 @@ const DEFAULT_BASE = "/synthlet";
  * an allowlisted one.
  */
 const ALLOWLIST = new Map([
-  // ["/learn/playground", "built by learning-synthlet 06"],
+  // Every lesson whose widget is the tutorial voice offers "Open in
+  // Playground"; the page it opens is built by learning-synthlet 06. The link
+  // ships now so that the lessons written before 06 do not have to be edited
+  // afterwards. Delete this line the day `/learn/playground` exists - the
+  // checker counts what it allowed, so a stale entry is visible.
+  ["/learn/playground", "built by learning-synthlet 06"],
 ]);
 
 /** The section this checks. Everything else in the export is somebody else's. */
