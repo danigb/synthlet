@@ -278,17 +278,16 @@ thirty-second; the flute recipe, which wants breath, builds its own noise path
 
 ## Testing
 
-`learn-voice.test.ts` is written for vitest, which ticket 02 ("Content model
-and the three layers") adds to `site/`. Until then it runs ad hoc:
+`learn-voice.test.ts` runs with the site's own vitest, which ticket 02 ("Content
+model and the three layers") installed along with `site/vitest.config.ts`:
 
 ```sh
-cd site && npx --yes vitest@2 run learn/voice
+npm --prefix site test           # the whole site suite
+npm --prefix site test -- learn/voice   # this file alone
 ```
 
-`next build` type-checks every file in `tsconfig.json`'s `include`, and vitest is
-not a dependency of `site/` yet, so the `import ... from "vitest"` at the top of
-the test carries a `// @ts-ignore` and a note. **Ticket 02: delete that line when
-you install vitest** — it is the only thing here that knows vitest is missing.
+The `// @ts-ignore` that stood on the `vitest` import while the package was
+missing is gone with it.
 
 Twenty-one tests, in two halves. The schema half needs no audio: the thirty-one
 parameters, the groups, the option lists, every preset key a declared parameter,

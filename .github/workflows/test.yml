@@ -47,6 +47,18 @@ jobs:
             exit 1
           }
 
+      # The site's own suite: the tutorial's five content rules and the
+      # tutorial voice. It is a separate install because `site/` is outside the
+      # workspaces and has its own lockfile, and it is cheap - two vitest files,
+      # a few seconds - so it rides in this job rather than earning a shard.
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Run site tests
+        working-directory: site
+        run: npm test
+
       # Rate bugs are silent: a k-rate read of an a-rate parameter does not throw,
       # does not warn, and produces audio that still sounds like audio. This reads
       # each package's params.ts and its processor together, which is the only

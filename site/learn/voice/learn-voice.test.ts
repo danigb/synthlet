@@ -1,11 +1,5 @@
 import * as webAudio from "node-web-audio-api";
 import { Instrument } from "synthlet";
-// `next build` type-checks every file in `site/tsconfig.json`'s `include`, and
-// vitest is not a dependency of `site/` yet - ticket 02 adds it, along with the
-// `test` script that replaces the `npx` line at the bottom of `README.md`.
-// Until then an unresolved import here would fail the whole site build, so:
-// **ticket 02, delete this line when you install vitest.**
-// @ts-ignore
 import { beforeAll, describe, expect, it } from "vitest";
 import { learnVoice } from "./learn-voice";
 import {

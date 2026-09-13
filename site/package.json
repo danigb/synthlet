@@ -8,6 +8,8 @@
     "start": "next start",
     "postinstall": "fumadocs-mdx",
     "check:links": "node scripts/check-learn-links.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "deploy": "npm run deploy:build && npm run deploy:push",
     "deploy:build": "DEPLOY=true next build && npm run deploy:fix",
     "deploy:fix": "cp out/docs/quick-start.html out/docs/index.html",
@@ -32,8 +34,10 @@
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
     "gh-pages": "^6.1.1",
+    "gray-matter": "^4.0.3",
     "postcss": "^8.4.47",
     "tailwindcss": "^3.4.13",
-    "typescript": "^5.6.2"
+    "typescript": "^5.6.2",
+    "vitest": "^2.1.9"
   }
 }

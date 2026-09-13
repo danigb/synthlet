@@ -1,0 +1,59 @@
+/*
+ * The tutorial's design tokens, and the only file in the section allowed to
+ * contain a colour.
+ *
+ * Everything the kit draws is one of these names. That is the whole of the
+ * redesign story: a second file that redefines the same names restyles fifty-
+ * seven lessons, and `git diff --stat content/learn learn/patches` after doing
+ * it is empty. `ink.css` next door exists to prove exactly that, and
+ * `rules.test.ts` fails the build on the first `#hex` that appears anywhere
+ * else.
+ *
+ * `.dark` rather than a media query: fumadocs' theme provider toggles that
+ * class on `<html>`, so the tutorial follows the site's switch rather than
+ * disagreeing with the header above it.
+ */
+
+:root {
+  --learn-bg: #ffffff;
+  --learn-surface: #f5f4f8;
+  --learn-ink: #1c1b20;
+  --learn-ink-muted: #5d5966;
+  --learn-accent: #7c3aed;
+  --learn-border: #e2dfe8;
+
+  /*
+   * The two cable colours. Every block diagram in Synth Secrets draws audio in
+   * blue and control in black (Part 41), and the canvas views read these two
+   * with `getComputedStyle` rather than a literal, so a scope trace restyles
+   * with everything else.
+   */
+  --learn-audio: #2563eb;
+  --learn-control: #26232c;
+
+  --learn-font-text: var(--fd-font-sans, ui-sans-serif, system-ui, sans-serif);
+  --learn-font-mono: var(
+    --fd-font-mono,
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace
+  );
+
+  --learn-radius: 0.5rem;
+  --learn-gap: 1rem;
+  --learn-widget-max-width: 44rem;
+}
+
+.dark {
+  --learn-bg: #14131a;
+  --learn-surface: #1d1b25;
+  --learn-ink: #ece9f2;
+  --learn-ink-muted: #a49fb0;
+  --learn-accent: #a78bfa;
+  --learn-border: #302d3b;
+
+  /* Lifted, not inverted: a cable has to stay a cable in either scheme. */
+  --learn-audio: #60a5fa;
+  --learn-control: #cfcad8;
+}

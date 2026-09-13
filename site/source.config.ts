@@ -1,6 +1,7 @@
 import { remarkInstall } from "fumadocs-docgen";
 import { defineConfig, defineDocs } from "fumadocs-mdx/config";
 import { z } from "zod";
+import { lessonFrontmatter } from "./learn/frontmatter";
 
 export const { docs, meta } = defineDocs({
   docs: {
@@ -22,13 +23,10 @@ export const { docs, meta } = defineDocs({
 export const { docs: learnDocs, meta: learnMeta } = defineDocs({
   docs: {
     dir: "content/learn",
-    // Title and description are all a lesson needs to build and route. The rest
-    // of the frontmatter - `core`, `book`, `hear`, `status` - arrives with the
-    // content model.
-    schema: z.object({
-      title: z.string(),
-      description: z.string().optional(),
-    }),
+    // Declared in `learn/frontmatter.ts` rather than here, because
+    // `learn/rules.test.ts` validates every lesson against the same object and
+    // a schema a test restates is a schema that drifts.
+    schema: lessonFrontmatter,
   },
   meta: { dir: "content/learn" },
 });
