@@ -1,0 +1,164 @@
+---
+title: Quantizer
+description: Snap a note number to a scale - Part 16's programmable scale generator
+package: quantizer
+---
+
+import QuantizerExample from "../../../examples/QuantizerExample";
+
+`@synthlet/quantizer`
+
+Semitones in, hertz out. Feed it a signal that wanders and it comes back landing
+on notes of the scale you picked. Reid calls it a **programmable scale
+generator**, or PSG, and Part 16 ends its tour of stepped voltages with it.
+
+```ts
+import { registerQuantizerWorklet, Quantizer, Scale, Param } from "synthlet";
+
+const audioContext = new AudioContext();
+await registerQuantizerWorklet(audioContext);
+
+// A sample-and-hold of noise, mapped to two octaves of note numbers
+const notes = Param(audioContext, { input: sampleHold, gain: 12, offset: 60 });
+const pitch = Quantizer(audioContext, {
+  input: notes,
+  scale: Scale.PentatonicMinor,
+});
+pitch.connect(osc.frequency);
+```
+
+<QuantizerExample />
+
+## The two patches this is for
+
+**Figure 15 — the random arpeggiator.** Noise → [sample and
+hold](/docs/modulators/sample-hold) → here → oscillator, which Reid calls
+_"particularly pleasing if you make the defined scale an arpeggio because you
+then have a random arpeggiator — one of my favourite effects"_. The clock that
+samples the noise plays the note, so the envelope needs nothing from this
+module.
+
+**Figure 14 — portamento into glissando.** Put a slow LFO or a
+[slew limiter](/docs/modulators/slew-limiter) where the sample-and-hold was and
+a continuous rise comes out as a staircase. The book's own words: _"convert a
+continuously rising or falling CV into a 'stepped' one — an effect that we often
+use to convert portamento into glissando"_.
+
+## Semitones in, hertz out
+
+Reid's quantiser rounds a 1 V/oct control voltage to the nearest twelfth of a
+volt. This library has no volts: every pitch inlet in it is a frequency, and
+frequency is the wrong unit to quantise in, because a semitone is a **ratio**
+and not a number of hertz.
+
+So the module works in MIDI note numbers, fractional, and converts on the way
+out. Feeding it is [`Param`](/docs/modulators/param)'s job — a bipolar modulator
+times 12 plus 60 is two octaves around middle C — and there is deliberately no
+`gain`/`offset` here, because that would be a second `Param` hidden inside the
+node.
+
+It is also the converter the slew limiter's
+[pitch caveat](/docs/modulators/slew-limiter) asks for: slew the **note number**
+and the portamento is even in pitch, which slewing hertz never is.
+
+```ts
+const glide = SlewLimiter(audioContext, { input: notes, rise: 0.2, fall: 0.2 });
+const pitch = Quantizer(audioContext, {
+  input: glide,
+  scale: Scale.Chromatic,
+  hysteresis: 0,
+});
+```
+
+## Parameters
+
+| Param        | Default | Range    | Rate   | Meaning                                             |
+| ------------ | ------- | -------- | ------ | --------------------------------------------------- |
+| `input`      | 60      | 0 … 127  | a-rate | The note number to snap. A fractional MIDI note     |
+| `scale`      | 4095    | 1 … 4095 | k-rate | 12-bit pitch-class mask, bit 0 the root             |
+| `root`       | 0       | 0 … 11   | k-rate | Pitch class of the root, semitones above C. Floored |
+| `hysteresis` | 0.1     | 0 … 1    | k-rate | Semitones past a boundary before the note changes   |
+| `output`     | 0       | 0 … 1    | k-rate | `QuantizerOutput.Hz` or `QuantizerOutput.Note`      |
+
+`input` is a-rate because the glissando patch needs it to be: a glide has to
+step at the sample it crosses a boundary, not at the top of the next render
+quantum — 2.9 ms later at 44.1 kHz, and by a different amount every time. A
+stepped source costs nothing extra for it.
+
+## Nearest allowed note, ties up
+
+Reid's Table 1 gives each note a band from −1/24 V inclusive to +1/24 V
+exclusive. Generalised to a scale that is not chromatic, the same rule applies to
+the two nearest **allowed** notes: the boundary is their midpoint, and the band
+is half-open, so a value exactly on it takes the upper note.
+
+In C major, C4 (60) and D4 (62) are neighbours with nothing between them, so
+their boundary is 61.0:
+
+| `input` | In C major | Why                           |
+| ------- | ---------- | ----------------------------- |
+| 60.4    | C4         | 0.4 from C, 1.6 from D        |
+| 60.9    | C4         | 0.9 from C, 1.1 from D        |
+| 61.0    | D4         | equidistant — the tie goes up |
+| 61.5    | D4         | 1.5 from C, 0.5 from D        |
+
+The obvious guess — round to the nearest semitone, then snap that to the scale —
+gives D for 60.9, and is a different module: it quantises twice, and its
+boundaries are not where an ear puts them.
+
+## Hysteresis is a Schmitt trigger on a note
+
+A value hovering on a boundary would flip between two notes on **every sample**.
+From a sample-and-hold you would never hear it; from a slewed or LFO'd input it
+is a buzz, because the note is switching at audio rate.
+
+So the module remembers the current note's boundary zone and only looks up a new
+note when the input leaves it, widened by `hysteresis` on both sides. Braids'
+quantiser is built the same way, and it is also why this costs nothing per
+sample: the hot path is two comparisons against a cached pair of numbers.
+
+With the default 0.1 and C major, a ramp from 60 to 62 switches to D at 61.1 and
+has to fall back below 60.9 to return to C.
+
+<Callout title="Chromatic with no hysteresis is a pure converter">
+  `Quantizer(ac, { scale: Scale.Chromatic, hysteresis: 0 })` maps every semitone
+  to its own frequency and snaps nothing away. If what you wanted was
+  &ldquo;turn this note number into hertz&rdquo;, that is the module — there is
+  deliberately no second one.
+</Callout>
+
+## The scale is a bitmask
+
+A scale is a 12-bit pitch-class mask: bit `i` set means pitch class `i` — `i`
+semitones above the root — is allowed. Bit 0 is the root, so C major is
+`[0,2,4,5,7,9,11]` = `0b101010110101` = 2741, and **any** number in 1…4095 is a
+valid scale. The `Scale` enum names 28 of the useful ones, and `root` moves the
+whole mask: `Scale.Major` with `root: 2` is D major.
+
+That table lives in `scripts/_scales.ts` and is shared with
+[Arp](/docs/sequencers/arp), which publishes the same 28 members as `ArpScale`
+because it named them first. They are the same numbers by construction — the
+repo asserts the file is byte-identical across its copies — which is what makes
+the pair work: `scale` is an `AudioParam` on both modules, so one value, or one
+node, can drive an arpeggiator and a quantiser at once and they will be in the
+same key.
+
+## `Note` output
+
+`output: QuantizerOutput.Note` emits the MIDI number instead of the frequency,
+for the two cases that want it: a second quantizer downstream, and a `detune`
+inlet in cents through `Param.mul(ac, quantizer, 100)`.
+
+## Not in this module
+
+**No trigger output.** Braids and Marbles emit a gate when the note changes, and
+an envelope fired by a new note is a real patch. It is a second output, which
+means a different node shape, and it deserves its own ticket once something
+asks. The random-arpeggiator patch does not need one — the clock that drives the
+sample-and-hold drives the envelope.
+
+**No weighted or progressive quantisation.** Marbles' single "amount" knob —
+root only, then a power chord, then the full scale — is a better one-knob UX and
+a different module surface.
+
+**No note names.** A mask is a number and a note is a number.

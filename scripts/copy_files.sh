@@ -3,14 +3,15 @@
 # scripts/_worklet.ts goes to every package: it is the module contract, and
 # every package needs it. scripts/_gate.ts, scripts/_blep.ts, scripts/_delay.ts,
 # scripts/_spectrum.ts, scripts/_levels.ts, scripts/_smooth.ts,
-# scripts/_voices.ts and scripts/_traversal.ts go only to the packages that
-# already carry a copy - the ones that produce or consume a gate, the ones that
-# band-limit a discontinuity, the ones that need a circular buffer, the ones
-# whose tests measure a spectrum, the ones that show the main thread a level,
-# the ones that turn a time in seconds into a one-pole coefficient, the ones
-# that hand notes to voices, and the ones that walk a sequence of them - so
-# adding a package does not silently give it an unused file. A package opts in
-# by copying the file once by hand; from then on this script keeps it current.
+# scripts/_voices.ts, scripts/_traversal.ts and scripts/_scales.ts go only to
+# the packages that already carry a copy - the ones that produce or consume a
+# gate, the ones that band-limit a discontinuity, the ones that need a circular
+# buffer, the ones whose tests measure a spectrum, the ones that show the main
+# thread a level, the ones that turn a time in seconds into a one-pole
+# coefficient, the ones that hand notes to voices, the ones that walk a
+# sequence of them, and the ones that speak in scales - so adding a package
+# does not silently give it an unused file. A package opts in by copying the
+# file once by hand; from then on this script keeps it current.
 SOURCE_FILE="scripts/_worklet.ts"
 GATE_FILE="scripts/_gate.ts"
 BLEP_FILE="scripts/_blep.ts"
@@ -20,6 +21,7 @@ LEVELS_FILE="scripts/_levels.ts"
 SMOOTH_FILE="scripts/_smooth.ts"
 VOICES_FILE="scripts/_voices.ts"
 TRAVERSAL_FILE="scripts/_traversal.ts"
+SCALES_FILE="scripts/_scales.ts"
 
 # Define the target directory for each package
 TARGET_DIR="src/"
@@ -92,6 +94,16 @@ for PACKAGE in packages/*; do
       if [ -f "$TARGET_PATH/_traversal.ts" ]; then
         cp "$TRAVERSAL_FILE" "$TARGET_PATH"
         echo "Copied $TRAVERSAL_FILE to $TARGET_PATH"
+      fi
+
+      # And the scale masks, under the same rule. What is shared is not the
+      # nine-line decoder but the table: 2741 has to name the same seven notes
+      # in the package that walks them and in the package that snaps a signal
+      # to them, because a `scale` value - or a node patched into `scale` - is
+      # meant to move between the two.
+      if [ -f "$TARGET_PATH/_scales.ts" ]; then
+        cp "$SCALES_FILE" "$TARGET_PATH"
+        echo "Copied $SCALES_FILE to $TARGET_PATH"
       fi
     else
       echo "Warning: $TARGET_PATH does not exist. Skipping."

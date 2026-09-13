@@ -68,6 +68,20 @@ const DECIMATOR_PAGE = readFileSync(
   "utf8",
 );
 
+// The fifth entry, and the one whose table is load-bearing in a new way: this
+// module's `input` is the only a-rate parameter among the five, and it is the
+// whole argument for the module being usable on a glide. A table that had
+// drifted to "k-rate" would be documenting a different module - one whose
+// glissando steps at the render quantum rather than at the crossing.
+const QUANTIZER_README = readFileSync(
+  join(root, "packages/quantizer/README.md"),
+  "utf8",
+);
+const QUANTIZER_PAGE = readFileSync(
+  join(root, "site/content/docs/(modulators)/quantizer.mdx"),
+  "utf8",
+);
+
 /**
  * The whole markdown table whose header contains `marker`, verbatim.
  *
@@ -335,6 +349,70 @@ describe("the decimator's parameter table", () => {
     for (const source of [DECIMATOR_README, DECIMATOR_PAGE]) {
       expect(source).toContain("44100");
       expect(source).toMatch(/48 kHz/);
+    }
+  });
+});
+
+describe("the quantizer's parameter table", () => {
+  const descriptors = synthlet.Quantizer
+    .descriptors as readonly ParamDescriptor[];
+
+  const sources: [string, string][] = [
+    ["packages/quantizer/README.md", QUANTIZER_README],
+    ["site/content/docs/(modulators)/quantizer.mdx", QUANTIZER_PAGE],
+  ];
+
+  it.each(sources)("in %s names exactly the parameters that exist", (_w, s) => {
+    const named = tableRows(s, "| Default |").map(([param]) =>
+      param.replace(/`/g, ""),
+    );
+    expect(named).toEqual(descriptors.map((d) => d.name));
+  });
+
+  it.each(sources)("in %s reports the declared range and rate", (_w, s) => {
+    for (const [param, , declared, rate] of tableRows(s, "| Default |")) {
+      const name = param.replace(/`/g, "");
+      const descriptor = descriptors.find((d) => d.name === name)!;
+      expect([name, range(declared)]).toEqual([
+        name,
+        [descriptor.minValue, descriptor.maxValue],
+      ]);
+      expect([name, rate]).toEqual([name, descriptor.automationRate]);
+    }
+  });
+
+  it.each(sources)("in %s reports the declared default", (_w, s) => {
+    for (const [param, declared] of tableRows(s, "| Default |")) {
+      const name = param.replace(/`/g, "");
+      const descriptor = descriptors.find((d) => d.name === name)!;
+      expect([name, Number(declared)]).toEqual([name, descriptor.defaultValue]);
+    }
+  });
+
+  it("agrees between the README and the docs page", () => {
+    expect(table(QUANTIZER_PAGE, "| Default |")).toBe(
+      table(QUANTIZER_README, "| Default |"),
+    );
+  });
+
+  it("states the tie rule with the arithmetic, in both documents", () => {
+    // The one thing a reader will get wrong from the name alone: the boundary
+    // is the midpoint between two *allowed* notes, so 60.9 in C major is a C
+    // and not a D. Both documents carry the row and the reason.
+    for (const source of [QUANTIZER_README, QUANTIZER_PAGE]) {
+      expect(source).toContain("0.9 from C, 1.1 from D");
+      expect(source).toMatch(/tie goes up/);
+    }
+  });
+
+  it("names the pure-converter patch in both documents", () => {
+    // `Scale.Chromatic` with no hysteresis is the answer to "I only want to
+    // turn a note number into hertz", and the reason there is no second
+    // module for it. If either document stopped saying so, the library would
+    // look like it had a gap it does not have.
+    for (const source of [QUANTIZER_README, QUANTIZER_PAGE]) {
+      expect(source).toContain("Scale.Chromatic");
+      expect(source).toMatch(/hysteresis: 0/);
     }
   });
 });

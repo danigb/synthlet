@@ -288,6 +288,44 @@ describe.each(traversalPackages)("%s", (pkg) => {
   });
 });
 
+// And the scale masks, which left `arp` the day `quantizer` arrived - the same
+// event, one file later, that moved the traversal out of the same `dsp.ts`
+// when `instrument` arrived.
+//
+// The thing that has to line up here is not the decoder, which is a nine-line
+// loop either package could have written twice without anyone noticing. It is
+// that **2741 has to name the same seven notes in both**. `arp` walks the
+// notes of a mask and `quantizer` snaps a signal to them, `scale` is an
+// `AudioParam` on both, and Part 16's Figure 15 is the patch where one value -
+// or one node - feeds the two at once. Two tables that had drifted by one bit
+// would put those halves in different keys, with no error and nothing to say
+// so: the same class of silence `_gate.ts` and `_smooth.ts` exist to prevent.
+//
+// What they deliberately do *not* share is the spelling at their surfaces, for
+// the same reason the two arpeggiators do not: this enum is `ArpScale` in the
+// package that named it first and `Scale` in the one that adopted it, because
+// a shared file does not get to rename a published export. That is why this
+// file's byte-identity assertion is the guard rather than an enum comparison -
+// the two enum *objects* are distinct by construction.
+const scalesSource = readFileSync(join(root, "scripts/_scales.ts"), "utf8");
+const scalesPackages = packages.filter((pkg) =>
+  existsSync(join(root, "packages", pkg, "src/_scales.ts")),
+);
+
+describe("the scale masks", () => {
+  it("are shared by every package that speaks in scales", () => {
+    expect(scalesPackages).toEqual(["arp", "quantizer"]);
+  });
+});
+
+describe.each(scalesPackages)("%s", (pkg) => {
+  it("has not drifted from scripts/_scales.ts", () => {
+    expect(
+      readFileSync(join(root, "packages", pkg, "src/_scales.ts"), "utf8"),
+    ).toBe(scalesSource);
+  });
+});
+
 // And the levels transport, under the same rule - but the strongest case for it
 // yet, because here the thing that has to line up is the *reader*. One
 // `LevelMeterUI`, one React hook and one `subscribe` are meant to draw every

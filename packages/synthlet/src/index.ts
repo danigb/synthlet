@@ -19,6 +19,7 @@ import { registerLookaheadLimiterWorklet } from "@synthlet/lookahead-limiter";
 import { registerNoiseWorklet } from "@synthlet/noise";
 import { registerParamWorklet } from "@synthlet/param";
 import { registerPolyblepOscillatorWorklet } from "@synthlet/polyblep-oscillator";
+import { registerQuantizerWorklet } from "@synthlet/quantizer";
 import { registerReverbDelayWorklet } from "@synthlet/reverb-delay";
 import { registerRingModWorklet } from "@synthlet/ring-mod";
 import { registerSampleHoldWorklet } from "@synthlet/sample-hold";
@@ -50,6 +51,7 @@ export * from "@synthlet/lookahead-limiter";
 export * from "@synthlet/noise";
 export * from "@synthlet/param";
 export * from "@synthlet/polyblep-oscillator";
+export * from "@synthlet/quantizer";
 export * from "@synthlet/reverb-delay";
 export * from "@synthlet/ring-mod";
 export * from "@synthlet/sample-hold";
@@ -70,7 +72,14 @@ export { NoiseType } from "@synthlet/noise";
 export { NotePriority } from "@synthlet/instrument";
 export { ParamScaleType } from "@synthlet/param";
 export { PolyblepOscillatorType } from "@synthlet/polyblep-oscillator";
+export { QuantizerOutput } from "@synthlet/quantizer";
 export { RingModType } from "@synthlet/ring-mod";
+// The scale masks, under the name the package that adopted them uses.
+// `@synthlet/arp` publishes the same members as `ArpScale` above, because it
+// named them first and a shared file does not get to rename a published
+// export - so the two cannot both arrive through `export *`, and this line is
+// what makes `Scale` the spelling the library documents.
+export { Scale } from "@synthlet/quantizer";
 export { SampleHoldType } from "@synthlet/sample-hold";
 export { SlewType } from "@synthlet/slew-limiter";
 export { StealMode } from "@synthlet/instrument";
@@ -117,6 +126,7 @@ export function registerAllWorklets<C extends BaseAudioContext>(
     registerNoiseWorklet(context),
     registerParamWorklet(context),
     registerPolyblepOscillatorWorklet(context),
+    registerQuantizerWorklet(context),
     registerReverbDelayWorklet(context),
     registerRingModWorklet(context),
     registerSampleHoldWorklet(context),

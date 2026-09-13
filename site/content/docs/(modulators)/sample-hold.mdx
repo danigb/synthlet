@@ -80,9 +80,26 @@ exists.
 
 One held value **per channel**, all sampled at the same frame.
 
-## Coming later: the quantiser
+## The random arpeggiator
 
-Part 17's Figure 15 is S&H → programmable scale generator → oscillator, which
-Reid calls _"a random arpeggiator — one of my favourite effects"_. The scale
-tables already exist, in [Arp](/docs/sequencers/arp); the quantiser that snaps a
-held voltage to them does not yet, and this is the module it will sit after.
+Part 16's Figure 15 is S&H → programmable scale generator → oscillator, which
+Reid calls _"a random arpeggiator — one of my favourite effects"_. The
+[quantizer](/docs/modulators/quantizer) is that scale generator, and this is the
+module it sits after:
+
+```ts
+const sh = SampleHold(audioContext, { trigger: clock.gate });
+noise.connect(sh);
+
+// Two octaves of note numbers, snapped to a pentatonic minor
+const notes = Param(audioContext, { input: sh, gain: 12, offset: 60 });
+const pitch = Quantizer(audioContext, {
+  input: notes,
+  scale: Scale.PentatonicMinor,
+});
+pitch.connect(osc.frequency);
+```
+
+It takes the same scale masks as [Arp](/docs/sequencers/arp) — the table is one
+shared file — so a `scale` value, or a node patched into `scale`, drives an
+arpeggiator and a quantiser in the same key.

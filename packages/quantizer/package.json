@@ -1,0 +1,45 @@
+{
+  "name": "@synthlet/quantizer",
+  "version": "0.1.0",
+  "description": "Quantizer audio worklet: snap a note number to a scale",
+  "keywords": [
+    "quantizer",
+    "quantiser",
+    "scale",
+    "pitch",
+    "arpeggio",
+    "modular",
+    "synthesis",
+    "synthlet"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/danigb/synthlet.git",
+    "directory": "packages/quantizer"
+  },
+  "homepage": "https://danigb.github.io/synthlet/docs/quantizer",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "author": "danigb@gmail.com",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@types/jest": "^29.5.13",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.1"
+  },
+  "jest": {
+    "preset": "ts-jest"
+  },
+  "scripts": {
+    "worklet": "esbuild src/worklet.ts --bundle --minify | sed -e 's/^/export const PROCESSOR = \\`/' -e 's/$/\\`;/'  > src/processor.ts",
+    "lib": "tsup src/index.ts --sourcemap --dts --format esm,cjs",
+    "build": "npm run worklet && npm run lib"
+  }
+}

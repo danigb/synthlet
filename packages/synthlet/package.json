@@ -72,6 +72,7 @@
     "@synthlet/noise": "^0.2.0",
     "@synthlet/param": "^0.2.0",
     "@synthlet/polyblep-oscillator": "^0.3.0",
+    "@synthlet/quantizer": "^0.1.0",
     "@synthlet/reverb-delay": "^0.2.0",
     "@synthlet/ring-mod": "^0.1.0",
     "@synthlet/sample-hold": "^0.1.0",
