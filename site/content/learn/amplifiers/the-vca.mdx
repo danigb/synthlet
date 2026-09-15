@@ -1,0 +1,59 @@
+---
+title: The VCA
+description: A gain with a signal on its control input. That is the whole of what a voltage controlled amplifier is, and it is one native node.
+core: true
+book: [9, 3]
+hear: Tremolo, from a slow wobble to a flutter fast enough to stop sounding like a wobble at all.
+status: ready
+---
+
+Imagine turning the volume knob on a hi-fi up and down twice a second while a
+record plays. That is tremolo, and it is also the entire definition of
+a <Term>voltage controlled amplifier</Term>: an amplifier whose gain is being
+set by another signal instead of by a hand. Replace the hand with an oscillator
+running below hearing and you have the patch below.
+
+<Patch id="amplifiers/vca" show={["depth", "rate"]} />
+
+<Try>
+
+Press Play with **Depth** at zero. A steady tone, and a flat line on the
+contour. Bring **Depth** up and the line starts to breathe: the LFO is being
+added to the amplifier's own gain, so the level now swings either side of where
+it was sitting.
+
+</Try>
+
+<Try>
+
+Take **Depth** all the way to the top. The trough of each cycle now reaches
+zero, so the sound switches off and on rather than swelling and fading. Tremolo
+that deep stops being an effect on a note and becomes a rhythm.
+
+</Try>
+
+<Try>
+
+Leave **Depth** halfway and run **Rate** up. Somewhere past ten cycles a second
+your ear stops counting the pulses and starts hearing a roughness instead. At
+the top of the slider the wobble is nearly a tone of its own, which is the
+doorway into amplitude modulation and a later chapter.
+
+</Try>
+
+<Aside kind="why">
+
+There is no module called VCA in this library and there does not need to be. A
+gain node's gain is a parameter, a parameter accepts a connection, and a
+connection carrying a signal is a control voltage — so the amplifier in the
+diagram is a native browser node with a cable plugged into its knob.
+
+Reid puts the general version of this at the end of Part 3 and calls it one of
+the most important secrets in the series: in voltage terms there is no
+difference at all between a signal you hear and a signal that shapes what you
+hear. The oscillator above is a controller because of where its output goes, and
+for no other reason. The next page takes the same idea from the other end.
+
+</Aside>
+
+<Book part={[9, 3]} />

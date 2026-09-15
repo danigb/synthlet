@@ -1,0 +1,55 @@
+---
+title: Decay and sustain
+description: Where a held note settles, and how fast it gets there. One of these two is a time and the other is not.
+core: true
+book: [3]
+hear: A plucked note that dies while the key is still held down, and a bowed one that refuses to.
+status: ready
+---
+
+The same synthesiser, two more sliders. **Decay** is a time and **Sustain** is a
+level, and that asymmetry is the thing worth getting straight early: of the four
+stages an envelope generator has, three are durations and this one is a height.
+
+<Patch id="envelopes/adsr" show={["attack", "decay", "sustain"]} />
+
+<Try>
+
+Put **Sustain** at the top and sweep **Decay** from end to end while a key is
+down. Nothing happens. Decay is the fall from the peak of the attack to the
+sustain level, and when those two are the same there is nowhere to fall — the
+slider is connected and has no work to do.
+
+</Try>
+
+<Try>
+
+Bring **Sustain** to zero and set **Decay** to about a third of a second. Hold
+the key. The note dies anyway, with your finger still on it. That is a plucked
+string, and no amount of holding will make a guitar ring for ever.
+
+</Try>
+
+<Try>
+
+Now **Sustain** to about a third of the way up, and move **Decay** slowly from
+fast to slow. The note keeps arriving at the same place; only the journey
+changes. Fast is a percussive front with a body behind it, which is most
+electric pianos. Slow is a swell that never quite settles down.
+
+</Try>
+
+<Aside kind="why">
+
+"Sustain is a level" is the most commonly misread of the four letters, because
+in ordinary English sustain is a duration. Instruments are what make the
+synthesiser's reading the right one. A plucked or struck string is given all its
+energy in one event and then leaks it away: its sustain level is zero, and its
+decay is the entire sound. A bowed, blown or electrically driven sound has
+someone feeding it continuously, so it can hold a level for as long as the
+feeding goes on — and what decides how long that is turns out not to be the
+envelope generator at all. It is your finger on the key, which is the next page.
+
+</Aside>
+
+<Book part={3} />

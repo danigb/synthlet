@@ -1,0 +1,63 @@
+---
+title: Clipping and drive
+description: What happens when you ask an amplifier for more than it has, and why the harmonics that appear were never in the signal.
+core: false
+book: [9]
+hear: A sine wave growing odd harmonics as its peaks flatten, and the difference between loud and harsh.
+status: ready
+---
+
+Every amplifier so far has been assumed to have infinite headroom: ask for ten
+times the signal and you get ten times the signal. Real ones run out. Past the
+limit the tops of the waveform square off for as long as the demand is beyond
+what the device has, and the sound turns harsh in a way that has nothing to do
+with being loud.
+
+The source here is a sine — one harmonic, nothing above it — so everything that
+appears in the spectrum was put there by the amplifier.
+
+<Patch id="amplifiers/clip" show={["drive", "output"]} />
+
+<Try>
+
+Press Play with **Drive** low. The waveform is a smooth curve and the spectrum
+has a single peak, sitting on the first of the marks. Those marks are at the
+odd multiples of the tone, bunched together at the left-hand end of the display,
+well before the first gridline.
+
+</Try>
+
+<Try>
+
+Run **Drive** up. The peaks of the wave flatten into plateaus, and one by one
+the marks grow a spike under them: the third, then the fifth, then the seventh,
+each weaker than the last. The tone gets a rasp on it that no filter put there,
+because nothing has been taken away — something has been added.
+
+</Try>
+
+<Try>
+
+Now make the comparison fair. Pull **Output** down as you push **Drive** up, so
+that the two settings are about equally loud, and switch between them. What is
+left when the loudness is matched is the distortion itself, which is the thing
+worth learning to recognise.
+
+</Try>
+
+<Aside kind="why">
+
+Only the odd harmonics appear, and the symmetry is why. The curve treats the top
+of the wave exactly as it treats the bottom, so the output is still an odd
+function of the input, and an odd function has no even harmonics to give. Break
+the symmetry — clip one side harder than the other — and the even ones arrive,
+which is roughly the difference between a fuzz pedal and a valve.
+
+The curve here is a smooth one rather than a hard ceiling, so the corners are
+rounded instead of cut square. That is soft clipping, and it is most of what
+people mean when they call a circuit warm: the same harmonics, arriving
+gradually as you play harder instead of all at once at a threshold.
+
+</Aside>
+
+<Book part={9} />
