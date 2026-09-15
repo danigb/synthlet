@@ -1,13 +1,4 @@
-import type { PatchLoader } from "../define";
-import arpSource from "./arp.ts?raw";
-import clockSource from "./clock.ts?raw";
-import decimatorSource from "./decimator.ts?raw";
-import euclidSource from "./euclid.ts?raw";
-import followerSource from "./follower.ts?raw";
-import randomArpSource from "./random-arp.ts?raw";
-import slewSource from "./slew.ts?raw";
-import stepsSource from "./steps.ts?raw";
-import vocoderSource from "./vocoder.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 6's patches, in the order the chapter reads them.
@@ -33,14 +24,14 @@ export const timePatches: Record<string, PatchLoader> = {
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
-export const timeSources: Record<string, string> = {
-  "time/clock": clockSource,
-  "time/euclid": euclidSource,
-  "time/arp": arpSource,
-  "time/steps": stepsSource,
-  "time/slew": slewSource,
-  "time/follower": followerSource,
-  "time/vocoder": vocoderSource,
-  "time/random-arp": randomArpSource,
-  "time/decimator": decimatorSource,
+export const timeSources: Record<string, SourceLoader> = {
+  "time/clock": () => import("./clock.ts?raw"),
+  "time/euclid": () => import("./euclid.ts?raw"),
+  "time/arp": () => import("./arp.ts?raw"),
+  "time/steps": () => import("./steps.ts?raw"),
+  "time/slew": () => import("./slew.ts?raw"),
+  "time/follower": () => import("./follower.ts?raw"),
+  "time/vocoder": () => import("./vocoder.ts?raw"),
+  "time/random-arp": () => import("./random-arp.ts?raw"),
+  "time/decimator": () => import("./decimator.ts?raw"),
 };

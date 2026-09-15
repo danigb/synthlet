@@ -1,11 +1,4 @@
-import type { PatchLoader } from "../define";
-import additiveSource from "./additive.ts?raw";
-import fmSource from "./fm.ts?raw";
-import lfoDestinationsSource from "./lfo-destinations.ts?raw";
-import pwmSource from "./pwm.ts?raw";
-import ringSource from "./ring.ts?raw";
-import sampleHoldSource from "./sample-hold.ts?raw";
-import syncSource from "./sync.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 5's patches, in the order the chapter reads them.
@@ -31,12 +24,12 @@ export const modulationPatches: Record<string, PatchLoader> = {
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
-export const modulationSources: Record<string, string> = {
-  "modulation/lfo-destinations": lfoDestinationsSource,
-  "modulation/pwm": pwmSource,
-  "modulation/sample-hold": sampleHoldSource,
-  "modulation/ring": ringSource,
-  "modulation/fm": fmSource,
-  "modulation/additive": additiveSource,
-  "modulation/sync": syncSource,
+export const modulationSources: Record<string, SourceLoader> = {
+  "modulation/lfo-destinations": () => import("./lfo-destinations.ts?raw"),
+  "modulation/pwm": () => import("./pwm.ts?raw"),
+  "modulation/sample-hold": () => import("./sample-hold.ts?raw"),
+  "modulation/ring": () => import("./ring.ts?raw"),
+  "modulation/fm": () => import("./fm.ts?raw"),
+  "modulation/additive": () => import("./additive.ts?raw"),
+  "modulation/sync": () => import("./sync.ts?raw"),
 };

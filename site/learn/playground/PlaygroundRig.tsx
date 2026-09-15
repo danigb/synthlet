@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getPatchSource } from "@/learn/patches";
 import playgroundPatch from "@/learn/patches/playground";
 import type { Control, ParamRef, XYControl } from "@/learn/patches/define";
 import { CodeView } from "@/learn/kit/CodeView";
@@ -295,27 +294,6 @@ export function PlaygroundRig({
     return value === undefined ? control : { ...control, default: value };
   };
 
-  /*
-   * "View the code", after mount only.
-   *
-   * `?raw` does not hand the kit the patch's *source*: Next's own loaders reach
-   * the file first, so what `getPatchSource` returns is the *compiled* module -
-   * and the server and the client compile it for different targets, so a patch
-   * whose source contains `?.` or `??` produces two different strings. React
-   * finds them different, throws a hydration error, and re-renders the whole
-   * document from scratch, which on this page is a visible flash and a lost
-   * first paint. `learn/patches/playground.ts` has both syntaxes, as does
-   * `voice.ts`; `sound/harmonics.ts` has neither, which is why nobody hit this
-   * before there were two patches like it.
-   *
-   * The bug is ticket 08b's. Rendering the panel only after mount means the
-   * server and the first client render agree - on nothing - and the code appears
-   * a frame later, which for a panel behind a `<summary>` costs the reader
-   * exactly nothing. **Delete this gate when 08b lands.**
-   */
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
   const meter = playgroundPatch.views.find((view) => view.kind === "meter");
   const pictures = playgroundPatch.views.filter(
     (view) => view.kind !== "meter",
@@ -404,13 +382,16 @@ export function PlaygroundRig({
 
         <CopyLink />
 
-        {mounted ? (
-          <CodeView
-            id={playgroundPatch.id}
-            source={getPatchSource(playgroundPatch.id)}
-            code={playgroundPatch.code}
-          />
-        ) : null}
+        {/*
+          "View the code", which fetches the file when it is opened (03c) and
+          so renders the same on the server as on the client's first pass: the
+          panel is empty until a reader asks. It used to be gated on `mounted`
+          for exactly that reason - `?raw` was handing the kit SWC's output,
+          which the two bundles compiled differently, and React reported the
+          difference as a hydration error and re-rendered the document. 08b
+          fixed the loader and this fixes the shape; the gate is gone.
+        */}
+        <CodeView id={playgroundPatch.id} code={playgroundPatch.code} />
       </figure>
     </div>
   );

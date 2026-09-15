@@ -1,8 +1,4 @@
-import type { PatchLoader } from "../define";
-import paraphonicSource from "./paraphonic.ts?raw";
-import presetsSource from "./presets.ts?raw";
-import prioritySource from "./priority.ts?raw";
-import stealingSource from "./stealing.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 7's patches, in the order the chapter reads them.
@@ -20,9 +16,9 @@ export const voicesPatches: Record<string, PatchLoader> = {
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
-export const voicesSources: Record<string, string> = {
-  "voices/priority": prioritySource,
-  "voices/paraphonic": paraphonicSource,
-  "voices/stealing": stealingSource,
-  "voices/presets": presetsSource,
+export const voicesSources: Record<string, SourceLoader> = {
+  "voices/priority": () => import("./priority.ts?raw"),
+  "voices/paraphonic": () => import("./paraphonic.ts?raw"),
+  "voices/stealing": () => import("./stealing.ts?raw"),
+  "voices/presets": () => import("./presets.ts?raw"),
 };

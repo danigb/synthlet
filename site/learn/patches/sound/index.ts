@@ -1,8 +1,4 @@
-import type { PatchLoader } from "../define";
-import harmonicsSource from "./harmonics.ts?raw";
-import noiseSource from "./noise.ts?raw";
-import toneSource from "./tone.ts?raw";
-import waveformsSource from "./waveforms.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 1's patches.
@@ -31,13 +27,18 @@ export const soundPatches: Record<string, PatchLoader> = {
  *
  * `?raw` is the whole of "View the code": the widget shows the module it is
  * running, so there is no second copy to fall out of step with the first. The
- * import sits beside the module's own on purpose - adding a patch is still one
+ * line sits beside the module's own on purpose - adding a patch is still one
  * line, and it is impossible to register a patch and forget its source without
  * the line above it looking wrong.
+ *
+ * Lazy like the module, and more so (03c): a patch minifies and its *source
+ * text* does not, so sixty of these were the largest thing on a lesson page.
+ * Nobody reads one without asking, so `kit/CodeView.tsx` fetches the one file
+ * whose panel the reader opened.
  */
-export const soundSources: Record<string, string> = {
-  "sound/harmonics": harmonicsSource,
-  "sound/tone": toneSource,
-  "sound/waveforms": waveformsSource,
-  "sound/noise": noiseSource,
+export const soundSources: Record<string, SourceLoader> = {
+  "sound/harmonics": () => import("./harmonics.ts?raw"),
+  "sound/tone": () => import("./tone.ts?raw"),
+  "sound/waveforms": () => import("./waveforms.ts?raw"),
+  "sound/noise": () => import("./noise.ts?raw"),
 };

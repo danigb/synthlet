@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { hasPatchSource, loadPatchSource } from "../patches";
 import type { CodeOptions } from "../patches/define";
 
 /*
@@ -11,6 +12,12 @@ import type { CodeOptions } from "../patches/define";
  * plays and what is shown. That is the promise the section makes that neither
  * of the two courses it is modelled on can: the sound you are hearing has a
  * file, and here it is.
+ *
+ * It is fetched on the click that opens this panel (03c). A patch module
+ * minifies and a patch's *source text* does not, so sixty of them made the
+ * largest thing on a lesson page out of the one part of it nobody reads without
+ * asking. `hasPatchSource` answers, with no fetch at all, whether there is a
+ * panel to draw; opening it is what asks for the file.
  *
  * The manifest half is folded by default. A reader who opens this wants to see
  * `build` - the oscillator, the filter, the connection - and the list of
@@ -44,20 +51,24 @@ function trimBlank(lines: string[]): string[] {
   return lines.slice(0, end);
 }
 
-export function CodeView({
-  id,
-  source,
-  code,
-}: {
-  id: string;
-  source?: string;
-  code?: CodeOptions;
-}) {
+export function CodeView({ id, code }: { id: string; code?: CodeOptions }) {
   const [manifestOpen, setManifestOpen] = useState(false);
+  const [source, setSource] = useState<string>();
+  // A ref and not state: asking twice would be a second render for nothing,
+  // and `<details>` fires its toggle on the way closed as well as open.
+  const asked = useRef(false);
 
-  if (!source) return null;
+  const fetchSource = () => {
+    if (asked.current) return;
+    asked.current = true;
+    void loadPatchSource(id).then(setSource);
+  };
 
-  let lines = source.replace(/\s+$/, "").split("\n");
+  // A patch with no registered source shows no panel at all, exactly as before:
+  // the question is answered from the registry's keys, not from its files.
+  if (!hasPatchSource(id)) return null;
+
+  let lines = (source ?? "").replace(/\s+$/, "").split("\n");
   if (code?.lines) {
     const [from, to] = code.lines;
     lines = lines.slice(Math.max(0, from - 1), to);
@@ -71,8 +82,17 @@ export function CodeView({
   const tail = fold === -1 ? [] : lines.slice(fold);
 
   return (
-    <details className="mt-learn border-t border-learn-border pt-2">
-      <summary className="cursor-pointer font-learn-text text-sm text-learn-ink-muted hover:text-learn-accent">
+    <details
+      className="mt-learn border-t border-learn-border pt-2"
+      onToggle={fetchSource}
+    >
+      <summary
+        className="cursor-pointer font-learn-text text-sm text-learn-ink-muted hover:text-learn-accent"
+        // The toggle event is the honest one - a panel that opens is a panel
+        // that wants its file - but it is also asynchronous, and the click that
+        // opened it is the last gesture the reader will make for a while.
+        onClick={fetchSource}
+      >
         View the code
       </summary>
 
@@ -81,9 +101,11 @@ export function CodeView({
         {code?.lines ? ` · lines ${code.lines[0]}–${code.lines[1]}` : null}
       </p>
 
-      <pre className="mt-2 overflow-x-auto rounded-learn border border-learn-border bg-learn-bg p-3 font-learn-mono text-xs leading-relaxed text-learn-ink">
-        <code>{head.join("\n")}</code>
-      </pre>
+      {source === undefined ? null : (
+        <pre className="mt-2 overflow-x-auto rounded-learn border border-learn-border bg-learn-bg p-3 font-learn-mono text-xs leading-relaxed text-learn-ink">
+          <code>{head.join("\n")}</code>
+        </pre>
+      )}
 
       {tail.length > 0 ? (
         <>

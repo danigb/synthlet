@@ -1,9 +1,4 @@
-import type { PatchLoader } from "../define";
-import analogSource from "./analog.ts?raw";
-import bodySource from "./body.ts?raw";
-import chorusSource from "./chorus.ts?raw";
-import delaySource from "./delay.ts?raw";
-import reverbSource from "./reverb.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 9's patches, in the order the chapter reads them.
@@ -25,10 +20,10 @@ export const effectsPatches: Record<string, PatchLoader> = {
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
-export const effectsSources: Record<string, string> = {
-  "effects/delay": delaySource,
-  "effects/analog": analogSource,
-  "effects/chorus": chorusSource,
-  "effects/reverb": reverbSource,
-  "effects/body": bodySource,
+export const effectsSources: Record<string, SourceLoader> = {
+  "effects/delay": () => import("./delay.ts?raw"),
+  "effects/analog": () => import("./analog.ts?raw"),
+  "effects/chorus": () => import("./chorus.ts?raw"),
+  "effects/reverb": () => import("./reverb.ts?raw"),
+  "effects/body": () => import("./body.ts?raw"),
 };

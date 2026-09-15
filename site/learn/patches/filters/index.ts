@@ -1,10 +1,4 @@
-import type { PatchLoader } from "../define";
-import combSource from "./comb.ts?raw";
-import resonanceSource from "./resonance.ts?raw";
-import shootoutSource from "./shootout.ts?raw";
-import slopeSource from "./slope.ts?raw";
-import sweepSource from "./sweep.ts?raw";
-import typesSource from "./types.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 4's patches, in the order the chapter reads them.
@@ -25,11 +19,11 @@ export const filtersPatches: Record<string, PatchLoader> = {
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
-export const filtersSources: Record<string, string> = {
-  "filters/comb": combSource,
-  "filters/slope": slopeSource,
-  "filters/types": typesSource,
-  "filters/resonance": resonanceSource,
-  "filters/sweep": sweepSource,
-  "filters/shootout": shootoutSource,
+export const filtersSources: Record<string, SourceLoader> = {
+  "filters/comb": () => import("./comb.ts?raw"),
+  "filters/slope": () => import("./slope.ts?raw"),
+  "filters/types": () => import("./types.ts?raw"),
+  "filters/resonance": () => import("./resonance.ts?raw"),
+  "filters/sweep": () => import("./sweep.ts?raw"),
+  "filters/shootout": () => import("./shootout.ts?raw"),
 };

@@ -2,7 +2,6 @@
 
 import { useMemo } from "react";
 import type { Control, LessonPatch } from "../patches/define";
-import { getPatchSource } from "../patches";
 import { CodeView } from "./CodeView";
 import { isWide, renderControl } from "./controls";
 import { PlayToggle } from "./PlayToggle";
@@ -145,11 +144,7 @@ export function LessonWidget({
         </div>
       ) : null}
 
-      <CodeView
-        id={patch.id}
-        source={getPatchSource(patch.id)}
-        code={patch.code}
-      />
+      <CodeView id={patch.id} code={patch.code} />
     </figure>
   );
 }

@@ -142,7 +142,13 @@ collection.
    ```
 
    and one to the `<chapter>Sources` object below it, which is the same file
-   again as text (see ["View the code"](#view-the-code)).
+   again as text (see ["View the code"](#view-the-code)):
+
+   ```ts
+   export const <chapter>Sources = {
+     "<chapter>/<name>": () => import("./name.ts?raw"),
+   };
+   ```
 
 3. If the chapter is new, add one line to `learn/patches/index.ts` spreading
    that chapter's two objects.
@@ -151,13 +157,15 @@ A file per chapter is why six people can add six chapters' patches at once
 without meeting in the same file. The key, the `id` and the path are three
 statements of one name, and rule 2 fails unless all three agree.
 
-**The value is a `() => import()`, not the patch** (02c). The registry has to be
-one object — rule 2 reads it, `<Patch>` resolves an id against it — but nothing
-said the _bundle_ had to be one object, and with sixty patches registered every
-lesson page carried all sixty to show one. A table of thunks is a few hundred
-bytes: `hasPatch(id)` answers the id from it, and `kit/Patch.tsx` calls
-`loadPatch(id)` when the widget mounts, drawing a frame of the widget's own size
-meanwhile so the page does not jump. A test that wants the whole registry —
+**Both values are `() => import()`, not the patch and not its text** (02c, 03c).
+The registry has to be one object — rule 2 reads it, `<Patch>` resolves an id
+against it — but nothing said the _bundle_ had to be one object, and with sixty
+patches registered every lesson page carried all sixty modules and all sixty
+source texts to show one. A table of thunks is a few hundred bytes:
+`hasPatch(id)` answers the id from it, `kit/Patch.tsx` calls `loadPatch(id)` when
+the widget mounts (drawing a frame of the widget's own size meanwhile, so the
+page does not jump), and `kit/CodeView.tsx` calls `loadPatchSource(id)` on the
+click that opens the panel. A test that wants the whole registry —
 `rules.test.ts`, `diagrams.test.ts` — calls `loadPatches()`, which has no bundle
 to care about.
 
@@ -182,7 +190,7 @@ a widget looks like.
 | `kit/scale.ts`           | The four tapers: `lin`, `log`, `time`, `db`. `scale.test.ts` states them as arithmetic    |
 | `kit/controls/*`         | One renderer per `Control.kind`, plus `Field.tsx`, the row they all sit in                |
 | `kit/views/*`            | One per `View.kind`, plus `ViewFrame.tsx`                                                 |
-| `kit/CodeView.tsx`       | The `?raw` source, manifest folded                                                        |
+| `kit/CodeView.tsx`       | The `?raw` source, fetched when the panel opens, manifest folded                          |
 | `kit/useTokenColors.tsx` | The two cable colours, for the canvases                                                   |
 | `kit/test-hooks.ts`      | `window.__learn__`, in non-production builds only                                         |
 
@@ -237,13 +245,24 @@ panel folds on its own.
 `type: "asset/source"` — so a chapter index can import its own patch twice:
 
 ```ts
-import harmonics from "./harmonics";
-import harmonicsSource from "./harmonics.ts?raw";
+export const soundPatches = { "sound/harmonics": () => import("./harmonics") };
+export const soundSources = {
+  "sound/harmonics": () => import("./harmonics.ts?raw"),
+};
 ```
 
-The registry keeps the second beside the first and `getPatchSource(id)` returns
+The registry keeps the second beside the first and `loadPatchSource(id)` fetches
 it. There is no second copy of any patch anywhere, which is the point: editing
 `sound/harmonics.ts` changes both what plays and what is shown.
+
+**The fetch happens when the panel opens** (03c). A patch module minifies and a
+patch's source text does not — the voice's file is six kilobytes of text on its
+own — so sixty of them were the largest single thing on a lesson page, and they
+are the one part of it no reader sees without asking. `CodeView` asks on the
+toggle; `hasPatchSource(id)` decides whether there is a panel to draw at all,
+from the registry's keys and without fetching anything. A closed panel holds no
+code at all, which is why `kit/code-view.test.tsx` opens one before it asserts
+anything about what is in it.
 
 The rule has a second half, and it is the reason the first half works. Webpack
 has no "last rule wins": every rule whose conditions match a request applies to

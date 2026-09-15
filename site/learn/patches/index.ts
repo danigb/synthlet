@@ -1,15 +1,13 @@
 import { amplifiersPatches, amplifiersSources } from "./amplifiers";
 import { beyondPatches, beyondSources } from "./beyond";
-import type { LessonPatch, PatchLoader } from "./define";
+import type { LessonPatch, PatchLoader, SourceLoader } from "./define";
 import { effectsPatches, effectsSources } from "./effects";
 import { envelopesPatches, envelopesSources } from "./envelopes";
 import { filtersPatches, filtersSources } from "./filters";
 import { modulationPatches, modulationSources } from "./modulation";
-import playgroundSource from "./playground.ts?raw";
 import { recipesPatches, recipesSources } from "./recipes";
 import { soundPatches, soundSources } from "./sound";
 import { timePatches, timeSources } from "./time";
-import voiceSource from "./voice.ts?raw";
 import { voicesPatches, voicesSources } from "./voices";
 
 /**
@@ -21,12 +19,13 @@ import { voicesPatches, voicesSources } from "./voices";
  * set of patches depend on what happens to be on disk, and "the id is the path"
  * would stop being something a test can check.
  *
- * The value is a `() => import()` rather than the patch, which is 02c. The
- * registry has to be one object - `rules.test.ts` reads it, `<Patch>` resolves
- * an id against it - but nothing said the *bundle* had to be one object, and
- * with sixty patches registered a lesson page carried all sixty to show one.
- * A table of thunks is a few hundred bytes; the patch itself arrives when a
- * widget mounts and asks for it.
+ * The value is a `() => import()` rather than the patch, which is 02c, and the
+ * source below it is the same, which is 03c. The registry has to be one object
+ * - `rules.test.ts` reads it, `<Patch>` resolves an id against it - but nothing
+ * said the *bundle* had to be one object, and with sixty patches registered a
+ * lesson page carried all sixty modules and all sixty source texts to show one.
+ * A table of thunks is a few hundred bytes; the patch arrives when a widget
+ * mounts and asks for it, and its text when a reader opens the code panel.
  *
  * **Adding a patch**: write `<chapter>/<name>.ts`, then add one line to
  * `<chapter>/index.ts`. A new chapter also adds one line here. See
@@ -53,7 +52,7 @@ export const patchLoaders: Record<string, PatchLoader> = {
 };
 
 /** The same files as text, for "View the code". Keyed exactly as above. */
-const sources: Record<string, string> = {
+const sourceLoaders: Record<string, SourceLoader> = {
   ...soundSources,
   ...envelopesSources,
   ...amplifiersSources,
@@ -64,8 +63,8 @@ const sources: Record<string, string> = {
   ...recipesSources,
   ...effectsSources,
   ...beyondSources,
-  voice: voiceSource,
-  playground: playgroundSource,
+  voice: () => import("./voice.ts?raw"),
+  playground: () => import("./playground.ts?raw"),
 };
 
 /** The ids, in registry order. What rule 2 checks the disk against. */
@@ -101,7 +100,20 @@ export async function loadPatches(): Promise<Record<string, LessonPatch>> {
   return Object.fromEntries(loaded) as Record<string, LessonPatch>;
 }
 
-/** The text of the file that patch lives in, or `undefined`. */
-export function getPatchSource(id: string): string | undefined {
-  return sources[id];
+/** Is there a source to show for this id? Answered without fetching it. */
+export function hasPatchSource(id: string): boolean {
+  return id in sourceLoaders;
+}
+
+/**
+ * The text of the file that patch lives in, or `undefined`.
+ *
+ * Fetched on the click that opens "View the code" (03c). A patch module
+ * minifies and a patch's source text does not - the voice's file is six
+ * kilobytes of text on its own - so sixty of them were the heaviest thing on
+ * a lesson page, and the one a reader ever looks at is the one they asked for.
+ */
+export async function loadPatchSource(id: string): Promise<string | undefined> {
+  const loader = sourceLoaders[id];
+  return loader ? (await loader()).default : undefined;
 }

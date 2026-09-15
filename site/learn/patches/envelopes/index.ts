@@ -1,8 +1,4 @@
-import type { PatchLoader } from "../define";
-import adsrSource from "./adsr.ts?raw";
-import beyondSource from "./beyond.ts?raw";
-import gatesSource from "./gates.ts?raw";
-import matchingSource from "./matching.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 2's patches.
@@ -19,9 +15,9 @@ export const envelopesPatches: Record<string, PatchLoader> = {
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
-export const envelopesSources: Record<string, string> = {
-  "envelopes/adsr": adsrSource,
-  "envelopes/matching": matchingSource,
-  "envelopes/gates": gatesSource,
-  "envelopes/beyond": beyondSource,
+export const envelopesSources: Record<string, SourceLoader> = {
+  "envelopes/adsr": () => import("./adsr.ts?raw"),
+  "envelopes/matching": () => import("./matching.ts?raw"),
+  "envelopes/gates": () => import("./gates.ts?raw"),
+  "envelopes/beyond": () => import("./beyond.ts?raw"),
 };

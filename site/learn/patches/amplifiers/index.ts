@@ -1,8 +1,4 @@
-import type { PatchLoader } from "../define";
-import clipSource from "./clip.ts?raw";
-import envAmountSource from "./env-amount.ts?raw";
-import initialGainSource from "./initial-gain.ts?raw";
-import vcaSource from "./vca.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 3's patches.
@@ -19,9 +15,9 @@ export const amplifiersPatches: Record<string, PatchLoader> = {
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
-export const amplifiersSources: Record<string, string> = {
-  "amplifiers/vca": vcaSource,
-  "amplifiers/env-amount": envAmountSource,
-  "amplifiers/initial-gain": initialGainSource,
-  "amplifiers/clip": clipSource,
+export const amplifiersSources: Record<string, SourceLoader> = {
+  "amplifiers/vca": () => import("./vca.ts?raw"),
+  "amplifiers/env-amount": () => import("./env-amount.ts?raw"),
+  "amplifiers/initial-gain": () => import("./initial-gain.ts?raw"),
+  "amplifiers/clip": () => import("./clip.ts?raw"),
 };

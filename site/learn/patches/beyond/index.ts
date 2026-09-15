@@ -1,10 +1,4 @@
-import type { PatchLoader } from "../define";
-import driftSource from "./drift.ts?raw";
-import graniteSource from "./granite.ts?raw";
-import limiterSource from "./limiter.ts?raw";
-import polyblepSource from "./polyblep.ts?raw";
-import timestretchSource from "./timestretch.ts?raw";
-import wavetableSource from "./wavetable.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 10's patches, in the order the chapter reads them.
@@ -25,11 +19,11 @@ export const beyondPatches: Record<string, PatchLoader> = {
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
-export const beyondSources: Record<string, string> = {
-  "beyond/polyblep": polyblepSource,
-  "beyond/wavetable": wavetableSource,
-  "beyond/granite": graniteSource,
-  "beyond/timestretch": timestretchSource,
-  "beyond/drift": driftSource,
-  "beyond/limiter": limiterSource,
+export const beyondSources: Record<string, SourceLoader> = {
+  "beyond/polyblep": () => import("./polyblep.ts?raw"),
+  "beyond/wavetable": () => import("./wavetable.ts?raw"),
+  "beyond/granite": () => import("./granite.ts?raw"),
+  "beyond/timestretch": () => import("./timestretch.ts?raw"),
+  "beyond/drift": () => import("./drift.ts?raw"),
+  "beyond/limiter": () => import("./limiter.ts?raw"),
 };

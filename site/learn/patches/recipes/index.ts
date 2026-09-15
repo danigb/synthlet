@@ -1,17 +1,4 @@
-import type { PatchLoader } from "../define";
-import bellsSource from "./bells.ts?raw";
-import bowedSource from "./bowed.ts?raw";
-import cymbalsSource from "./cymbals.ts?raw";
-import ensembleSource from "./ensemble.ts?raw";
-import fluteSource from "./flute.ts?raw";
-import kickSource from "./kick.ts?raw";
-import leslieSource from "./leslie.ts?raw";
-import organSource from "./organ.ts?raw";
-import pianoSource from "./piano.ts?raw";
-import pluckSource from "./pluck.ts?raw";
-import snareSource from "./snare.ts?raw";
-import timpaniSource from "./timpani.ts?raw";
-import vowelsSource from "./vowels.ts?raw";
+import type { PatchLoader, SourceLoader } from "../define";
 
 /*
  * Chapter 8's patches, in the order the chapter reads them.
@@ -42,18 +29,18 @@ export const recipesPatches: Record<string, PatchLoader> = {
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
-export const recipesSources: Record<string, string> = {
-  "recipes/flute": fluteSource,
-  "recipes/ensemble": ensembleSource,
-  "recipes/pluck": pluckSource,
-  "recipes/bowed": bowedSource,
-  "recipes/kick": kickSource,
-  "recipes/snare": snareSource,
-  "recipes/cymbals": cymbalsSource,
-  "recipes/bells": bellsSource,
-  "recipes/timpani": timpaniSource,
-  "recipes/piano": pianoSource,
-  "recipes/organ": organSource,
-  "recipes/leslie": leslieSource,
-  "recipes/vowels": vowelsSource,
+export const recipesSources: Record<string, SourceLoader> = {
+  "recipes/flute": () => import("./flute.ts?raw"),
+  "recipes/ensemble": () => import("./ensemble.ts?raw"),
+  "recipes/pluck": () => import("./pluck.ts?raw"),
+  "recipes/bowed": () => import("./bowed.ts?raw"),
+  "recipes/kick": () => import("./kick.ts?raw"),
+  "recipes/snare": () => import("./snare.ts?raw"),
+  "recipes/cymbals": () => import("./cymbals.ts?raw"),
+  "recipes/bells": () => import("./bells.ts?raw"),
+  "recipes/timpani": () => import("./timpani.ts?raw"),
+  "recipes/piano": () => import("./piano.ts?raw"),
+  "recipes/organ": () => import("./organ.ts?raw"),
+  "recipes/leslie": () => import("./leslie.ts?raw"),
+  "recipes/vowels": () => import("./vowels.ts?raw"),
 };
