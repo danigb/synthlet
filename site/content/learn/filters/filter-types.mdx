@@ -1,0 +1,63 @@
+---
+title: "Filter types"
+description: "One circuit read at four different taps: low-pass, high-pass, band-pass and notch, with the same cutoff and the same Q behind all of them."
+core: true
+book: [6]
+hear: "Low-pass keeps the bottom, high-pass the top, band-pass a slice, and a notch everything except the slice."
+status: ready
+---
+
+A low-pass filter keeps what is below the corner. Swap two components around and
+it keeps what is above instead. Put those two in series and only a band in the
+middle survives; run them side by side and everything survives except that band.
+Four responses, one idea — and in this widget one module, because a state
+variable filter computes all of them at once and a switch decides which output
+you hear.
+
+<Patch id="filters/types" show={["type", "cutoff", "resonance"]} />
+
+<Try>
+
+Press Play with **Type** on **Low-pass**, then walk down the list. **High-pass**
+is the same sawtooth with its body removed and only the fizz left. **Band-pass**
+keeps a slice around the mark and throws away both ends. **Notch** is its
+opposite: everything except that slice, which is why it barely changes the sound
+at all until you move the cutoff.
+
+</Try>
+
+<Try>
+
+Leave it on **Band-pass** and sweep **Cutoff** up and down. The same knob means
+something different under every setting of the switch: the edge of what is kept,
+the edge of what is removed, or the centre of the slice. The mark on the
+spectrum always sits at the number, and what happens around it is the switch's
+business.
+
+</Try>
+
+<Try>
+
+Turn **Resonance** up to 10 and sweep the cutoff again. On the low-pass it is a
+peak riding the corner; on the notch it makes the hole narrower and deeper; on
+the band-pass it turns a slice into something close to a single tone. This is
+
+<Term>Q</Term>, and the next lesson is about what happens when you keep turning
+it.
+
+</Try>
+
+<Aside kind="why">
+
+Series and parallel are how these responses were built before anyone integrated
+them. A low-pass and a high-pass in series is a band-pass, provided their corners
+are separated — with both at the same frequency the signal is attenuated
+everywhere, by 6 dB at its loudest point, which is unusable. The same two in
+parallel, low-pass at 1 kHz and high-pass at 5 kHz, recombine into a notch. Reid
+is careful to add that recombining them is where the trouble starts: each path
+phase-shifts what it passes, and the sum of two differently shifted signals is
+the comb from the first page of this chapter.
+
+</Aside>
+
+<Book part={6} />

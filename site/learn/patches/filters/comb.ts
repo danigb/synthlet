@@ -13,7 +13,9 @@
  * the digital delay, with its feedback and its filtering, comes later.
  *
  * No `diagram`: the picture here is two paths from one source, and the kit's
- * layout lays a patch out in one row (see ticket 10b).
+ * layout puts every box on an audio cable in a single row, centred - so the dry
+ * path would be drawn straight through the delay and along the cable that is
+ * already there. Ticket 10b.
  */
 
 import {
@@ -52,7 +54,7 @@ const SOURCES = [
 const SUM = 0.5;
 
 /** A fixed trim, after the analyser: the picture is the signal, this is the room. */
-const LEVEL = 0.25;
+const LEVEL = 0.125;
 
 /** Long enough not to zipper, short enough that the slider feels direct. */
 const GLIDE = 0.02;

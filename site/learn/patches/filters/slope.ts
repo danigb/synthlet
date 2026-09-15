@@ -31,7 +31,7 @@ const FREQUENCY = 110;
 const DEFAULT_CUTOFF = 1000;
 
 /** A fixed trim, after the analyser. */
-const LEVEL = 0.18;
+const LEVEL = 0.125;
 
 /** Long enough to cover a switch, short enough to hear as no gap at all. */
 const CROSSFADE = 0.01;

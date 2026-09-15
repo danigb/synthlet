@@ -26,7 +26,7 @@ const DEFAULT_CUTOFF = 1000;
 const TYPES = ["Bypass", "Low-pass", "Band-pass", "High-pass", "Notch"];
 
 /** A fixed trim, after the analyser. */
-const LEVEL = 0.18;
+const LEVEL = 0.125;
 
 function build(ac: AudioContext) {
   const osc = PolyblepOscillator(ac, {

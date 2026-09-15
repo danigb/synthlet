@@ -1,0 +1,60 @@
+---
+title: "Phase and comb filters"
+description: "The first filter in this chapter has no filter in it: a signal, a copy of itself five milliseconds late, and the sum of the two."
+core: false
+book: [4]
+hear: "A 100 Hz sine and its 5 ms-delayed copy cancel; a 200 Hz sine reinforces. On a sawtooth the notches march up the spectrum as the delay shrinks."
+status: ready
+---
+
+Reid opens his filter chapter without a filter, and so does this one. Two
+identical signals offset in time do not simply get louder when you add them
+together: at some frequencies they reinforce, at others they cancel outright,
+and which is which depends only on how far apart in time they are.
+
+<Patch id="filters/comb" show={["delay", "mix", "waveform"]} />
+
+<Try>
+
+Leave **Waveform** on **Sine 100 Hz** and **Delay** at 5 ms, and press Play. It
+is almost silent. Now switch to **Sine 200 Hz** without touching anything else
+and it comes roaring back, louder than one oscillator alone. Five milliseconds
+is half a cycle of 100 Hz and a whole cycle of 200 Hz, and half a cycle apart is
+the definition of cancelling.
+
+</Try>
+
+<Try>
+
+Switch to **Sawtooth 100 Hz**, which contains both of those frequencies and every
+one above them, and drag **Delay** slowly from 10 ms down towards zero. The
+vertical marks are the predicted cancellations, and the holes in the trace walk
+up the spectrum alongside them as the delay shrinks. This shape is why the
+arrangement is called a <Term>comb filter</Term>. Swept rather than set, it is
+also a flanger.
+
+</Try>
+
+<Try>
+
+Put the delay back to 5 ms on the 100 Hz sine and pull **Mix** down. The silence
+fills back in long before the copy is gone. Two things add up to nothing only
+when they are exactly the same size, so total cancellation lives at one setting
+and nowhere else.
+
+</Try>
+
+<Aside kind="why">
+
+A delay of t seconds turns every frequency into a phase shift, and the shift is
+different for each one: a frequency whose period fits an odd number of
+half-cycles into t arrives inverted and cancels, one that fits a whole number
+arrives in step and doubles. That puts the notches at odd multiples of 1/2t,
+which is the even spacing you can see. Reid's own result is the surprising part:
+adding a sawtooth to a copy of itself half a cycle late does not produce silence,
+it produces a sawtooth an octave up, because the harmonics that survive are the
+even ones. Combining out-of-phase signals almost never cancels everything.
+
+</Aside>
+
+<Book part={4} />

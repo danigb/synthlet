@@ -9,8 +9,9 @@
  * source turned down and the cutoff following the note, the thing making the
  * sound is the filter.
  *
- * No `diagram`: the cutoff and the gate arrive at the same two boxes from the
- * same controller, and the kit's layout draws one control cable per box (10b).
+ * No `diagram`: the ticket gives this lesson a keyboard and a spectrum, and the
+ * chapter spends its picture on the sweep, where what is worth drawing is the
+ * contour standing between the envelope and the cutoff.
  */
 
 import {

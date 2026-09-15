@@ -1,0 +1,64 @@
+---
+title: "Every filter sounds different"
+description: "The same sawtooth, the same cutoff, and ten filter circuits — nine analogue models and one that is not pretending to be one."
+core: false
+book: [5, 6]
+hear: "Same saw, same cutoff, ten filters, and not one of them puts the corner where you asked for it."
+status: ready
+---
+
+Reid ends his second filter article by asserting that every analogue filter
+design sounds different from every other, and then has to leave it there,
+because a magazine cannot hand you a Moog and a Korg and an Oberheim on the same
+page. This page can.
+
+<Patch id="filters/shootout" show={["model", "cutoff", "resonance", "drive"]} />
+
+<Try>
+
+Press Play and walk down **Model** while the note holds. Nothing else changes —
+same oscillator, same cutoff, same resonance — and the switch is a ten
+millisecond crossfade, so there is no gap to hide a difference in. The ladder is
+thick and squashes the bass as the resonance rises; the Korg 35 bites; the diode
+ladder is soft and blurred; the Oberheim is clean and even.
+
+</Try>
+
+<Try>
+
+Leave the model on **Moog ladder** and watch where the trace turns against the
+mark, then switch to **Oberheim low-pass**. The mark is the frequency you asked
+for and the knee is where the circuit actually put it. Ask for 1 kHz and the
+ladder answers around 907 Hz, the half ladder 1163, the Korg 35 870, the diode
+ladder 502 and the Oberheim 1542. The
+[measurements](/docs/vaf) are in the documentation, and every one of them is
+asserted in the filter's own test suite.
+
+</Try>
+
+<Try>
+
+Set **Resonance** to 0.9 and walk the list again. This is where the circuits
+diverge most: two of them will sing on their own past 0.95 and the rest never
+will, because only the two ladders have a saturating feedback path to hold the
+oscillation steady.
+
+</Try>
+
+<Try>
+
+Put the resonance back to 0.7 and push **Drive** up. Seven of the nine have a
+real nonlinearity for it to reach, so the filter distorts from the inside rather
+than after the fact. On the two Korg 35s, which are linear by design, it is
+nothing but input gain.
+
+</Try>
+
+<Epigraph source="Gordon Reid, Synth Secrets Part 6">
+
+Indeed, if you take the output from a Moog oscillator and pass it through a Korg
+filter, the result sounds like... a Korg synthesizer.
+
+</Epigraph>
+
+<Book part={[5, 6]} />
