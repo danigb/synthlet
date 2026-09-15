@@ -1,6 +1,11 @@
 import { amplifiersPatches, amplifiersSources } from "./amplifiers";
 import { beyondPatches, beyondSources } from "./beyond";
-import type { LessonPatch, PatchLoader, SourceLoader } from "./define";
+import type {
+  LessonPatch,
+  PatchLoader,
+  PatchSource,
+  SourceLoader,
+} from "./define";
 import { effectsPatches, effectsSources } from "./effects";
 import { envelopesPatches, envelopesSources } from "./envelopes";
 import { filtersPatches, filtersSources } from "./filters";
@@ -106,14 +111,18 @@ export function hasPatchSource(id: string): boolean {
 }
 
 /**
- * The text of the file that patch lives in, or `undefined`.
+ * The file that patch lives in - its text, and its lines highlighted.
  *
  * Fetched on the click that opens "View the code" (03c). A patch module
  * minifies and a patch's source text does not - the voice's file is six
  * kilobytes of text on its own - so sixty of them were the heaviest thing on
  * a lesson page, and the one a reader ever looks at is the one they asked for.
  */
-export async function loadPatchSource(id: string): Promise<string | undefined> {
+export async function loadPatchSource(
+  id: string,
+): Promise<PatchSource | undefined> {
   const loader = sourceLoaders[id];
-  return loader ? (await loader()).default : undefined;
+  if (!loader) return undefined;
+  const source = await loader();
+  return { text: source.default, lines: source.lines };
 }

@@ -30,6 +30,22 @@
   --learn-audio: #14130f;
   --learn-control: #8a8578;
 
+  /*
+   * A lit code panel, monochrome. Ink has no accent to spend on a keyword, so
+   * the highlighting says what is structure and what is incidental: the words
+   * that make the graph are the page's ink, everything the reader skims -
+   * comments, strings, numbers, punctuation - is its muted half. Written in
+   * `var()`s, so the dark block below restyles the panel by restating nothing.
+   */
+  --learn-code-comment: var(--learn-ink-muted);
+  --learn-code-keyword: var(--learn-ink);
+  --learn-code-function: var(--learn-ink);
+  --learn-code-constant: var(--learn-ink-muted);
+  --learn-code-string: var(--learn-ink-muted);
+  --learn-code-parameter: var(--learn-ink-muted);
+  --learn-code-punctuation: var(--learn-ink-muted);
+  --learn-code-link: var(--learn-ink);
+
   --learn-font-text: Iowan Old Style, Palatino, Georgia, ui-serif, serif;
   --learn-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 

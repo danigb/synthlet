@@ -7,6 +7,7 @@ import { LearnThemeSwitch } from "@/learn/theme/switch";
 // through these custom properties.
 import "@/learn/theme/default.css";
 import "@/learn/theme/ink.css";
+import "@/learn/theme/code.css";
 
 /**
  * The theme the tutorial ships with.

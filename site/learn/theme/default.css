@@ -31,6 +31,22 @@
   --learn-audio: #2563eb;
   --learn-control: #26232c;
 
+  /*
+   * "View the code", lit (03b). The panel is the section's own palette read
+   * back as syntax: the accent is what a keyword is, the audio cable is what a
+   * function is, and everything the highlighter did not name stays
+   * `--learn-ink`. `theme/code.css` binds these to the classes shiki's
+   * tokeniser writes.
+   */
+  --learn-code-comment: #7a7585;
+  --learn-code-keyword: var(--learn-accent);
+  --learn-code-function: var(--learn-audio);
+  --learn-code-constant: #b45309;
+  --learn-code-string: #0f766e;
+  --learn-code-parameter: var(--learn-ink);
+  --learn-code-punctuation: #8b8794;
+  --learn-code-link: var(--learn-audio);
+
   --learn-font-text: var(--fd-font-sans, ui-sans-serif, system-ui, sans-serif);
   --learn-font-mono: var(
     --fd-font-mono,
@@ -56,4 +72,10 @@
   /* Lifted, not inverted: a cable has to stay a cable in either scheme. */
   --learn-audio: #60a5fa;
   --learn-control: #cfcad8;
+
+  /* Lifted the same way. The four that are `var()` above follow on their own. */
+  --learn-code-comment: #8f8a9c;
+  --learn-code-constant: #fbbf24;
+  --learn-code-string: #5eead4;
+  --learn-code-punctuation: #a49fb0;
 }

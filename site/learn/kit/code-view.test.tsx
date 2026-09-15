@@ -47,7 +47,7 @@ function head(container: HTMLElement): string[] {
  * The click is what asks for the file, so nothing here can be asserted until
  * one has landed - `waitFor` is the frame between the gesture and the text.
  */
-async function open(ui: ReactElement) {
+async function openPanel(ui: ReactElement) {
   const rendered = render(ui);
   fireEvent.click(rendered.getByText("View the code"));
   await waitFor(() =>
@@ -61,8 +61,10 @@ describe("the source is the source", () => {
     const source = await loadPatchSource("sound/harmonics");
 
     expect(source).toBeDefined();
-    expect(source).toContain("function build(ac: AudioContext)");
-    expect(source).toContain("function sawHarmonics(count: number): number[]");
+    expect(source?.text).toContain("function build(ac: AudioContext)");
+    expect(source?.text).toContain(
+      "function sawHarmonics(count: number): number[]",
+    );
   });
 
   it("registers a source for every patch", () => {
@@ -79,7 +81,7 @@ describe("the source is the source", () => {
       if (!range) continue;
 
       const [from, to] = range;
-      const lines = ((await loadPatchSource(id)) ?? "")
+      const lines = ((await loadPatchSource(id))?.text ?? "")
         .replace(/\s+$/, "")
         .split("\n");
 
@@ -118,6 +120,45 @@ describe("the panel", () => {
     await waitFor(() => expect(container.querySelector("pre")).not.toBeNull());
   });
 
+  it("lights the code, in classes and not in colours", async () => {
+    const { container } = await openPanel(
+      <CodeView id="sound/tone" code={tone.code} />,
+    );
+    const pre = container.querySelector("pre") as HTMLElement;
+
+    // The same words, lit: a keyword is a keyword and a comment is a comment,
+    // and the panel reads like a code fence in the documentation half of the
+    // site rather than like a `<pre>` nobody styled.
+    const keywords = [...pre.querySelectorAll(".learn-code-keyword")].map(
+      (span) => span.textContent,
+    );
+    expect(keywords).toContain("import");
+    expect(keywords).toContain("const");
+    expect(pre.querySelector(".learn-code-function")).not.toBeNull();
+
+    // And rule 4, in the one place it cannot walk: the markup is generated at
+    // build time and lives in no file the rule reads, so it says here instead.
+    // `learn/theme/code.css` binds these classes to `--learn-code-*` tokens,
+    // which `default.css` and `ink.css` are the only files to give values.
+    expect(pre.innerHTML).not.toMatch(/style=/);
+    expect(pre.innerHTML).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
+    for (const span of pre.querySelectorAll("span")) {
+      expect(span.className).toMatch(/^learn-code-[\w-]+$/);
+    }
+  });
+
+  it("shows the file, letter for letter, lit or not", async () => {
+    const { container } = await openPanel(<CodeView id="sound/harmonics" />);
+    const source = (await loadPatchSource("sound/harmonics"))?.text ?? "";
+
+    // The markup is a rendering of the text and not a second copy of it: what
+    // a reader can select out of the panel is the file's own opening, entities
+    // decoded and every token back where it was.
+    const shown = container.querySelector("pre")?.textContent ?? "";
+    expect(shown.length).toBeGreaterThan(200);
+    expect(source.startsWith(shown)).toBe(true);
+  });
+
   it("draws no panel for a patch the registry has no source for", () => {
     const { container } = render(<CodeView id="test/every-kind" />);
 
@@ -125,7 +166,7 @@ describe("the panel", () => {
   });
 
   it("opens on the slice its patch asked for", async () => {
-    const { container } = await open(
+    const { container } = await openPanel(
       <CodeView id="sound/tone" code={tone.code} />,
     );
     const lines = head(container);
@@ -140,7 +181,7 @@ describe("the panel", () => {
   });
 
   it("folds the manifest behind a button", async () => {
-    const { container, getByRole } = await open(
+    const { container, getByRole } = await openPanel(
       <CodeView id="sound/tone" code={tone.code} />,
     );
 
@@ -156,7 +197,7 @@ describe("the panel", () => {
   });
 
   it("shows the whole file when a patch declares no slice", async () => {
-    const { container } = await open(<CodeView id="sound/harmonics" />);
+    const { container } = await openPanel(<CodeView id="sound/harmonics" />);
     const lines = head(container);
 
     expect(lines[0]).toBe(
@@ -166,7 +207,7 @@ describe("the panel", () => {
 
   it("folds a manifest that names its type", async () => {
     // `definePatch<Voice>({`, which the voice and the playground both write.
-    const { container } = await open(<CodeView id="voice" />);
+    const { container } = await openPanel(<CodeView id="voice" />);
     const shown = head(container).join("\n");
 
     expect(shown).toContain("function build(");

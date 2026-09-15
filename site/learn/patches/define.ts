@@ -368,8 +368,24 @@ export type PatchLoader<S = any> = () => Promise<{ default: LessonPatch<S> }>;
  * Lazy for the same reason and more so (03c): a patch module minifies and a
  * patch's *source* does not, and it is read only by a reader who opens "View
  * the code" - one file, on that click.
+ *
+ * `lines` is that file highlighted at build time (03b), one string of HTML per
+ * line of the text and indexed the same, so that a slice of the one is a slice
+ * of the other. `null` where the highlighter could not run, which is why the
+ * panel can always fall back to the text.
  */
-export type SourceLoader = () => Promise<{ default: string }>;
+export type SourceLoader = () => Promise<{
+  default: string;
+  lines: string[] | null;
+}>;
+
+/** A patch's file, as "View the code" reads it. */
+export interface PatchSource {
+  /** The file itself, uncompiled. */
+  text: string;
+  /** Its lines as HTML, or `null` - see `SourceLoader`. */
+  lines: string[] | null;
+}
 
 /**
  * Declare a patch.

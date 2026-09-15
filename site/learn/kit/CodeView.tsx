@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { hasPatchSource, loadPatchSource } from "../patches";
-import type { CodeOptions } from "../patches/define";
+import type { CodeOptions, PatchSource } from "../patches/define";
 
 /*
  * "View the code", and the code is the code.
@@ -27,11 +27,14 @@ import type { CodeOptions } from "../patches/define";
  * only count on because the text here is the file, not a compiler's rendering
  * of it. That is `next.config.mjs`'s job, and it was once a bug.
  *
- * **It is a plain `<pre>`, not highlighted.** The site's shiki pipeline runs at
- * build time inside `fumadocs-mdx`, and this is a client component: reaching it
- * would mean either shipping a highlighter to the browser or pre-rendering
- * every patch's HTML into the bundle, and neither is worth colour on a page
- * whose subject is sound. If a later ticket wants it, the change is here alone.
+ * **It is highlighted** (03b), by the same shiki the documentation's code
+ * fences use and at the same time: build time. `?raw` hands this component the
+ * file's text *and* the file's lines as markup (`scripts/highlight-patch.mjs`,
+ * `scripts/patch-source-loader.cjs`), indexed identically - so everything below
+ * slices and folds the text, which is the thing with line numbers in it, and
+ * renders the lit lines at the same indices. No highlighter reaches the browser,
+ * the panel costs the page nothing it did not cost before, and a patch whose
+ * markup is missing falls back to the text rather than to a blank panel.
  */
 
 /**
@@ -44,16 +47,54 @@ import type { CodeOptions } from "../patches/define";
  */
 const MANIFEST = /^export default definePatch[<(]/;
 
-/** The same lines without the empty ones at the end. */
-function trimBlank(lines: string[]): string[] {
-  let end = lines.length;
-  while (end > 0 && lines[end - 1].trim() === "") end--;
-  return lines.slice(0, end);
+/*
+ * The panel's own frame.
+ *
+ * `not-prose` because a lesson's widget sits inside the documentation's prose
+ * styles, and those give every `<code>` a padded, bordered, tinted box - which
+ * on an inline element wrapping forty lines is forty boxes, one per line
+ * fragment. The lit panel is a code block and wants none of it; the tokens
+ * below carry the only colour in here.
+ */
+const PANEL =
+  "not-prose mt-2 overflow-x-auto rounded-learn border border-learn-border " +
+  "bg-learn-bg p-3 font-learn-mono text-xs leading-relaxed text-learn-ink";
+
+/**
+ * One `<pre>`, from line `from` to line `to` of the file.
+ *
+ * `dangerouslySetInnerHTML` is the whole of the highlighting, and what makes it
+ * safe is where the markup came from: `scripts/highlight-patch.mjs` built it
+ * out of this repository's own files at build time, escaping every token it put
+ * in, and no string a reader can influence reaches this component at all.
+ */
+function Lines({
+  source,
+  from,
+  to,
+}: {
+  source: PatchSource;
+  from: number;
+  to: number;
+}) {
+  const lit = source.lines;
+
+  return (
+    <pre className={PANEL}>
+      {lit ? (
+        <code
+          dangerouslySetInnerHTML={{ __html: lit.slice(from, to).join("\n") }}
+        />
+      ) : (
+        <code>{source.text.split("\n").slice(from, to).join("\n")}</code>
+      )}
+    </pre>
+  );
 }
 
 export function CodeView({ id, code }: { id: string; code?: CodeOptions }) {
   const [manifestOpen, setManifestOpen] = useState(false);
-  const [source, setSource] = useState<string>();
+  const [source, setSource] = useState<PatchSource>();
   // A ref and not state: asking twice would be a second render for nothing,
   // and `<details>` fires its toggle on the way closed as well as open.
   const asked = useRef(false);
@@ -61,25 +102,42 @@ export function CodeView({ id, code }: { id: string; code?: CodeOptions }) {
   const fetchSource = () => {
     if (asked.current) return;
     asked.current = true;
-    void loadPatchSource(id).then(setSource);
+    void loadPatchSource(id).then((loaded) => {
+      // The lines and the text have to be the same file, line for line, or the
+      // slicing below would be counting in one and drawing from the other. The
+      // text is the one that is always right, so a mismatch loses the colour.
+      const lines = loaded?.lines;
+      setSource(
+        loaded && lines && lines.length !== loaded.text.split("\n").length
+          ? { ...loaded, lines: null }
+          : loaded,
+      );
+    });
   };
 
   // A patch with no registered source shows no panel at all, exactly as before:
   // the question is answered from the registry's keys, not from its files.
   if (!hasPatchSource(id)) return null;
 
-  let lines = (source ?? "").replace(/\s+$/, "").split("\n");
-  if (code?.lines) {
-    const [from, to] = code.lines;
-    lines = lines.slice(Math.max(0, from - 1), to);
-  }
+  // Everything below counts in the file's own line numbers, from zero, so that
+  // the text and the markup can be sliced by the same pair of indices.
+  const lines = (source?.text ?? "").split("\n");
 
-  const fold = lines.findIndex((line) => MANIFEST.test(line));
+  // The blank line a file ends on is not a line of the panel.
+  let end = lines.length;
+  while (end > 0 && lines[end - 1].trim() === "") end--;
+
+  const from = code?.lines ? Math.max(0, code.lines[0] - 1) : 0;
+  const to = code?.lines ? Math.min(end, code.lines[1]) : end;
+
+  let fold = lines.findIndex((line) => MANIFEST.test(line));
+  if (fold < from || fold >= to) fold = -1;
+
   // The head stops at the blank line a file leaves before `export default`, and
   // a blank line at the bottom of a code panel is a line of the reader's screen
   // spent on the fold rather than on the patch.
-  const head = trimBlank(fold === -1 ? lines : lines.slice(0, fold));
-  const tail = fold === -1 ? [] : lines.slice(fold);
+  let head = fold === -1 ? to : fold;
+  while (head > from && lines[head - 1].trim() === "") head--;
 
   return (
     <details
@@ -101,13 +159,9 @@ export function CodeView({ id, code }: { id: string; code?: CodeOptions }) {
         {code?.lines ? ` · lines ${code.lines[0]}–${code.lines[1]}` : null}
       </p>
 
-      {source === undefined ? null : (
-        <pre className="mt-2 overflow-x-auto rounded-learn border border-learn-border bg-learn-bg p-3 font-learn-mono text-xs leading-relaxed text-learn-ink">
-          <code>{head.join("\n")}</code>
-        </pre>
-      )}
+      {source ? <Lines source={source} from={from} to={head} /> : null}
 
-      {tail.length > 0 ? (
+      {source && fold !== -1 ? (
         <>
           <button
             type="button"
@@ -117,11 +171,7 @@ export function CodeView({ id, code }: { id: string; code?: CodeOptions }) {
           >
             {manifestOpen ? "Hide" : "Show"} the controls and views
           </button>
-          {manifestOpen ? (
-            <pre className="mt-2 overflow-x-auto rounded-learn border border-learn-border bg-learn-bg p-3 font-learn-mono text-xs leading-relaxed text-learn-ink">
-              <code>{tail.join("\n")}</code>
-            </pre>
-          ) : null}
+          {manifestOpen ? <Lines source={source} from={fold} to={to} /> : null}
         </>
       ) : null}
     </details>

@@ -1,6 +1,10 @@
 import { createMDX } from "fumadocs-mdx/next";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 const withMDX = createMDX();
+
+const HERE = dirname(fileURLToPath(import.meta.url));
 
 const repo = "synthlet";
 const isDeploy = process.env.DEPLOY || false;
@@ -141,7 +145,11 @@ const config = {
    * reported a hydration mismatch on the lesson that shows it.
    *
    * So the rules that would have compiled the file are told to stand down for
-   * this one query, and `asset/source` is left alone with it.
+   * this one query, and `scripts/patch-source-loader.cjs` is left alone with
+   * it. That loader is where `asset/source` used to be: it returns the same
+   * text as the default export and, since 03b, the same lines highlighted
+   * (`scripts/highlight-patch.mjs`), so that the panel reads like a code fence
+   * in the documentation without a highlighter reaching the browser.
    */
   webpack(config) {
     const compilers = excludeRaw(config.module.rules);
@@ -160,7 +168,11 @@ const config = {
 
     config.module.rules.push({
       resourceQuery: RAW,
-      type: "asset/source",
+      use: [{ loader: join(HERE, "scripts", "patch-source-loader.cjs") }],
+      // The loader writes a module, not an asset. Said out loud because the
+      // rule it replaced said `type: "asset/source"`, and the two are the
+      // difference between `export default "…"` and a file webpack emits.
+      type: "javascript/auto",
     });
     return config;
   },

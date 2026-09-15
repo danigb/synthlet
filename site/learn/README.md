@@ -66,6 +66,21 @@ a colour may be written.
 | `--learn-gap`              | `p-learn`, `gap-learn`, `m-learn`          | The section's one spacing step      |
 | `--learn-widget-max-width` | `max-w-learn`                              | How wide a widget may get           |
 
+And eight more for the lit code panel (03b), which have no Tailwind class
+because nothing writes them by hand: `theme/code.css` binds each to the class
+the highlighter puts in the markup, and that file is their only reader.
+
+| Token                      | The class it colours      | What it is               |
+| -------------------------- | ------------------------- | ------------------------ |
+| `--learn-code-comment`     | `.learn-code-comment`     | A comment                |
+| `--learn-code-keyword`     | `.learn-code-keyword`     | `const`, `import`, `=>`  |
+| `--learn-code-function`    | `.learn-code-function`    | A call, a type name      |
+| `--learn-code-constant`    | `.learn-code-constant`    | A number, a `const` name |
+| `--learn-code-string`      | `.learn-code-string(-…)`  | A string                 |
+| `--learn-code-parameter`   | `.learn-code-parameter`   | A parameter              |
+| `--learn-code-punctuation` | `.learn-code-punctuation` | Brackets and separators  |
+| `--learn-code-link`        | `.learn-code-link`        | A URL inside the code    |
+
 The canvas views read `--learn-audio` and `--learn-control` with
 `getComputedStyle` rather than a literal, so a scope trace restyles with
 everything else.
@@ -285,10 +300,32 @@ the site still builds, and only the reader sees it.
 by asserting the registry's text still contains an annotation
 (`ac: AudioContext`) that any compiler would have removed.
 
-**It is a plain `<pre>`, not highlighted.** The site's shiki pipeline runs at
-build time inside `fumadocs-mdx` and the widget is a client component; reaching
-it would mean shipping a highlighter to the browser. If that becomes worth it,
-the change is `kit/CodeView.tsx` alone.
+**It is highlighted** (03b), by the same shiki the documentation's code fences
+use and at the same time: build time. The site's shiki pipeline runs inside
+`fumadocs-mdx`, which is a transform over `.mdx` files and reaches nothing here
+— the widget is a client component holding a string. So the highlighting moved
+to the loader instead. `scripts/highlight-patch.mjs` tokenises the file with
+shiki's CSS-variables theme under the tutorial's own prefix and writes one class
+per token, `scripts/patch-source-loader.cjs` calls it, and the module `?raw`
+returns is the text _and_ `lines`, its lines as markup, indexed identically —
+which is what lets `CodeView` count in the text (where `code: { lines }` and the
+manifest fold live) and draw from the markup. `vitest.config.ts` carries the
+same transform as a Vite plugin, so a test sees what a browser will.
+
+Three properties are worth stating, because each of them is why this shape and
+not another:
+
+- **No highlighter reaches the browser.** `/learn`'s first-load JS is the same
+  byte for byte with the colour as without it; the markup rides in the chunk the
+  panel already fetched on the click that opened it.
+- **No colour is in the markup.** Tokens arrive as classes, `theme/code.css`
+  binds the classes to `--learn-code-*`, and `default.css` and `ink.css` are the
+  only files with a literal in them — so the panel restyles with everything
+  else, and rule 4 needs no exception. `code-view.test.tsx` asserts the markup
+  carries classes and no `style=` in the one place rule 4 cannot walk.
+- **A patch is never a blank panel.** If shiki cannot run, the loader emits the
+  text with `lines` as `null`, warns with the file's name, and `CodeView` draws
+  the plain `<pre>` it drew before.
 
 ### Colours on a canvas
 
