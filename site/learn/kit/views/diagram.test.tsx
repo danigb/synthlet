@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { definePatch } from "../../patches/define";
 import { LessonWidget } from "../LessonWidget";
@@ -156,5 +156,101 @@ describe("the diagram, drawn in a widget", () => {
     const { container } = widget(auto as typeof attackPatch);
     expect(container.querySelector('[data-view="diagram"]')).not.toBeNull();
     expect(container.querySelector("svg")).toBeNull();
+  });
+});
+
+/*
+ * And the same picture, reached without a pointer.
+ *
+ * 07b: half the link was keyboard-reachable - tabbing onto a knob outlined its
+ * box - and half was not, because a `<g>` in an SVG has no tab stop and a phone
+ * has no hover. The boxes carry a roving tab stop now, arrow keys walk the
+ * chain, and a tap does what a hover does.
+ */
+describe("the diagram, reached without a pointer", () => {
+  const boxes = (container: HTMLElement) => [
+    ...container.querySelectorAll("[data-node]"),
+  ];
+  const tabIndexes = (container: HTMLElement) =>
+    boxes(container).map((box) => box.getAttribute("tabindex"));
+  /* A real focus, not a dispatched event: the point is where the focus goes,
+   * and `act` is what makes React's answer to it arrive before the assertion. */
+  const focus = (element: Element) =>
+    act(() => {
+      (element as SVGGElement).focus();
+    });
+
+  it("is one tab stop for the whole picture", () => {
+    const { container } = widget(attackPatch);
+    // Four boxes, one stop: the rest are reachable by arrow, not by tab.
+    expect(tabIndexes(container)).toEqual(["0", "-1", "-1", "-1"]);
+  });
+
+  it("lights the knob when the reader focuses the box", () => {
+    const { container } = widget(attackPatch);
+    expect(linked(container, "attack")).toBeNull();
+
+    fireEvent.focus(box(container, "amp"));
+    expect(linked(container, "attack")).toBe("true");
+    expect(outline(container, "amp")).toContain("stroke-learn-accent");
+
+    fireEvent.blur(box(container, "amp"));
+    expect(linked(container, "attack")).toBeNull();
+  });
+
+  it("walks the chain with the arrow keys", () => {
+    const { container } = widget(attackPatch);
+    const osc = box(container, "osc");
+    focus(osc);
+    expect(linked(container, "attack")).toBeNull();
+
+    // osc → amp: the box the lesson's knob is marked on, so the knob lights.
+    fireEvent.keyDown(osc, { key: "ArrowRight" });
+    expect(container.ownerDocument.activeElement).toBe(box(container, "amp"));
+    expect(linked(container, "attack")).toBe("true");
+    // And the stop moved with the focus, so tabbing away and back returns here.
+    expect(tabIndexes(container)).toEqual(["-1", "0", "-1", "-1"]);
+
+    // Back again, and the chain wraps at the ends rather than trapping.
+    fireEvent.keyDown(box(container, "amp"), { key: "ArrowLeft" });
+    expect(container.ownerDocument.activeElement).toBe(box(container, "osc"));
+    fireEvent.keyDown(box(container, "osc"), { key: "ArrowLeft" });
+    expect(container.ownerDocument.activeElement).toBe(box(container, "keys"));
+  });
+
+  it("puts the link down on Escape and keeps the focus", () => {
+    const { container } = widget(attackPatch);
+    const amp = box(container, "amp");
+    focus(amp);
+    expect(linked(container, "attack")).toBe("true");
+
+    fireEvent.keyDown(amp, { key: "Escape" });
+    expect(linked(container, "attack")).toBeNull();
+    expect(container.ownerDocument.activeElement).toBe(amp);
+  });
+
+  it("lights a box on a tap, and clears it on a tap away", () => {
+    const { container } = widget(attackPatch);
+    fireEvent.pointerDown(box(container, "amp"));
+    expect(linked(container, "attack")).toBe("true");
+
+    // The background of the picture: the one place a tap means "never mind".
+    fireEvent.pointerDown(container.querySelector("svg") as SVGSVGElement);
+    expect(linked(container, "attack")).toBeNull();
+  });
+
+  it("names every box for the knobs printed on it", () => {
+    const { container } = widget(attackPatch);
+    expect(box(container, "amp").getAttribute("aria-label")).toBe(
+      "AdsrAmp, Attack",
+    );
+    expect(box(container, "osc").getAttribute("aria-label")).toBe(
+      "PolyblepOscillator",
+    );
+    // The boxes are named, so the drawing cannot be a `role="img"`: that role
+    // takes everything inside it out of the accessibility tree.
+    const svg = container.querySelector("svg") as SVGSVGElement;
+    expect(svg.getAttribute("role")).toBe("group");
+    expect(svg.getAttribute("aria-label")).toContain("Signal flow");
   });
 });

@@ -222,6 +222,29 @@ export function describeDiagram(graph: DiagramGraph): string {
   return `Signal flow: ${parts.join(", ")}`;
 }
 
+/**
+ * One box, as a name.
+ *
+ * The picture says which knobs belong to which box by printing their labels
+ * inside it, and that is the one relationship a reader who cannot see it has no
+ * other way to get: the `aria-label` on the whole drawing is the chain, not the
+ * marks on it. So a box is named for its module and the knobs it carries -
+ * "Svf, Cutoff and Strip harmonics" - and a box with no knobs on it is just its
+ * label.
+ *
+ * Pure, and beside `describeDiagram` for the same reason: what a box is called
+ * is a fact about the graph, not about the SVG.
+ */
+export function describeNode(node: DiagramGraphNode): string {
+  const names = node.controls.map((control) => control.label);
+  if (names.length === 0) return node.label;
+  const last = names[names.length - 1];
+  const rest = names.slice(0, -1);
+  return rest.length === 0
+    ? `${node.label}, ${last}`
+    : `${node.label}, ${rest.join(", ")} and ${last}`;
+}
+
 /* -------------------------------------------------------------------------
  * Geometry
  *

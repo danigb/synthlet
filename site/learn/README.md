@@ -411,7 +411,8 @@ accessor is a function and cannot be read, which is why the tie is declared.
 
 That tie is also the hover link: pointing at a knob outlines its box, pointing
 at a box outlines its knobs, and tabbing to a knob does the same as pointing at
-it.
+it. Both halves are reachable without a pointer — "Reaching it without a
+pointer" below.
 
 ### What the test checks
 
@@ -452,6 +453,28 @@ cable colours and squares the boxes and moves nothing. A diagram wider than the
 widget scrolls sideways inside it — the one place the site allows a horizontal
 scroll container, because a diagram scaled to fit 400 px is a diagram nobody can
 read.
+
+### Reaching it without a pointer
+
+The diagram is **one tab stop, not one per box**: the boxes carry a roving
+`tabindex` — the one the reader last visited holds it — and the arrow keys walk
+the chain in either direction, wrapping at both ends. A five-box diagram in
+front of a page of knobs must not cost five stops.
+
+- A **focused** box sets the same link a hovered one does, so the knobs light up
+  identically and the box outlines itself in `--learn-accent`, which is also its
+  focus indicator.
+- `Escape` puts the link down without taking the focus off the picture.
+- A **tap** on a box sets the link — the only way a reader with no hover has of
+  asking — and a tap on the drawing's background clears it.
+- Each box is a `role="group"` named for the knobs printed on it: "Svf, Cutoff
+  and Strip harmonics" (`describeNode` in `kit/views/layout.ts`). That is why
+  the `<svg>` is a `role="group"` rather than a `role="img"` — that role takes
+  everything inside it out of the accessibility tree, and the boxes are in it
+  now. Its own `aria-label` is unchanged: the chain as a sentence.
+
+The chrome's `←`/`→` page turn stands down for anything with a tab stop
+(`LessonKeys`), so walking a diagram does not turn the lesson.
 
 ## The chrome
 
