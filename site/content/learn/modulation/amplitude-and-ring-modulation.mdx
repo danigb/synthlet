@@ -1,0 +1,67 @@
+---
+title: Amplitude modulation and ring modulation
+description: Multiply two sine waves instead of mixing them and you get two frequencies that were in neither of them.
+core: false
+book: [11]
+hear: "2000 Hz against 1000 Hz gives peaks at 1000, 2000 and 3000; at offset zero the carrier vanishes and only the sidebands are left; put the carrier at 3710 and it is a bell."
+status: ready
+---
+
+Take the tremolo from the first page of this chapter and speed the modulator up
+until it is a note in its own right. You might expect very fast tremolo. What you
+get instead are frequencies that were in neither signal: a <Term>sum</Term> and
+a <Term>difference</Term>, at carrier plus modulator and carrier minus
+modulator. The marks on the spectrum are those two predictions, with the carrier
+between them.
+
+<Patch id="modulation/ring" show={["carrier", "modulator", "offset"]} />
+
+<Try>
+
+Press Play with the defaults — carrier 2000 Hz, modulator 1000 Hz, **Ring →
+amplitude** at zero. Peaks stand on the outer two marks, at 1000 and 3000 Hz, and
+the middle mark is bare. The modulator is not there either. A ring modulator
+outputs the sum and the difference and neither of its inputs.
+
+</Try>
+
+<Try>
+
+Drag **Ring → amplitude** up to 1. The carrier rises back into the middle mark
+and the sidebands drop to half their height, which is amplitude modulation rather
+than ring modulation — the difference between the two is a DC offset on the
+modulator, and on an ARP 2600 it was a switch.
+
+</Try>
+
+<Try>
+
+Leave the modulator at 1000 Hz and take the carrier up to about 3700. The
+sidebands follow the marks out to roughly 2700 and 4700, which are in no simple
+ratio to anything, and the sound goes metallic. This is Reid's third case at ten
+times his frequencies: a ring modulator is enharmonic almost
+everywhere, which is why it makes bells and Daleks and almost never makes notes.
+
+</Try>
+
+<Aside kind="note">
+
+Reid's own numbers are 200 Hz and 100 Hz. These are ten times his, because the
+spectrum here runs linearly to 22 kHz and three peaks 100 Hz apart would be three
+pixels apart. The arithmetic is about ratios, so nothing is lost but the absolute
+values.
+
+</Aside>
+
+<Aside kind="why">
+
+It is a line of school trigonometry. The product of two cosines is half the
+cosine of their sum plus half the cosine of their difference — so multiplying two
+sine waves does not produce a modulated sine wave at all, it produces exactly two
+new sine waves and nothing else. Every extra partial in either input multiplies
+against every partial in the other, which is why feeding two sawtooths into a
+ring modulator produces a spectrum nobody can predict by ear.
+
+</Aside>
+
+<Book part={11} />

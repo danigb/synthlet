@@ -32,7 +32,7 @@ const WIDTH = 0.5;
 const DEPTH = 0.2;
 const RATE = 0.6;
 /** Trimmed to about -18 dB. A square at full scale is painful. */
-const LEVEL = 0.12;
+const LEVEL = 0.125;
 
 function build(ac: AudioContext) {
   const osc = PolyblepOscillator(ac, {

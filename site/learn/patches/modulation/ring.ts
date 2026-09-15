@@ -30,7 +30,7 @@ const MODULATOR = 1000;
 
 /** 0 is a ring modulator. The knob opens it towards amplitude modulation. */
 const OFFSET = 0;
-const LEVEL = 0.12;
+const LEVEL = 0.125;
 
 function build(ac: AudioContext) {
   const carrier = PolyblepOscillator(ac, {

@@ -1,0 +1,62 @@
+---
+title: "Random: sample and hold"
+description: A clock, a switch and a capacitor turn a noise generator into a new random voltage on every beat.
+core: true
+book: [16]
+hear: "The Emerson, Lake & Palmer burble: a new random cutoff on every tick, and a wide pulse in track-and-hold mode slides between them instead of stepping."
+status: ready
+---
+
+Every modulator so far has repeated. A <Term>sample and hold</Term> does not, and
+the circuit behind it is two components: a switch and a capacitor. Close the
+switch for an instant and the capacitor charges to whatever voltage is at the
+input; open it again and that voltage has nowhere to go, so it stays. Feed the
+input from a noise generator, close the switch on a clock, and the output is a
+staircase of random values — the first picture below, which is a control voltage
+and not a sound.
+
+<Patch
+  id="modulation/sample-hold"
+  show={["rate", "pulseWidth", "depth", "track"]}
+/>
+
+<Try>
+
+Press Play and watch the staircase while you listen. Each step is one closing of
+the switch. Take **Clock** from 300 up towards 900 beats per minute and the steps
+narrow; the burble speeds up and the trace redraws to match, because the picture
+and the sound are the same voltage.
+
+</Try>
+
+<Try>
+
+Pull **Depth** down to nothing. The steps are still there in the control voltage,
+but the filter no longer moves and the saw sits still. Depth is how many hertz of
+cutoff one unit of held voltage is worth — the amplifier that Reid draws in every
+modulation path, here in its most obvious form.
+
+</Try>
+
+<Try>
+
+Turn **Track and hold** on and widen **Pulse width** to 0.8. The steps grow
+slopes: the circuit is now transparent while the clock pulse is high and only
+latches on its falling edge, so four fifths of each beat is spent following the
+noise rather than holding it. Narrow the pulse again and it is a sample and hold
+once more.
+
+</Try>
+
+<Aside kind="why">
+
+Nothing here samples audio, and yet this is where digital sound begins. The same
+two components in front of a converter, clocked fast enough, are the input stage
+of every recording ever made — Reid's article walks from this burble to
+sample-rate conversion in a few pages. The synth module is the slow, audible
+version of the thing, running at five hertz instead of forty-four thousand, which
+makes it a good place to learn what sampling actually does.
+
+</Aside>
+
+<Book part={16} />

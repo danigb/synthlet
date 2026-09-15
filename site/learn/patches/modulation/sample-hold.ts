@@ -36,7 +36,7 @@ const CUTOFF = 1600;
 const DEPTH = 1200;
 /** Enough resonance to hear each step land; not enough to whistle. */
 const RESONANCE = 8;
-const LEVEL = 0.12;
+const LEVEL = 0.125;
 
 function build(ac: AudioContext) {
   const clock = Clock(ac, { bpm: BPM, pulseWidth: PULSE_WIDTH });

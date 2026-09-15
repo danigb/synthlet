@@ -10,6 +10,8 @@ import ring from "./ring";
 import ringSource from "./ring.ts?raw";
 import sampleHold from "./sample-hold";
 import sampleHoldSource from "./sample-hold.ts?raw";
+import sync from "./sync";
+import syncSource from "./sync.ts?raw";
 
 /*
  * Chapter 5's patches, in the order the chapter reads them.
@@ -20,8 +22,9 @@ import sampleHoldSource from "./sample-hold.ts?raw";
  * is why `lfo-destinations` carries two lessons and `additive` fourteen
  * sliders.
  *
- * The chapter is still being written: `modulation/sync` adds a line each to
- * the two records below and touches nothing else.
+ * Seven patches for eight lessons: `lfo-destinations` carries 5.1 and 5.2,
+ * which are the same synth asked two questions - where does the wobble go, and
+ * what does it do when it gets there - with two `show` lists.
  */
 export const modulationPatches = {
   "modulation/lfo-destinations": lfoDestinations,
@@ -30,6 +33,7 @@ export const modulationPatches = {
   "modulation/ring": ring,
   "modulation/fm": fm,
   "modulation/additive": additive,
+  "modulation/sync": sync,
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
@@ -40,4 +44,5 @@ export const modulationSources: Record<string, string> = {
   "modulation/ring": ringSource,
   "modulation/fm": fmSource,
   "modulation/additive": additiveSource,
+  "modulation/sync": syncSource,
 };

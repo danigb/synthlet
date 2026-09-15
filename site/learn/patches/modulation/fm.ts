@@ -39,7 +39,7 @@ const INDEX = 1;
 const MAX_DEVIATION = 20000;
 /** How many orders of sideband the marks predict. */
 const ORDERS = 8;
-const LEVEL = 0.12;
+const LEVEL = 0.125;
 
 function build(ac: AudioContext) {
   const carrier = PolyblepOscillator(ac, {

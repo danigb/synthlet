@@ -1,0 +1,63 @@
+---
+title: FM
+description: Vibrato sped into the audio band stops being vibrato and becomes a timbre with a whole family of sidebands.
+core: false
+book: [12, 13]
+hear: "One sine wave bending another: at 1:1 it is a filtered sawtooth, at 1:2 a square, at 1:1.21 a bell, and the index knob decides how many partials there are."
+status: ready
+---
+
+Amplitude modulation at audio rate gave two new frequencies. Frequency modulation
+gives an unlimited family of them, at the carrier plus or minus every whole
+multiple of the modulator: c ± m, c ± 2m, c ± 3m, and onwards. The marks below are
+that prediction. The carrier is fixed at 1 kHz, so the only two things you can
+change are where the modulator sits relative to it and how hard it pushes.
+
+<Patch id="modulation/fm" show={["ratio", "index", "rate"]} />
+
+<Try>
+
+Take **Modulator** down to about five hertz and put **Index** at about 5, which
+is a deviation of twenty-five hertz either side of the carrier. That is vibrato —
+you can count the wobble. Now drag the slider
+upwards. At twenty or thirty hertz the wobble smears; by a few hundred it has
+stopped being movement and become tone colour, and by 1 kHz the spectrum has
+filled with sidebands standing on the marks. Nothing changed but one slider.
+
+</Try>
+
+<Try>
+
+Put **Index** at 1 and step down the **C:M ratio** list. At 1:1 the sidebands land
+on every harmonic of the carrier and the result sounds like a filtered sawtooth.
+At 1:2 only the odd harmonics survive, which is a square. At 1:3 every third is
+gone, which is a narrow pulse. Three familiar waveforms, from two sine waves.
+
+</Try>
+
+<Try>
+
+Choose 1:1.21 and listen, then watch. No peak sits on a harmonic of anything; the
+partials are packed at uneven spacings and the sound is a struck bell rather than
+a note. Now raise **Index** from 0 to 20 on any ratio: at zero there is only the
+carrier, and every step upwards buys more sidebands and pushes energy out of the
+middle into them.
+
+</Try>
+
+<Aside kind="why">
+
+At 1:1 the lower sidebands run 0, −1000, −2000 Hz and so on, which looks like
+nonsense until you accept Reid's answer: a negative frequency is the same
+frequency with its phase inverted. It reflects off zero and is subtracted from
+whatever is already there. That is why the mark list here takes an absolute
+value, and why a 1:1 ratio draws a plain harmonic series instead of cancelling
+itself to silence.
+
+</Aside>
+
+Stacking operators, and feeding a modulator back into itself, are the other half
+of FM; both need a module this library does not have yet, so this page stops at
+two oscillators and the C:M ratio.
+
+<Book part={[12, 13]} />

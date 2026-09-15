@@ -1,0 +1,63 @@
+---
+title: Hard sync
+description: One oscillator restarts another before it can finish a cycle, and the pitch and the timbre come apart into two separate knobs.
+core: false
+book: [43]
+hear: "The pitch stays with the master whatever the slave does; moving the slave changes only the timbre, and an envelope on it is the zeeeooooww of every vintage lead patch."
+status: ready
+---
+
+This last modulation does not arrive at a level or a cutoff. The master
+oscillator's rising edge goes to the slave's <Term>sync</Term> input, and every
+time it arrives the slave's waveform is thrown back to the start of its cycle. If
+the slave is running faster than the master — and it usually is — it never gets
+to finish. Only the slave is heard; the master is in this patch purely to
+interrupt it.
+
+<Patch
+  id="modulation/sync"
+  show={["master", "slave", "sweep", "decay", "trigger"]}
+/>
+
+<Try>
+
+Press Play and drag **Slave** slowly from 660 Hz upwards with **Sweep** at zero.
+The tone changes continuously and drastically — ramps, then strange hollow
+variants, then ramps again — and the pitch does not move at all. Watch the left
+mark on the spectrum: the lowest peak stays at the master's 220 Hz however far
+the slave travels. That is the first rule of hard sync, and it is why a synth can
+give you a timbre knob that plays in tune.
+
+</Try>
+
+<Try>
+
+Now move **Master** instead. The pitch follows it, as it must, and the timbre
+shifts with it too, because what matters is the ratio of the two. At 660 against
+220 the slave completes exactly three cycles per reset and the output is a plain
+ramp; a few hertz either side of that and it is anything but.
+
+</Try>
+
+<Try>
+
+Put **Slave** back around 660, **Sweep** near 2000 and **Decay** at about half a
+second, then press **Trigger**. The slave is flung upwards and falls back, so the
+timbre sweeps down through all those variants in one gesture. That is the sound
+a Moog Prodigy is remembered for, and it is one envelope on one oscillator's
+pitch.
+
+</Try>
+
+<Aside kind="why">
+
+The waveform repeats whenever the master resets it, so it repeats at the master's
+period — and a wave that repeats at 220 Hz has its energy on harmonics of 220 Hz,
+whatever shape each repetition happens to be. What the slave's frequency changes
+is which of those harmonics are loud: it puts a broad peak in the spectrum around
+itself and drags it about as you sweep. That is a formant under another name, and
+it is why sync sounds vocal in a way that a filter sweep does not.
+
+</Aside>
+
+<Book part={43} />

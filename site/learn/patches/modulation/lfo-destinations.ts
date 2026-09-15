@@ -69,7 +69,7 @@ const CUTOFF = 1200;
 /** Enough resonance that a moving cutoff is audible as a growl, not a fade. */
 const RESONANCE = 6;
 /** Trimmed to about -18 dB, the level the chapter-1 patches settled on. */
-const LEVEL = 0.12;
+const LEVEL = 0.125;
 
 function build(ac: AudioContext) {
   const osc = PolyblepOscillator(ac, {

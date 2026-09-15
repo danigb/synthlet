@@ -1,0 +1,78 @@
+---
+title: Additive
+description: Nine sine waves and nine volume controls, which is one way to describe the most successful keyboard instrument of the twentieth century.
+core: false
+book: [14, 55]
+hear: "Nine sines at 1/n are a sawtooth, nine at equal level are a buzz, 88 8000 000 is an organ, and a pluck darkens on its own because the high partials die first."
+status: ready
+---
+
+Chapter 1 took a sawtooth apart into harmonics. This page builds one back up by
+hand. Nine oscillators at one, two, three… nine times 220 Hz, nine amplifiers,
+one mixer: Reid calls that configuration hopelessly inefficient in the same
+paragraph in which he points out that a Hammond organ is exactly it, with ninety
+years of tonewheels standing in for the oscillators.
+
+<Patch
+  id="modulation/additive"
+  show={[
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "h7",
+    "h8",
+    "h9",
+    "saw",
+    "buzz",
+    "drawbars",
+    "time",
+    "pluck",
+  ]}
+/>
+
+<Try>
+
+Press Play, then **1/n**. The nth slider lands at roughly one nth of the first
+and the sound is a sawtooth — thin, because nine harmonics is where the series
+has been cut, but unmistakably the waveform chapter 1 started from. Press **All
+equal** and every partial jumps to full: much brighter, and unlike anything you
+would find in nature, because real resonators do not hand out energy evenly.
+
+</Try>
+
+<Try>
+
+Press **88 8000 000**. Three drawbars out, the first three harmonics, and the
+result is instantly an organ — the registration Jimmy Smith and Keith Emerson
+played on. Then pull the sliders about by hand. There is no filter on this
+widget and no waveform list; every timbre you can reach is reached by deciding
+how loud each sine wave is, which is the whole of additive synthesis.
+
+</Try>
+
+<Try>
+
+Press **Pluck** and hold your eye on the spectrum. Every partial starts falling
+at once, but the ninth reaches silence in a ninth of the time the first takes,
+so the sound darkens as it decays. Nothing filtered it. Set **Decay** long and
+short and listen again: a plucked string, from nine straight lines.
+
+</Try>
+
+<Aside kind="why">
+
+This is the one patch in the tutorial with no worklet in it — nine
+`OscillatorNode`s and a handful of `GainNode`s, nothing else. That is
+deliberate. A native
+node is a synthlet module too, and additive synthesis is the case that proves it,
+because it needs no filter, no envelope generator and no processor of any kind:
+the amplitude of each harmonic over time _is_ the sound, so the contours the
+partials trace out do the work that a filter and a VCA would otherwise be hired
+for.
+
+</Aside>
+
+<Book part={[14, 55]} />

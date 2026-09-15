@@ -1,0 +1,13 @@
+{
+  "title": "Modulation",
+  "pages": [
+    "lfos",
+    "shapes-rate-amount-delay",
+    "pulse-width-modulation",
+    "random",
+    "amplitude-and-ring-modulation",
+    "frequency-modulation",
+    "additive",
+    "hard-sync"
+  ]
+}
