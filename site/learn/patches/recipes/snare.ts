@@ -21,7 +21,8 @@
  * to. The circuit here is `HandclapDrum`'s, which is the TR-808's: a burst of
  * band-passed noise chopped by a 100 Hz ramp, saturated. It is here because
  * the library ships it and because it belongs beside a snare, and the lesson
- * credits Roland rather than the book.
+ * credits Roland rather than the book. `HandclapDrum` is where those numbers
+ * come from, and 13c is why the reader cannot open that file from here.
  *
  * No diagram: three sources into a mixer (13b).
  */

@@ -22,7 +22,9 @@
  * octave and a half and is what everybody actually does; this patch is that
  * factory's inside, with the book's number in it.
  *
- * The clip's 5 and 0.6 are `drums.ts`'s own.
+ * The clip's 5 and 0.6 are `drums.ts`'s own. "View the code" cannot open that
+ * file - `getPatchSource` returns the patch and the library publishes no path
+ * into `src/` - which is ticket 13c.
  *
  * No diagram: two sources into a mixer, twice over (13b).
  */

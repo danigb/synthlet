@@ -22,7 +22,8 @@
  * Bridged-T oscillator and an output amplifier - the signal is not even
  * modified before being passed to the output". **Reid gives no frequency for
  * them**, only "an even shorter Decay than the cowbell", so 2500 Hz is
- * `ClaveDrum`'s and the lesson says so.
+ * `ClaveDrum`'s and the lesson says so. `CowBellDrum` and `ClaveDrum` are the
+ * shipped versions of these two; 13c is why the reader cannot open them here.
  *
  * The struck bell is Part 40's tuning: strike partials at 2 : 3 : 4 so the ear
  * supplies the missing 1 - his 100, 150 and 200 Hz, heard as 50 - with a

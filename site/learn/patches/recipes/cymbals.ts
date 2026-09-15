@@ -9,6 +9,8 @@
  * Reid's - except the six frequencies, which he never gives. The
  * `[263, 400, 421, 474, 587, 845]` below is `drums.ts`'s choice, which is this
  * library's, and the lesson says which half of the recipe is a citation.
+ * `CymbalDrum` is the shipped version of this chain, and 13c is why "View the
+ * code" cannot show it.
  *
  * The hi-hat is Part 38's own point rather than a second bank: a hi-hat is a
  * cymbal with the bands moved and the decays shortened, so `mode` moves them.
