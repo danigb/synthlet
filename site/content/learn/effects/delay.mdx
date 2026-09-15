@@ -1,0 +1,58 @@
+---
+title: Delay
+description: One repeat, then the feedback loop that turns it into a decaying row, then the cross-feed that bounces it between the ears.
+core: false
+book: [61]
+hear: "Echo; regeneration turns one repeat into a decaying row; cross-feed bounces it between the ears."
+status: ready
+---
+
+Reid's picture of a delay is a tape recorder with an infinitely long strip of
+tape running past a record head and then a replay head. The distance between the
+heads and the speed of the tape decide how late the copy is, and that is the
+whole device. The knobs below are that picture and two things people added to
+it.
+
+<Patch id="effects/delay" show={["time", "feedback", "cross", "mix"]} />
+
+<Try>
+
+Press Play and listen to one pluck. With **Feedback** at zero you hear the
+string and one copy of it, and **Time** is how far apart they are. Take **Mix**
+to zero and the copy disappears; take it to one and the original does. Reid has
+to draw that dry path as a separate cable, because the delay line itself only
+ever produces the late copy.
+
+</Try>
+
+<Try>
+
+Now raise **Feedback**. Some of the output is recorded again, so the copy makes
+its own copy, and one repeat becomes a row of them getting quieter. Tape echoes
+label this knob _Regeneration_, and on a real machine it is how much of the
+signal the erase head leaves behind on each pass. Push it past one and the row
+stops getting quieter: the machine sings, held in bounds by the soft limiter
+inside the loop.
+
+</Try>
+
+<Try>
+
+Put headphones on, set **Feedback** around 0.6, and bring **Cross-feed** up to
+one. The repeats start alternating between the ears. The decay does not change
+as you do it — the loop still loses exactly as much per trip, it just loses it
+somewhere else each time.
+
+</Try>
+
+<Aside kind="history">
+
+Ping-pong was esoteric in 1975 and is a preset now, but it began as a patch: two
+delay lines with their feedback cables crossed over into each other's inputs.
+Reid draws it with more mixers and multiples than seem necessary, and then
+points out the compensation — with everything on separate cables you can give
+the two channels different times, different feedbacks and different levels.
+
+</Aside>
+
+<Book part={61} />

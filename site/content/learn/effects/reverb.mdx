@@ -1,0 +1,59 @@
+---
+title: Reverb
+description: Three delay lines chained together become a room, and the metallic ring they leave behind is the same one a spring reverb has.
+core: false
+book: [22, 61]
+hear: "Three delays at different rates make a metallic room; a plate makes a smooth one. Reverb is delays, all the way down."
+status: ready
+---
+
+Reid ends Part 61 by building a reverb out of nothing but echo units. One delay
+line repeating gives a stream of repeats. Feed that into a second one set to a
+different time and every repeat grows its own stream. Feed that into a third and
+the result, drawn, is the picture of natural reverberation he had published
+three years earlier: a click, some early reflections, then a tail too dense to
+count.
+
+<Patch
+  id="effects/reverb"
+  show={["model", "size", "decay", "damping", "mix"]}
+/>
+
+<Try>
+
+Press Play on Reid's Figure 17 and turn **Decay** up. The repeats stop being
+countable somewhere around the middle of the knob, which is the moment a
+sequence of echoes becomes a space. Then listen to what is left ringing:
+something metallic, on a pitch.
+
+</Try>
+
+<Try>
+
+Switch **Model** to Greyhole and then to the plate while a pluck is decaying.
+Both are made of delay lines too — they just have far more of them, arranged so
+that each one smears the others. The metallic pitch goes away, because there is
+no longer a small number of fixed times for it to come from.
+
+</Try>
+
+<Try>
+
+Take **Mix** to zero and back. Two of these three models have no dry signal of
+their own at all, so the knob here is a send and a return rather than anything
+inside a reverb — which is how Reid draws it too, with the effect hanging off a
+mixer that decides how much of it is heard.
+
+</Try>
+
+<Aside kind="why">
+
+The metallic ring is not a flaw in the patch, it is the patch being honest.
+Three delay lines at three constant times put three characteristic frequencies
+in the tail. A spring reverb has exactly the same problem for exactly the same
+reason: a spring carries three modes of vibration, so it has three frequencies,
+and that is where its famous _boinggg_ comes from.
+
+</Aside>
+
+<Book part={[22, 61]} />
