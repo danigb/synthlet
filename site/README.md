@@ -23,14 +23,15 @@ The tutorial's chapters are plain folders — `content/learn/sound/…` is serve
 `npm run check:links` reads the export in `out/` and fails if any `/learn/` link
 points at a page that was not built. Run it after `deploy:build`.
 
+The site is installed with `npm ci` and `site/package-lock.json` is its
+lockfile. It is deliberately outside the root npm workspace, which is why it has
+one of its own; there is no pnpm lockfile, and re-creating one would give a tree
+with no test runner in it (02b).
+
 Run development server:
 
 ```bash
 npm run dev
-# or
-pnpm dev
-# or
-yarn dev
 ```
 
 Open http://localhost:3000 with your browser to see the result.
