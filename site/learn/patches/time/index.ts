@@ -1,20 +1,12 @@
-import arp from "./arp";
+import type { PatchLoader } from "../define";
 import arpSource from "./arp.ts?raw";
-import clock from "./clock";
 import clockSource from "./clock.ts?raw";
-import decimator from "./decimator";
 import decimatorSource from "./decimator.ts?raw";
-import euclid from "./euclid";
 import euclidSource from "./euclid.ts?raw";
-import follower from "./follower";
 import followerSource from "./follower.ts?raw";
-import randomArp from "./random-arp";
 import randomArpSource from "./random-arp.ts?raw";
-import slew from "./slew";
 import slewSource from "./slew.ts?raw";
-import steps from "./steps";
 import stepsSource from "./steps.ts?raw";
-import vocoder from "./vocoder";
 import vocoderSource from "./vocoder.ts?raw";
 
 /*
@@ -28,16 +20,16 @@ import vocoderSource from "./vocoder.ts?raw";
  * followers at once - and finally what a sample-and-hold becomes when it runs
  * fast enough to be a converter.
  */
-export const timePatches = {
-  "time/clock": clock,
-  "time/euclid": euclid,
-  "time/arp": arp,
-  "time/steps": steps,
-  "time/slew": slew,
-  "time/follower": follower,
-  "time/vocoder": vocoder,
-  "time/random-arp": randomArp,
-  "time/decimator": decimator,
+export const timePatches: Record<string, PatchLoader> = {
+  "time/clock": () => import("./clock"),
+  "time/euclid": () => import("./euclid"),
+  "time/arp": () => import("./arp"),
+  "time/steps": () => import("./steps"),
+  "time/slew": () => import("./slew"),
+  "time/follower": () => import("./follower"),
+  "time/vocoder": () => import("./vocoder"),
+  "time/random-arp": () => import("./random-arp"),
+  "time/decimator": () => import("./decimator"),
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */

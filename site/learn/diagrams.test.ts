@@ -14,7 +14,7 @@ import {
   type DiagramControl,
   type LibraryGraph,
 } from "./kit/views/layout";
-import { patches } from "./patches";
+import { loadPatches } from "./patches";
 import type { DiagramNode, LessonPatch } from "./patches/define";
 
 /*
@@ -53,6 +53,13 @@ const CAN_BUILD =
 const HOW = CAN_BUILD
   ? "built on an OfflineAudioContext"
   : "parsed from source";
+
+/*
+ * The registry, loaded. It is a table of `() => import()` since 02c so that a
+ * lesson carries its own patch; a test wants every one of them, and has no
+ * bundle to care about.
+ */
+const patches = await loadPatches();
 
 /** Every registered patch that draws itself. `"auto"` has nothing to check. */
 const declared = Object.entries(patches).filter(

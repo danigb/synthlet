@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
-import { getPatchSource, patches } from "../patches";
+import { getPatchSource, loadPatches } from "../patches";
 import { CodeView } from "./CodeView";
 
 /*
@@ -26,6 +26,9 @@ import { CodeView } from "./CodeView";
  */
 
 afterEach(cleanup);
+
+/** The registry, loaded: a table of `() => import()` since 02c. */
+const patches = await loadPatches();
 
 /** The lines a panel shows above the fold, as the reader counts them. */
 function head(container: HTMLElement): string[] {

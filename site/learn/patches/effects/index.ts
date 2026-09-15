@@ -1,12 +1,8 @@
-import analog from "./analog";
+import type { PatchLoader } from "../define";
 import analogSource from "./analog.ts?raw";
-import body from "./body";
 import bodySource from "./body.ts?raw";
-import chorus from "./chorus";
 import chorusSource from "./chorus.ts?raw";
-import delay from "./delay";
 import delaySource from "./delay.ts?raw";
-import reverb from "./reverb";
 import reverbSource from "./reverb.ts?raw";
 
 /*
@@ -20,12 +16,12 @@ import reverbSource from "./reverb.ts?raw";
  * countable and become a room. The fifth moves the line to the front of the
  * patch, where it is no longer an effect at all.
  */
-export const effectsPatches = {
-  "effects/delay": delay,
-  "effects/analog": analog,
-  "effects/chorus": chorus,
-  "effects/reverb": reverb,
-  "effects/body": body,
+export const effectsPatches: Record<string, PatchLoader> = {
+  "effects/delay": () => import("./delay"),
+  "effects/analog": () => import("./analog"),
+  "effects/chorus": () => import("./chorus"),
+  "effects/reverb": () => import("./reverb"),
+  "effects/body": () => import("./body"),
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */

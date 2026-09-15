@@ -1,10 +1,7 @@
-import paraphonic from "./paraphonic";
+import type { PatchLoader } from "../define";
 import paraphonicSource from "./paraphonic.ts?raw";
-import presets from "./presets";
 import presetsSource from "./presets.ts?raw";
-import priority from "./priority";
 import prioritySource from "./priority.ts?raw";
-import stealing from "./stealing";
 import stealingSource from "./stealing.ts?raw";
 
 /*
@@ -15,11 +12,11 @@ import stealingSource from "./stealing.ts?raw";
  * the envelope sits; four voices and five fingers is a decision about which
  * note dies. The last one is the file format that carries all three.
  */
-export const voicesPatches = {
-  "voices/priority": priority,
-  "voices/paraphonic": paraphonic,
-  "voices/stealing": stealing,
-  "voices/presets": presets,
+export const voicesPatches: Record<string, PatchLoader> = {
+  "voices/priority": () => import("./priority"),
+  "voices/paraphonic": () => import("./paraphonic"),
+  "voices/stealing": () => import("./stealing"),
+  "voices/presets": () => import("./presets"),
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */

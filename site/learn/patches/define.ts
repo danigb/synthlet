@@ -351,6 +351,27 @@ export interface LessonPatch<S = any> {
 }
 
 /**
+ * A patch module, behind an `import()`.
+ *
+ * The registry is a table of these rather than a table of patches, and that is
+ * the whole of 02c: a chapter index that imports its patches eagerly puts every
+ * patch in the tutorial into the bundle of every lesson, so the reader of
+ * lesson 1.1 downloaded the drum machine to hear a sawtooth. One line per patch
+ * either way - what the chapter index declares is still which file an id names,
+ * and the bundler is what decides when to fetch it.
+ */
+export type PatchLoader<S = any> = () => Promise<{ default: LessonPatch<S> }>;
+
+/**
+ * The same file's text, behind an `import()`: `./<name>.ts?raw`.
+ *
+ * Lazy for the same reason and more so (03c): a patch module minifies and a
+ * patch's *source* does not, and it is read only by a reader who opens "View
+ * the code" - one file, on that click.
+ */
+export type SourceLoader = () => Promise<{ default: string }>;
+
+/**
  * Declare a patch.
  *
  * It returns its argument. The function exists for the type parameter: writing

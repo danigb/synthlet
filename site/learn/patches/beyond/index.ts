@@ -1,14 +1,9 @@
-import drift from "./drift";
+import type { PatchLoader } from "../define";
 import driftSource from "./drift.ts?raw";
-import granite from "./granite";
 import graniteSource from "./granite.ts?raw";
-import limiter from "./limiter";
 import limiterSource from "./limiter.ts?raw";
-import polyblep from "./polyblep";
 import polyblepSource from "./polyblep.ts?raw";
-import timestretch from "./timestretch";
 import timestretchSource from "./timestretch.ts?raw";
-import wavetable from "./wavetable";
 import wavetableSource from "./wavetable.ts?raw";
 
 /*
@@ -20,13 +15,13 @@ import wavetableSource from "./wavetable.ts?raw";
  * stub registered so a blocked lesson had something to name would be a fake
  * widget in the registry, and rule 2 would then demand a file for it.
  */
-export const beyondPatches = {
-  "beyond/polyblep": polyblep,
-  "beyond/wavetable": wavetable,
-  "beyond/granite": granite,
-  "beyond/timestretch": timestretch,
-  "beyond/drift": drift,
-  "beyond/limiter": limiter,
+export const beyondPatches: Record<string, PatchLoader> = {
+  "beyond/polyblep": () => import("./polyblep"),
+  "beyond/wavetable": () => import("./wavetable"),
+  "beyond/granite": () => import("./granite"),
+  "beyond/timestretch": () => import("./timestretch"),
+  "beyond/drift": () => import("./drift"),
+  "beyond/limiter": () => import("./limiter"),
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */

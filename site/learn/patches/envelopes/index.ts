@@ -1,10 +1,7 @@
-import adsr from "./adsr";
+import type { PatchLoader } from "../define";
 import adsrSource from "./adsr.ts?raw";
-import beyond from "./beyond";
 import beyondSource from "./beyond.ts?raw";
-import gates from "./gates";
 import gatesSource from "./gates.ts?raw";
-import matching from "./matching";
 import matchingSource from "./matching.ts?raw";
 
 /*
@@ -14,11 +11,11 @@ import matchingSource from "./matching.ts?raw";
  * widget with one more slider revealed each time, which is what `show` is for
  * and why a chapter does not need a patch per page.
  */
-export const envelopesPatches = {
-  "envelopes/adsr": adsr,
-  "envelopes/matching": matching,
-  "envelopes/gates": gates,
-  "envelopes/beyond": beyond,
+export const envelopesPatches: Record<string, PatchLoader> = {
+  "envelopes/adsr": () => import("./adsr"),
+  "envelopes/matching": () => import("./matching"),
+  "envelopes/gates": () => import("./gates"),
+  "envelopes/beyond": () => import("./beyond"),
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */

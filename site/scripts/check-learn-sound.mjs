@@ -740,6 +740,21 @@ async function walk({ pages, origin, base, floor, riseMs, headed }) {
         }
 
         const blocked = /^blocked:/.test(target.status ?? "");
+
+        // A widget fetches its own patch (02c), so `figure[data-patch]` arrives
+        // a moment after the page does and `kit/Patch.tsx` holds its place with
+        // a frame that says so. Wait for the last of those to go before
+        // counting: a lesson whose chunk was still in the air would otherwise
+        // be read as a lesson with no widget, which is silently a pass.
+        const loaded = await until(
+          async () =>
+            (await page.locator("[data-patch-loading]").count()) === 0,
+          10_000,
+        );
+        if (!loaded) {
+          problems.push("a widget was still loading its patch after 10 s");
+        }
+
         const frames = page.locator("figure[data-patch]");
         const count = await frames.count();
 

@@ -1,28 +1,16 @@
-import bells from "./bells";
+import type { PatchLoader } from "../define";
 import bellsSource from "./bells.ts?raw";
-import bowed from "./bowed";
 import bowedSource from "./bowed.ts?raw";
-import cymbals from "./cymbals";
 import cymbalsSource from "./cymbals.ts?raw";
-import ensemble from "./ensemble";
 import ensembleSource from "./ensemble.ts?raw";
-import flute from "./flute";
 import fluteSource from "./flute.ts?raw";
-import kick from "./kick";
 import kickSource from "./kick.ts?raw";
-import leslie from "./leslie";
 import leslieSource from "./leslie.ts?raw";
-import organ from "./organ";
 import organSource from "./organ.ts?raw";
-import piano from "./piano";
 import pianoSource from "./piano.ts?raw";
-import pluck from "./pluck";
 import pluckSource from "./pluck.ts?raw";
-import snare from "./snare";
 import snareSource from "./snare.ts?raw";
-import timpani from "./timpani";
 import timpaniSource from "./timpani.ts?raw";
-import vowels from "./vowels";
 import vowelsSource from "./vowels.ts?raw";
 
 /*
@@ -37,20 +25,20 @@ import vowelsSource from "./vowels.ts?raw";
  * exposes `trigger`, `tone`, `decay` and `volume` and nothing else, and every
  * drum lesson here is about a parameter that is not one of those four.
  */
-export const recipesPatches = {
-  "recipes/flute": flute,
-  "recipes/ensemble": ensemble,
-  "recipes/pluck": pluck,
-  "recipes/bowed": bowed,
-  "recipes/kick": kick,
-  "recipes/snare": snare,
-  "recipes/cymbals": cymbals,
-  "recipes/bells": bells,
-  "recipes/timpani": timpani,
-  "recipes/piano": piano,
-  "recipes/organ": organ,
-  "recipes/leslie": leslie,
-  "recipes/vowels": vowels,
+export const recipesPatches: Record<string, PatchLoader> = {
+  "recipes/flute": () => import("./flute"),
+  "recipes/ensemble": () => import("./ensemble"),
+  "recipes/pluck": () => import("./pluck"),
+  "recipes/bowed": () => import("./bowed"),
+  "recipes/kick": () => import("./kick"),
+  "recipes/snare": () => import("./snare"),
+  "recipes/cymbals": () => import("./cymbals"),
+  "recipes/bells": () => import("./bells"),
+  "recipes/timpani": () => import("./timpani"),
+  "recipes/piano": () => import("./piano"),
+  "recipes/organ": () => import("./organ"),
+  "recipes/leslie": () => import("./leslie"),
+  "recipes/vowels": () => import("./vowels"),
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */

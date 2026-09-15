@@ -1,16 +1,10 @@
-import additive from "./additive";
+import type { PatchLoader } from "../define";
 import additiveSource from "./additive.ts?raw";
-import fm from "./fm";
 import fmSource from "./fm.ts?raw";
-import lfoDestinations from "./lfo-destinations";
 import lfoDestinationsSource from "./lfo-destinations.ts?raw";
-import pwm from "./pwm";
 import pwmSource from "./pwm.ts?raw";
-import ring from "./ring";
 import ringSource from "./ring.ts?raw";
-import sampleHold from "./sample-hold";
 import sampleHoldSource from "./sample-hold.ts?raw";
-import sync from "./sync";
 import syncSource from "./sync.ts?raw";
 
 /*
@@ -26,14 +20,14 @@ import syncSource from "./sync.ts?raw";
  * which are the same synth asked two questions - where does the wobble go, and
  * what does it do when it gets there - with two `show` lists.
  */
-export const modulationPatches = {
-  "modulation/lfo-destinations": lfoDestinations,
-  "modulation/pwm": pwm,
-  "modulation/sample-hold": sampleHold,
-  "modulation/ring": ring,
-  "modulation/fm": fm,
-  "modulation/additive": additive,
-  "modulation/sync": sync,
+export const modulationPatches: Record<string, PatchLoader> = {
+  "modulation/lfo-destinations": () => import("./lfo-destinations"),
+  "modulation/pwm": () => import("./pwm"),
+  "modulation/sample-hold": () => import("./sample-hold"),
+  "modulation/ring": () => import("./ring"),
+  "modulation/fm": () => import("./fm"),
+  "modulation/additive": () => import("./additive"),
+  "modulation/sync": () => import("./sync"),
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */

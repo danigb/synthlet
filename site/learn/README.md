@@ -136,16 +136,30 @@ collection.
 2. Add one line to `learn/patches/<chapter>/index.ts`:
 
    ```ts
-   import name from "./name";
-   export const <chapter>Patches = { "<chapter>/<name>": name };
+   export const <chapter>Patches = {
+     "<chapter>/<name>": () => import("./name"),
+   };
    ```
 
+   and one to the `<chapter>Sources` object below it, which is the same file
+   again as text (see ["View the code"](#view-the-code)).
+
 3. If the chapter is new, add one line to `learn/patches/index.ts` spreading
-   that chapter's object.
+   that chapter's two objects.
 
 A file per chapter is why six people can add six chapters' patches at once
 without meeting in the same file. The key, the `id` and the path are three
 statements of one name, and rule 2 fails unless all three agree.
+
+**The value is a `() => import()`, not the patch** (02c). The registry has to be
+one object — rule 2 reads it, `<Patch>` resolves an id against it — but nothing
+said the _bundle_ had to be one object, and with sixty patches registered every
+lesson page carried all sixty to show one. A table of thunks is a few hundred
+bytes: `hasPatch(id)` answers the id from it, and `kit/Patch.tsx` calls
+`loadPatch(id)` when the widget mounts, drawing a frame of the widget's own size
+meanwhile so the page does not jump. A test that wants the whole registry —
+`rules.test.ts`, `diagrams.test.ts` — calls `loadPatches()`, which has no bundle
+to care about.
 
 The build contract, unchanged from the docs examples: return a `Compound`, own
 everything you created so `dispose()` tears it down, and **arrive silent** — the

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { lessonFrontmatter, LESSON_REQUIRED_FIELDS } from "./frontmatter";
 import { learnVocabulary } from "./kit/vocabulary";
-import { patches } from "./patches";
+import { loadPatches } from "./patches";
 import { unknownControls } from "./patches/define";
 
 /*
@@ -22,6 +22,17 @@ import { unknownControls } from "./patches/define";
  * throwing on the first one: a contributor who broke a rule in four places
  * should see four lines, not four runs.
  */
+
+/*
+ * The registry, loaded.
+ *
+ * `learn/patches/index.ts` is a table of `() => import()` since 02c, so that a
+ * lesson page carries its own patch and not the other fifty-nine. A test is the
+ * one reader that wants all of them: it has no bundle to care about, and the
+ * rules below are about the set. Top-level await, so every rule sees the same
+ * loaded registry and nobody has to remember to await inside an `it`.
+ */
+const patches = await loadPatches();
 
 const LEARN = dirname(fileURLToPath(import.meta.url));
 const SITE = join(LEARN, "..");

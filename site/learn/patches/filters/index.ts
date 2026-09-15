@@ -1,14 +1,9 @@
-import comb from "./comb";
+import type { PatchLoader } from "../define";
 import combSource from "./comb.ts?raw";
-import resonance from "./resonance";
 import resonanceSource from "./resonance.ts?raw";
-import shootout from "./shootout";
 import shootoutSource from "./shootout.ts?raw";
-import slope from "./slope";
 import slopeSource from "./slope.ts?raw";
-import sweep from "./sweep";
 import sweepSource from "./sweep.ts?raw";
-import types from "./types";
 import typesSource from "./types.ts?raw";
 
 /*
@@ -20,13 +15,13 @@ import typesSource from "./types.ts?raw";
  * the knee is fed back into itself, by moving the knee while a note is held,
  * and - last - by being a different circuit altogether.
  */
-export const filtersPatches = {
-  "filters/comb": comb,
-  "filters/slope": slope,
-  "filters/types": types,
-  "filters/resonance": resonance,
-  "filters/sweep": sweep,
-  "filters/shootout": shootout,
+export const filtersPatches: Record<string, PatchLoader> = {
+  "filters/comb": () => import("./comb"),
+  "filters/slope": () => import("./slope"),
+  "filters/types": () => import("./types"),
+  "filters/resonance": () => import("./resonance"),
+  "filters/sweep": () => import("./sweep"),
+  "filters/shootout": () => import("./shootout"),
 };
 
 /** The same files again, as text, for "View the code". Keyed exactly as above. */
