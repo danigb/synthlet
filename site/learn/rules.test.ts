@@ -251,13 +251,26 @@ interface PatchReference {
   id?: string;
   show?: string[];
   preset?: string;
+  /** A `blocked:` lesson names the patch it is waiting for. */
+  blocked?: boolean;
 }
+
+/**
+ * Whether a lesson's frontmatter says it is still waiting on something.
+ *
+ * `learn/frontmatter.ts` allows `ready` or `blocked: <what it waits for>`, and
+ * `scripts/check-learn-sound.mjs` reads the same prefix, so this rule reads it
+ * the same way rather than inventing a third spelling of the word.
+ */
+const isBlocked = (status: unknown) => /^blocked:/.test(String(status ?? ""));
 
 function patchReferences(): PatchReference[] {
   const references: PatchReference[] = [];
 
   for (const file of walk(CONTENT, [".mdx"])) {
-    const text = prose(readFileSync(file, "utf8"));
+    const source = readFileSync(file, "utf8");
+    const blocked = isBlocked(matter(source).data.status);
+    const text = prose(source);
     for (const [, attributes] of text.matchAll(PATCH_TAG)) {
       const id = /\bid\s*=\s*"([^"]*)"/.exec(attributes)?.[1];
       const preset = /\bpreset\s*=\s*"([^"]*)"/.exec(attributes)?.[1];
@@ -265,7 +278,7 @@ function patchReferences(): PatchReference[] {
       const show = showList
         ? [...showList.matchAll(/["']([^"']+)["']/g)].map(([, name]) => name)
         : undefined;
-      references.push({ file, id, show, preset });
+      references.push({ file, id, show, preset, blocked });
     }
   }
 
@@ -277,6 +290,12 @@ describe("rule 3: every widget a lesson asks for is real", () => {
 
   it("finds the lessons' patches", () => {
     expect(references.length).toBeGreaterThan(0);
+  });
+
+  it("reads a blocked status the way the page and check:sound do", () => {
+    expect(isBlocked("blocked: the Strata package")).toBe(true);
+    expect(isBlocked("ready")).toBe(false);
+    expect(isBlocked(undefined)).toBe(false);
   });
 
   it("resolves every id and every shown control", () => {
@@ -291,6 +310,14 @@ describe("rule 3: every widget a lesson asks for is real", () => {
 
       const patch = patches[id];
       if (!patch) {
+        // A rule that fails a lesson for naming the module it is waiting on is
+        // a rule that forbids writing the lesson first. A `blocked:` lesson's
+        // id is, by definition, a patch nobody has written yet: the page swaps
+        // `Patch` for `BlockedPatch`, which prints that id, and `check:sound`
+        // insists the placeholder is there. So the id stays required - it is
+        // the promise the lesson is making - and only "does it resolve" waits
+        // for the module.
+        if (reference.blocked) continue;
         violations.push(
           `${named(file)}: rule 3 - no patch registered as "${id}"`,
         );

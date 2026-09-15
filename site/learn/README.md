@@ -517,6 +517,16 @@ different `Patch`, from `app/learn/lesson-components.tsx`'s
 `blockedLessonComponents(what)`. Neither the kit nor the lesson knows about
 blocking: which component a tag resolves to is already the page's decision.
 
+A blocked lesson still **writes a `<Patch id="…" />`**, and the id is the patch
+that does not exist yet — `BlockedPatch` prints it, and it is the promise the
+lesson is making. `check:sound` requires the placeholder (at least one
+`[data-blocked-patch]` and no `figure[data-patch]`), so a blocked lesson with no
+`<Patch>` fails it. Rule 3 knows this: it still fails a `<Patch>` with no id,
+and it skips only "does the id resolve" when `status` starts with `blocked:`.
+Write nothing else on the tag — a `show` list on a blocked `<Patch>` is neither
+rendered nor checked. Quote the status: `status: "blocked: <what it waits for>"`
+contains a `: `, so unquoted YAML will not parse.
+
 ### Progress
 
 `learn/chrome/progress.ts` keeps the set of visited lesson urls in
@@ -642,13 +652,13 @@ out of the URL it just wrote. Play resumes with it.
 `learn/rules.test.ts`, run by `npm --prefix site test` and by CI (a step in the
 `build` job of `.github/workflows/test.yml`).
 
-| #   | What it checks                                                                                                                                                                                                                                            | Where                                                                             |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| 1   | No `import`/`export` at line start, no `className`, no `style=`, and no tag outside the vocabulary. Code fences and inline code are stripped first, so prose _about_ an import is fine                                                                    | `content/learn/**/*.mdx`                                                          |
-| 2   | No import of `react`, `react-dom`, `next`, or anything under `kit/` or `app/` (a `?raw` query is ignored); every patch on disk is registered; key, `id` and path agree; control ids are unique. A `*.test.ts` beside a patch is not a patch and is exempt | `learn/patches/**/*.ts`                                                           |
-| 3   | Every `<Patch id>` resolves in the registry and every name in `show` is one of that patch's controls. When the registry gains a `voice` id, every `preset` is checked against `learn/voice`'s two banks                                                   | content ↔ registry                                                                |
-| 4   | No `#hex`, `rgb(`, `hsl(`, no Tailwind palette class (`bg-sky-500` and the other twenty-one palettes), no `fd-` class. `theme/*.css` are the token files and are exempt                                                                                   | `learn/kit`, `learn/chrome`, `learn/playground`, `learn/theme/*.tsx`, `app/learn` |
-| 5   | Frontmatter passes `learn/frontmatter.ts`; every `book` part is 1–63; every lesson carries `core`, `book`, `hear` and `status`                                                                                                                            | `content/learn/**/*.mdx`                                                          |
+| #   | What it checks                                                                                                                                                                                                                                                                               | Where                                                                             |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 1   | No `import`/`export` at line start, no `className`, no `style=`, and no tag outside the vocabulary. Code fences and inline code are stripped first, so prose _about_ an import is fine                                                                                                       | `content/learn/**/*.mdx`                                                          |
+| 2   | No import of `react`, `react-dom`, `next`, or anything under `kit/` or `app/` (a `?raw` query is ignored); every patch on disk is registered; key, `id` and path agree; control ids are unique. A `*.test.ts` beside a patch is not a patch and is exempt                                    | `learn/patches/**/*.ts`                                                           |
+| 3   | Every `<Patch id>` resolves in the registry and every name in `show` is one of that patch's controls. When the registry gains a `voice` id, every `preset` is checked against `learn/voice`'s two banks. A `blocked:` lesson's id is exempt from resolving — it names the module it waits on | content ↔ registry                                                                |
+| 4   | No `#hex`, `rgb(`, `hsl(`, no Tailwind palette class (`bg-sky-500` and the other twenty-one palettes), no `fd-` class. `theme/*.css` are the token files and are exempt                                                                                                                      | `learn/kit`, `learn/chrome`, `learn/playground`, `learn/theme/*.tsx`, `app/learn` |
+| 5   | Frontmatter passes `learn/frontmatter.ts`; every `book` part is 1–63; every lesson carries `core`, `book`, `hear` and `status`                                                                                                                                                               | `content/learn/**/*.mdx`                                                          |
 
 Each violation names the file and the rule. They are collected rather than
 thrown, so four mistakes are four lines and not four runs.
