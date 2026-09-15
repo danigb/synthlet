@@ -1,4 +1,8 @@
+import { amplifiersPatches, amplifiersSources } from "./amplifiers";
 import type { LessonPatch } from "./define";
+import { envelopesPatches, envelopesSources } from "./envelopes";
+import { filtersPatches, filtersSources } from "./filters";
+import { modulationPatches, modulationSources } from "./modulation";
 import playground from "./playground";
 import playgroundSource from "./playground.ts?raw";
 import { soundPatches, soundSources } from "./sound";
@@ -20,6 +24,10 @@ import voiceSource from "./voice.ts?raw";
  */
 export const patches: Record<string, LessonPatch> = {
   ...soundPatches,
+  ...envelopesPatches,
+  ...amplifiersPatches,
+  ...filtersPatches,
+  ...modulationPatches,
   // The tutorial voice, which belongs to no chapter: every chapter that teaches
   // a parameter rather than a module reaches for it, with a preset and a `show`.
   voice,
@@ -32,6 +40,10 @@ export const patches: Record<string, LessonPatch> = {
 /** The same files as text, for "View the code". Keyed exactly as above. */
 const sources: Record<string, string> = {
   ...soundSources,
+  ...envelopesSources,
+  ...amplifiersSources,
+  ...filtersSources,
+  ...modulationSources,
   voice: voiceSource,
   playground: playgroundSource,
 };
