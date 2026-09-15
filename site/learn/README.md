@@ -193,14 +193,23 @@ promise. The kit awaits it and reads no accessor before it resolves.
 
 ### The view options
 
-| View       | Option                                    | What it does                                                                           |
-| ---------- | ----------------------------------------- | -------------------------------------------------------------------------------------- |
-| `scope`    | `window: "wave" \| "contour"`, `seconds?` | `wave` is a few cycles; `contour` is a rolling peak history, which is an envelope      |
-| `spectrum` | `marks: number[] \| (synth) => number[]`  | Frequencies ruled over the trace: the prediction beside the measurement, per frame     |
-| `spectrum` | `minDb`, `maxDb`                          | Written onto the analyser; they are its display range                                  |
-| `meter`    | `show: ("peak" \| "rms" \| "lufs")[]`     | Defaults to `["peak"]`. `lufs` turns on the `LevelMeter`'s loudness path               |
-| `keyboard` | `octaves`, `from`                         | A view as well as a control, so a lesson's `show` cannot take the keys away            |
-| `diagram`  | `compact`                                 | Drops the parameter port labels, for a diagram beside a narrow widget — see "Diagrams" |
+| View       | Option                                    | What it does                                                                            |
+| ---------- | ----------------------------------------- | --------------------------------------------------------------------------------------- |
+| `scope`    | `window: "wave" \| "contour"`, `seconds?` | `wave` is a few cycles; `contour` is a rolling peak history, which is an envelope       |
+| `spectrum` | `marks: number[] \| (synth) => number[]`  | Frequencies ruled over the trace: the prediction beside the measurement, per frame      |
+| `spectrum` | `minDb`, `maxDb`                          | Written onto the analyser; they are its display range                                   |
+| `meter`    | `show: ("peak" \| "rms" \| "lufs")[]`     | Defaults to `["peak"]`. `lufs` turns on the `LevelMeter`'s loudness path                |
+| `keyboard` | `octaves`, `from`                         | A view as well as a control, so a lesson's `show` cannot take the keys away — see below |
+| `diagram`  | `compact`                                 | Drops the parameter port labels, for a diagram beside a narrow widget — see "Diagrams"  |
+
+**A keyboard is drawn once, whoever names it.** It is the one kind a patch may
+declare both ways, and a lesson is invited to name it: `voice` has keys as a
+view _and_ a `keyboard` control, so `show={["keyboard"]}` can mean "the keys are
+the control this page is about". The widget drops a control whose kind is
+already on the patch's view list, so naming the keys changes nothing about what
+is drawn — one keyboard, above the knobs, with or without the `show`. A lesson
+that names some other control keeps them for the same reason: a view is never
+filtered.
 
 A patch may also set `code: { lines: [from, to] }` to open "View the code" on a
 slice of its file rather than the whole of it. The numbers are the file's own

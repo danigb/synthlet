@@ -246,3 +246,92 @@ describe("silent arrival", () => {
     ).toBe("false");
   });
 });
+
+/**
+ * The patch that declares its keys twice.
+ *
+ * `voice` does exactly this, on purpose: a keyboard *view*, so a lesson that
+ * narrows the knobs down to one is still playable, and a keyboard *control*, so
+ * a lesson can name the keys in `show` and mean "the keys are what this page is
+ * about". The two used to draw two keyboards.
+ */
+const playedPatch = definePatch({
+  id: "test/played",
+  label: "Played",
+  build: buildTestSynth,
+  controls: [
+    {
+      id: "level",
+      kind: "slider",
+      label: "Level",
+      param: (s) => s.level,
+      min: 0,
+      max: 1,
+      default: 0.5,
+    },
+    {
+      id: "keyboard",
+      kind: "keyboard",
+      label: "Keyboard",
+      noteOn: (s) => (note) => {
+        s.notes.push(note);
+      },
+      noteOff: () => () => {},
+    },
+  ],
+  views: [
+    {
+      kind: "keyboard",
+      label: "Keyboard",
+      noteOn: (s) => (note) => {
+        s.notes.push(note);
+      },
+      noteOff: () => () => {},
+    },
+  ],
+});
+
+describe("a keyboard is a view, never a control", () => {
+  const keyboards = (container: HTMLElement) =>
+    container.querySelectorAll('[role="group"][aria-label="Keyboard"]');
+
+  it("draws one keyboard when the lesson names it in show", () => {
+    const { container } = render(
+      <LessonWidget
+        patch={playedPatch}
+        controls={resolveControls(playedPatch, ["keyboard"])}
+      />,
+    );
+
+    expect(keyboards(container)).toHaveLength(1);
+    // And it is the view's copy: the panel is empty, so `show={["keyboard"]}`
+    // reads as "this widget is the keys" and draws exactly that.
+    expect(container.querySelector('[data-control="keyboard"]')).toBeNull();
+    expect(container.querySelector('[data-view="keyboard"]')).not.toBeNull();
+  });
+
+  it("draws one keyboard when the lesson names another control", () => {
+    const { container } = render(
+      <LessonWidget
+        patch={playedPatch}
+        controls={resolveControls(playedPatch, ["level"])}
+      />,
+    );
+
+    expect(keyboards(container)).toHaveLength(1);
+    expect(container.querySelector('[data-control="level"]')).not.toBeNull();
+  });
+
+  it("leaves a patch whose keys are a control alone", () => {
+    // `everyKind` declares no keyboard view, so its keyboard control is the
+    // only copy of the keys and stays in the panel.
+    const { container } = render(
+      <LessonWidget patch={everyKind} controls={everyKind.controls} />,
+    );
+
+    expect(container.querySelector('[data-control="keys"]')).not.toBeNull();
+    expect(
+      container.querySelectorAll('[role="group"][aria-label="Keys"]'),
+    ).toHaveLength(1);
+  });
+});

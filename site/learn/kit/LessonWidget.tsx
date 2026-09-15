@@ -40,9 +40,30 @@ export function LessonWidget({
   const options = useMemo(() => ({ preset }), [preset]);
   const runtime = useLessonPatch(patch, options);
   const { colors, markers } = useTokenColors();
+
+  /*
+   * A keyboard is a view, never a control.
+   *
+   * `voice` declares its keys twice on purpose (`patches/define.ts`): as a view,
+   * so a lesson that narrows the knobs down to one is still playable, and as a
+   * control, so a lesson can write `show={["keyboard"]}` and mean "the keys are
+   * what this page is about". Both resolve to the same component, so a lesson
+   * that took the invitation used to get two sets of keys - one under the views
+   * and an identical one in the panel.
+   *
+   * The view wins, because it is the copy no `show` can take away: naming the
+   * keys changes nothing about what is drawn, which is the only answer that
+   * reads the same whether a lesson names them or not. One filter, here, in the
+   * file that already owns the layout decision - and free for every patch whose
+   * views and controls do not overlap, which is all of them but one.
+   */
+  const viewKinds = new Set<string>(patch.views.map((view) => view.kind));
+  const panel = controls.filter((control) => !viewKinds.has(control.kind));
+
   // Pointing at a knob lights its box in the diagram, and pointing at a box
   // lights its knobs. Inert - and free - for a patch that declares no diagram.
-  const link = useDiagramLink(controls);
+  // The panel, not the lesson's list: a box marks the knobs a reader can see.
+  const link = useDiagramLink(panel);
 
   // The meter belongs beside Play: "is it making a sound" is the same question
   // as "make a sound", and it is the one view with a fixed place.
@@ -98,9 +119,9 @@ export function LessonWidget({
         </DiagramLinkProvider>
       ) : null}
 
-      {controls.length > 0 ? (
+      {panel.length > 0 ? (
         <div className="mt-learn grid grid-cols-1 gap-learn sm:grid-cols-2">
-          {controls.map((control) => (
+          {panel.map((control) => (
             <div
               key={control.id}
               // The id, in the markup: it is what a lesson wrote in `show`, and
