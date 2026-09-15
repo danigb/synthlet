@@ -42,12 +42,19 @@ export const CHAPTERS: readonly PlannedChapter[] = [
 /**
  * How long the core path is meant to be.
  *
- * The *Learning Synths* equivalent, and the number the ticket folder's README
- * states. It is the progress bar's denominator, so that on the day the section
- * has six lessons the bar says "2 of 22" and means it, rather than "2 of 6",
- * which would read as nearly finished.
+ * Twenty: the *Learning Synths* equivalent, and the number chapters 0-5 carry
+ * between them - six in 0 and 1, six in 2 and 3, four in 4, four in 5. The
+ * path ends with chapter 5, because tickets 12-14 mark every lesson in
+ * chapters 6-10 optional; there is nothing further to add to it.
+ *
+ * It is the progress bar's denominator, so it is also a claim about content,
+ * and `core-path.test.ts` holds it to that claim: it counts the `core: true`
+ * frontmatter on disk and fails when the two disagree. The folder README said
+ * twenty-two for a while and the content tickets' tables said twenty; the test
+ * is here so the next disagreement is caught by a run rather than by a reader
+ * finishing the path and seeing a bar stop at 91%.
  */
-export const CORE_PATH_SIZE = 22;
+export const CORE_PATH_SIZE = 20;
 
 export function plannedChapter(slug: string): PlannedChapter | undefined {
   return CHAPTERS.find((chapter) => chapter.slug === slug);

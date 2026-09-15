@@ -6,11 +6,14 @@ import { useProgress } from "./progress";
 /**
  * How far along the core path you are.
  *
- * The core path is the twenty-two-lesson spine - the *Learning Synths*
- * equivalent - and it is the only thing worth counting, because the rest of the
- * section is a reference you dip into. The denominator is the path's planned
- * length rather than the number of lessons written so far: two of six would
- * read as nearly done, and two of twenty-two is the truth about the course.
+ * The core path is the twenty-lesson spine - the *Learning Synths* equivalent -
+ * and it is the only thing worth counting, because the rest of the section is a
+ * reference you dip into. The denominator is `CORE_PATH_SIZE`, the path's
+ * declared length, rather than the number of lessons found: a chapter that
+ * fails to build should not quietly shorten the course. `Math.max` is the one
+ * concession - a core lesson added before the constant is updated must not
+ * produce a bar past 100% - and `core-path.test.ts` fails on exactly that case,
+ * so the two numbers are equal every day the suite is green.
  *
  * Absent from the server render, not merely zero there. A progress bar that
  * ships at 0% in the HTML flashes empty on every load for a reader who is

@@ -20,7 +20,7 @@ const BOOK_PARTS = 63;
 export const lessonFrontmatter = z.object({
   title: z.string(),
   description: z.string().optional(),
-  /** On the twenty-two-lesson core path - the *Learning Synths* equivalent. */
+  /** On the twenty-lesson core path - the *Learning Synths* equivalent. */
   core: z.boolean().optional(),
   /** The parts this lesson paraphrases, cited with `<Book />`. `[]` if none. */
   book: z.array(z.number().int().min(1).max(BOOK_PARTS)).optional(),

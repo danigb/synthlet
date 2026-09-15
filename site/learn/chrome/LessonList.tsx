@@ -10,7 +10,7 @@ import { VisitedMark } from "./VisitedMark";
  * index wants each lesson's one-line description. One component, one prop.
  */
 
-/** The mark on a lesson that is part of the twenty-two-lesson core path. */
+/** The mark on a lesson that is part of the twenty-lesson core path. */
 function CoreMark() {
   return (
     <span
