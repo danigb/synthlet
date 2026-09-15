@@ -1,0 +1,65 @@
+---
+title: "Piano"
+description: "A synced oscillator's sweep is the hammer, a second layer is the body, and Part 45 says what it still is not."
+core: false
+book: [42, 43, 44, 45]
+hear: "A thunk from a synced oscillator's sweep and a body from a second layer. It will sound like a Pianet, and the lesson says why."
+status: ready
+---
+
+Reid takes a Roland JX10 patch called Piano 1-B apart and finds one trick doing
+all the work. The first oscillator is an eight foot square and is the master.
+The second is a four foot sawtooth, hard-synced to it, tuned up by two
+semitones and ten cents — so it sits fourteen semitones and ten cents above the
+master — with the envelope depth at ninety-nine. At note-on that envelope
+throws the slave up and drops it back through the sync in a quarter of a
+second, and the resulting blip is the hammer strike.
+
+The master is audible too, at about a quarter of the mix, which is why the note
+changes character as it goes on rather than simply getting quieter.
+
+<Patch
+  id="recipes/piano"
+  show={["sweep", "sweepDecay", "balance", "detune", "decay"]}
+/>
+
+<Try>
+
+Set **Layer balance** to zero so you hear only the thunk, then take **Sync
+sweep** to zero and play. Without the sweep the layer is a synced pair sitting
+still, which is a fixed buzz. The whole hammer is in that one envelope.
+
+</Try>
+
+<Try>
+
+Shorten **Sweep decay** to its minimum and lengthen it to its maximum. Too
+short and the strike is a click; too long and the piano turns into a sync lead,
+which is what the same patch is if you leave the envelope running.
+
+</Try>
+
+<Try>
+
+Walk **Layer balance** from zero to one while playing. Neither end is a piano.
+Reid's rule for why layering works is that the two sounds have to be similar
+enough to be indistinguishable within the composite and different enough to
+make something more interesting than either, and this is that sentence as a
+slider.
+
+</Try>
+
+<Aside kind="history">
+
+Part 45 ends with the most useful sentence in the chapter. Even when carefully
+programmed on a large modular synthesiser, Reid writes, the result sounds like
+a Wurlitzer or a Hohner Pianet. It does not sound like a Bosendorfer. The
+reason is in the previous lesson's stiffness knob: a piano string's partials
+are stretched, every note has three strings slightly out of tune with each
+other, and the whole frame resonates. Two oscillators and a sync cannot get
+there, and knowing exactly which corner cannot be turned is worth more than
+another hour of tweaking.
+
+</Aside>
+
+<Book part={[42, 43, 44, 45]} />

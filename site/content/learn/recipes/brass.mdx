@@ -1,0 +1,70 @@
+---
+title: "Brass"
+description: "A Minimoog trumpet, and the one thing about it a synthesiser with a slow LFO cannot do."
+core: false
+book: [25, 26, 27]
+hear: "The tone opens after the note starts; a growl on the cutoff rather than on the pitch; vibrato that arrives late."
+status: ready
+---
+
+Reid spends three articles on brass and gets the patch out of the way in one
+paragraph: a sawtooth at four foot on a Minimoog, mixer at half, loudness
+attack around a hundred milliseconds, sustain full, cutoff low, amount of
+contour about two thirds, a little resonance. What the other two articles are
+about is why that is not enough.
+
+<Patch
+  id="voice"
+  preset="brass"
+  show={[
+    "filterEnv",
+    "modAttack",
+    "keyTrack",
+    "filterLfo",
+    "lfoRate",
+    "lfoDelay",
+  ]}
+/>
+
+<Try>
+
+Play a note and listen to the first fifty milliseconds. **Filter envelope** is
+the amount of contour: the tone opens after the note has already started, which
+is the single feature that says brass. Turn it to zero and you have an organ
+with a slow attack. Reid measured a trumpet at 256 Hz taking about a dozen
+cycles — fifty milliseconds — to settle into its waveform, and that is the
+window the envelope is working in.
+
+</Try>
+
+<Try>
+
+Raise **Key tracking** and play two octaves. A real trumpet is not a fixed
+filter on a variable oscillator, so the cutoff has to follow the pitch or the
+top of the range goes dull.
+
+</Try>
+
+<Try>
+
+Set **Vibrato delay** to about a second and hold a long note. The vibrato is
+not there at the start and arrives while you hold, the way a player's does, and
+Reid's warning about it is that the amplitude must be very low: too much and
+the timbre stops sounding like an instrument at all.
+
+</Try>
+
+<Aside kind="history">
+
+The growl at the front of a brass note is a triangle wave at about eighty hertz
+on the cutoff, gated by its own short contour. Eighty hertz is not a vibrato
+speed — it is an audio frequency — and Reid raises it to make a point about
+instruments rather than about brass: an ARP Axxe cannot make this sound, because
+its LFO stops at twenty. Here the modulation rate stops at forty for the same
+kind of reason, deliberately. Push **LFO rate** to the top and you are standing
+at the wall Reid is describing. What is on the other side of it is not a faster
+LFO, it is frequency modulation, which chapter 5 has its own page for.
+
+</Aside>
+
+<Book part={[25, 26, 27]} />

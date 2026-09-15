@@ -1,0 +1,62 @@
+---
+title: "Snare and clap"
+description: "The 0,1 mode gives two frequencies and the ratio between them is not an octave."
+core: false
+book: [35, 36]
+hear: "Two tones at 180 and 330 Hz plus a burst of filtered noise; hit it harder and it gets noisier rather than just louder."
+status: ready
+---
+
+The one thing to take from Part 35 is that a drum head's 0,1 mode produces
+**two** frequencies, at roughly a hundred and eighty and three hundred and
+thirty hertz. The ratio is 1.83. It is not an octave, and a snare built from an
+octave pair is a snare that sounds like a synthesiser. The TR-909 used exactly
+those two, each with a VCA and a contour of its own — and Reid notes that his
+own model does not, because the 0,1 partials decay far faster than the rest,
+sometimes at more than twice the rate.
+
+<Patch
+  id="recipes/snare"
+  show={["tone", "decay", "harder", "drum", "trigger"]}
+/>
+
+<Try>
+
+Hit it and watch the two marks. **Tone** moves them together and the ratio
+between them never changes, because the upper one is derived from the lower.
+The upper mode dies in less than half the time of the lower, which is what the
+909 did and what a drum does.
+
+</Try>
+
+<Try>
+
+Walk **Harder** from zero to one and hit it at each end. One knob is moving two
+things: the noise level and the band-pass corner. That is Reid's pair of
+generalisations in one gesture — a harder strike puts more energy at high
+frequencies, and the more the snares interact with the head, the wider the
+modes become, eventually changing into a complex noise spectrum. At the top the
+drum has stopped being a drum with a rattle on it.
+
+</Try>
+
+<Try>
+
+Switch **Drum** to **Handclap** and hit it. The same noise generator, band-passed
+and then chopped by a ramp running at a hundred hertz, which is what turns one
+burst into the several claps of a pair of hands.
+
+</Try>
+
+<Aside kind="history">
+
+There is no handclap anywhere in Synth Secrets. Parts 35 and 36 never mention
+one, and Part 41 closes by listing hand claps among the sounds Reid never got
+round to. The circuit here is the TR-808's, and that is who to credit for it —
+this page is the one place in the chapter where the recipe has no citation at
+all, and it seemed more honest to say so than to quietly attach the nearest
+article number.
+
+</Aside>
+
+<Book part={[35, 36]} />

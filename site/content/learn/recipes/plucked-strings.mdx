@@ -1,0 +1,64 @@
+---
+title: "Plucked strings"
+description: "Where you pluck a string is a comb filter, and the article that ends by saying it cannot be done."
+core: false
+book: [28, 29, 30]
+hear: "Pluck a quarter of the way along and every fourth harmonic is gone; a stiff string goes sharp at the top."
+status: ready
+---
+
+Part 28 works out what plucking a string actually does. Pull it at the centre
+and let go and it starts as a triangle, which has odd harmonics only, falling
+as one over n squared. Pull it a third of the way along and every third
+harmonic is missing; a quarter of the way and every fourth. Slide the picking
+position and Reid says you hear a swept comb filter — because that is exactly
+what it is.
+
+Then Part 30 ends with a verdict. You cannot, he writes, create
+authentic-sounding acoustic guitar patches using analogue subtractive
+synthesis. He is right, and this page is here because the module below is not
+subtractive synthesis: it is a delay line with a loss in it, which is what a
+string physically is.
+
+<Patch
+  id="recipes/pluck"
+  show={["position", "pickAngle", "brightness", "decay", "stiffness"]}
+/>
+
+<Try>
+
+Play a note and drag **Pick position** slowly. The marks on the spectrum are
+the comb's first three notches, and they move with the knob. Put it on 0.25 and
+the first notch stands on the fourth harmonic, which is Reid's own arithmetic
+arriving from the other direction.
+
+</Try>
+
+<Try>
+
+Set the position to zero. The comb is bypassed entirely — that is the bridge,
+where there is nothing to cancel — and the tone goes bright and characterless.
+
+</Try>
+
+<Try>
+
+Raise **Stiffness** and play low notes. The partials stop being whole-number
+multiples: a real string resists bending, so the high ones travel faster and
+sit sharp. That inharmonicity is most of what separates a piano or a clavinet
+from a comb, and it is the next lesson's problem too.
+
+</Try>
+
+<Aside kind="why">
+
+Reid's conclusion was about his instrument, not about physics. A subtractive
+synthesiser starts with a waveform and takes things away, and a plucked string
+is not a waveform with things taken away: it is energy going round a loop and
+losing a little each time, faster at the top than at the bottom. Once the loop
+is the module, the picking position and the pick angle and the stiffness all
+stop being approximations and start being the actual parameters.
+
+</Aside>
+
+<Book part={[28, 29, 30]} />

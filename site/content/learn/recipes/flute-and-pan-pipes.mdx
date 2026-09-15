@@ -1,0 +1,68 @@
+---
+title: "Flute and pan pipes"
+description: "The instrument that gets brighter rather than louder, and the pipe that has no even harmonics at all."
+core: false
+book: [52, 53, 54]
+hear: "A flute gets brighter, not louder, as you blow harder — the modulation is on the cutoff and nowhere else. The pan pipe is tuned noise."
+status: ready
+---
+
+Part 54 italicises the sentence the whole recipe turns on: a flute does not get
+significantly louder or softer as the player alters the blowing pressure, it
+becomes brighter or duller. So the patch has no tremolo, no vibrato, and one
+modulator, and that modulator goes to the filter.
+
+The rest is two fixed corners. The low-pass sits at two kilohertz whatever note
+is played — that number is Reid's, off an ARP Axxe patch, with only a few
+percent of pitch tracking. The high-pass is the one figure he never gives, and
+says only that it is "in the region of a few hundred Hertz", so the three
+hundred here is this patch's choice rather than his.
+
+<Patch
+  id="recipes/flute"
+  show={["breath", "chiff", "lfoDepth", "release", "panpipe"]}
+/>
+
+<Try>
+
+Play and move **Brightness modulation**. The two marks on the spectrum are the
+fixed corners; the trace under the upper one moves and the mark does not.
+Trained players vary their blowing pressure by about ten percent at five to six
+hertz, which is what this is.
+
+</Try>
+
+<Try>
+
+Turn **Chiff** down to zero and play a phrase. The puff of air at the front of
+the note is, in Reid's words, perhaps the most defining characteristic of the
+instrument, and without it the patch is a filtered sawtooth.
+
+</Try>
+
+<Try>
+
+Shorten the **Release** and play a legato line. Reid calls the result a
+"sucking" between the notes, and lengthening the release is his own fix for it.
+
+</Try>
+
+<Try>
+
+Switch on **Pan pipe**. A pipe closed at the bottom has no even harmonics at
+all, so this is not the flute with a filter on it: it is six tuned resonances,
+odd ones only, excited by noise. Reid's practical answer for it was six
+band-pass filters on the edge of self-oscillation.
+
+</Try>
+
+<Aside kind="note">
+
+**Breath** starts at zero on purpose. Reid recommends against putting noise in
+a flute patch — he calls it a mistake that detracts from the authenticity
+rather than adding to it. The knob is here so you can disagree with him, and
+now you know that you are.
+
+</Aside>
+
+<Book part={[52, 53, 54]} />

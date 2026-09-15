@@ -1,0 +1,75 @@
+---
+title: "Bowed strings"
+description: "The force at the bridge really is a sawtooth, and Part 49 prints the three body resonances that turn it into a violin."
+core: false
+book: [48, 49, 50]
+hear: "A saw at the bridge, shaped by a body: three resonances make it a violin, and the slow attack is the bow."
+status: ready
+---
+
+Everyone synthesises strings from a sawtooth, and most people think of it as a
+convenient approximation. Part 48 shows that it is not one. A bowed string
+sticks to the bow, is dragged, lets go, flies back and is caught again, and the
+force that this stick-slip cycle exerts **at the bridge** — which is what the
+body of the instrument hears — is a sawtooth. The saw is the measurement.
+
+Part 49 then gives the body as a table, off an Analogue Systems RS360 filter
+bank: three resonances at three hundred hertz, seven hundred hertz and three
+kilohertz, with Q values of 3.5, 3.5 and 2. Those six numbers are Reid's.
+
+<Patch
+  id="recipes/bowed"
+  show={[
+    "formant1",
+    "formant2",
+    "formant3",
+    "attack",
+    "vibratoDelay",
+    "vibratoDepth",
+  ]}
+/>
+
+<Try>
+
+Pull all three formant sliders down to zero and play. What is left is a bare
+sawtooth through an envelope: recognisably a synthesiser and recognisably not
+an instrument. Bring them back one at a time and watch the marks. The body is
+the whole difference.
+
+</Try>
+
+<Try>
+
+Play up two octaves with the formants in place. The three marks do not move.
+A body resonance is a property of the wooden box and not of the note, which is
+the opposite of the key-tracking filter chapter 4 built.
+
+</Try>
+
+<Try>
+
+Shorten the **Attack** to its minimum and play. A bow cannot start a note
+instantly — it has to get the string moving — and an attack of a few
+milliseconds turns a violin into a synth brass patch.
+
+</Try>
+
+<Try>
+
+Set **Vibrato depth** to about twenty cents and **Vibrato delay** to a second
+and a half. Reid's range is five to eight hertz and up to about a quarter tone,
+arriving after the initial bowing rather than on it.
+
+</Try>
+
+<Aside kind="why">
+
+The three filters here are in series rather than in parallel, and Part 50 is the
+licence for that: his own Sorceror patch puts a resonant high-pass and a fixed
+filter bank one after the other, so that the responses multiply rather than add.
+A body resonance boosts a region of whatever is driving it. It does not replace
+the driver with a filtered copy of itself.
+
+</Aside>
+
+<Book part={[48, 49, 50]} />

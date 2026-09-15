@@ -31,8 +31,15 @@ const DEFAULT_PWM = 0.18;
 const DEFAULT_ATTACK = 0.45;
 const DEFAULT_MIX = 0.6;
 
-/** A fixed trim, after the analyser. */
-const LEVEL = 0.125;
+/**
+ * A fixed trim, after the analyser.
+ *
+ * Higher than the rest of the chapter's 0.125, because the source here is a
+ * polyphonic instrument whose voices are already scaled by velocity and by the
+ * pool size: at 0.125 one note measured twenty decibels below every other
+ * widget in the chapter.
+ */
+const LEVEL = 0.4;
 
 function build(ac: AudioContext) {
   const instrument = Instrument(ac, learnVoice, {

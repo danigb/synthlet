@@ -1,0 +1,68 @@
+---
+title: "Leslie"
+description: "A rotating horn does three things at once, and two of them are ninety degrees apart."
+core: false
+book: [58, 59]
+hear: "Pitch wobble and loudness wobble ninety degrees apart, faster on the horn than on the drum, and a spin-up when you switch."
+status: ready
+---
+
+The most useful thing in Reid's two articles on the Leslie cabinet is that it
+is not one effect. A horn swinging round on the end of a duct does three
+separate things at once, and the phase between them is the whole character.
+
+It is loudest when it points at you, and moving fastest towards you a quarter
+of a turn earlier — so the vibrato is ninety degrees out of phase with the
+tremolo. And it is duller when it points away, which is the same moment as
+being quieter, so the tone modulation is **in phase** with the loudness
+modulation rather than ninety degrees from it.
+
+<Patch id="recipes/leslie" show={["speed", "depth", "crossover"]} />
+
+<Try>
+
+Press Play. Nothing is gated here: the cabinet is the lesson, so the organ
+underneath it just drones. Switch **Speed** to **Tremolo** and listen to the
+spin-up rather than to the destination. The horn arrives before the drum,
+because they have different transition rates as well as different speeds.
+
+</Try>
+
+<Try>
+
+Take **Depth** to zero and back up. The loudness and the tone move together and
+neither of them is the pitch — the pitch wobble stays at one percent whatever
+you do here, and that is deliberate.
+
+</Try>
+
+<Try>
+
+Move **Crossover**. Eight hundred hertz is Reid's number: above it goes to the
+horn and below it to the drum, and dragging the corner up hands the whole sound
+to the slow rotor.
+
+</Try>
+
+<Aside kind="why">
+
+The Doppler shift in a real cabinet is small — Reid measures it at about plus
+or minus one percent — and that fixes the delay depth rather than leaving it to
+taste. A sinusoidal delay of amplitude A at rate r shifts the pitch by two pi r
+A, so the depth here is one percent divided by two pi times the rate: about two
+milliseconds slow, a third of that fast. Change speed and the depth follows, so
+the wobble stays at one percent.
+
+</Aside>
+
+<Aside kind="note">
+
+Reid gives no rotation speeds at all, in hertz or in revolutions per minute.
+The only figure in the two articles is that the rotor can be slower than one
+hertz. So the 0.9 and 6.5 hertz here, and the drum running at eight tenths of
+the horn's rate, are this patch's choices — and the spin-up is his, a slew
+generator smoothing between two speed control voltages.
+
+</Aside>
+
+<Book part={[58, 59]} />
