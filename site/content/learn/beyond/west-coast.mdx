@@ -1,0 +1,39 @@
+---
+title: West Coast
+description: Buchla's answer to the same problem as Moog's — timbre from folding a sine rather than filtering a saw.
+core: false
+book: []
+hear: "Timbre from folding a sine instead of filtering a saw."
+status: "blocked: a wavefolder module"
+---
+
+Everything in this tutorial so far has been East Coast synthesis. Start with a
+harmonically rich waveform, take harmonics away with a filter, and shape the
+result with an amplifier: oscillator, filter, amplifier, in that order, which is
+Bob Moog's architecture and the reason the word _subtractive_ exists.
+
+On the other side of the country, Don Buchla was building instruments at the
+same time that answer the same question in the opposite direction. Start with a
+sine wave, which has no harmonics at all, and _add_ them. The way you add them
+is folding. Drive the sine into a circuit that reflects the waveform back on
+itself every time it passes a threshold, and a single loud peak becomes several
+smaller ones. The harder you drive it, the more folds there are and the more
+harmonics appear — and unlike a filter sweep, the new partials arrive high in
+the spectrum rather than being uncovered at the bottom. One knob, from a pure
+tone to something metallic, with no filter anywhere.
+
+The second half of the architecture is just as unfamiliar. Buchla had no
+separate filter and amplifier at the end of the chain; he had a lowpass gate,
+which is one circuit doing both jobs through a photoresistor. Send it a pulse
+and the sound gets louder and brighter together, then gets quieter and darker
+together as the cell relaxes, which is what a struck physical object does. That
+relationship is why a lowpass gate sounds like wood rather than like an envelope.
+
+Half of this ships today: the lowpass gate is an attack-decay envelope driving a
+filter and an amplifier from one gate, which the library already has. The other
+half does not exist. There is no wavefolder module in synthlet, and — unusually
+for this tutorial — there is no ticket for one either, so this page is waiting on
+a design as well as on code. A saturating clipper cannot stand in: saturation
+rounds the peaks off, and folding turns them inside out.
+
+<Patch id="beyond/west-coast" />

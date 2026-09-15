@@ -1,0 +1,64 @@
+---
+title: Band-limiting
+description: The same sawtooth from a naive oscillator and from a band-limited one, on one spectrum, so the aliasing has nowhere to hide.
+core: false
+book: [17]
+hear: "The same saw at 4 kHz: the naive one sprays partials below its own harmonics, the PolyBLEP one does not. That spray is aliasing."
+status: ready
+---
+
+Part 17 states the sampling theorem and then does the thing that makes it
+audible. Sample a 10 kHz sine at 13.33 kHz and the samples still lie on the
+original wave, but they also describe a different one at 3.33 kHz. Anything
+above half the sample rate folds over and reappears the same distance below it,
+under an alias — and once it is there, Reid says, you cannot take it out again.
+
+A sawtooth at 4 kHz has harmonics at 8, 12 and 16 kHz and onwards, so most of
+them are over that line before the note is even played. What an oscillator does
+about that is the whole of this page.
+
+<Patch
+  id="beyond/polyblep"
+  show={["oscillator", "frequency", "rate", "bits", "antialias"]}
+/>
+
+<Try>
+
+Press Play on **Naive wavetable**. The marks are where the harmonics of 4 kHz
+ought to be; the trace has lines standing everywhere between them. Those are
+harmonics that went over Nyquist and came back down. Now sweep **Frequency**
+upward and watch them: the marks climb, and the aliases slide the other way,
+which is the one behaviour no real harmonic has.
+
+</Try>
+
+<Try>
+
+Switch to **PolyBLEP** at the same pitch. The space between the marks empties.
+The library's oscillator replaces each jump in the waveform with a band-limited
+step, so the offending harmonics are never generated rather than removed
+afterwards — which matters, because removing them afterwards is impossible.
+
+</Try>
+
+<Try>
+
+Switch to the decimated arm and drag **Sample rate** down from 44100. This is
+the clean saw resampled too slowly with the anti-alias filter switched off, so
+the spray comes back on demand. Turn **Anti-alias** on and it cleans up: that
+switch is the low-pass filter Reid puts in front of every converter. **Bits** is
+his other limit, how finely the amplitude can be chopped up.
+
+</Try>
+
+<Aside kind="why">
+
+The naive arm is a plain buffer read at whatever rate the pitch needs, and it is
+not a module in this library on purpose. The library's job is not to ship a
+broken oscillator; this lesson's job is to show one. Everything that is wrong
+with it comes from one place — the discontinuity where the ramp wraps, resampled
+by straight-line interpolation.
+
+</Aside>
+
+<Book part={17} />

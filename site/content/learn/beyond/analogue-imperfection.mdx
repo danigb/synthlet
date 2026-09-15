@@ -1,0 +1,61 @@
+---
+title: Analogue imperfection as a parameter
+description: Four small amounts of wrong — pitch, level, a drifting filter and an aged delay — and the digital synth stops sounding switched on a second ago.
+core: false
+book: [46]
+hear: "A little wander in pitch and level, a filter that drifts and a delay that has aged, and the digital synth sounds like it has been on for an hour."
+status: ready
+---
+
+Reid explains in Part 46 why a cheap string machine sounds like an ensemble and
+an expensive dual-oscillator polysynth does not. It is not the number of
+oscillators. It is that no two of the imagined players are doing exactly the
+same thing at exactly the same moment, and a synth with two perfectly stable
+oscillators is two players who are, forever.
+
+A digital oscillator is worse off than an analogue one here, because it really
+is perfectly stable. The fix is to put the imperfection back as a parameter.
+
+<Patch
+  id="beyond/drift"
+  show={["pitchChaos", "ampChaos", "driftDepth", "age"]}
+/>
+
+<Try>
+
+Press Play and listen to the pair of oscillators for a moment: detuned, beating,
+and absolutely steady. Now bring **Pitch chaos** up slowly. Each oscillator
+starts wandering a few cents on its own, without reference to the other, and the
+beating stops being a regular pulse and starts being movement.
+
+</Try>
+
+<Try>
+
+Add **Level chaos**. Each cycle now arrives a little louder or quieter than the
+last, which is the thing a bow or a set of bellows does and an amplifier does
+not. A small amount is plenty; past halfway it stops being an instrument and
+becomes a fault.
+
+</Try>
+
+<Try>
+
+Take **Drift depth** to a few hundred hertz. The filter's corner now wanders,
+driven by a shape that has a rate but no period — it never repeats, so you never
+learn it. Then turn **Age** up on the delay at the end: the repeats lose their
+top end and wobble, and the whole patch sounds like it has been switched on for
+an hour rather than a second.
+
+</Try>
+
+<Aside kind="note">
+
+Pitch chaos and level chaos are each two parameters on the module, not one: how
+wild the deviation is, and how far it may reach. Either of them at zero means
+silence from the other, so the knobs here write both at once. A control that
+does nothing until a second control moves is a control nobody finds.
+
+</Aside>
+
+<Book part={46} />
