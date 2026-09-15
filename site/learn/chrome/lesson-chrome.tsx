@@ -97,8 +97,10 @@ export function BookLine({ book }: { book: number[] }) {
     <section className="my-6 max-w-learn font-learn-text">
       <h2 className={LABEL}>From the book</h2>
       {/* `<Book>` carries a lesson-sized block margin, which would push the
-          citation away from the label it belongs to. */}
-      <div className="[&>p]:my-1">
+          citation away from the label it belongs to. It is a `<span class=
+          "block">` rather than a `<p>` so that a lesson can also cite a part
+          mid-sentence; see `kit/vocabulary.tsx`. */}
+      <div className="[&>span]:my-1">
         <Book part={book} />
       </div>
     </section>

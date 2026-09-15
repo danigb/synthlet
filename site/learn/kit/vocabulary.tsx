@@ -151,6 +151,16 @@ export interface BookProps {
  * Every lesson that owes something to the book carries one, which is how the
  * section keeps the promise `content/learn/about.mdx` makes - paraphrased and
  * cited, never reproduced.
+ *
+ * A `<span class="block">` and not a `<p>`, although it is a paragraph in every
+ * other way. Ten lessons write it on a line of its own, where MDX leaves it a
+ * block in the flow and the two render identically; one - `sound/
+ * sources-modifiers-controllers` - cites a part *mid-sentence*, which
+ * `chrome/lesson-chrome.tsx` says a lesson may do, and there a `<p>` inside the
+ * paragraph's `<p>` is markup no browser will accept: the parser closes the
+ * outer one, React finds a tree it did not send, and re-renders the document.
+ * Phrasing content is legal in both places, and `block` keeps the ten looking
+ * exactly as they did. Found by `check:sound`.
  */
 export function Book({ part }: BookProps) {
   const parts = Array.isArray(part) ? part : [part];
@@ -160,7 +170,7 @@ export function Book({ part }: BookProps) {
       : `Parts ${parts.slice(0, -1).join(", ")} and ${parts[parts.length - 1]}`;
 
   return (
-    <p className="my-6 max-w-learn font-learn-text text-sm text-learn-ink-muted">
+    <span className="my-6 block max-w-learn font-learn-text text-sm text-learn-ink-muted">
       <a
         className="underline decoration-learn-border underline-offset-4 hover:text-learn-accent"
         href={SYNTH_SECRETS}
@@ -169,7 +179,7 @@ export function Book({ part }: BookProps) {
       >
         Synth Secrets, {label}
       </a>
-    </p>
+    </span>
   );
 }
 
