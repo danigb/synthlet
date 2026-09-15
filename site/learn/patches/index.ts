@@ -1,13 +1,18 @@
 import { amplifiersPatches, amplifiersSources } from "./amplifiers";
+import { beyondPatches, beyondSources } from "./beyond";
 import type { LessonPatch } from "./define";
+import { effectsPatches, effectsSources } from "./effects";
 import { envelopesPatches, envelopesSources } from "./envelopes";
 import { filtersPatches, filtersSources } from "./filters";
 import { modulationPatches, modulationSources } from "./modulation";
 import playground from "./playground";
 import playgroundSource from "./playground.ts?raw";
+import { recipesPatches, recipesSources } from "./recipes";
 import { soundPatches, soundSources } from "./sound";
+import { timePatches, timeSources } from "./time";
 import voice from "./voice";
 import voiceSource from "./voice.ts?raw";
+import { voicesPatches, voicesSources } from "./voices";
 
 /**
  * Every patch in the tutorial, by id.
@@ -28,6 +33,11 @@ export const patches: Record<string, LessonPatch> = {
   ...amplifiersPatches,
   ...filtersPatches,
   ...modulationPatches,
+  ...timePatches,
+  ...voicesPatches,
+  ...recipesPatches,
+  ...effectsPatches,
+  ...beyondPatches,
   // The tutorial voice, which belongs to no chapter: every chapter that teaches
   // a parameter rather than a module reaches for it, with a preset and a `show`.
   voice,
@@ -44,6 +54,11 @@ const sources: Record<string, string> = {
   ...amplifiersSources,
   ...filtersSources,
   ...modulationSources,
+  ...timeSources,
+  ...voicesSources,
+  ...recipesSources,
+  ...effectsSources,
+  ...beyondSources,
   voice: voiceSource,
   playground: playgroundSource,
 };
