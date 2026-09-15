@@ -1,0 +1,29 @@
+---
+title: "Notes and voices"
+description: "What happens between a key going down and a sound coming out: which note wins, how many can sound at once, which one dies, and what a preset really is."
+---
+
+A keyboard is a lie that every synthesiser has to maintain. Ten fingers arrive
+in whatever order they like, and underneath there is a fixed amount of circuitry
+that has to decide what to do about them. This chapter is the four decisions.
+
+The first is the one a monosynth cannot avoid. One voice, four keys held: which
+note sounds? Parts 18 gives four answers, all of them shipped in real
+instruments, and the choice changes what the instrument is to play rather than
+how it sounds. The second is where the filter and the envelope sit. Four
+oscillators through one filter and one envelope is a **paraphonic** instrument,
+and it behaves in a way nobody expects the first time they meet it: the second
+note you add has no attack of its own, because the envelope is already open.
+
+The third is what happens when the voices run out, which is a question with no
+correct answer and four defensible ones. The fourth is the file format all of
+this ends up in — a preset, which turns out to be a flat object of parameter
+values plus the two or three options that belong to a sound rather than to an
+instrument.
+
+**Duophony, which is Part 19, is skipped.** A duophonic keyboard splits two held
+notes between two oscillators inside one otherwise monophonic voice, and it
+exists because 1974 could not afford a second filter. Nothing in this library
+models it, and nothing should: a duophonic instrument is a polyphonic instrument
+with a deliberate hole in it, and the interesting half of the idea — sharing a
+filter between voices — is the paraphonic page instead.

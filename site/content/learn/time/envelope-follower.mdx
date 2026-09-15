@@ -1,0 +1,61 @@
+---
+title: The envelope follower
+description: "Taking the loudness of one sound and using it as a control voltage for another, which is an auto-wah one way round and a sidechain the other."
+core: false
+book: [15]
+hear: "The loudness of one sound controlling another: auto-wah on the clip, then the clip ducking a pad."
+status: ready
+---
+
+An envelope generator invents a shape. An envelope **follower** measures one. It
+rectifies whatever it is given, charges a capacitor from the result and
+discharges it slowly, and what comes out is a control voltage that rises and
+falls with the loudness of the input. Reid's Figure 9 in Part 15 does exactly
+one thing with it: it replaces the contour generator in an otherwise ordinary
+patch, so the filter is opened by the sound rather than by the keyboard.
+
+The signal being followed here is a piece of music rather than an instrument in
+the patch, which is worth saying because it is the general case: a follower does
+not care what it is listening to.
+
+<Patch id="time/follower" show={["mode", "attack", "release", "amount"]} />
+
+<Try>
+
+Press Play with **Destination** on **Auto-wah**. The top trace is the follower's
+output — the shape of the clip, a few times a second — and the mark on the
+spectrum is where the filter's corner has been pushed to. Loud passages open it;
+quiet ones close it. Nobody is moving anything.
+
+</Try>
+
+<Try>
+
+Shorten **Attack** to nothing and lengthen **Release**. Each hit snaps the filter
+open and it sags back slowly, which is the wah pedal everyone recognises. Then
+do the opposite: a long attack ignores transients entirely and follows only the
+shape of the phrase.
+
+</Try>
+
+<Try>
+
+Switch to **Ducking**. The same follower, inverted and pointed at a pad's gain
+instead of a cutoff, and the pad now gets out of the way on every hit. That is
+the whole of a sidechain compressor, minus the marketing.
+
+</Try>
+
+<Aside kind="why">
+
+Attack and release here are not the envelope's, they are the detector's, and
+they are the only two settings that matter. Too fast and the follower tracks
+individual cycles of the waveform rather than its outline, which comes out as
+distortion in the control voltage. Too slow and it misses the transients that
+make the effect legible. The detector also has a choice of measurements: peak
+answers with the loudest sample, which catches clicks, and RMS answers with
+average power, which is what a compressor wants.
+
+</Aside>
+
+<Book part={15} />

@@ -1,0 +1,62 @@
+---
+title: The vocoder
+description: "Sixteen envelope followers at once, and a carrier that ends up wearing another sound's spectrum."
+core: false
+book: [15]
+hear: "A clip's spectrum wearing a sawtooth. Noise as the carrier makes whispers; fewer bands make a robot."
+status: ready
+---
+
+A vocoder is the previous page done sixteen times at once. Split one sound — the
+**modulator** — into bands with a row of band-pass filters. Follow the loudness
+of each band. Split a second sound — the **carrier** — into the same bands, and
+use those sixteen control voltages to open sixteen amplifiers, one per band. The
+carrier comes out wearing the modulator's spectrum.
+
+The modulator here is the site's music clip, not a voice, and that is not a
+compromise worth hiding. A vocoder is indifferent to what it is given; what it
+needs is a modulator whose spectrum **moves**. Speech moves more interestingly
+than music, which is the entire reason the effect is famous, but the mechanism
+is the same either way.
+
+<Patch id="time/vocoder" show={["bands", "carrier", "release"]} />
+
+<Try>
+
+Press Play. It takes a moment: there are 48 worklets in this patch — two filters
+and a follower for each of sixteen bands — which is why this page is heavier
+than the rest of the chapter. What you hear is a sawtooth being carved into the
+shape of the clip.
+
+</Try>
+
+<Try>
+
+Take **Bands** from sixteen to four. Four wide bands cannot describe a spectrum,
+so what survives is a coarse impression of it, which is the robot everyone means
+by the word. Sixteen is close enough to intelligible that you can follow the
+music through it.
+
+</Try>
+
+<Try>
+
+Switch **Carrier** to **Noise** and it becomes a whisper. A sawtooth has
+harmonics at every multiple of its pitch, so the bands carve a pitched sound;
+noise has energy everywhere and no pitch at all, so the same bands produce a
+whispering voice with no note in it.
+
+</Try>
+
+<Aside kind="why">
+
+Fewer bands cannot simply mean switching some off. Four of the original sixteen
+would be four narrow windows with silence between them, which is a comb filter
+and not a coarse picture — so the bands that remain widen as the count drops.
+That is the same trade a real vocoder makes in its filter design, and it is why
+a twenty-band unit sounds articulate where an eight-band one sounds like a
+machine.
+
+</Aside>
+
+<Book part={15} />

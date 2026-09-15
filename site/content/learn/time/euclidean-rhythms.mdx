@@ -1,0 +1,57 @@
+---
+title: Euclidean rhythms
+description: "Two integers and a remainder produce most of the world's dance rhythms, and one necklace is several parts at once."
+core: false
+book: []
+hear: "Three in eight is a tresillo; five in eight is a cinquillo; rotation moves the downbeat. Rhythms as arithmetic."
+status: ready
+---
+
+Spread three hits as evenly as you can over eight slots. There is no exact
+answer — eight does not divide by three — and the best you can do turns out to
+be a rhythm with a name. It is the tresillo, the left hand of half of Cuban
+music, the bassline of a great deal of house, and the thing a Roland TR-808
+programmer arrives at by ear in about a minute.
+
+The algorithm that finds it is Euclid's, the one for greatest common divisors,
+and Godfried Toussaint's observation is that running it on two integers
+reproduces a startling number of the rhythms people actually play. Nothing below
+is a pattern anyone typed in.
+
+<Patch id="time/euclid" show={["steps", "beats", "rotation", "spread"]} />
+
+<Try>
+
+Press Play. Eight steps, three beats: the tresillo. Take **Beats** to five and it
+becomes the cinquillo, its complement and its constant companion. Then try
+sixteen steps with five beats, which is the bossa nova.
+
+</Try>
+
+<Try>
+
+Move **Rotation**. The grid shifts but its shape does not: a necklace has no
+beginning, so rotating it chooses where the downbeat falls among hits that were
+already in that arrangement. Several of the named rhythms are the same necklace
+entered in different places.
+
+</Try>
+
+<Try>
+
+Move **Spread** and listen to the hi-hat rather than the kick. At zero the two
+land together; at two they interlock. This is one pattern read from two
+starting points, not two patterns.
+
+</Try>
+
+<Aside kind="why">
+
+The fan is the part that is easy to miss. One necklace is several named rhythms
+simultaneously, and those are the parts different players hold rather than
+variations on one part — so the hi-hat here is not a second generator. Both
+drums read one pattern array and one step counter, which is why they cannot
+drift apart however long the widget runs, and why one reset aligns every
+channel.
+
+</Aside>

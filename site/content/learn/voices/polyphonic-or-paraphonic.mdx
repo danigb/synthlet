@@ -1,0 +1,57 @@
+---
+title: Polyphonic or paraphonic
+description: "Four oscillators through one filter and one envelope is not a four-voice synthesiser, and the difference is audible in one gesture."
+core: false
+book: [20]
+hear: "Four oscillators through one envelope: the second note joins at sustain and never gets its own attack. Four voices: each note is born on its own."
+status: ready
+---
+
+Polyphony costs money. A voice is an oscillator, a filter, two envelope
+generators and an amplifier, and in 1978 that was a circuit board — so several
+famous instruments bought the oscillators and shared everything after them. Four
+oscillators, one filter, one envelope: a **paraphonic** synthesiser, which plays
+chords and is not a four-voice polysynth.
+
+The widget below is both, built from the same parts with the same numbers, so
+the only difference between the two arms is where the filter and the envelope
+sit.
+
+<Patch id="voices/paraphonic" show={["mode", "attack", "release"]} />
+
+<Try>
+
+Press Play with **Architecture** on **Paraphonic** and **Attack** at about a
+fifth of a second. Hold one note, wait for it to arrive, then add a second
+without releasing the first. The new note does not fade in — it appears at full
+level, because the shared envelope is already open and there is nothing left for
+it to do.
+
+</Try>
+
+<Try>
+
+Switch to **Polyphonic** and do it again. Now each note fades in on its own,
+because each has an envelope of its own. Then release one finger of a held
+chord: on Polyphonic that note decays and the others continue; on Paraphonic
+nothing happens until the last finger leaves, and then everything stops
+together.
+
+</Try>
+
+<Aside kind="why">
+
+This is exactly the sound of a string machine, and it is why the Polymoog and
+the Korg Poly-800 are described that way rather than as polysynths. The shared
+filter has a second consequence worth listening for: a filter sweep moves every
+note in the chord at once, which is lush and is also why a paraphonic instrument
+cannot make one note in a chord brighter than another. Everything after the
+oscillators is common.
+
+</Aside>
+
+The polyphonic arm here is hand-rolled — four copies of the same three modules —
+so the comparison stays about architecture. A real instrument builds that pool
+once and manages it, which is what the next page is about.
+
+<Book part={20} />

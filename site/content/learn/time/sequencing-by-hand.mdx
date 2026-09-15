@@ -1,0 +1,74 @@
+---
+title: Sequencing by hand
+description: "Sixteen values, one animation frame and a lookahead window, which is how a DAW keeps time and what it costs."
+core: false
+book: [16, 17]
+hear: "A bassline from sixteen values, and the one page where the main thread keeps time, which the lesson says the price of."
+status: ready
+---
+
+An analogue step sequencer is sixteen knobs and a switch that walks them. Each
+knob is a voltage, the switch hands one of them to an oscillator at a time, and
+the result is the Moroder bassline, the Berlin School, and a large part of why
+anyone bought a synthesiser with a sequencer attached.
+
+This page builds one the way software normally does. An animation frame wakes
+up, looks a quarter of a second into the future, and writes the next bar of
+pitches and gates as scheduled parameter changes. The audio is still accurate to
+the sample, because every value carries a time. The **arming** is not.
+
+<Patch
+  id="time/steps"
+  show={[
+    "step1",
+    "step2",
+    "step3",
+    "step4",
+    "step5",
+    "step6",
+    "step7",
+    "step8",
+    "step9",
+    "step10",
+    "step11",
+    "step12",
+    "step13",
+    "step14",
+    "step15",
+    "step16",
+    "bpm",
+  ]}
+/>
+
+<Try>
+
+Press Play and move a step. The number is in semitones above the root, so twelve
+is an octave and seven a fifth. The change does not arrive immediately: the bar
+it belongs to was armed before you touched it, and the sequencer reads the
+sliders when it arms the next one.
+
+</Try>
+
+<Try>
+
+Now stall the page. Open the developer console and run a loop that spins for two
+or three seconds — anything that keeps JavaScript busy. The rhythm survives a
+short stall, because a quarter of a second was already written; a longer one
+arrives late, all at once. Go back to the clock and the arpeggiator two pages
+ago and do the same thing. Neither of them notices.
+
+</Try>
+
+<Aside kind="why">
+
+This is the one file in the chapter with a timer in it, and the difference is
+worth stating plainly. A lookahead scheduler is not inaccurate — the samples
+land where they were told to. It is **interruptible**: the window is a bet that
+the main thread will come back before the music runs out of instructions, and
+every other tab, every layout, every garbage collection is betting against you.
+The clock, the rhythm generator and the arpeggiator make no such bet, because
+nothing outside the audio thread is involved in keeping them going.
+
+</Aside>
+
+<Book part={[16, 17]} />

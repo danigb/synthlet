@@ -1,0 +1,62 @@
+---
+title: Presets
+description: "A sound by name is a flat object of parameter values, plus the two or three options that belong to the sound rather than to the instrument."
+core: false
+book: []
+hear: "A sound by name, and the code panel showing that a preset is a flat object of parameter values."
+status: ready
+---
+
+A preset is not a feature of a synthesiser. It is a file format, and it is a
+much less mysterious one than the word suggests: every parameter the voice
+declares, with a number beside it.
+
+```json
+{
+  "name": "bass",
+  "params": { "cutoff": 320, "resonance": 4.5, "attack": 0.005 },
+  "glide": 0,
+  "legato": false,
+  "priority": "last"
+}
+```
+
+The three keys after `params` are the ones from the last two pages — the options
+that belong to a sound rather than to an instrument. A lead sound is its glide;
+a bass sound is its note priority. Everything else is a parameter with a fan-out
+node behind it, so loading a preset is one scheduled write per parameter and
+nothing more.
+
+<Patch id="voices/presets" show={["preset"]} />
+
+<Try>
+
+Press Play and walk down the list, holding a chord as you go. Sixteen sounds out
+of one voice: the parameters are the same thirty-one every time, and nothing but
+their values changes.
+
+</Try>
+
+<Try>
+
+Load **bass**, then **flute**, then **bass** again. The second bass is identical
+to the first. That is worth checking rather than assuming, because it is the
+property that makes a name worth having — a preset is complete, so the
+parameters it does not mention are written with their defaults rather than left
+wherever the previous sound put them.
+
+</Try>
+
+<Aside kind="why">
+
+Keys rather than an array, because in JavaScript the key **is** the stable
+identifier: it survives a parameter being added in the middle, a missing key
+means the default, and the whole thing is already JSON. Loading a sound is
+therefore something you can schedule — one `setValueAtTime` per parameter means
+"load the pad at bar nine" is a real sentence rather than a feature request.
+
+</Aside>
+
+These sixteen are the bank in `site/learn/voice/presets.ts`, which is the same
+list the Playground's gallery draws from. Open the code panel and the preset
+picker turns out to be one line.

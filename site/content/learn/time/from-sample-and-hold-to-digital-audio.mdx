@@ -1,0 +1,66 @@
+---
+title: From sample and hold to digital audio
+description: "Run a sample and hold fast enough and it stops being a modulation effect and becomes an analogue-to-digital converter."
+core: false
+book: [17]
+hear: "10 kHz sampled at 13.33 kHz is 3.33 kHz; the filter before stops it; the filter after turns the staircase back into a sine."
+status: ready
+---
+
+The module from chapter 5 has not changed. It still closes a switch, catches
+whatever voltage it finds and holds it until the next tick. The only difference
+on this page is the rate: run it tens of thousands of times a second instead of
+a few, and it is the front half of every converter ever built.
+
+Everything strange about digital audio is already there in the module, which is
+Reid's point in Part 17 and the reason the chapter arrives here rather than
+starting here.
+
+<Patch
+  id="time/decimator"
+  show={["frequency", "rate", "bits", "antialias", "reconstruct"]}
+/>
+
+<Try>
+
+Press Play. A 10 kHz sine, sampled at 13,333 Hz. The tallest peak in the
+spectrum is not at either of those numbers — it is at 3,333 Hz, the difference
+between them, and it is a tone that was never in the input: that is the effect
+called <Term>aliasing</Term>. The three marks on the trace are half the sample
+rate, the tone that was asked for, and where the arithmetic says the fold will
+land.
+
+</Try>
+
+<Try>
+
+Turn **Anti-alias filter** on. The intruder disappears, because the filter sits
+before the switch and removes everything above half the sample rate before it
+can be sampled. There is no way to remove it afterwards: two different input
+frequencies genuinely produce the same sequence of samples, so nothing
+downstream has anything to work with.
+
+</Try>
+
+<Try>
+
+Take **Tone** down to about 500 Hz and look at the scope. You can count the
+steps. Turn **Reconstruction filter** on and they round off into a sine — the
+same filter, on the other side of the switch. Then drop **Bit depth** towards
+four and hear the other kind of error: not the timing of the samples but how
+finely each one was measured.
+
+</Try>
+
+<Aside kind="why">
+
+Half the sample rate is the Nyquist limit, and it is not a quality threshold —
+it is the frequency above which the information is genuinely gone. A converter's
+input filter exists to enforce it, and its output filter exists because a
+staircase is a sine plus a great deal of high-frequency rubbish that the
+sampling put there. Both filters are the same low-pass; only their position
+differs.
+
+</Aside>
+
+<Book part={17} />

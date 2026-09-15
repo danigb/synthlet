@@ -1,0 +1,59 @@
+---
+title: Clock
+description: "A metronome that is a signal rather than a timer, living on the audio thread where nothing the page does can make it late."
+core: false
+book: [16]
+hear: "A pulse, on the audio clock, with nothing on the page timing it. Widen the pulse and the notes lengthen."
+status: ready
+---
+
+Everything in the first five chapters waited for you. A key, a slider, a gate
+button: you did something and the synthesiser answered. This chapter is about
+the other half of a modular synthesiser — the half that does things on its own —
+and all of it starts with a clock.
+
+A clock is not a timer. It is a module with an output, and what comes out is a
+signal like any other: it can be scaled, offset, divided, and sent anywhere a
+parameter will take a cable. It lives among the samples rather than among the
+callbacks, which is why the widget below keeps time while the page around it is
+busy.
+
+<Patch id="time/clock" show={["bpm", "pulseWidth", "beatsPerBar"]} />
+
+<Try>
+
+Press Play. Two voices: a high tick on every beat and a low one at the top of
+every bar. Move **Tempo** while it runs — the change lands on the next beat and
+nothing stumbles, because the tempo is a parameter and not a `setInterval`.
+
+</Try>
+
+<Try>
+
+Widen **Pulse width** and the ticks lengthen into notes. The scope is looking at
+the gate rather than at the sound, so what you are watching is the control
+signal the amplifiers read: a rectangle that is high for that fraction of each
+beat.
+
+</Try>
+
+<Try>
+
+Take **Beats per bar** from four to three and the low voice arrives a beat
+earlier each time round. At zero it stops: there is no bar, only beats.
+
+</Try>
+
+<Aside kind="why">
+
+The clock has two kinds of output and they are not interchangeable. Its own
+output is a <Term>phase</Term> — a ramp rising from zero to one across each beat
+— and a phase is what a rhythm generator needs, because subdividing a clock means
+multiplying its ramp. The gate is a pulse, high for the pulse width, and a pulse
+is what an envelope needs. The bar pair exists for the same reason and cannot be
+recovered downstream: the ramp during beat one is identical to the ramp during
+beat three, so the count has to belong to whoever owns the phase.
+
+</Aside>
+
+<Book part={16} />

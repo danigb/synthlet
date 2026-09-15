@@ -1,0 +1,60 @@
+---
+title: Glide and slew
+description: "A low-pass filter for control voltages, and the reason portamento measured in hertz sounds wrong."
+core: false
+book: [16]
+hear: "Portamento, and the shark's tooth on a stepped input. In hertz the glide is lopsided; in cents it is even."
+status: ready
+---
+
+A slew limiter refuses to let its output move faster than you allow. Feed it a
+step and it climbs; feed it a staircase and the corners round off. Point one at
+a pitch and you have portamento, which is the effect on the front panel of every
+monosynth since the Minimoog, and which is one module rather than a feature.
+
+It has two rates, not one, and that is the interesting part. A rise time and a
+fall time that differ turn a square input into a shape no envelope generator in
+this library produces.
+
+<Patch id="time/slew" show={["glide", "fall", "type", "unit"]} />
+
+<Try>
+
+Press Play and walk up the keyboard with **Rise** at about a fifth of a second.
+Each note slides into the next. Take **Rise** to zero and it is an ordinary
+keyboard again — the module is still there, doing nothing, which is what a
+portamento switch really is.
+
+</Try>
+
+<Try>
+
+Set **Rise** long and **Fall** short and watch the scope while you play a
+repeated two-note figure. Slow up, fast down: that asymmetry is the shark's
+tooth, and it is unreachable with any single glide knob.
+
+</Try>
+
+<Try>
+
+Turn **Glide in hertz** on and play the same run. Low down it crawls; high up it
+snaps. The interval your ear hears is a ratio, and a fixed number of hertz per
+second is a smaller and smaller ratio the higher the note.
+
+</Try>
+
+<Aside kind="why">
+
+This is why the unit matters more than the module. Pitch is logarithmic: an
+octave is a doubling wherever you are, so an even glide has to be even in
+**cents**, and the oscillator's detune input takes cents for exactly that
+reason. A voltage-controlled oscillator with a linear frequency input glides the
+lopsided way, which is audible on plenty of vintage instruments and is
+occasionally the sound people are after. The other toggle asks a separate
+question: <Term>exponential</Term> slew approaches its target the way a
+capacitor charges, <Term>linear</Term> slew at a constant rate. That is the
+shape of the approach, not the units it is measured in.
+
+</Aside>
+
+<Book part={16} />
