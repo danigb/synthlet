@@ -195,7 +195,13 @@ export function BlockedNotice({ what }: { what: string }) {
 /** What stands where a blocked lesson's widget would be. */
 export function BlockedPatch({ id, what }: { id?: string; what: string }) {
   return (
-    <div className="my-6 max-w-learn rounded-learn border border-dashed border-learn-border bg-learn-bg p-learn font-learn-text text-learn-ink-muted">
+    <div
+      // What a blocked lesson has instead of a widget. `check:sound` asserts
+      // the placeholder is here and no `figure[data-patch]` is, which is a
+      // stronger reading of "blocked" than matching on the prose above.
+      data-blocked-patch={id ?? ""}
+      className="my-6 max-w-learn rounded-learn border border-dashed border-learn-border bg-learn-bg p-learn font-learn-text text-learn-ink-muted"
+    >
       <p className={LABEL}>The widget is not here yet</p>
       <p className="mt-1">
         {id ? (

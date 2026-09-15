@@ -327,7 +327,12 @@ export function PlaygroundRig({
 
       <Gallery chosen={preset} onChoose={choose} />
 
-      <figure className="my-6 overflow-hidden rounded-learn border border-learn-border bg-learn-surface p-learn text-learn-ink">
+      <figure
+        // Not a `LessonWidget`, but the same runtime and the same `PlayToggle`,
+        // so it is the same thing to `check:sound`.
+        data-patch="playground"
+        className="my-6 overflow-hidden rounded-learn border border-learn-border bg-learn-surface p-learn text-learn-ink"
+      >
         <figcaption className="flex flex-wrap items-center justify-between gap-2">
           <span className="min-w-0 font-learn-text text-sm font-medium">
             {playgroundPatch.label}

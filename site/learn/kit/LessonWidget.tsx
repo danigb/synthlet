@@ -50,7 +50,13 @@ export function LessonWidget({
   const pictures = patch.views.filter((view) => view.kind !== "meter");
 
   return (
-    <figure className="my-6 max-w-learn overflow-hidden rounded-learn border border-learn-border bg-learn-surface p-learn text-learn-ink">
+    <figure
+      // The patch's id, in the markup, for the same reader `data-control`
+      // below is for: `check:sound` addresses one widget at a time, and a
+      // failure that names the patch is a failure somebody can act on.
+      data-patch={patch.id}
+      className="my-6 max-w-learn overflow-hidden rounded-learn border border-learn-border bg-learn-surface p-learn text-learn-ink"
+    >
       {markers}
 
       <figcaption className="flex flex-wrap items-center justify-between gap-2">
@@ -100,6 +106,10 @@ export function LessonWidget({
               // The id, in the markup: it is what a lesson wrote in `show`, and
               // it is how the headless pass finds a knob it means to move.
               data-control={control.id}
+              // And its kind, so that pass can tell a gate - the one control
+              // that makes a note on its own - from a slider, without reading
+              // a label that a redesign is free to reword.
+              data-kind={control.kind}
               className={`${isWide(control) ? "sm:col-span-2" : ""} ${
                 link.isLinked(control.id)
                   ? "rounded-learn ring-1 ring-learn-accent"

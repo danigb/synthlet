@@ -268,6 +268,60 @@ window.__learn__.live(); // built synths plus live meter taps; 0 is a clean page
 Webpack inlines `NODE_ENV`, so the deployed export ships neither. Ticket 15's
 headless pass reads them; so can you, in `next dev`.
 
+### Every lesson makes a sound
+
+```sh
+npm --prefix site run check:sound
+npm --prefix site run check:sound -- --only /learn/filters   # one chapter
+npm --prefix site run check:sound -- --headed                # watch it
+```
+
+`scripts/check-learn-sound.mjs` starts `next dev` on a free port, walks every
+page under `/learn` in reading order in one browser page, and asserts four
+things:
+
+- the page arrives **silent** — `level()` is exactly `-Infinity`, because
+  before the first interaction no probe is registered at all;
+- **nothing is left live** from the page before it — `live()` is 0;
+- every widget **makes a sound** above −60 dBFS within three seconds of Play,
+  a gate press or the `z` key, in that order;
+- the **console is clean**, but for the `/favicon.ico` 404, which is a request
+  the document makes outside the `/synthlet` base path.
+
+It walks by clicking the page's own `Next` link wherever there is one, so the
+leak assertion is made across a **client-side** navigation. A `page.goto` would
+destroy the JavaScript context and make it vacuous; the summary counts the soft
+transitions so a run that lost them is visible.
+
+**It needs a browser** — Chrome or Chromium, resolved at run time, because
+`playwright-core` downloads none: `CHROME_PATH`, then the system Google Chrome,
+then whatever `npx playwright install chromium` has left in the cache.
+
+**It runs `next dev`**, so it wants the same lock a `DEPLOY=true` build does:
+both write `site/.next`. And it has to — `hooksEnabled` is gated on `NODE_ENV`,
+so an exported page has no `window.__learn__` at all, which is the other half
+of the check: `npm --prefix site run check:sound -- --export out` loads an
+exported page and fails if the hooks are there.
+
+When it fails:
+
+- **live objects arrived from the page before** — a compound whose `dispose()`
+  does not tear down everything it made. It is named on the page after the one
+  with the bug, and both slugs are printed.
+- **silent after Play, a gate press and a key** — usually a patch that does not
+  end in a gain, so there is nothing for Play to open (`outputGain()` in
+  `kit/useLessonPatch.ts`); or a patch that needs a note and shows neither a
+  `gate` control nor a keyboard for the pass to press.
+- **Play is disabled** — the patch's `ready` never resolved, and the console
+  line beside it says which one.
+- **a dirty console** — most often a hydration error: markup no browser will
+  accept, which React answers by re-rendering the whole document.
+
+What it does **not** catch is a misspelled `exposes` name. `useLessonPatch`
+swallows a dead accessor on purpose — "a dead accessor is a manifest bug, not a
+render error" — so the control quietly does nothing and the page still makes a
+sound. Rule 3 in `learn/rules.test.ts` owns that one, without a browser.
+
 ### The shared audio components
 
 `site/components/audio/` holds the parts both sections use: `Scope`,
