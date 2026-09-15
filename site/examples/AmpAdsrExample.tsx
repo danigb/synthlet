@@ -2,7 +2,7 @@
 
 import { AdsrAmp, Compound, Oscillator, Param } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 const VcaSynth = (ac: AudioContext) => {
   const gate = Param(ac);

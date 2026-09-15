@@ -19,7 +19,7 @@ import {
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 // Part 16, Figure 15: noise -> S&H -> programmable scale generator -> VCO.
 // Reid calls it "a random arpeggiator - one of my favourite effects", and it is

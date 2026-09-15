@@ -11,7 +11,7 @@ import {
 } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 function LimiterSynth(ac: AudioContext) {
   // A percussive source is what makes a limiter audible: the transient is

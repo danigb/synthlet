@@ -1,0 +1,48 @@
+---
+title: Sources, modifiers, controllers
+description: The whole catalogue on three shelves, and the reason a module can move from one shelf to another without changing at all.
+core: true
+book: [63]
+hear: No sound. Three shelves, and the idea that the same module can sit on two of them depending on what it is patched into.
+status: ready
+---
+
+This page makes no sound. It is the map, and it comes at the end of the first
+chapter because everything after it is a module with a name, and thirty names are
+easier to hold on to as three piles than as a list.
+
+<Map />
+
+A <Term>source</Term> makes a signal out of nothing. Those are the oscillators —
+[PolyblepOscillator](/docs/polyblep) and [WavetableOscillator](/docs/wavetable) —
+plus [Noise](/docs/noise), which you met on the last page, and the odd ones like
+[Karplus-Strong](/docs/ks) that make a whole plucked string in one box.
+
+A <Term>modifier</Term> takes a signal in and puts a changed one out. The filter
+you have been using, [Svf](/docs/state-variable-filter), is one; so is any
+amplifier, including [AdsrAmp](/docs/adsr-amp); so are the distortions like
+[ClipAmp](/docs/clip-amp) and the delays like
+[DigitalDelay](/docs/digital-delay).
+
+A <Term>controller</Term> makes a signal nobody is meant to hear. It exists to be
+pointed at something else's knob: [AdsrEnv](/docs/adsr) for a shape that happens
+once per note, [Lfo](/docs/lfo) for one that repeats, [Param](/docs/param) for
+arithmetic on the way, [Clock](/docs/clock) for a steady tick.
+
+## The shelves are not fixed
+
+Here is the part that makes the arrangement worth learning rather than
+memorising. Nothing about a module decides which shelf it sits on. Slow an
+oscillator to 5 Hz, point it at a filter's cutoff, and it is a controller — it is
+producing vibrato and nobody would call it a source. Speed an LFO up to 500 Hz,
+send it to the output, and it is a source; you can hear it.
+
+The same is true of a filter with enough resonance to oscillate on its own, and
+of an envelope fast enough to be a click. It is not where a signal comes from
+that matters but where it is going <Book part={3} />, and that is why the two
+arrows in the drawing run down the outside rather than through the middle.
+
+Reid put this at the very end of Synth Secrets, after sixty-two parts of
+particulars. It is at the front here because it is cheaper to learn first.
+
+<Book part={63} />

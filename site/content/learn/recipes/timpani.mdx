@@ -1,0 +1,60 @@
+---
+title: "Timpani"
+description: "Four filters in Part 32 are one node here, and the reason a timpanist never hits the middle."
+core: false
+book: [31, 32]
+hear: "Four modes the shell has dragged almost harmonic; dead centre is the enharmonic mess they came from."
+status: ready
+---
+
+Part 31 works out what a circular drum head does on its own: modes at 1, 1.59,
+2.14, 2.3 and so on, ratios that fall where a Bessel function crosses zero and
+sound like nothing in particular. Part 32 then explains why a kettle drum has a
+pitch anyway. The shell traps air under the skin, the air loads the radial
+modes, and four of them get dragged into a near-harmonic series at 1, 1.5, 1.98
+and 2.44 — a hundred and fifty, two hundred and twenty-five, two hundred and
+ninety-seven and three hundred and sixty-six hertz, in his table.
+
+<Patch
+  id="recipes/timpani"
+  show={["principal", "decay", "brightness", "strike", "trigger"]}
+/>
+
+<Try>
+
+Strike it and look at the four marks. They are Reid's Table 1 ratios, drawn at
+whatever **Principal** is set to, and off centre they stand on four peaks.
+
+</Try>
+
+<Try>
+
+Switch **Strike** to **Dead centre** and hit it again. The marks now stand on a
+mess, because the mode table underneath has been swapped for the ideal
+membrane's twelve Bessel ratios. Reid describes striking a kettle drum in the
+middle as producing a dull, toneless and musically uninteresting thump, and a
+timpanist strikes almost precisely a quarter of the way from the edge to the
+centre in order not to.
+
+</Try>
+
+<Try>
+
+Set a long **Decay** and listen to the end of the note. Mode one rings for
+forty-five percent of the decay time and mode three for ninety-one, so as it
+dies the lowest mode goes first and the pitch you hear can leap a fifth or an
+octave on the way out.
+
+</Try>
+
+<Aside kind="note">
+
+The principal is the 1,1 mode and not the fundamental. The true fundamental of
+the head sits at about sixty-three percent of it and is barely present, which
+is the second reason the pitch is unstable at the end of a roll. On the
+spectrum it would be at about ninety-five hertz, which on a linear axis to half
+the sample rate is two pixels from the left edge.
+
+</Aside>
+
+<Book part={[31, 32]} />

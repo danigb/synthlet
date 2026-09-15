@@ -47,6 +47,60 @@ jobs:
             exit 1
           }
 
+      # The site's own suite: the tutorial's five content rules and the
+      # tutorial voice. It is a separate install because `site/` is outside the
+      # workspaces and has its own lockfile, and it is cheap - two vitest files,
+      # a few seconds - so it rides in this job rather than earning a shard.
+      - name: Install site dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Run site tests
+        working-directory: site
+        run: npm test
+
+      # A lesson that loads silent, throws in the console, or leaves a worklet
+      # running is a reader who stops, and none of it shows in a build log. This
+      # opens every page under `/learn` in Chrome, presses Play, and reads the
+      # level and the live count off `window.__learn__`. It runs against
+      # `next dev` because the hooks are gated on NODE_ENV and an exported page
+      # has none - which the step after the link check asserts from the other
+      # side. `ubuntu-latest` ships Google Chrome, so nothing is downloaded and
+      # `playwright-core` has no browser to install; if that stops being true,
+      # this step gains `npx playwright install chromium` and CHROME_PATH goes.
+      - name: Every lesson makes a sound
+        working-directory: site
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: npm run check:sound
+
+      # The tutorial is a web of internal links - a lesson to the next lesson,
+      # the map to every chapter, a chapter back to the map - and a static
+      # export gives no warning at all when one of those targets was never
+      # built. The documentation half of the site has thirty such links today
+      # (`thoughts/roadmap.md`) precisely because nothing ever checked the URLs
+      # against the output. The check reads the export, so the export has to
+      # exist: `DEPLOY=true` is what `npm run deploy` uses, so this is the same
+      # build that ships.
+      - name: Build the site
+        working-directory: site
+        run: DEPLOY=true npm run build
+
+      - name: Check the tutorial's links
+        working-directory: site
+        run: npm run check:links
+
+      # The hooks above exist for a test, and a page that ships a global for the
+      # convenience of a test it is not running has given the test a say in what
+      # visitors download. A grep would not answer it: webpack folds the gate to
+      # a constant and the module's text survives minification unreachable. So
+      # this loads an exported page and asks the page.
+      - name: The export ships no test hooks
+        working-directory: site
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: npm run check:sound -- --export out
+
       # Rate bugs are silent: a k-rate read of an a-rate parameter does not throw,
       # does not warn, and produces audio that still sounds like audio. This reads
       # each package's params.ts and its processor together, which is the only

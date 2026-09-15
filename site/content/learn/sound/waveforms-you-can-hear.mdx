@@ -1,0 +1,56 @@
+---
+title: Waveforms you can hear
+description: Four shapes, four harmonic recipes, and one knob that punches regular holes in the brightest of them.
+core: true
+book: [10]
+hear: Sine is one peak; triangle and square are the odd ones; saw is all of them. A narrower pulse loses every nth harmonic.
+status: ready
+---
+
+The last page used the waveform list as a way of changing timbre. This page is
+about the list itself, because a waveform's name is shorthand for a set of
+harmonics, and learning which name means which set is most of learning to guess
+how a sound was made.
+
+<Patch id="sound/waveforms" show={["waveform", "width"]} />
+
+<Try>
+
+Press Play and step down the list. **Sine** has nothing above the fundamental at
+all: a tuning fork, or a flute played gently. **Triangle** is nearly that, with
+a trace of an edge on it. **Sawtooth** has every harmonic at 1/n and is the
+brightest of the four — it is the raw material of brass and of strings.
+**Square** has the odd harmonics only, which is the hollow, woody sound a
+clarinet makes.
+
+</Try>
+
+<Try>
+
+Leave it on **Square** and drag **Width** down from the middle. Dashed lines
+appear, and they mark the harmonics that should be _missing_: at a width of 0.5
+they land on every second one, at 0.33 on every third, at 0.25 on every fourth.
+The sound goes from hollow to reedy to thin as the holes crowd together, and the
+holes are where the lines are.
+
+</Try>
+
+<Aside kind="why">
+
+Reid's rule for pulse waves is worth memorising: a pulse has the same harmonics
+as a sawtooth, except that for a duty cycle of 1:n, every nth harmonic is
+missing. The square wave is just the case n = 2 — which means "a square wave has
+only odd harmonics", a thing people quote and rarely explain, is not a separate
+fact at all. Widths between the whole ratios do not remove harmonics, they only
+attenuate them, which is why the sound changes smoothly under your finger rather
+than in steps.
+
+</Aside>
+
+Width does something to a triangle too, and nothing at all to a sine or a
+sawtooth. The oscillator treats it as the position of the wave's second corner,
+so a triangle with its corner pushed all the way to one end has become a
+sawtooth — which is a good demonstration that these four names are points on a
+continuum rather than four separate devices.
+
+<Book part={10} />

@@ -12,8 +12,8 @@ import { useState } from "react";
 import { ExamplePane } from "./components/ExamplePane";
 import { SelectorParam } from "./components/Selector";
 import { Slider } from "./components/Slider";
-import { Spectrum } from "./components/Spectrum";
-import { useSynth } from "./useSynth";
+import { Spectrum } from "@/components/audio/Spectrum";
+import { useSynth } from "@/components/audio/useSynth";
 
 /**
  * `PolyblepOscillatorType` is `Sine = 0, Triangle = 1, Sawtooth = 2,

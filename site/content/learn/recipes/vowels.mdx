@@ -1,0 +1,58 @@
+---
+title: "Vowels"
+description: "Three fixed resonances say a word, and they do not care what note you are playing."
+core: false
+book: [23]
+hear: "A sawtooth says ee; noise whispers the same vowel; morphing between two rows of the table is a mouth opening."
+status: ready
+---
+
+Part 23 prints a table of the first three formants of six adult male vowels,
+and it is the most immediately useful table in the series: ee at 270, 2300 and
+3000 hertz, oo at 300, 870 and 2250, i at 400, 2000 and 2550, e at 530, 1850
+and 2500, u at 640, 1200 and 2400, and a at 660, 1700 and 2400. Three formants
+are enough to be understood — experiments in the 1950s established that — and
+with six, Reid says, the results can be very lifelike indeed.
+
+<Patch id="recipes/vowels" show={["vowel", "source", "morph"]} />
+
+<Try>
+
+Play and walk **Vowel** down the list. The three marks jump each time, and the
+middle one moves furthest between most pairs. That is Reid's point about what
+the ear is actually listening to: the second formant is the one that carries
+the vowel.
+
+</Try>
+
+<Try>
+
+Hold a key and drag **Morph** slowly. It interpolates from the vowel you chose
+to the next one down the list and wraps round at the end, and it does it
+geometrically, so what you hear is a mouth opening rather than two sounds
+crossfading.
+
+</Try>
+
+<Try>
+
+Switch **Source** to **Noise** and play anything. The vowel is still there and
+the pitch is gone, because a whisper has no pitch and still says the word. Then
+play up two octaves with the sawtooth back: the marks do not move at all.
+Formants are a property of the mouth and not of the note, which is exactly what
+a key-tracking filter is not.
+
+</Try>
+
+<Aside kind="note">
+
+Two small honesties. Reid's extended table gives the third formant a Q of
+fifty, and the filter here stops at forty, so that one is clamped and the third
+resonance is a little broader than he asked for. And the spectrum below is
+linear to half the sample rate, which puts the first formant of **ee** at 270
+hertz about six pixels from the left edge — so for this lesson the marks are
+the evidence and the trace is the confirmation.
+
+</Aside>
+
+<Book part={23} />

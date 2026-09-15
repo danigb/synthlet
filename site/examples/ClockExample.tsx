@@ -3,7 +3,7 @@
 import { ClaveDrum, Clock, Compound, CowBellDrum, Gain, Param } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 const Metronome = (ac: AudioContext) => {
   const bpm = Param(ac, { input: 100 });

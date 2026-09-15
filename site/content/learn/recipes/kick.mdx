@@ -1,0 +1,72 @@
+---
+title: "Kick"
+description: "A sine that falls as fast as it fades, and the same drum again from a filter with no oscillator at all."
+core: false
+book: [33, 34]
+hear: "A pitch that drops with the loudness and a click at the front. Then the same drum from a self-oscillating filter and no oscillator."
+status: ready
+---
+
+Part 33 builds the obvious kick drum: a sine wave, one envelope on its
+loudness, another on its pitch, and a click at the front. The number worth
+having is the pitch depth. Reid measured a typical kick drum shifting by **a
+couple of semitones** from start to finish, not by an octave — the loudness
+changes by a hundred percent while the pitch changes by about ten — which is
+why the pitch CV needs an attenuator and most drum machines sound wrong without
+one.
+
+Part 34 then builds the same drum on an ARP Axxe that has no oscillator left to
+spare: resonance at maximum, cutoff at minimum, contour to filter about half,
+attack zero, decay and release about half, no keyboard tracking, transposed two
+octaves down. The filter is the oscillator, and the trigger is the beater.
+
+<Patch
+  id="recipes/kick"
+  show={["tone", "decay", "click", "drive", "route", "trigger"]}
+/>
+
+<Try>
+
+Hit it on **Route** zero and watch the contour. The pitch and the loudness fall
+together over the same time, which is the whole drum. Lengthen the **Decay**
+and both get longer, because both envelopes read the same number.
+
+</Try>
+
+<Try>
+
+Switch to **Self-oscillating ladder** and hit it again. There is no oscillator
+in that route: one impulse goes into a filter wound up to just under the point
+where it sings, and what comes out is a drum. Reid backs the resonance off a
+tad on purpose, so that a little of the excitation gets through.
+
+</Try>
+
+<Try>
+
+Push **Drive** to the top on route zero. The saturator is what turns a thud
+into a wall, and it is doing something a volume control cannot: the waveform
+changes shape rather than size.
+
+</Try>
+
+<Aside kind="why">
+
+Turn **Click** to zero and hit it again. There is still a click. With an attack
+of zero the amplifier's own discontinuity is one — the sound jumps from nothing
+to full in a single sample — and Reid calls that the desirable consequence of
+truly snappy contour generators and VCAs. The click generator is there to make
+it louder, not to create it.
+
+</Aside>
+
+<Aside kind="history">
+
+The TR-808's bridged-T oscillator goes slightly flat at long decay settings,
+which is exactly what a kick drum does. The CR-68 and CR-78 before it did not,
+and Reid names that as one reason analogue drum machines started sounding so
+much better from the 808 onwards.
+
+</Aside>
+
+<Book part={[33, 34]} />

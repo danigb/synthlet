@@ -1,0 +1,68 @@
+/*
+ * The second theme, and the reason the first one is a set of names.
+ *
+ * It is not meant to be pretty. It is meant to be *unmistakable*: monochrome
+ * where the default has an accent, a serif where the default has the site's
+ * sans, square where the default is rounded, and wider. If switching to it
+ * leaves any part of a lesson looking the same, that part is drawing with
+ * something that is not a token - which is the bug this file is here to find.
+ *
+ * Scoped to an attribute rather than to `:root`, so that both ways of
+ * selecting it work and neither fights the other: `app/learn/layout.tsx` puts
+ * the attribute on the section's own element when `DEFAULT_THEME` is `"ink"` -
+ * that is the one-line redesign - and `theme/switch.tsx` puts it on `<html>`
+ * for `?theme=ink`, in development. Custom properties inherit, so either
+ * position reaches everything below it.
+ *
+ * The dark halves carry the extra `.dark`, which outranks both this file's own
+ * light block and `default.css`'s `.dark` no matter which order the two
+ * stylesheets land in.
+ */
+
+[data-learn-theme="ink"] {
+  --learn-bg: #fbfaf7;
+  --learn-surface: #efece4;
+  --learn-ink: #14130f;
+  --learn-ink-muted: #57534a;
+  --learn-accent: #14130f;
+  --learn-border: #14130f;
+
+  --learn-audio: #14130f;
+  --learn-control: #8a8578;
+
+  /*
+   * A lit code panel, monochrome. Ink has no accent to spend on a keyword, so
+   * the highlighting says what is structure and what is incidental: the words
+   * that make the graph are the page's ink, everything the reader skims -
+   * comments, strings, numbers, punctuation - is its muted half. Written in
+   * `var()`s, so the dark block below restyles the panel by restating nothing.
+   */
+  --learn-code-comment: var(--learn-ink-muted);
+  --learn-code-keyword: var(--learn-ink);
+  --learn-code-function: var(--learn-ink);
+  --learn-code-constant: var(--learn-ink-muted);
+  --learn-code-string: var(--learn-ink-muted);
+  --learn-code-parameter: var(--learn-ink-muted);
+  --learn-code-punctuation: var(--learn-ink-muted);
+  --learn-code-link: var(--learn-ink);
+
+  --learn-font-text: Iowan Old Style, Palatino, Georgia, ui-serif, serif;
+  --learn-font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --learn-radius: 0rem;
+  --learn-gap: 1.5rem;
+  --learn-widget-max-width: 52rem;
+}
+
+.dark [data-learn-theme="ink"],
+.dark[data-learn-theme="ink"] {
+  --learn-bg: #0d0d0c;
+  --learn-surface: #171715;
+  --learn-ink: #f2efe7;
+  --learn-ink-muted: #8f8b80;
+  --learn-accent: #f2efe7;
+  --learn-border: #f2efe7;
+
+  --learn-audio: #f2efe7;
+  --learn-control: #78746a;
+}

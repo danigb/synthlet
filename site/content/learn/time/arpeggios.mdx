@@ -1,0 +1,57 @@
+---
+title: Arpeggios
+description: "A clock, a scale and a voice, with nothing on the page to keep them: the patch that plays itself."
+core: false
+book: []
+hear: "The patch that plays itself: a clock, a scale and a voice. Change the mode while it runs."
+status: ready
+---
+
+An arpeggiator takes a set of notes and walks it. That is the whole idea, and it
+is old enough that the Roland Jupiter-4 and the Sequential Prophet-600 both had
+one, and modern enough that a great deal of what people call a synth line is
+nothing else.
+
+What is unusual here is where it sits. This arpeggiator is a worklet and its
+output is a **frequency**, in hertz, which goes straight into an oscillator.
+There is no note event anywhere in the patch — nothing is scheduled, nothing is
+counted, and the main thread is not involved once Play is pressed.
+
+<Patch id="time/arp" show={["mode", "scale", "octaves", "baseNote", "bpm"]} />
+
+<Try>
+
+Press Play and change **Mode** while it runs. Up, down, up-and-down, and two
+kinds of random: the first wanders and never repeats a note immediately, the
+second plays every note of the set once per pass in a fresh order.
+
+</Try>
+
+<Try>
+
+Change **Scale**. A chord is a short scale — the same parameter holds both,
+because it is a twelve-bit mask of which pitch classes are allowed — so
+**Triad minor** is an arpeggio in the guitarist's sense and **Dorian** is a scale
+run, from one control.
+
+</Try>
+
+<Try>
+
+Play the keyboard. The root moves and the pattern keeps walking: the traversal's
+position lives in the worklet, so a new root arrives at the next step rather
+than restarting the figure. Then take **Octaves** to four and hear how far it
+climbs before it comes back.
+
+</Try>
+
+<Aside kind="why">
+
+Every hardware arpeggiator emits note messages for something else to turn into
+pitch, which is why its chord has to be in your fingers. This one has no
+note-event tier underneath it, so `scale`, `mode` and `baseNote` are ordinary
+parameters — and a parameter can be automated. Send a slow sequence of masks to
+`scale` and you have a chord progression; send an oscillator to `mode` and you
+have an arpeggiator whose own direction is arpeggiated.
+
+</Aside>

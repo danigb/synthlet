@@ -1,0 +1,64 @@
+---
+title: "Cymbals and hats"
+description: "Six squares through three filters is a TR-808, and a hi-hat is the same thing with the knobs moved."
+core: false
+book: [37, 38, 39]
+hear: "Six enharmonic squares split into three bands, the highest dying fastest. Then a ride made of two oscillators and no noise at all."
+status: ready
+---
+
+A cymbal is the hardest thing in the chapter to measure. James Boyk put a crash
+cymbal in front of an instrument that reaches a hundred kilohertz and found no
+sign of it running out of energy there, with about forty percent of its energy
+above twenty kilohertz — above, that is, anything you can hear or record.
+
+Part 39 describes what Roland did instead. Six square waves, tuned
+enharmonically, split by filters into a low band and an upper band that is
+split again, each with its own amplifier and attack-decay contour, the highest
+band decaying fastest, then high-passed and recombined by a single Tone
+control.
+
+<Patch
+  id="recipes/cymbals"
+  show={["tone", "decay", "low", "mid", "high", "mode", "trigger"]}
+/>
+
+<Try>
+
+Hit it and look at the six marks. No two of them are a whole-number ratio
+apart, which is what "enharmonic" means and why the result has no pitch. Reid
+never gives these six frequencies — they are the library's choice, taken from
+its own drum machine, and only the shape of the recipe is his.
+
+</Try>
+
+<Try>
+
+Pull **Low band** to zero and shorten the **Decay**, then switch **Mode** to
+**Hi-hat** and compare. They are close, because Part 38's own point is that a
+hi-hat is a cymbal with the bands moved and the decays shortened. It is a
+setting, not a second instrument.
+
+</Try>
+
+<Try>
+
+Switch to **FM ping** and hit it. A pulse at about a kilohertz modulating a
+square at about two and a half, driven into both linear and logarithmic FM at
+maximum, through a band-pass swept down to a kilohertz over a fifth of a second
+for the ping and a high-pass at 2.64 kilohertz for the tail, with the tail
+mixed louder than the ping. It contains no noise generator whatsoever.
+
+</Try>
+
+<Aside kind="history">
+
+That last patch is not from a drum machine. Reid built it on a Nord Micro
+Modular, and every frequency in it is his: 2.5 kHz, 1 kHz, the 1 kHz band-pass
+landing, the 2.64 kHz high-pass, the two hundred millisecond opening and the
+3.7 second close. It is the one cymbal in the chapter where the numbers are
+citations and the only thing this patch chose was how loud to make it.
+
+</Aside>
+
+<Book part={[37, 38, 39]} />

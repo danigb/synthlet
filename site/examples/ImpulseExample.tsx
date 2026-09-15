@@ -2,7 +2,7 @@
 
 import { Compound, Impulse, Param } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 const ImpulseSynth = (ac: AudioContext) => {
   const trigger = Param(ac);

@@ -1,0 +1,29 @@
+---
+title: "Time as a signal"
+description: "Clocks, rhythms and arpeggios that live inside the audio graph, and the three modules that turn one sound into a control voltage for another."
+---
+
+Parts 15 to 17 of Synth Secrets are about time, and they are not about
+sequencers. Reid's subject is what happens when a control voltage carries a
+shape rather than a setting: a voltage that rises and falls with the loudness of
+a sound, a voltage that will not move faster than you allow it to, a voltage
+sampled at intervals until the intervals themselves become the thing you hear.
+Every module in this chapter reads one signal and answers with a slower one.
+
+Three of the nine pages are things the book has no module for, because in 1999
+there was no reason to want them. A clock, a Euclidean rhythm generator and an
+arpeggiator all live **inside the graph** here: they are worklets, their outputs
+are signals, and nothing on the page is counting for them. That is not a
+performance trick. It means the tempo is accurate to the sample, that a stalled
+browser tab cannot make a beat late, and that everything you already know about
+patching applies to rhythm too — a clock can be scaled, an arpeggiator's mode
+can be modulated, a rhythm can be transposed by a cable.
+
+One page deliberately does it the other way — sixteen sliders, an animation
+frame and a lookahead window, which is how a DAW keeps time — so that the
+difference is something you can hear rather than something you are asked to
+believe.
+
+The chapter ends by running a sample-and-hold fast enough that it stops being a
+modulation effect and becomes an analogue-to-digital converter, which is where
+aliasing comes from.

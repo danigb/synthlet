@@ -610,6 +610,30 @@ function assertTappable(source: AudioNode, output: number) {
   }
 }
 
+/**
+ * Undo the edge that made this a tap, whether or not it is still there.
+ *
+ * A targeted `disconnect(node, output)` throws `InvalidAccessError` when the
+ * edge it names is already gone; the argument-less one does not. A tap outlives
+ * nothing, so its teardown regularly runs *after* the source has been disposed
+ * - `synthlet`'s `disposable()` calls `node.disconnect()`, which drops every
+ * edge out of the source, including this one. In a React tree that is the
+ * ordinary case rather than an edge case: a cleanup runs parent-first, so the
+ * compound is disposed and then the meter watching it is, and the throw comes
+ * out of an effect cleanup, which React treats as an error in the commit and
+ * answers by re-rendering the document.
+ *
+ * A teardown that fails because the thing it is undoing is already undone is a
+ * teardown with a bug. This is the smallest honest fix.
+ */
+function detach(source: AudioNode, node: AudioNode, output: number) {
+  try {
+    source.disconnect(node, output);
+  } catch {
+    // The source was disposed first and took this edge with it.
+  }
+}
+
 // The tap, and the whole of the meter: `LevelMeter()` is this with a `GainNode`
 // in front of it.
 //
@@ -684,7 +708,7 @@ function createTap(
     core.attach(built);
     source.connect(built, output);
     // The cascade every other module uses, plus the edge that made it a tap.
-    node = disposable(built, [() => source.disconnect(built, output)]);
+    node = disposable(built, [() => detach(source, built, output)]);
   })();
 
   // `ready` now rejects only when *no* engine can run - if building the script

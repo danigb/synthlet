@@ -1,7 +1,7 @@
 import { pageTree } from "@/app/source";
 import { type HomeLayoutProps } from "fumadocs-ui/home-layout";
 import { type DocsLayoutProps } from "fumadocs-ui/layout";
-import { BookIcon, GithubIcon } from "lucide-react";
+import { BookIcon, GithubIcon, GraduationCapIcon } from "lucide-react";
 
 // shared configuration
 export const baseOptions: HomeLayoutProps = {
@@ -18,6 +18,12 @@ export const baseOptions: HomeLayoutProps = {
       text: "Documentation",
       icon: <BookIcon />,
       url: "/docs",
+      active: "nested-url",
+    },
+    {
+      text: "Learn",
+      icon: <GraduationCapIcon />,
+      url: "/learn",
       active: "nested-url",
     },
   ],

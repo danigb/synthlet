@@ -1,0 +1,58 @@
+---
+title: The delay inside the instrument
+description: Move the delay line in front of the filter and it stops being an effect — the note gains a body, and the body has a size.
+core: false
+book: [22]
+hear: "A short delay in the signal path is a resonant body: the note has modes, and moving the delay changes the size of the body."
+status: ready
+---
+
+Everything so far has put the delay at the end, where it adds ambience. This
+page moves it to the front. A violin string vibrating at the bridge is close to
+a sawtooth, and a violin does not sound like a sawtooth; the difference is a
+hollow wooden box with resonances of its own. A delay short enough to fit inside
+a cycle of the note has resonances of its own too.
+
+<Patch id="effects/body" show={["delay", "feedback", "cutoff"]} />
+
+<Try>
+
+Play a low note with **Delay** at 5 ms. The marks on the spectrum are at every
+multiple of one over the delay, and the note's harmonics are emphasised where
+they land near one and suppressed where they do not. Now play up the keyboard:
+the marks stay exactly where they are. A body does not move with the note, which
+is why the character of each note is different.
+
+</Try>
+
+<Try>
+
+Hold a note and sweep **Delay** from 20 ms down to 1. At the top it is an audible
+flutter; somewhere around 10 it stops being a repeat and becomes a pitch; by 2 or
+3 it is a small hard box. Reid puts the useful range for an instrument body at
+about 1 to 4 ms, and works it out from the speed of sound: a cavity with its
+lowest resonance at 500 Hz is about a third of a metre long.
+
+</Try>
+
+<Try>
+
+Turn **Feedback** down to zero and back up to 0.9. That knob is how long the box
+rings, which is the same quantity as a room's reverberation time measured on a
+much smaller room. **Cutoff** is the ordinary filter, still there, still after
+the body rather than instead of it.
+
+</Try>
+
+<Aside kind="history">
+
+This is one of the few Synth Secrets patches you could not try on a modern
+workstation, because its effects are bolted to the end of the chain. Reid's
+readers needed a modular, or an ARP 2600 or EMS VCS3, whose spring reverb could
+be patched anywhere. A spring is far too long for a violin — it would model a
+cavity four metres deep — so he reaches for the bucket brigade instead, which
+is the only thing in 1969 that could be made short enough.
+
+</Aside>
+
+<Book part={22} />

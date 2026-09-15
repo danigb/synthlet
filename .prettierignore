@@ -13,7 +13,6 @@ packages/*/CHANGELOG.md
 
 # Lockfiles
 package-lock.json
-site/pnpm-lock.yaml
 
 # Build output
 dist/

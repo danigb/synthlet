@@ -1,0 +1,56 @@
+---
+title: Noise
+description: The source with no fundamental and no harmonics, and the reason every drum in every analogue synth starts here.
+core: true
+book: [2]
+hear: White is flat, pink falls off, and a filtered burst of either is already most of a drum.
+status: ready
+---
+
+Everything so far has had a fundamental with a series of harmonics above it,
+because everything so far has been a one-dimensional oscillator: a string, or a
+column of air in a tube. Hit a drum skin and none of it holds.
+
+<Patch id="sound/noise" show={["type", "filter", "cutoff"]} />
+
+<Try>
+
+Press Play with **Type** on **White**. The spectrum is flat from one end to the
+other: every frequency at once, in equal measure. There is no pitch to hear
+because there is no peak to hear it at.
+
+</Try>
+
+<Try>
+
+Switch to **Pink**. The spectrum tilts — about three decibels down per octave —
+and the hiss drops from a cymbal to something nearer rain or a distant motorway.
+Pink has equal energy per octave rather than per hertz, and octaves are how your
+ear divides the spectrum up, so pink is the one that sounds even to a human.
+
+</Try>
+
+<Try>
+
+Turn **Filter** on and bring **Cutoff** down slowly. Around 6 kHz you have a
+hi-hat, around 1 kHz a snare, below 200 Hz wind. Then tap **Play** twice in
+quick succession at each of those settings: a short burst of filtered noise is
+already most of a drum, and the shape of the burst is what chapter 2 is about.
+
+</Try>
+
+<Aside kind="why">
+
+A string is a line and a drum skin is a surface, and that one extra dimension is
+the whole difference. The places a skin can hold still are not the simple
+fractions a string's are; they fall where a Bessel function crosses zero, so the
+second mode of an ideal drum sits at 2.296 times the fundamental instead of 2,
+and the third at 3.6 instead of 3. Keep going up and the modes become so many and
+so closely spaced that the ear stops trying to find a pitch among them. A noise
+generator is the cheap way to arrive at that state directly — which is why the
+Minimoog's drum patch has all three oscillators off and only the noise switched
+on.
+
+</Aside>
+
+<Book part={2} />

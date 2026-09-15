@@ -1,0 +1,59 @@
+---
+title: Pulse width modulation
+description: Modulating a pulse wave's duty cycle changes neither its pitch nor its loudness, only which of its harmonics exist.
+core: true
+book: [10, 46]
+hear: A pulse's harmonics come and go as the width moves, and moving it slowly gives the lush chorused shimmer of a string machine.
+status: ready
+---
+
+A square wave spends half of each cycle at the top and half at the bottom. Let it
+spend a third up and two thirds down and it is still a pulse wave, but a
+different-sounding one — and Reid gives the law behind that in a single sentence:
+a pulse whose <Term>duty cycle</Term> is one in three has a sawtooth's harmonics
+with every third one missing, one in four with every fourth one missing, and so
+on for any whole number you like. The marks on the spectrum below are the harmonic
+series of the note. Which of them has a peak standing on it is what the width
+decides.
+
+<Patch id="modulation/pwm" show={["width", "depth", "rate"]} />
+
+<Try>
+
+Put **PWM depth** at zero and drag **Width** slowly from 0.5 downwards. At 0.5
+every second mark is bare — that is the square wave, odd harmonics only. Near
+0.33 the gaps move to every third mark; near 0.25, to every fourth. Between those
+values nothing vanishes completely, it is merely thinned, and the sound thickens
+from hollow towards nasal as you narrow it.
+
+</Try>
+
+<Try>
+
+Leave **Width** at 0.5, bring **PWM depth** up and set **PWM rate** to about half
+a hertz. Now the gaps travel: a slow shimmer that never repeats the same spectrum
+twice. This is the sound of every string machine of the seventies, and it is one
+oscillator — no chorus pedal, no second voice, no detuning.
+
+</Try>
+
+<Try>
+
+Take **PWM rate** up to 6 or 7 Hz. It stops shimmering and starts buzzing, because
+a spectrum changing thirty times a second is no longer something you hear as
+movement.
+
+</Try>
+
+<Aside kind="why">
+
+The moving harmonics are the visible half of it. The audible half is stranger:
+a pulse whose width is modulated by a triangle carries _two_ pitches at once, the
+oscillator's own and a second one bending above and below it at the modulation
+rate. That is why PWM sounds chorused rather than merely animated, and why Reid
+reaches for it when he wants an ensemble out of a synth that has one oscillator
+and no effects at all.
+
+</Aside>
+
+<Book part={[10, 46]} />

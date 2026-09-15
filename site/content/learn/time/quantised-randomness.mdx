@@ -1,0 +1,61 @@
+---
+title: Quantised randomness
+description: "Reid's random arpeggiator: noise, a sample and hold, and the one module that turns a random voltage into a note somebody could have played."
+core: false
+book: [16]
+hear: "Random, but in key: Reid's random arpeggiator, three modules and a cable."
+status: ready
+---
+
+Chapter 5 sampled a noise generator once a beat and pointed the held voltage at
+a cutoff. Point the same voltage at a **pitch** instead and the result is
+famously unlistenable: every note between the notes, all of them equally likely,
+none of them in any key.
+
+Part 16 fixes it with one more module. A quantiser takes a fractional note
+number and snaps it to the nearest member of a scale, so the randomness survives
+and the wrong notes do not. Three modules and a cable, and the patch writes
+melodies on its own.
+
+<Patch id="time/random-arp" show={["scale", "root", "rate", "range"]} />
+
+<Try>
+
+Press Play. The scope is drawing note numbers rather than the sound: a staircase,
+and every tread sits on a line the scale allows. Change **Scale** and watch the
+available treads change with it — **Triad minor** has three per octave, **Blues**
+six, **Whole tone** six evenly spaced.
+
+</Try>
+
+<Try>
+
+Move **Range** down to two or three semitones. The melody collapses into a
+wobble around one note, which is what a random voltage sounds like before the
+quantiser has anything to choose between. Take it to twenty-four and it leaps
+across two octaves.
+
+</Try>
+
+<Try>
+
+Play the keyboard to move the centre note, and take **Rate** up past four
+hundred. Somewhere above that the notes stop being a melody and become a texture,
+which is where this patch stopped being an arpeggiator and became the sound on
+half the progressive rock records of 1973.
+
+</Try>
+
+<Aside kind="why">
+
+The quantiser is semitones in and hertz out, which is why nothing has to
+interpret its answer: it goes straight into an oscillator. Getting the voltage
+into its input is a scaling job — the held sample is minus one to one, so
+multiplying by twelve and adding sixty is two octaves of note numbers around
+middle C. A scale is a twelve-bit mask of allowed pitch classes and the key is a
+separate number, so transposing the melody and changing its mode are two
+different controls, as they are on paper.
+
+</Aside>
+
+<Book part={16} />

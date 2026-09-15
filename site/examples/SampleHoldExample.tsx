@@ -16,7 +16,7 @@ import {
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 // Part 16, Figure 6: noise -> S&H -> filter cutoff. Reid: "this combination of
 // clock, S&H and noise is so deeply routed in synthesis that some synthesizers

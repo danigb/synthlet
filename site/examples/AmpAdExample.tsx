@@ -3,7 +3,7 @@
 import { AdAmp, Compound, Oscillator, Param } from "synthlet";
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 const VcaSynth = (ac: AudioContext) => {
   const trigger = Param(ac);

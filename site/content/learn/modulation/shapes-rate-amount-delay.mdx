@@ -1,0 +1,61 @@
+---
+title: Shapes, rate, amount, delay
+description: The four things an LFO has of its own, and why the last of them is what makes modulation sound played rather than switched on.
+core: true
+book: [8, 10]
+hear: Sine, triangle, square, ramps and random, and the delayed vibrato that every wind player uses without thinking about it.
+status: ready
+---
+
+The last page hid the LFO's own controls and asked only where its output went.
+This is the same synth with the switch left alone — it is still on pitch — and
+the oscillator opened up instead. An LFO is an oscillator, so it has a waveform
+and a frequency. Because it is a modulator rather than a voice it has two things
+a voice has no use for.
+
+<Patch
+  id="modulation/lfo-destinations"
+  show={["shape", "rate", "depth", "delay", "fadeIn"]}
+/>
+
+<Try>
+
+Hold a key and walk down the **Shape** list with **Depth** high. Sine is a
+singer's vibrato. Square is a trill: two pitches and nothing in between. The two
+ramps are sirens, one rising and one falling, and they are not interchangeable —
+your ear notices which way a pitch is travelling. Random steps to a new value
+each cycle; smooth random glides to it instead.
+
+</Try>
+
+<Try>
+
+Put the shape back on sine and take **Rate** up. Past about 12 Hz you stop
+counting cycles and start hearing one wobbling thing; past 20 Hz the wobble
+disappears entirely and something else arrives in its place. Everything from
+lesson five onwards lives on the far side of that boundary.
+
+</Try>
+
+<Try>
+
+Set **Delay** to one second and **Fade-in** to one and a half, then hold a key
+for three. The note starts perfectly straight, waits, and then grows its vibrato.
+Let go and press again: the delay restarts with the note. That is how a flute
+player phrases, and a fixed vibrato from the first sample is the single loudest
+tell of an unplayed synthesiser.
+
+</Try>
+
+<Aside kind="why">
+
+Delay is not a convenience knob, it is a second envelope. Reid meets it on the
+Korg MS20, whose simpler contour generator is a DAR — delay, attack, release —
+put there precisely so that the vibrato it drives can arrive late. What this
+patch calls **Delay** and **Fade-in** are that envelope's first two stages,
+gated by the key you are holding, and the LFO's depth is what they multiply.
+A modulator with an envelope on it is the ordinary case, not the exotic one.
+
+</Aside>
+
+<Book part={[8, 10]} />

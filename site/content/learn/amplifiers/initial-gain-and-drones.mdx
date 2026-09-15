@@ -1,0 +1,58 @@
+---
+title: Initial gain and drones
+description: One slider on an ARP that makes the synthesiser refuse to stop, and the summing rule that explains it.
+core: false
+book: [9]
+hear: A note that ends, and then the same note over a drone that has no end at all.
+status: ready
+---
+
+The front panel of an ARP Odyssey has a slider marked Initial Gain, and the
+first thing everybody does with it is turn it up and then spend a while working
+out how to make the noise go away. All it does is add a steady voltage to
+whatever the contour generator is sending the amplifier.
+
+<Patch id="amplifiers/initial-gain" show={["initial"]} />
+
+<Try>
+
+With **Initial gain** at zero, play a few notes. Between them there is silence,
+and the contour comes back down to the floor every time. The amplifier is doing
+nothing at all unless the envelope tells it to.
+
+</Try>
+
+<Try>
+
+Take **Initial gain** to about a fifth. There is now a drone under everything,
+and it was there before you touched a key. The envelope still works — each note
+still swells and falls — but it swells from the drone and falls back to it, and
+the contour never returns to the bottom of the display.
+
+</Try>
+
+<Try>
+
+Push it to the top. The notes are now a ripple on something much louder than
+they are, which is the sound of an amplifier being told to stay open and only
+occasionally being told a little more. Then bring the slider back to zero and
+enjoy the silence you have earned.
+
+</Try>
+
+<Aside kind="why">
+
+The circuit has no mixer in it, and it does not need one. A parameter adds up
+everything connected to it, so the envelope's cable and the offset's cable meet
+at the amplifier's gain and are summed there — which is precisely what a control
+voltage mixer on a modular synth is, and the same trick the last lesson of the
+envelope chapter used to draw a contour no ADSR could.
+
+The musical use is the obvious one and the unobvious one at the same time. A
+drone under a solo is a sound you cannot get from a keyboard alone, because a
+keyboard only ever tells you about notes; the offset is the part of the patch
+that is true whether or not anyone is playing.
+
+</Aside>
+
+<Book part={9} />

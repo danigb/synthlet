@@ -1,0 +1,60 @@
+---
+title: "LFOs: vibrato, tremolo, growl"
+description: One oscillator running too slowly to hear, and the three sockets you can plug it into.
+core: true
+book: [10]
+hear: The same wobble on pitch is vibrato, on loudness tremolo, on the filter a growl. One source, three sounds.
+status: ready
+---
+
+A violinist rocks a finger on the string and the note wavers: the string gets a
+little shorter, then a little longer, and the pitch follows. A synthesiser does
+the same thing with an oscillator too slow to hear — a <Term>low-frequency
+oscillator</Term>, an LFO — whose output is not a sound but a control voltage,
+and which is therefore useless until you decide where to send it.
+
+<Patch
+  id="modulation/lfo-destinations"
+  show={["destination", "rate", "depth"]}
+/>
+
+<Try>
+
+Hold a key with **Destination** on **pitch**. The first picture is the LFO
+itself, not the sound: one slow wave, five cycles a second. Bring **Depth** up
+from nothing and the note starts to waver. That is vibrato. The cable arrives at
+the oscillator's detune rather than its frequency, which is why the wobble is the
+same size at the top of the keyboard as at the bottom — cents are a ratio, hertz
+are not.
+
+</Try>
+
+<Try>
+
+Switch **Destination** to **loudness**. Nothing changed but where the cable ends:
+it now arrives at an amplifier's gain. The note swells and fades instead of
+bending, and the effect has a different name. Tremolo and vibrato are confused
+for each other constantly, and this is the whole of the difference.
+
+</Try>
+
+<Try>
+
+Now **filter**, and sweep **Rate** across its travel. At 0.2 Hz you have an
+ambient sweep. Around 1 or 2 Hz it is a wah. Push it to 15 Hz and the note
+growls, which is half of every synthesised brass patch ever programmed.
+
+</Try>
+
+<Aside kind="why">
+
+These are not three features that happen to resemble each other. Reid draws the
+LFO once and then draws an amplifier after it per destination, each with its own
+depth control, and that block diagram is this patch — which is also why a mod
+wheel on a real synth can be routed to anything at all. A synthesiser is a small
+number of modules and a large number of places to plug them into each other.
+Modulation is the chapter where that stops being a slogan.
+
+</Aside>
+
+<Book part={10} />

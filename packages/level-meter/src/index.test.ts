@@ -836,6 +836,36 @@ describe("LevelMeter", () => {
       ).toThrow(RangeError);
     });
 
+    // A tap outlives nothing. React runs a cleanup parent-first, so a compound
+    // is disposed - `disposable()` calls `disconnect()` with no argument, which
+    // drops every edge out of it, this one included - and only then is the
+    // meter watching it disposed. A targeted `disconnect` of an edge that has
+    // already gone throws `InvalidAccessError`, and a throw out of an effect
+    // cleanup is an error in the commit: React unmounts the rest of the tree
+    // and re-renders the document. Found by the tutorial (ticket 06c), fixed
+    // here because a teardown that fails because the thing it is undoing is
+    // already undone is a teardown with a bug.
+    it("disposes after its source has gone, without throwing", async () => {
+      const { meter, source, node } = await tapMeter();
+
+      source.disconnect.mockImplementation((...args: unknown[]) => {
+        if (args.length === 0) return;
+        throw new DOMException(
+          "Failed to execute 'disconnect' on 'AudioNode': output (0) is not connected to the given destination.",
+          "InvalidAccessError",
+        );
+      });
+
+      // What `disposable()` does to the source first.
+      source.disconnect();
+
+      expect(() => meter.dispose()).not.toThrow();
+      expect(source.disconnect).toHaveBeenCalledWith(node, 0);
+      // The rest of the cascade still ran: the guard is around one edge, not
+      // around the teardown.
+      expect(node.port.postMessage).toHaveBeenCalledWith({ type: "DISPOSE" });
+    });
+
     // A `Compound` *is* its output node with properties assigned, so tapping
     // one needs no reference to which node it ends in.
     it("taps a compound without knowing its output node", async () => {

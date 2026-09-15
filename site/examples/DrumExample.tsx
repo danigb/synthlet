@@ -16,7 +16,7 @@ import {
   TomDrum,
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
-import { Synth, useSynth } from "./useSynth";
+import { Synth, useSynth } from "@/components/audio/useSynth";
 
 type DrumSynth = Synth & {
   trigger: AudioParam;

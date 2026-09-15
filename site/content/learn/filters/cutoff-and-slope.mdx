@@ -1,0 +1,59 @@
+---
+title: "Cutoff and slope"
+description: "The cutoff frequency is not where the filter starts working. It is the point where the signal is already three decibels down."
+core: true
+book: [5]
+hear: "The cutoff is already 3 dB down, and the slope is how fast it falls after that. 24 dB per octave is a wall; 12 is a hill."
+status: ready
+---
+
+Two numbers describe a low-pass filter, and almost everyone gets the first one
+wrong. The <Term>cutoff frequency</Term> is not the frequency above which the
+filter starts working — it is defined as the frequency at which the signal has
+already been attenuated by three decibels, which the ear hears perfectly well.
+The second number is the <Term>slope</Term>: how fast it keeps falling after
+that.
+
+<Patch id="filters/slope" show={["cutoff", "slope"]} />
+
+<Try>
+
+Press Play and drag **Cutoff** from 16 kHz down to a few hundred hertz. The
+vertical mark is the frequency you asked for. Watch the trace rather than the
+line: it is already bending downwards well below the mark, and the harmonic
+sitting exactly under it is noticeably quieter than its neighbour below. That is
+the three decibels, and it is why a filter set to 1 kHz sounds darker than you
+would expect from the number.
+
+</Try>
+
+<Try>
+
+Park the cutoff around 500 Hz, where there is plenty of sawtooth above it, and
+step **Slope** through the three. The 24 dB per octave ladder cuts the top off
+like a wall; the two 12 dB filters leave a hill of harmonics running away above
+the corner. The difference is not subtle, and it is the whole reason a synth's
+specification sheet bothers to print the number.
+
+</Try>
+
+<Try>
+
+Now compare only the first two, which fall at the same rate. They still do not
+sound alike, and their knees do not sit in the same place against the mark.
+Slope is one property of a filter and not the filter.
+
+</Try>
+
+<Aside kind="why">
+
+Filters are counted in poles: one pole is 6 dB per octave, two is 12, four is 24. You cannot get there by chaining four simple circuits, because they load
+each other and stop behaving; real designs put amplifiers between the stages,
+and even then the four corners never land exactly on top of one another. Reid's
+conclusion is the useful one: a four-pole filter tends towards 24 dB per octave
+a long way above the corner, but on the way there it passes through regions that
+fall at 6, at 12 and at 18.
+
+</Aside>
+
+<Book part={5} />

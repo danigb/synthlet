@@ -4,7 +4,7 @@ import { useState } from "react";
 import { AdsrAmp, Compound, Gain, Param, WavetableOscillator } from "synthlet";
 import { ExamplePane, GateButton } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 /** Cents applied to each voice, scaled by the spread control. */
 const SPREAD = [-1, 0, 1];

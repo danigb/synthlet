@@ -1,0 +1,39 @@
+---
+title: A file as terrain
+description: A granular sampler has an absolute playhead into a file, so the speed you move through the sound is a knob of its own.
+core: false
+book: []
+hear: "The same clip walked at any speed in either direction, or not at all."
+status: "blocked: strata/02 — the Strata scanner"
+---
+
+The previous page granulated a stream. Grains were taken out of the last few
+seconds of whatever was arriving, which is a granular _delay_: any source, one
+window of time, and a position measured backwards from now.
+
+A granular _sampler_ is the other arrangement, and it is a different instrument
+rather than a better one. It holds a whole decoded file and keeps an absolute
+playhead somewhere inside it. Grains are taken from wherever that playhead is,
+and the playhead moves at a speed you set — the scan rate. Because the grains
+carry the pitch and the scanner only decides where they are read from, that
+speed has nothing to do with the pitch at all.
+
+Once the scan rate is a knob, the interesting settings are the ones a tape
+machine cannot reach. At one, the playhead keeps up with the grains and you hear
+the file at its own speed. At a tenth, you crawl: the same material, an octave
+of detail stretched out, still at the original pitch. At zero the playhead stops
+and the grains keep coming, so one instant of the file becomes a held chord —
+the sound of a freeze, except that you chose the moment rather than catching it.
+Negative and the whole thing runs backwards, still in tune.
+
+That is why the page calls a file terrain. A sample is usually a thing you
+trigger; here it is a landscape with a position in it, and playing the instrument
+is moving around.
+
+There is no widget yet. The module this lesson needs is Strata, the library's
+granular sampler, and specifically its scanner; the package is designed and not
+written. The granular delay from the previous page cannot stand in for it,
+because its position is a fraction of a rolling few seconds of input and it has
+no scan rate at all — which is exactly the difference this page is about.
+
+<Patch id="beyond/terrain" />

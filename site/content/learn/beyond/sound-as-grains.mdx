@@ -1,0 +1,61 @@
+---
+title: Sound as grains
+description: Any sound described as a cloud of very short fragments, with the density, the length and the pitch of the fragments all separate knobs.
+core: false
+book: []
+hear: "A sound cut into grains and re-thrown: fewer grains is a stutter, more is a cloud, freeze is a held moment."
+status: ready
+---
+
+Dennis Gabor argued in 1947 that any sound can be described as a stream of very
+short fragments, each windowed so it starts and stops without a click. Iannis
+Xenakis turned the argument into music in the 1960s. The useful part, for a
+synthesist, is what falls out of the description: once a sound is a cloud of
+fragments, the number of them, how long each one is, what pitch each one is
+played at and where each one came from are four independent quantities.
+
+The widget granulates a clip. The clip is the same one the documentation uses,
+and the module is running fully wet, so everything you hear is grains.
+
+<Patch
+  id="beyond/granite"
+  show={["rate", "duration", "spray", "pitchSpread", "freeze", "feedback"]}
+/>
+
+<Try>
+
+Press Play, then take **Rate** down to five or six grains a second. You can hear
+them individually: a stutter, with silence between. Now run it back up past a
+hundred and they overlap into a continuous texture. **Duration** is separate, so
+try short grains at a high rate and then long ones at a low rate — the same two
+numbers make quite different objects.
+
+</Try>
+
+<Try>
+
+Turn **Spray** up. Each grain now reaches back a random distance for its
+material instead of taking the freshest, so the ordering of the source dissolves
+while its character survives. Then raise **Pitch spread**: the grains stop
+agreeing about what note they are, and a recognisable clip becomes a chord of
+itself.
+
+</Try>
+
+<Try>
+
+Switch **Freeze** on. Nothing new is written into the buffer, so the last few
+seconds become an object you can walk around in. With **Feedback** up, grains
+are summed back in and granulated again, which is how a short freeze becomes a
+texture that keeps evolving.
+
+</Try>
+
+<Aside kind="note">
+
+Every per-grain quantity here is a centre and a spread, drawn once per grain.
+With every spread at zero the module is deterministic and every grain is
+identical; the spreads are what turn a stream into a cloud. That pairing is
+Barry Truax's control model, and it is why there is no single "randomness" knob.
+
+</Aside>

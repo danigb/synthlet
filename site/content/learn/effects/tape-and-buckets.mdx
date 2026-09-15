@@ -1,0 +1,60 @@
+---
+title: Tape and buckets
+description: Why an analogue delay and a digital one, which do the same thing, sound nothing like each other.
+core: false
+book: [59, 60, 61]
+hear: "Each repeat is darker and a little off, and a moving delay time bends the pitch — that is a delay line made of sample-and-holds."
+status: ready
+---
+
+Reid asks a good question halfway through Part 60. A bucket-brigade device and a
+digital delay are the same idea: store a slice of the signal, hold it, pass it
+down a line of identical stages at a rate a clock decides. If the rate and the
+number of stages match, why do they sound so different?
+
+His answer is that in the bucket brigade every stage is a capacitor, every
+capacitor is imperfect, and the errors accumulate. Nothing arrives at the far end
+unaltered. Below, that is one knob.
+
+<Patch
+  id="effects/analog"
+  show={["mode", "age", "wobble", "time", "feedback"]}
+/>
+
+<Try>
+
+Press Play with **Feedback** around 0.55 and listen to the row of repeats, then
+take **Age** from 0 to 1. Each generation loses more top end, gains more hiss
+and saturates a little harder, until the fifth repeat is a dark blur of the
+first. That is the accumulation, and it is the reason people buy old delays.
+
+</Try>
+
+<Try>
+
+Drag **Time** slowly while the repeats are sounding. The pitch bends, the way it
+does when you push a tape reel with your thumb, because this module moves the
+heads rather than crossfading between two read positions. The digital delay on
+the previous page does the opposite on purpose and holds the pitch steady.
+
+</Try>
+
+<Try>
+
+Switch **Machine** from Tape to BBD at the same settings. Both read the same
+line at several fixed head positions; the tape machine's are whole multiples of
+the delay time, so extra heads arrive as a rhythm, while the bucket brigade's
+are at awkward fractions and arrive as a wash.
+
+</Try>
+
+<Aside kind="why">
+
+**Wobble** is separate from **Age** because a well-maintained machine with an
+eccentric capstan is a real and desirable thing, and one composite wear knob
+cannot say it. Age is everything getting old together; wobble is wow and flutter
+on top of whatever age already implies.
+
+</Aside>
+
+<Book part={[59, 60, 61]} />

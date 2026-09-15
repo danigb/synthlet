@@ -1,0 +1,64 @@
+---
+title: Loud without clipping
+description: The last node of anything that plays in a browser, and the two meters that show what it is doing.
+core: false
+book: []
+hear: "Push the gain and the meter goes red; the limiter catches every peak and the loudness number tells the truth."
+status: ready
+---
+
+There is nothing after your output. A browser hands the signal to a converter
+with no headroom past full scale, no console to ride and nobody in the control
+room, so anything that goes over the top is simply chopped off — and four voices
+summed will find the top on their own. A limiter is the answer, and it is the
+one module in this library that belongs in every patch whether or not it is part
+of the sound.
+
+<Patch id="beyond/limiter" show={["threshold", "gain", "release", "bypass"]} />
+
+<Try>
+
+Press Play and watch the two meters. They agree, because nothing is over the
+threshold yet. Now push **Gain** up a few decibels at a time. The Before meter
+climbs steadily; the After meter climbs and then stops, pinned just under the
+ceiling, however much more you give it.
+
+</Try>
+
+<Try>
+
+Switch **Bypass** on at a high gain. Same signal, same delay, no limiting — and
+the After meter shoots past zero, which is where the chopping happens. Switch it
+back and forth a few times: the loudness barely changes, and the damage does.
+
+</Try>
+
+<Try>
+
+Set a short **Release** and a threshold around −6, then a long one. Short and it
+recovers between every note, which is audible as a pumping; long and it stays
+turned down through the gaps. Neither is wrong. The knob is how quickly the
+limiter is willing to forget a peak.
+
+</Try>
+
+<Aside kind="why">
+
+A limiter this clean is only possible because it is allowed to be late. It
+delays the signal by a couple of milliseconds so that it can see a peak coming
+and already be turned down by the time it arrives, rather than reacting after
+the fact. That is why the bypass path here is delayed by exactly the same
+amount: without it the comparison would be a comb filter as well as a bypass,
+and neither arm would be telling the truth about the other.
+
+</Aside>
+
+<Aside kind="note">
+
+The threshold is written in decibels true peak, which measures the waveform
+_between_ the samples as well as on them — a signal can sit under the ceiling at
+every sample and still go over it on the way past. The meters here can show peak
+and loudness and cannot yet show true peak, so the number on the knob is a
+promise the page cannot quite check.
+
+</Aside>

@@ -1,0 +1,58 @@
+---
+title: Chorus and ensemble
+description: One delay is a chorus, three are a string machine, and Roland's pair is a Dimension D — three designs behind one switch.
+core: false
+book: [62]
+hear: "One delay is a chorus; three at 120° are a string machine; two in stereo are a Dimension D. The three designs, one switch."
+status: ready
+---
+
+A string machine starts from the weediest source in this whole tutorial: a
+single divide-down sawtooth, which Reid describes as about as interesting as a
+bunch of boring things on a very boring day. Switch its ensemble on and it is
+lush. The trick is to fool the ear into hearing several performances of one note
+by splitting the signal into paths, modulating the delay in each, and mixing
+them back together.
+
+<Patch id="effects/chorus" show={["mode", "rate", "depth", "mix", "width"]} />
+
+<Try>
+
+Press Play with **Design** on Juno and take **Mix** from 0 to 1. Zero is an
+exact bypass — the pair of detuned sawtooths, and nothing else. One delay path
+against the dry signal is the simplest chorus there is, and Reid says outright
+that the ear is not really fooled by it.
+
+</Try>
+
+<Try>
+
+Switch to Ensemble while the note is holding. There is no gap, because a design
+change crossfades inside the module over five milliseconds. Three delay paths
+are modulated by one low-frequency oscillator at a third of a cycle apart, which
+is the circuit inside the Eminent Solina and most of the Italian string machines
+that followed it. On headphones it is audibly wider than Juno.
+
+</Try>
+
+<Try>
+
+Switch to Dimension and bring **Width** down to zero and back. Roland's design
+leaves the dry signal out of the output entirely, because at this width the
+original would work against the impression of space rather than for it. Width
+touches only the wet path: narrowing the effect must not narrow the source.
+
+</Try>
+
+<Aside kind="history">
+
+Roland built the cheapest of these designs out of one square-wave oscillator and
+three frequency dividers, rounded off with simple low-pass filters into
+approximate sine waves. The point was cost — clocks and dividers were pennies —
+but it had a second benefit the designers were actually after: the relationships
+between those four modulating waves suppress the warbling that mars cheaper
+circuits.
+
+</Aside>
+
+<Book part={62} />

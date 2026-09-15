@@ -16,8 +16,8 @@ import {
 import { ExamplePane, TriggerButton } from "./components/ExamplePane";
 import { PresetPicker } from "./components/PresetPicker";
 import { Slider } from "./components/Slider";
-import { Spectrum } from "./components/Spectrum";
-import { useSynth } from "./useSynth";
+import { Spectrum } from "@/components/audio/Spectrum";
+import { useSynth } from "@/components/audio/useSynth";
 
 // Synth Secrets Parts 31 to 41 in one pane: every chapter ends with a table of
 // partials, and this plays the table. Pick one, strike it, then edit a row and

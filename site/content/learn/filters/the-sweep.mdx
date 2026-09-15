@@ -1,0 +1,69 @@
+---
+title: "The sweep"
+description: "A static filter is a tone control. Point an envelope at the cutoff and you have the sound everyone means by the word analogue."
+core: true
+book: [6, 10]
+hear: "The envelope sweep is the classic analogue note, and the LFO has three zones: a tide near 0.1 Hz, a wah near 1 Hz, a growl near 15 Hz."
+status: ready
+---
+
+Every filter so far has stood still, which makes it a tone control: powerful,
+but something you set rather than something you play. The missing piece is that
+the cutoff can be a voltage instead of a knob, and once it is, anything that
+makes a voltage can move it — a contour once per key, an oscillator too slow to
+hear, or both.
+
+<Patch
+  id="filters/sweep"
+  show={["envAmount", "decay", "lfoDepth", "lfoRate", "resonance"]}
+/>
+
+<Try>
+
+Play a note. The filter opens and shuts on every key press: that is the
+envelope. Pull **Envelope amount** down to zero and play again — the sound is
+still there and it is dull and dead, because the cutoff is now parked at the
+floor and nothing moves it. The envelope is 0 to 1 whatever its times say; this
+knob is what decides how many hertz that is worth.
+
+</Try>
+
+<Try>
+
+Put the amount back and take **Decay** from 0.02 up to 2 seconds. Short is a
+click and a thud; around 0.3 is the plucked bass that carried most of the
+records made between 1972 and 1985; two seconds is a slow opening that outlasts
+most notes. Nothing about the pitch or the loudness changed.
+
+</Try>
+
+<Try>
+
+Hold a note and bring **LFO depth** up, then move **LFO rate** through its three
+zones. Near 0.1 Hz you get a tide, useful for something that sits under a track
+for a minute. Around 1 or 2 Hz it is a wah. Push it to 15 Hz and it becomes a
+growl, which is one of the standard ways of faking a brass instrument.
+
+</Try>
+
+<Try>
+
+Turn **Resonance** up and play the envelope again. The peak marks where the
+corner is at each instant, so the more resonance there is, the more of the
+movement you hear.
+
+</Try>
+
+<Aside kind="why">
+
+Both modulators arrive at the same parameter and are summed with the number
+already in it, so the cutoff at any instant is a floor plus a contour plus a
+wobble. That is worth knowing because it is how every modulation matrix works:
+destinations add. It is also why the envelope reaches the filter through a box
+of its own. A contour generator's output is the same 0 to 1 whatever its knobs
+say, so something has to decide how much of it arrives: Reid draws an amplifier
+standing in the control cable, and that amplifier is the envelope amount knob.
+
+</Aside>
+
+<Book part={[6, 10]} />

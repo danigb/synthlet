@@ -1,0 +1,59 @@
+---
+title: Voice stealing
+description: "Four voices and five fingers, and four defensible answers to which note has to die."
+core: false
+book: [21]
+hear: "Play a fifth note on four voices and hear which one dies. Protect keeps the held ones; LRU kills the oldest."
+status: ready
+---
+
+Every polyphonic instrument has a fixed number of voices, and the interesting
+question is not how many. It is what happens on the note after the last one.
+Part 21 is the first place most people meet the word **stealing**, and the
+answer it describes is the one nearly everything ships: take the voice that has
+been sounding longest, because it is the note the listener is least attached to.
+
+That is not the only defensible answer, and the release time is what makes the
+argument audible. With a long tail, four notes are still using their voices well
+after your fingers left them.
+
+<Patch id="voices/stealing" show={["voices", "steal", "release"]} />
+
+<Try>
+
+Press Play with **Voices** at four and **Release** long. Hold a low interval with
+your left hand and play a rising line above it. On **Protect** the two held notes
+survive everything: the line simply stops sounding once the pool is full, which
+is startling the first time and is exactly what you want from a bass pedal. On
+**LRU** the oldest goes first, and your held interval is the first casualty.
+
+</Try>
+
+<Try>
+
+Switch to **MRU** and play the same line. Now the newest note is the one taken,
+which comes out as a stutter — each new note kills the one before it. It sounds
+like a mistake and it is occasionally precisely the effect somebody is after.
+
+</Try>
+
+<Try>
+
+Drop **Voices** to two and play a chord. Everything below the limit is a
+different instrument, and a sustain-heavy sound at two voices is mostly a
+sequence of interruptions.
+
+</Try>
+
+<Aside kind="why">
+
+A pool is chosen when it is built. The voice count and the stealing rule are
+read once, at construction, and there is no setter for either — so moving
+**Voices** here builds a second instrument and carries the sound across as a
+preset. A note in flight stops when that happens, and that is not a limitation
+being hidden: reallocating a pool under a held chord is the alternative, and it
+is worse.
+
+</Aside>
+
+<Book part={21} />

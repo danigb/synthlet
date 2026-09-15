@@ -1,0 +1,52 @@
+---
+title: Note priority and legato
+description: "One voice and four keys held: four answers to which note wins, all of them shipped in real instruments."
+core: false
+book: [18]
+hear: "D-F-A-C held overlapping, four ways. The Minimoog plays the lowest; a Korg the highest; the drone trick works on only one of them."
+status: ready
+---
+
+A monophonic synthesiser has one voice and a keyboard with sixty-one keys, so
+somebody had to decide what happens when two are down at once. Part 18 finds
+four answers in the instruments of the period, and none of them is a compromise:
+they are four different things to play.
+
+**Lowest note** is the Minimoog's, and it is the one that gives you the drone
+trick — hold a bass note, play a melody above it, and the moment you let go of
+the melody the bass comes back, because it was always the lowest. **Highest
+note** is the Korg 700's and it does the same thing upside down, which suits a
+lead line over a held pedal. **Last note** is the ARP's, and it is the one that
+always speaks: whatever you just pressed is what you hear.
+
+<Patch id="voices/priority" show={["priority", "legato"]} />
+
+<Try>
+
+Press Play, then hold a low note and add three above it one at a time without
+releasing any. On **Lowest** nothing changes after the first key. On **Highest**
+the pitch climbs with every addition. On **Last** it follows your fingers
+exactly. The contour scope is the easiest way to see what happened.
+
+</Try>
+
+<Try>
+
+Now turn **Legato** on and play a run without lifting your finger between notes.
+The pitch moves but the attack does not happen again — one envelope for the
+whole phrase. Turn it off and every note is born from silence. That single
+switch is most of what people mean when they describe a Minimoog line as smooth.
+
+</Try>
+
+<Aside kind="why">
+
+Neither of these is a setting on the instrument here; both are part of the
+**preset**. A bass sound is its note priority in the way a lead sound is its
+glide, so they travel with the sound rather than sitting beside it, and loading
+a patch loads them. The code panel shows what that costs: reading the current
+preset, changing one key, and writing it back.
+
+</Aside>
+
+<Book part={18} />

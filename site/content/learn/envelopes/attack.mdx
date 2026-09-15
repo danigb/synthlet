@@ -1,0 +1,60 @@
+---
+title: Attack
+description: The first few milliseconds of a note decide which instrument you think you are listening to.
+core: true
+book: [3, 7]
+hear: A note that breathes in and a note that strikes, and the click that arrives when the strike is instant.
+status: ready
+---
+
+Chapter 1 left you with a tone that began when you pressed Play. This one begins
+when you press a key, and how quickly it gets there is the only thing on this
+page. The same widget grows a slider over the next two lessons; this is it with
+one.
+
+<Patch id="envelopes/adsr" show={["attack"]} />
+
+<Try>
+
+With **Attack** at the bottom, play a key — with the pointer, or with the letter
+keys on your computer keyboard. The note is at full loudness the instant you
+touch it. Whatever that is, it was struck or plucked.
+
+</Try>
+
+<Try>
+
+Drag **Attack** up to a second and play the same key. Now the note has to be
+waited for. Nothing about the tone has changed — same oscillator, same pitch,
+the same harmonics in the same proportions — and yet you would call it bowed or
+blown rather than struck. Watch the contour under the keys draw the ramp.
+
+</Try>
+
+<Try>
+
+Work in the first tenth of a second, where the slider is most sensitive.
+Somewhere around ten milliseconds the attack stops being a shape you can hear
+the start of and becomes an edge; below that you are hearing a click on the
+front of the note rather than the note beginning.
+
+</Try>
+
+<Aside kind="why">
+
+The first fifty milliseconds of a note carry more of its identity than all the
+rest. Cut the beginning off a recorded piano and play someone the remainder and
+the instrument becomes genuinely hard to name: the hammer, the key thump and the
+fact that the harmonics do not all arrive at the same moment are in that
+fragment and nowhere else.
+
+Which is also why an attack of zero sounds artificial rather than merely fast.
+Energy takes time to get into a real resonator, so nothing outside a
+loudspeaker ever goes from silence to full amplitude in one sample — and a jump
+like that is a step, whose spectrum is a click at every frequency at once. The
+click you can hear at the bottom of the slider is that step, and it is not the
+envelope.
+
+</Aside>
+
+<Book part={[3, 7]} />

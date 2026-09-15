@@ -138,7 +138,15 @@ export function createScriptProcessorDriver(
     bufferSize,
     dispose() {
       node.onaudioprocess = null;
-      source.disconnect(node, output);
+      try {
+        // The same edge, and the same reason `detach` in `index.ts` guards it:
+        // a targeted disconnect throws when the source was disposed first and
+        // took this edge with it, and a teardown must not fail because the
+        // thing it is undoing is already undone.
+        source.disconnect(node, output);
+      } catch {
+        // Already gone.
+      }
       node.disconnect();
       sink.disconnect();
     },

@@ -1,0 +1,57 @@
+---
+title: Wavetables and morphing
+description: A stack of single-cycle waveforms and a read position that can sit between two of them.
+core: false
+book: []
+hear: "A table of waves and a knob that slides between them — the sound the 2010s built synths around."
+status: ready
+---
+
+Every oscillator so far has had one waveform at a time, chosen from a list. A
+wavetable oscillator has a pile of them — planes — and a read position that can
+sit between two planes and crossfade. The waveform stops being a setting and
+becomes a place you are, which means it can be swept, envelope-controlled or
+modulated like any other parameter.
+
+<Patch id="beyond/wavetable" show={["table", "morph", "lfoRate", "lfoDepth"]} />
+
+<Try>
+
+Press Play and drag **Morph** slowly from 0 to 1 on the built-in table. Sine,
+triangle, sawtooth, square — the four waveforms of chapter 1, in order, with
+everything in between. Watch the partials on the spectrum arrive and leave as
+you cross each plane: they arrive standing on the marks, which is what makes
+this a spectral interpolation rather than two waves fighting.
+
+</Try>
+
+<Try>
+
+Switch **Table** to the harmonic sweep. Each plane is a sawtooth truncated one
+harmonic further, so morphing is additive synthesis done with a single knob:
+plane one is a sine, plane sixteen has sixteen partials. Then try the odd
+harmonics table, which is the same walk from a sine but arrives at a square
+instead.
+
+</Try>
+
+<Try>
+
+Leave **Morph** at about 0.3, put **LFO depth** at 0.2 and **LFO rate** at half
+a hertz. The knob and the oscillator sum at the same parameter, so the LFO
+wanders around wherever you left the knob rather than replacing it. That is a
+morph knob with a modulation amount beside it, and it is most of what makes a
+wavetable patch sound alive.
+
+</Try>
+
+<Aside kind="note">
+
+The three tables here are built in the patch, out of arrays of harmonic
+magnitudes, one array per plane. That is deliberate: the module can also fetch
+tables from an online catalogue, and a lesson that depends on somebody else's
+web host is a lesson that breaks when they reorganise it. The first array is not
+the DC offset, as it would be in Web Audio's own `PeriodicWave` — it is the
+fundamental.
+
+</Aside>

@@ -1,0 +1,62 @@
+---
+title: "Strings and ensemble"
+description: "Two detuned oscillators, a pulse width that swings, and the three-phase delay that made a string machine."
+core: false
+book: [46, 47, 62]
+hear: "Two detuned saws thicken into a section; PWM adds two more pitches; the ensemble chorus is the Solina's three delays at a hundred and twenty degrees."
+status: ready
+---
+
+Reid builds a string section out of beating. A hundred hertz against a hundred
+and one beats once a second, and a section is a great many of those at once.
+Two oscillators a few cents apart is the cheap version, and it is most of the
+way there.
+
+Then he points out the thing that makes a string machine sound bigger than its
+oscillator count. A pulse-width-modulated wave from a **single** oscillator
+already contains two pitches — one fixed and one swinging around it — so two
+detuned PWM oscillators are four voices, not two.
+
+<Patch
+  id="recipes/ensemble"
+  show={["detuneFine", "pulseWidthLfo", "attack", "chorusMode", "chorusMix"]}
+/>
+
+<Try>
+
+Hold a chord with **Fine detune** at zero, then walk it out to twenty cents. At
+zero it is a synthesiser. Somewhere around eight it becomes a section, and past
+about thirty it becomes out of tune. The beat rate follows the pitch, which is
+why the effect stays the same size up the keyboard.
+
+</Try>
+
+<Try>
+
+Put the detune back and raise **PWM depth** instead. Nothing about the tuning
+has changed and the sound thickens anyway: that is the second pitch inside the
+one oscillator, swinging.
+
+</Try>
+
+<Try>
+
+Turn **Chorus mix** to zero and back. Then walk **Chorus** through its three
+voicings while a chord is held. The Juno is two delay lines, the Ensemble is
+three, and the Dimension is the difference output, which is wide without any
+vibrato in it.
+
+</Try>
+
+<Aside kind="history">
+
+The Solina String Ensemble's cabinet is in Part 62, not in the string articles
+at all. It is three delay lines modulated a hundred and twenty degrees apart by
+a pair of LFOs, one at about one hertz and the other at about six, with delay
+times between ten and fifty milliseconds. The **Ensemble** voicing here is that
+circuit. It is the reason a string machine from 1974 sounds like a string
+machine and a pair of detuned oscillators does not.
+
+</Aside>
+
+<Book part={[46, 47, 62]} />

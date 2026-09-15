@@ -1,0 +1,62 @@
+---
+title: Gates and triggers
+description: A key sends two timing signals, not one, and which of them your synth listens to decides how a fast line feels under the hands.
+core: true
+book: [7, 18]
+hear: The same overlapping run twice - every note articulated, and then only the first one.
+status: ready
+---
+
+Pressing a key on a synthesiser sends a pitch and two separate timing signals.
+The <Term>gate</Term> goes high on the press and stays high for as long as the
+key is down, so it is the signal that knows when you let go. A pulse at the
+moment of the press, and nothing more, is a <Term>trigger</Term>. A contour
+generator needs both: the trigger says start, and the gate says keep going until
+I say otherwise. The library's own account of the contract is in
+[gates and triggers](/docs/gates-and-triggers).
+
+This widget is one voice, so its notes cannot overlap. What it does when you
+play as though they could is the entire lesson.
+
+<Patch id="envelopes/gates" show={["legato", "attack"]} />
+
+<Try>
+
+With **Legato** off, play a run with the letter keys and hold each one a little
+too long, so that the next note starts before you have let the last one go.
+Every note speaks: the gate closes and reopens under your fingers, so every note
+gets its own attack.
+
+</Try>
+
+<Try>
+
+Turn **Legato** on and play the same sloppy run. Only the first note is
+articulated. The gate never falls — something is always held — so the contour
+never restarts, and the notes after the first are pitch changes inside one long
+note.
+
+</Try>
+
+<Try>
+
+Take **Attack** up to a third of a second and play the run both ways. Off, every
+note swells from nothing and the line stutters. On, the line swells once and
+then simply moves about. Neither is wrong; they are two different instruments,
+and you would choose between them by what you were playing.
+
+</Try>
+
+<Aside kind="history">
+
+Reid worked this out with a Minimoog and an ARP Odyssey side by side in a live
+rig. He preferred playing fast solos on the Odyssey and could not say why, and
+assumed it was the keyboards. It was not. The Odyssey sends a trigger and
+retriggers its contours on every key press whether or not the previous note has
+been released; the Minimoog sends only a gate, so an overlapping run loses its
+punch after the first note. The toggle above is exactly that difference, with
+nothing else changed.
+
+</Aside>
+
+<Book part={[7, 18]} />

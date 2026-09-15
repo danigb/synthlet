@@ -1,0 +1,67 @@
+---
+title: Matching envelopes
+description: Four contours out of the book, and four sliders to hit them with.
+core: true
+book: [3, 54]
+hear: An organ, a trombone, a thunderclap and a flute, told apart by their loudness contours and nothing else.
+status: ready
+---
+
+Part 3 draws three contours side by side and invites you to name the
+instruments from the shapes alone: a rectangle, a lump that falls back to a
+ledge, and a spike with a long tail. They are an organ, a trombone and a
+thunderclap. This page loads those three and a flute into a second synthesiser
+beside yours, played from the same keys.
+
+<Patch
+  id="envelopes/matching"
+  show={["target", "compare", "attack", "decay", "sustain", "release"]}
+/>
+
+**Hear the target** points the keys at the target instead of at your sound.
+Everything else about the two is identical, so anything you can hear between
+them is the envelope and only the envelope.
+
+<Try>
+
+Start on **Organ** and flip the switch back and forth. There is nothing to do:
+your sliders already match it. On, full level, off — the contour is very nearly
+a rectangle, and it is so much an organ's that the shape carries the name even
+in patches that sound nothing like one.
+
+</Try>
+
+<Try>
+
+Switch to **Trombone** and go hunting. It speaks slowly, reaches its loudest at
+the end of the attack and falls back to a ledge a little below that, so the
+attack wants around a tenth of a second and the sustain wants to be high but not
+maximum. Then **Thunderclap**: everything at the front, no sustain at all, and a
+decay you measure in seconds rather than in tenths.
+
+</Try>
+
+<Try>
+
+Last, **Flute** — which you can match in about four seconds, and then improve
+on. Its release is five hundredths of a second, so every note is cut off rather
+than allowed to leave, and a line played quickly sounds like the player is
+swallowing. Take your own **Release** up to about a fifth of a second: the notes
+join up, and you no longer match the target.
+
+</Try>
+
+<Aside kind="why">
+
+That last mismatch is worth more than the match. Reid hits it in Part 54 while
+building a flute: the contour is right on paper, and a line played with it
+sounds as though the player keeps sucking air in. The cause is the device rather
+than the setting — a contour that must begin at zero digs a hole under whatever
+was sounding a moment ago.
+
+Lengthening the release papers over the hole, at the cost of the shape you were
+copying. The next page has the other half of the explanation.
+
+</Aside>
+
+<Book part={[3, 54]} />

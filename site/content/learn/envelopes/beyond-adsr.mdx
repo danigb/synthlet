@@ -1,0 +1,64 @@
+---
+title: Beyond ADSR
+description: The spit brass contour no four-stage envelope can draw, and the two envelopes that draw it together.
+core: false
+book: [8]
+hear: A note that spits, falls back and then swells, plus vibrato that arrives late the way a player's does.
+status: ready
+---
+
+Four stages get you a very long way, and then they stop. Reid's example is a
+brass section played hard: the note goes "psst" at the front, drops back to
+something quieter and duller, and only then swells to its full size. Write that
+down as an ADSR and you cannot, because an ADSR is always loudest at the end of
+its attack and its sustain always begins wherever the decay left off.
+
+The answer is older than the problem. Take two simple attack-and-decay contours,
+add them together, and send the sum to one destination: a fast one for the spit
+and a slow one for the swell.
+
+<Patch id="envelopes/beyond" show={["spit", "swell", "vibratoDelay"]} />
+
+<Try>
+
+Hold a note and watch the contour. Then pull **Spit** to zero and hold another.
+The front of the note goes flat and what is left is the swell arriving on its
+own — the same note, minus its consonant.
+
+</Try>
+
+<Try>
+
+Put **Spit** back and take **Swell** from fast to slow. This is the slow
+contour's attack, so it decides how late the second half of the note turns up.
+At the slow end the note is still getting louder two seconds after you played
+it, which is a shape the last four pages could not make at any setting.
+
+</Try>
+
+<Try>
+
+Hold a long note and move **Vibrato delay**. At zero the wobble is there from
+the start and sounds like a machine. Around a second it arrives after the note
+has established itself, which is what a player does, and what the delay control
+on an LFO is for.
+
+</Try>
+
+<Aside kind="why">
+
+It is worth being precise about which limitation is doing the damage, because
+most of the nine an ADSR has are harmless. The fatal pair are that the peak is
+always at the end of the attack, and that the sustain always starts where the
+decay finished. The spit brass violates both at once: its loudest moment is at
+the front, and the level it ends up holding is above the level it fell to.
+
+Two envelopes summed get around both because addition has no opinion about
+order. A five-stage envelope generator with editable break points would do the
+same job in one module, and this library does not have one yet — so the CV
+mixer, which is what an audio-rate parameter accepting several connections
+really is, remains the honest answer.
+
+</Aside>
+
+<Book part={8} />

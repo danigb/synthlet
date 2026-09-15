@@ -1,0 +1,71 @@
+---
+title: "Bells, cowbell, claves"
+description: "587 and 845 Hz is a cowbell, and a few hertz off it is not. Reid's most testable claim in the whole series."
+core: false
+book: [40, 41]
+hear: "Two tones and nothing else is a cowbell; move one of them and it stops being one. Ring-modulating two sines is every cheap bell ever made."
+status: ready
+---
+
+Part 41 makes a claim you can falsify in about four seconds. The Roland
+CR-8000's cowbell is two tones, at five hundred and eighty-seven hertz and
+eight hundred and forty-five — a ratio of 1 to 1.44 — taken by ear off the
+machine, and even small deviations from these pitches, he writes, destroy the
+cowbell illusion.
+
+They are triangle waves rather than pulses, because pulses are far too bright
+and synth-y, through a twelve decibel per octave band-pass at 2.64 kilohertz
+with a little resonance, on a two-stage contour: a high-amplitude,
+short-duration impact followed by a more extended tail.
+
+<Patch
+  id="recipes/bells"
+  show={["tone1", "tone2", "carrier", "modulator", "decay", "drum", "trigger"]}
+/>
+
+<Try>
+
+Hit it, then drag **Upper tone** from 845 up to 900 and hit it again. Fifty-five
+hertz is nothing — half a semitone at that pitch — and the cowbell is gone. Put
+it back and it returns.
+
+</Try>
+
+<Try>
+
+Switch to **Claves** and hit it. One mode, no filter, no envelope: Part 41 says
+the TR-808's claves are a single bridged-T oscillator and an output amplifier,
+and that the signal is not even modified before being passed to the output.
+Reid gives no frequency for them at all, only that the decay is shorter than
+the cowbell's, so the pitch here is the library's.
+
+</Try>
+
+<Try>
+
+Switch to **Bell — struck** and lengthen the **Decay**. The strike partials sit
+at two, three and four times the pitch you hear, so the ear supplies the
+missing one: Reid's example is a bell with partials at 100, 150 and 200 hertz
+that you hear as fifty.
+
+</Try>
+
+<Try>
+
+Switch to **Bell — ring modulation** and move **Bell carrier** and **Bell
+modulator**. Two sines multiplied together give you the sum and the difference
+and neither of the originals, which is Part 11's third case, and it is every
+cheap bell in every cheap synthesiser.
+
+</Try>
+
+<Aside kind="note">
+
+The spectrum is drawn linearly to half the sample rate, so at the cowbell's
+setting the two tones are about six pixels apart. Watch the two marks rather
+than the picture: the marks are where the book says the energy should be, and
+the trace is where it is.
+
+</Aside>
+
+<Book part={[40, 41]} />

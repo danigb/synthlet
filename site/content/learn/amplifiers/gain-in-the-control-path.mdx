@@ -1,0 +1,64 @@
+---
+title: Gain in the control path
+description: The envelope amount knob on every synth front panel is an amplifier standing in a control cable, and almost nobody notices.
+core: false
+book: [9]
+hear: One envelope, one filter, and a knob that decides how far up the same contour pushes the cutoff.
+status: ready
+---
+
+An envelope generator has no volume control. Whatever its four sliders say, its
+output runs from nothing to full scale and stops there, which is fine when it is
+driving the loudness of a note and useless when it is driving something with
+units. Two thousand hertz of filter sweep and six thousand are different sounds,
+and the envelope cannot tell you which you are getting.
+
+So something has to stand between the envelope and its destination and decide
+how much of it arrives. That something is an amplifier — the same module as the
+last page, in a cable nobody listens to.
+
+<Patch id="amplifiers/env-amount" show={["amount", "cutoff"]} />
+
+<Try>
+
+With **Envelope amount** at zero, play a few notes. The filter never moves: a
+dull constant timbre with an envelope on its loudness and nothing else. The
+contour generator is running the whole time, and none of it is getting through.
+
+</Try>
+
+<Try>
+
+Bring **Envelope amount** up to a couple of thousand and play again. Every note
+now opens the filter and lets it close, and the harmonics near the left of the
+spectrum light up and go out with each key. The envelope has not changed shape.
+It is being scaled on the way.
+
+</Try>
+
+<Try>
+
+Set **Cutoff** somewhere in the middle and drop **Envelope amount** to match.
+**Cutoff** is where the sweep starts and **Envelope amount** is how far above
+that it reaches — the two ends of the same journey, which is why every synth
+that has one has the other next to it.
+
+</Try>
+
+<Aside kind="why">
+
+Look at the diagram. The box marked Param is drawn as a modifier, on the same
+shelf as the filter, and it is in a cable that never reaches your ears. That is
+deliberate: the majority of the amplifiers inside an analogue synthesiser are
+not in the audio path at all, they are attenuating control voltages, and they
+are the same circuit.
+
+It follows that a module has no fixed shelf. A gain is a modifier when a
+sawtooth passes through it, and a modifier still when an envelope does; whether
+anyone can hear the result is a question about where its output is plugged, not
+about the module. Reid spends Part 9 on that argument, and this knob is the
+version of it you use every day.
+
+</Aside>
+
+<Book part={9} />

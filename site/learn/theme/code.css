@@ -1,0 +1,49 @@
+/*
+ * What a keyword looks like, in one place.
+ *
+ * "View the code" is highlighted at build time (03b): shiki tokenises each
+ * patch file and `scripts/highlight-patch.mjs` writes one class per token kind
+ * into the markup - `learn-code-keyword`, `learn-code-string` - so that the
+ * only thing shipped to the browser is markup and the only thing that decides
+ * its colour is a token. This file is the join between the two: the classes the
+ * highlighter writes, bound to the names `default.css` and `ink.css` give
+ * values. A colour literal here would be the same mistake as one in the kit.
+ *
+ * Everything the highlighter leaves unclassed - whitespace, most punctuation,
+ * every identifier that is nothing in particular - is the `<pre>`'s own
+ * `text-learn-ink`, which is why a panel reads as text with some of it lit
+ * rather than as a mosaic.
+ */
+
+.learn-code-comment {
+  color: var(--learn-code-comment);
+}
+
+.learn-code-keyword {
+  color: var(--learn-code-keyword);
+}
+
+.learn-code-function {
+  color: var(--learn-code-function);
+}
+
+.learn-code-constant {
+  color: var(--learn-code-constant);
+}
+
+.learn-code-string,
+.learn-code-string-expression {
+  color: var(--learn-code-string);
+}
+
+.learn-code-parameter {
+  color: var(--learn-code-parameter);
+}
+
+.learn-code-punctuation {
+  color: var(--learn-code-punctuation);
+}
+
+.learn-code-link {
+  color: var(--learn-code-link);
+}

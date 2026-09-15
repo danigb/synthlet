@@ -4,7 +4,7 @@ import { createSynthAudioContext } from "@/app/audio-context";
 import { useEffect, useMemo, useState } from "react";
 import { Instrument, monoVoice } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
-import { Keyboard } from "./components/Keyboard";
+import { Keyboard } from "@/components/audio/Keyboard";
 import { PresetPicker } from "./components/PresetPicker";
 import { Slider } from "./components/Slider";
 

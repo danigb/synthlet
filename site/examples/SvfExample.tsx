@@ -13,7 +13,7 @@ import {
 } from "synthlet";
 import { ExamplePane } from "./components/ExamplePane";
 import { Slider } from "./components/Slider";
-import { useSynth } from "./useSynth";
+import { useSynth } from "@/components/audio/useSynth";
 
 const createSynth = (ac: AudioContext) => {
   const volume = Param.db(ac, -12);

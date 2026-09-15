@@ -1,0 +1,62 @@
+---
+title: Time and pitch apart
+description: Half speed at the same pitch, then the same speed a fifth up — the two quantities tape could never separate.
+core: false
+book: [59]
+hear: "Half speed at the same pitch, then the same speed a fifth up. Tape could not do this."
+status: ready
+---
+
+Every delay in the previous chapter was a strip of tape, and the analogy held
+right up to its last page: move the heads while the tape is running and the
+pitch bends. That is not a quirk of the model, it is the arithmetic. On tape,
+speed and pitch are one quantity, because the samples of the sound arrive closer
+together or further apart and that spacing is both the duration and the
+frequency.
+
+This module cuts the tie.
+
+<Patch
+  id="beyond/timestretch"
+  show={["playbackRate", "detune", "reverse", "loop"]}
+/>
+
+<Try>
+
+Press Play. The clip is already running at half speed. Drag **Speed** from 0.25
+up to 4 and back: the whole thing takes four times as long or a quarter as long,
+and the voices and instruments in it stay exactly where they were on the
+keyboard. Compare that with the previous chapter's tape delay, where moving the
+time knob bent everything.
+
+</Try>
+
+<Try>
+
+Put **Speed** back to 1 and take **Detune** to 700 cents. Now the pitch has gone
+up a fifth and the clip still takes precisely as long as it did. The two sliders
+do not know about each other, so any combination of the two is available —
+double speed a fourth down, quarter speed an octave up.
+
+</Try>
+
+<Try>
+
+Switch **Reverse** on at a slow speed. Backwards, stretched, in tune. **Loop** is
+on by default so the clip keeps going; switch it off and it plays once and stops.
+
+</Try>
+
+<Aside kind="why">
+
+The technique is called WSOLA, and the idea is simple enough to state. Chop the
+sound into overlapping frames. To stretch time, repeat some frames; to compress
+it, skip some. The catch is that a repeated frame almost never lines up with
+what came before it, and a join that does not line up is a click — so before
+overlapping two frames, slide one of them a little either way and keep the
+position where the two waveforms best resemble each other. The samples still
+come out at the rate they went in, which is why the pitch does not move.
+
+</Aside>
+
+<Book part={59} />

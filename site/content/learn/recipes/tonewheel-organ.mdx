@@ -1,0 +1,79 @@
+---
+title: "Tonewheel organ"
+description: "Nine sine waves, no envelope, and the seven harmonics a Hammond does not have."
+core: false
+book: [55, 56, 57]
+hear: "Nine sines at fixed ratios, a click at the front, and a blip of the third harmonic. Registrations are numbers."
+status: ready
+---
+
+A Hammond's nine drawbars are harmonics 1, 3, 2, 4, 6, 8, 10, 12 and 16 of the
+sixteen foot pitch. Read that list again: there is no fifth harmonic on a
+Hammond, and no seventh, ninth, eleventh, thirteenth, fourteenth or fifteenth
+either. Every registration ever played is built from those nine, at nine
+positions each, which is where Reid's figure of 387,420,489 registrations per
+manual comes from.
+
+The key sounds the eight foot, so relative to the note you play the ratios are
+a half, one and a half, one, two, three, four, five, six and eight. The
+drawbars are labelled by footage rather than by harmonic, which is an organ
+builder's habit borrowed from pipe lengths, and it is why the first two are out
+of numerical order.
+
+<Patch
+  id="recipes/organ"
+  show={[
+    "drawbar1",
+    "drawbar2",
+    "drawbar3",
+    "drawbar4",
+    "drawbar5",
+    "drawbar6",
+    "drawbar7",
+    "drawbar8",
+    "drawbar9",
+    "percussion",
+    "click",
+    "jimmySmith",
+    "fullOrgan",
+    "sawtooth",
+    "square",
+  ]}
+/>
+
+<Try>
+
+Hold a note and move the drawbars while it sounds. Nothing fades in and nothing
+fades out: a Hammond key is a switch that connects nine tonewheels to a bus, so
+there is no attack, no decay and no release anywhere in this patch.
+
+</Try>
+
+<Try>
+
+Press the four registration buttons in turn. They are all Reid's: **88 8000
+000** is the one Jimmy Smith and Keith Emerson lived on, **88 8888 888** is
+everything, **83 4211 100** is as close as nine drawbars with seven harmonics
+missing get to a sawtooth, and **00 8030 200** is as close as they get to odd
+harmonics only.
+
+</Try>
+
+<Try>
+
+Set **Percussion** to **Second** and play a staccato phrase, then hold one note
+down and play another. The second one has no accent. Percussion on a real
+Hammond is single-triggering, and it also drops the level of the sustained part
+of the sound — both of those are here, and both are Reid's.
+
+</Try>
+
+<Try>
+
+Turn **Key click** off and on. On the instrument it is nine contacts closing at
+nine slightly different moments, and it was considered a fault for about twenty
+years before it was considered the sound.
+
+</Try>
+
+<Book part={[55, 56, 57]} />
