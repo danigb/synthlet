@@ -29,6 +29,7 @@ const SITE = join(LEARN, "..");
 const CONTENT = join(SITE, "content", "learn");
 const PATCHES = join(LEARN, "patches");
 const KIT = join(LEARN, "kit");
+const PLAYGROUND = join(LEARN, "playground");
 const CHROME = join(LEARN, "chrome");
 const THEME = join(LEARN, "theme");
 const APP_LEARN = join(SITE, "app", "learn");
@@ -351,10 +352,13 @@ const FORBIDDEN_IN_DESIGN: [RegExp, string][] = [
 describe("rule 4: design is tokens, and only tokens", () => {
   // `theme/*.css` are the token files: they are where the literals live, and
   // the whole point of them is that they are the only place. Everything else
-  // in the three design directories has to go through a `learn-` name.
+  // in the design directories has to go through a `learn-` name - the
+  // Playground included, which used to keep a copy of these patterns in
+  // `playground/playground.test.ts` and no longer needs one (06b).
   const files = [
     ...walk(KIT, [".ts", ".tsx"]),
     ...walk(CHROME, [".ts", ".tsx"]),
+    ...walk(PLAYGROUND, [".ts", ".tsx"]),
     ...walk(THEME, [".ts", ".tsx"]),
     ...walk(APP_LEARN, [".ts", ".tsx"]),
   ];

@@ -1,6 +1,3 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, sep } from "node:path";
-import { fileURLToPath } from "node:url";
 import * as webAudio from "node-web-audio-api";
 import { describe, expect, it } from "vitest";
 import playgroundPatch from "../patches/playground";
@@ -17,21 +14,18 @@ import { changedParams, VOICE_RANGE } from "./state";
 import { PLAYGROUND_PARAMS, presetValues } from "./values";
 
 /*
- * The Playground's own three promises.
+ * The Playground's own two promises.
  *
  * 1. It resolves a preset to the same thirty-one numbers the library does. It
  *    has to do the resolving itself - `setPreset` schedules, and a slider has to
  *    move now - and two resolvers that disagree would be a page whose knobs lie
  *    about the sound coming out of it.
  * 2. The link is small, and it round-trips.
- * 3. It writes no colour. `rules.test.ts`'s rule 4 walks the kit, the chrome,
- *    the theme and `app/learn`; `learn/playground` is the one design directory
- *    outside that list, so the same patterns are applied to it here. Folding it
- *    into rule 4 is ticket 06b.
+ *
+ * It also writes no colour, but that is not checked here: rule 4 walks
+ * `learn/playground` like every other design directory (06b), so the copy of
+ * its patterns that used to live at the bottom of this file is gone.
  */
-
-const HERE = dirname(fileURLToPath(import.meta.url));
-const SITE = join(HERE, "..", "..");
 
 // ---------------------------------------------------------------------------
 // The preset resolver
@@ -180,56 +174,5 @@ describe("the pad arrives where the sound already is", () => {
       expect(value).toBeGreaterThanOrEqual(spec.min);
       expect(value).toBeLessThanOrEqual(spec.max);
     }
-  });
-});
-
-// ---------------------------------------------------------------------------
-// Rule 4, for the one design directory rule 4 does not walk
-// ---------------------------------------------------------------------------
-
-const PALETTE =
-  /-(slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-(50|[1-9]00|950)\b/;
-
-const FORBIDDEN: [RegExp, string][] = [
-  [/(?<![\w#])#[0-9a-fA-F]{3,8}\b/, "a colour literal"],
-  [/\brgba?\(/, "an rgb() colour"],
-  [/\bhsla?\(/, "an hsl() colour"],
-  [PALETTE, "a Tailwind palette class"],
-  [/(?<![-\w])fd-[a-z][\w-]*/, "a documentation (fd-) token class"],
-];
-
-function walk(dir: string): string[] {
-  const found: string[] = [];
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    if (statSync(path).isDirectory()) found.push(...walk(path));
-    else if (/\.tsx?$/.test(entry)) found.push(path);
-  }
-  return found.sort();
-}
-
-describe("the Playground writes no colour either", () => {
-  const files = walk(HERE).filter((file) => !/\.test\.tsx?$/.test(file));
-
-  it("finds the Playground", () => {
-    expect(files.length).toBeGreaterThan(0);
-  });
-
-  it("uses tokens, like every other design directory", () => {
-    const violations: string[] = [];
-
-    for (const file of files) {
-      const text = readFileSync(file, "utf8");
-      for (const [pattern, what] of FORBIDDEN) {
-        const found = pattern.exec(text);
-        if (found) {
-          violations.push(
-            `${relative(SITE, file).split(sep).join("/")}: ${what} ("${found[0]}")`,
-          );
-        }
-      }
-    }
-
-    expect(violations).toEqual([]);
   });
 });

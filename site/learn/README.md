@@ -637,25 +637,18 @@ what was asked for and calls whoever is listening; the rig writes the fragment
 and asks `Playground.tsx` to re-key it, and the rebuilt rig reads the sound back
 out of the URL it just wrote. Play resumes with it.
 
-### One rule this directory is outside of
-
-Rule 4 walks `learn/kit`, `learn/chrome`, `learn/theme/*.tsx` and `app/learn`.
-`learn/playground` is a design directory that is in none of those lists, so
-`learn/playground/playground.test.ts` applies the same patterns to it. Folding it
-into rule 4 is ticket 06b.
-
 ## The rules
 
 `learn/rules.test.ts`, run by `npm --prefix site test` and by CI (a step in the
 `build` job of `.github/workflows/test.yml`).
 
-| #   | What it checks                                                                                                                                                                                                                                            | Where                                                         |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| 1   | No `import`/`export` at line start, no `className`, no `style=`, and no tag outside the vocabulary. Code fences and inline code are stripped first, so prose _about_ an import is fine                                                                    | `content/learn/**/*.mdx`                                      |
-| 2   | No import of `react`, `react-dom`, `next`, or anything under `kit/` or `app/` (a `?raw` query is ignored); every patch on disk is registered; key, `id` and path agree; control ids are unique. A `*.test.ts` beside a patch is not a patch and is exempt | `learn/patches/**/*.ts`                                       |
-| 3   | Every `<Patch id>` resolves in the registry and every name in `show` is one of that patch's controls. When the registry gains a `voice` id, every `preset` is checked against `learn/voice`'s two banks                                                   | content ↔ registry                                            |
-| 4   | No `#hex`, `rgb(`, `hsl(`, no Tailwind palette class (`bg-sky-500` and the other twenty-one palettes), no `fd-` class. `theme/*.css` are the token files and are exempt                                                                                   | `learn/kit`, `learn/chrome`, `learn/theme/*.tsx`, `app/learn` |
-| 5   | Frontmatter passes `learn/frontmatter.ts`; every `book` part is 1–63; every lesson carries `core`, `book`, `hear` and `status`                                                                                                                            | `content/learn/**/*.mdx`                                      |
+| #   | What it checks                                                                                                                                                                                                                                            | Where                                                                             |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| 1   | No `import`/`export` at line start, no `className`, no `style=`, and no tag outside the vocabulary. Code fences and inline code are stripped first, so prose _about_ an import is fine                                                                    | `content/learn/**/*.mdx`                                                          |
+| 2   | No import of `react`, `react-dom`, `next`, or anything under `kit/` or `app/` (a `?raw` query is ignored); every patch on disk is registered; key, `id` and path agree; control ids are unique. A `*.test.ts` beside a patch is not a patch and is exempt | `learn/patches/**/*.ts`                                                           |
+| 3   | Every `<Patch id>` resolves in the registry and every name in `show` is one of that patch's controls. When the registry gains a `voice` id, every `preset` is checked against `learn/voice`'s two banks                                                   | content ↔ registry                                                                |
+| 4   | No `#hex`, `rgb(`, `hsl(`, no Tailwind palette class (`bg-sky-500` and the other twenty-one palettes), no `fd-` class. `theme/*.css` are the token files and are exempt                                                                                   | `learn/kit`, `learn/chrome`, `learn/playground`, `learn/theme/*.tsx`, `app/learn` |
+| 5   | Frontmatter passes `learn/frontmatter.ts`; every `book` part is 1–63; every lesson carries `core`, `book`, `hear` and `status`                                                                                                                            | `content/learn/**/*.mdx`                                                          |
 
 Each violation names the file and the rule. They are collected rather than
 thrown, so four mistakes are four lines and not four runs.
